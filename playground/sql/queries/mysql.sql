@@ -3,7 +3,7 @@
 
 SELECT * FROM items ;
 
-SELECT * FROM blog.authors;
+SELECT * FROM blog.authors ;
 
 select id, slug FROM blog.posts ;
 
