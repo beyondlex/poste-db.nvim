@@ -8,6 +8,7 @@ end
 
 local ns = vim.api.nvim_create_namespace("poste_sql_dataset")
 local ns_cell = vim.api.nvim_create_namespace("poste_sql_dataset_cell")
+local ns_cursorline = vim.api.nvim_create_namespace("poste_sql_dataset_cursorline")
 
 --- Resolve highlight group links fully (follow chains of `link`).
 local function resolve_hl(name)
@@ -124,6 +125,14 @@ function M.setup()
     bold = true,
   })
 
+  -- Cursor line: subtle bg for other cells in the same row
+  local normal_bg = normal.bg or (dark and 0x1e1e1e or 0xffffff)
+  local cr, cg, cb = math.floor(normal_bg / 0x10000) % 0x100, math.floor(normal_bg / 0x100) % 0x100, normal_bg % 0x100
+  local cursorline_bg = dark
+    and math.min(cr + 12, 255) * 0x10000 + math.min(cg + 12, 255) * 0x100 + math.min(cb + 12, 255)
+    or math.max(cr - 12, 0) * 0x10000 + math.max(cg - 12, 0) * 0x100 + math.max(cb - 12, 0)
+  vim.api.nvim_set_hl(0, "PosteSqlCursorLine", { bg = cursorline_bg })
+
   -- Search match: purple background, white text
   vim.api.nvim_set_hl(0, "PosteSearchMatch", {
     fg = 0xffffff,
@@ -180,7 +189,7 @@ function M.setup()
     "PosteSqlHeader", "PosteSqlWinbarBorder", "PosteSqlWinbarSep",
     "PosteSqlMeta", "PosteSqlMetaDim", "PosteSqlNull",
     "PosteSqlNumber", "PosteSqlBool", "PosteSqlSortIndicator",
-    "PosteSqlRowNum", "PosteSqlCellSelected",
+    "PosteSqlRowNum", "PosteSqlCellSelected", "PosteSqlCursorLine",
     "PosteSearchMatch", "PosteSearchCurrent",
     "PosteFilterActive", "PosteSearchActive",
     "PosteInsertHint", "PosteSqlError",
@@ -413,8 +422,8 @@ function M.invalidate_sep_cache() end
 --- @param line string|nil Pre-fetched buffer line (avoids extra nvim_buf_get_lines call)
 --- @param col_starts table|nil Pre-computed column positions (from tab.buffer_col_starts[line_idx])
 function M.highlight_cell(buf, row, col, meta, line, col_starts)
-  -- Clear previous cell highlight
   vim.api.nvim_buf_clear_namespace(buf, ns_cell, 0, -1)
+  vim.api.nvim_buf_clear_namespace(buf, ns_cursorline, 0, -1)
   if not state.sql.highlight_cell then return end
 
   if not meta or meta.type ~= "resultset" then return end
@@ -423,7 +432,25 @@ function M.highlight_cell(buf, row, col, meta, line, col_starts)
   local line_idx = meta.data_start_line + row - 1
   if line_idx > meta.data_end_line then return end
 
-  -- +1 offset: visual column 1 is the row number column
+  -- Cursor line: subtle bg on all other cells in this row
+  if col_starts then
+    local col_count = meta.col_count or 0
+    for c = 1, col_count + 1 do
+      if c ~= col + 1 then
+        local range = col_starts[c]
+        if range then
+          vim.api.nvim_buf_set_extmark(buf, ns_cursorline, line_idx - 1, range.ext_start, {
+            end_row = line_idx - 1,
+            end_col = range.ext_end,
+            hl_group = "PosteSqlCursorLine",
+            hl_mode = "combine",
+            priority = 150,
+          })
+        end
+      end
+    end
+  end
+
   local range
   if col_starts then
     range = find_cell_range_by_starts(col_starts, col + 1)
@@ -433,7 +460,6 @@ function M.highlight_cell(buf, row, col, meta, line, col_starts)
   end
   if not range then return end
 
-  -- Clamp to line byte length
   if not col_starts and range.ext_start > #line then return end
 
   vim.api.nvim_buf_set_extmark(buf, ns_cell, line_idx - 1, range.ext_start, {
@@ -447,6 +473,7 @@ end
 --- Clear cell selection highlight.
 function M.clear_cell_highlight(buf)
   vim.api.nvim_buf_clear_namespace(buf, ns_cell, 0, -1)
+  vim.api.nvim_buf_clear_namespace(buf, ns_cursorline, 0, -1)
 end
 
 ---------------------------------------------------------------------------
