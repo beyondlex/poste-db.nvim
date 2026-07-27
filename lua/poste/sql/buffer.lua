@@ -314,6 +314,7 @@ function M.apply_rendered_page(tab, lines, meta)
       meta.header_line = nil
       meta.data_start_line = meta.data_start_line - 3
       meta.data_end_line = meta.data_end_line - 3
+      table.remove(clean, meta.data_end_line + 1)
     end
   end
 
@@ -536,6 +537,7 @@ function M.render_dataset(lines, meta, opts)
         meta.header_line = nil
         meta.data_start_line = meta.data_start_line - 3
         meta.data_end_line = meta.data_end_line - 3
+        table.remove(clean, meta.data_end_line + 1)
       end
     end
 

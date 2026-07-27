@@ -447,7 +447,7 @@ function M.plan_resultset_layout(data)
   local col_widths = calc_column_widths(columns, rows, 200)
   table.insert(col_widths, 1, row_num_width)
 
-  local numeric_cols = { true }
+  local numeric_cols = { false }
   for i = 1, #columns do
     numeric_cols[i + 1] = is_numeric_column(rows, i)
   end
@@ -514,7 +514,7 @@ function M.render_page(layout, page, page_size)
   lines[line_num] = border_line(col_widths, "┌", "┬", "┐", "─")
 
   line_num = line_num + 1
-  local header_cells = { "" }
+  local header_cells = { "#" }
   for i, col in ipairs(columns) do
     header_cells[i + 1] = col.name
   end
@@ -607,7 +607,7 @@ function M.render_view(layout, view_indices, page, page_size, opts)
   lines[line_num] = border_line(col_widths, "┌", "┬", "┐", "─")
 
   line_num = line_num + 1
-  local header_cells = { "" }
+  local header_cells = { "#" }
   for i, col in ipairs(columns) do
     header_cells[i + 1] = col.name
   end

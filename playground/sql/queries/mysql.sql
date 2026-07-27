@@ -2,6 +2,7 @@
 -- @database inventory
 
 SELECT * FROM items ;
+SELECT count(1) FROM items ;
 
 SELECT * FROM blog.authors ;
 
@@ -13,7 +14,7 @@ select id, slug FROM blog.posts ;
 
 -- UPDATE posts SET bio = '' AFTERE id i
 
--- @database inventory
+-- @database blog
 
 SELECT id, page_id, url, measured_at, metric_01 from web_vitals ;
 SELECT * from web_vitals ;
