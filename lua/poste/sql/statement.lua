@@ -5,6 +5,7 @@
 
 local cli = require("poste.cli")
 local state = require("poste.state")
+local ts_stmt = require("poste.sql.ts_stmt")
 
 local M = {}
 
@@ -118,13 +119,50 @@ function M.try_rust_stmt_ranges(buf_lines, start_line, end_line)
   return #stmt_lines > 0 and stmt_lines or nil
 end
 
+--- Try to find statement boundaries using Tree-sitter.
+--- Returns {start_line, end_line} as 1-based buffer line numbers, or nil.
+function M.try_ts_stmt_span(buf, cursor_line)
+  local ok, result = pcall(ts_stmt.find_stmt_span, buf, cursor_line)
+  if ok and result then
+    return result
+  end
+  return nil
+end
+
+--- Try to find ALL statement boundaries using Tree-sitter.
+--- Returns number[] of 1-based buffer statement start lines, or nil.
+function M.try_ts_stmt_ranges(buf, start_line, end_line)
+  local ok, result = pcall(ts_stmt.find_all_stmt_lines, buf, start_line, end_line)
+  if ok and result then
+    return result
+  end
+  return nil
+end
+
 ---------------------------------------------------------------------------
 -- Single-statement extraction
 ---------------------------------------------------------------------------
 
+local function has_sql_content(stmt_lines, start, stop)
+  for i = start, stop do
+    local l = stmt_lines[i]
+    if l then
+      local trimmed = l:match("^%s*(.*)$")
+      if trimmed ~= "" and not trimmed:match("^%-%-") then
+        return true
+      end
+    end
+  end
+  return false
+end
+
 --- Extract a single SQL statement at the cursor position.
 --- Delimited purely by semicolons, wrapped in a synthetic ### block.
-function M.extract_stmt_at_cursor(buf_lines, cursor_line)
+--- @param buf_lines string[]
+--- @param cursor_line number  1-based
+--- @param buf number|nil  buffer handle (for Tree-sitter)
+--- @return string|nil content, number|nil adjusted_line, number|nil stmt_start, number|nil stmt_end
+function M.extract_stmt_at_cursor(buf_lines, cursor_line, buf)
   local directives = {}
   for _, l in ipairs(buf_lines) do
     if l:match("^%s*%-%-") or l:match("^%s*$") then
@@ -136,21 +174,32 @@ function M.extract_stmt_at_cursor(buf_lines, cursor_line)
 
   local stmt_start
   local stmt_end
-  -- Try Rust for proper statement boundary detection (handles ; in strings/comments)
-  -- poste_sql_legacy_completion: nil → Rust+Lua, true → Lua only, "rust" → Rust only
-  local use_rust = not vim.g.poste_sql_legacy_completion or vim.g.poste_sql_legacy_completion == "rust"
-  local rust_ok, rust_result
-  if use_rust then
-    rust_ok, rust_result = pcall(M.try_rust_stmt_span, buf_lines, cursor_line)
+  -- Try Tree-sitter for proper statement boundary detection (handles ; in strings/comments, PL/pgSQL, etc.)
+  local ts_ok, ts_result
+  if buf then
+    ts_ok, ts_result = pcall(M.try_ts_stmt_span, buf, cursor_line)
   end
-  if use_rust and rust_ok and rust_result then
-    stmt_start = rust_result[1]
-    stmt_end = rust_result[2]
+  if ts_ok and ts_result then
+    stmt_start = ts_result[1]
+    stmt_end = ts_result[2]
+  else
+    -- Try Rust as fallback
+    local use_rust = not vim.g.poste_sql_legacy_completion or vim.g.poste_sql_legacy_completion == "rust"
+    if use_rust then
+      local rust_ok, rust_result = pcall(M.try_rust_stmt_span, buf_lines, cursor_line)
+      if rust_ok and rust_result then
+        stmt_start = rust_result[1]
+        stmt_end = rust_result[2]
+      end
+    end
+  end
+
+  if stmt_start then
     -- If cursor is on a blank line, skip forward past empty lines
     -- to find the next statement start.
     if (buf_lines[cursor_line] or ""):match("^%s*$") then
       -- Cursor on blank line: skip forward past empty lines from the
-      -- Rust result, and show the statement above the blank lines.
+      -- detected result, and show the statement above the blank lines.
       while stmt_start <= #buf_lines and (buf_lines[stmt_start] or ""):match("^%s*$") do
         stmt_start = stmt_start + 1
       end
@@ -166,7 +215,7 @@ function M.extract_stmt_at_cursor(buf_lines, cursor_line)
       end
     end
   else
-    -- Fall back to Lua logic
+    -- Fall back to Lua ;-heuristic logic
     if (buf_lines[cursor_line] or ""):match("^%s*$") then
       -- Cursor on empty line: search forward for next statement
       stmt_start = cursor_line
@@ -216,7 +265,7 @@ function M.extract_stmt_at_cursor(buf_lines, cursor_line)
     if not l:match("^%s*$") then all_blank = false; break end
   end
   if all_blank then
-    return nil, nil, stmt_start
+    return nil, nil, stmt_start, stmt_end
   end
 
   -- If the detected statement contains only comment lines, nothing to execute
@@ -228,8 +277,8 @@ function M.extract_stmt_at_cursor(buf_lines, cursor_line)
       break
     end
   end
-  if not has_sql then
-    return nil, nil, stmt_start
+  if not has_sql_content(buf_lines, stmt_start, stmt_end) then
+    return nil, nil, stmt_start, stmt_end
   end
 
   local parts = {}
@@ -241,7 +290,7 @@ function M.extract_stmt_at_cursor(buf_lines, cursor_line)
   -- adjusted_line to stmt_end so it doesn't exceed the synthetic ### block.
   local cursor_ref = (cursor_line >= stmt_start) and math.min(cursor_line, stmt_end) or stmt_start
   local adjusted_line = #directives + 1 + (cursor_ref - stmt_start + 1)
-  return table.concat(parts, "\n"), adjusted_line, stmt_start
+  return table.concat(parts, "\n"), adjusted_line, stmt_start, stmt_end
 end
 
 ---------------------------------------------------------------------------
@@ -381,6 +430,8 @@ M._test = {
   extract_visual_block = M.extract_visual_block,
   try_rust_stmt_span = M.try_rust_stmt_span,
   try_rust_stmt_ranges = M.try_rust_stmt_ranges,
+  try_ts_stmt_span = M.try_ts_stmt_span,
+  try_ts_stmt_ranges = M.try_ts_stmt_ranges,
   find_block_for_line = M.find_block_for_line,
 }
 

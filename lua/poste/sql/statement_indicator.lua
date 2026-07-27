@@ -1,148 +1,94 @@
-local cli = require("poste.cli")
-local state = require("poste.state")
+local ts_stmt = require("poste.sql.ts_stmt")
 
 local M = {}
 
-local ns = vim.api.nvim_create_namespace("poste_sql_stmt_boundary")
-local _debounce_timer = nil
-local _prev_buf = nil
-local _disabled = false
-local _job_id = nil
+-- Define boundary sign highlight group
+vim.api.nvim_set_hl(0, "PosteSqlBoundaryBorder", { link = "Comment" })
 
-local DEBOUNCE_MS = 50
+local _debounce_timer = nil
+local _disabled = false
+
+local C = require("poste.constants")
+local sign_group = C.SIGN_GROUP_NAME .. "_boundary"
+
+-- Define sign texts for boundary indicators (multi-line statements only)
+local BOUNDARY_SIGNS = {
+  PosteBoundaryTop = "┌",
+  PosteBoundaryMid = "│",
+  PosteBoundaryBot = "└",
+}
+
+for name, text in pairs(BOUNDARY_SIGNS) do
+  pcall(vim.fn.sign_define, name, { text = text, texthl = "PosteSqlBoundaryBorder" })
+end
+
+local bound_sign_ids = {}  -- buf -> { line_0 -> sign_id }
 
 local function clear_all(buf)
   if buf and vim.api.nvim_buf_is_valid(buf) then
-    vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
+    if bound_sign_ids[buf] then
+      for _, sign_id in pairs(bound_sign_ids[buf]) do
+        pcall(vim.fn.sign_unplace, sign_group, { id = sign_id })
+      end
+      bound_sign_ids[buf] = nil
+    end
   end
 end
 
 local function apply_range(buf, start, stop)
-  clear_all(_prev_buf)
-  if not vim.api.nvim_buf_is_valid(buf) then
-    _prev_buf = nil
-    return
-  end
   clear_all(buf)
+  if not vim.api.nvim_buf_is_valid(buf) then return end
+  -- Don't show boundary for single-line statements
+  if start == stop then return end
+
+  local ids = {}
   for line = start, stop do
-    local text
-    if start == stop then text = "──"
-    elseif line == start then text = "─┐"
-    elseif line == stop then  text = "─┘"
-    else text = " │"
+    local sign_name
+    if line == start then
+      sign_name = "PosteBoundaryTop"
+    elseif line == stop then
+      sign_name = "PosteBoundaryBot"
+    else
+      sign_name = "PosteBoundaryMid"
     end
-    vim.api.nvim_buf_set_extmark(buf, ns, line, 0, {
-      virt_text = {{text, "PosteSqlBoundaryBorder"}},
-      virt_text_pos = "right_align",
-      priority = 100,
-    })
-  end
-  _prev_buf = buf
-end
-
-local function find_block(lines, cursor_line)
-  local start = 1
-  for i = cursor_line, 1, -1 do
-    if (lines[i] or ""):match("^###") then
-      start = i + 1
-      break
+    local sign_id = vim.fn.sign_place(0, sign_group, sign_name, buf, { lnum = line + 1 })
+    if sign_id and sign_id > 0 then
+      ids[line] = sign_id
     end
   end
-  local stop = #lines
-  for i = cursor_line, #lines do
-    if (lines[i] or ""):match("^###") and i > cursor_line then
-      stop = i - 1
-      break
-    end
-  end
-  return start, stop
-end
-
-local function try_rust_span(lines, cursor_line, callback)
-  local block_start, block_end = find_block(lines, cursor_line)
-
-  -- If cursor is on a separator line between blocks, bail out
-  local last_content = nil
-  for i = block_end, block_start, -1 do
-    local trimmed = (lines[i] or ""):match("^%s*(.-)%s*$")
-    if trimmed ~= "" and not trimmed:match("^#") and not trimmed:match("^%-%-") then
-      last_content = i
-      break
-    end
-  end
-  if cursor_line > (last_content or block_start) then
-    callback(nil)
-    return
-  end
-  local block_lines = {}
-  for i = block_start, block_end do
-    block_lines[#block_lines + 1] = lines[i] or ""
-  end
-  local rel_cursor = cursor_line - block_start
-
-  local input = table.concat(block_lines, "\n")
-  local stdout = {}
-
-  cli.run_async({ "context", "stmt", tostring(rel_cursor) }, {
-    stdin = input,
-    on_stdout = function(data)
-      if data then
-        for _, line in ipairs(data) do stdout[#stdout + 1] = line end
-      end
-    end,
-    on_exit = function(exit_code)
-      _job_id = nil
-      if exit_code ~= 0 then callback(nil); return end
-      local output = table.concat(stdout, "\n")
-      local ok, parsed = pcall(vim.json.decode, output)
-      if not ok or type(parsed) ~= "table" then callback(nil); return end
-      local rs = parsed.start_line
-      local re = parsed.end_line
-      if type(rs) ~= "number" or type(re) ~= "number" then callback(nil); return end
-      callback(block_start + rs, block_start + re)
-    end,
-  })
+  bound_sign_ids[buf] = ids
 end
 
 local function fetch_and_highlight(buf, cursor_line)
   if not vim.api.nvim_buf_is_valid(buf) then return end
 
-  local total = vim.api.nvim_buf_line_count(buf)
-  local lines = vim.api.nvim_buf_get_lines(buf, 0, total, false)
+  local span = ts_stmt.find_stmt_span(buf, cursor_line)
+  if not span then return end
 
-  if _job_id then
-    pcall(vim.fn.jobstop, _job_id)
-    _job_id = nil
-  end
+  local s, e = span[1], span[2]
 
-  try_rust_span(lines, cursor_line, function(s, e)
-    if not vim.api.nvim_buf_is_valid(buf) then return end
-    if not s or not e then return end
-
-    if s == e then
-      local line_text = lines[s] or ""
-      if line_text:match("^%s*$") then
-        clear_all(_prev_buf)
-        _prev_buf = nil
-        return
-      end
-    end
-
-    local has_content = false
-    for i = s, e do
-      local trimmed = (lines[i] or ""):match("^%s*(.*)$")
-      if trimmed ~= "" and not trimmed:match("^%-%-") then
-        has_content = true
-        break
-      end
-    end
-    if not has_content then
-      clear_all(_prev_buf)
-      _prev_buf = nil
+  if s == e then
+    local line_text = vim.api.nvim_buf_get_lines(buf, s - 1, s, false)[1] or ""
+    if line_text:match("^%s*$") then
+      clear_all(buf)
       return
     end
-    apply_range(buf, s - 1, e - 1)
-  end)
+  end
+
+  local lines = vim.api.nvim_buf_get_lines(buf, s - 1, e, false)
+  local has_content = false
+  for _, line in ipairs(lines) do
+    local trimmed = (line or ""):match("^%s*(.*)$")
+    if trimmed ~= "" and not trimmed:match("^%-%-") then
+      has_content = true
+      break
+    end
+  end
+  if not has_content then
+    clear_all(buf)
+    return
+  end
+  apply_range(buf, s - 1, e - 1)
 end
 
 function M.update(buf, cursor_line)
@@ -156,7 +102,7 @@ function M.update(buf, cursor_line)
   _debounce_timer = vim.defer_fn(function()
     _debounce_timer = nil
     fetch_and_highlight(buf, cursor_line)
-  end, DEBOUNCE_MS)
+  end, 50)
 end
 
 function M.clear(buf)
@@ -165,12 +111,7 @@ function M.clear(buf)
     _debounce_timer:close()
     _debounce_timer = nil
   end
-  if _job_id then
-    pcall(vim.fn.jobstop, _job_id)
-    _job_id = nil
-  end
   clear_all(buf)
-  _prev_buf = nil
 end
 
 function M.toggle()

@@ -21,42 +21,12 @@ local _vis_end = 0
 local _cursor_moved_timer = nil
 local CURSOR_MOVED_DEBOUNCE_MS = 100
 
--- Shared SQL syntax highlighter
-local syntax = require("poste.sql.syntax")
-
---- Apply shared SQL syntax highlighting to a source buffer.
---- Skips comments, directives, separators, and blank lines.
-local _syn_ns = vim.api.nvim_create_namespace("poste_sql_syntax")
-local function apply_source_highlights(buf)
-  vim.api.nvim_buf_clear_namespace(buf, _syn_ns, 0, -1)
-  local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-  for i, line in ipairs(lines) do
-    if line ~= "" and not line:match("^%s*%-%-") and not line:match("^%s*###") then
-      syntax.highlight_line(buf, _syn_ns, i, line, 0)
-    end
-  end
-end
-
---- Debounced refresh of source buffer highlighting.
-local _syn_timer = nil
-local function schedule_syn_refresh(buf)
-  if _syn_timer then _syn_timer:stop(); _syn_timer:close() end
-  _syn_timer = vim.defer_fn(function()
-    _syn_timer = nil
-    if not vim.api.nvim_buf_is_valid(buf) then return end
-    apply_source_highlights(buf)
-  end, 150)
-end
-
 
 --- Install keymaps for this SQL buffer (one-time setup).
 local function ensure_sql_keymaps(buf)
   if buf == 0 then buf = vim.api.nvim_get_current_buf() end
   if vim.b[buf].poste_sql_keymaps_installed then return end
   vim.b[buf].poste_sql_keymaps_installed = true
-
-  -- Initial apply of shared SQL syntax highlighting
-  apply_source_highlights(buf)
 
   local keymap_opts = { buffer = buf, noremap = true, silent = true }
 
@@ -146,15 +116,11 @@ local function ensure_sql_keymaps(buf)
     end,
   })
 
-  -- Refresh shared SQL syntax highlighting on text changes
-  local syn_group = "PosteSQLSyntax_" .. buf
-  pcall(vim.api.nvim_del_augroup_by_name, syn_group)
-  local sg = vim.api.nvim_create_augroup(syn_group, { clear = true })
-  vim.api.nvim_create_autocmd({ "TextChanged", "TextChangedI", "BufWritePost" }, {
-    group = sg,
-    buffer = buf,
-    callback = function() schedule_syn_refresh(buf) end,
-  })
+  -- Tree-sitter syntax diagnostics
+  local ok_diag, diag = pcall(require, "poste.sql.diagnostics")
+  if ok_diag then
+    diag.setup(buf)
+  end
 end
 M.ensure_sql_keymaps = ensure_sql_keymaps
 
@@ -206,6 +172,7 @@ function M.run_sql_request()
   local buf_content
   local adjusted_line
   local visual_sel_end
+  local stmt_end  -- used in callbacks for indicator placement on last line
 
   if is_visual then
     local sel_start = math.min(_vis_start, _vis_end)
@@ -233,9 +200,10 @@ function M.run_sql_request()
   else
     local line = vim.fn.line(".")
     local stmt_start
-    buf_content, adjusted_line, stmt_start = statement.extract_stmt_at_cursor(buf_lines, line)
+    buf_content, adjusted_line, stmt_start, stmt_end = statement.extract_stmt_at_cursor(buf_lines, line, src_buf)
     if not buf_content then return end
     stmt_lines = { stmt_start or 1 }
+    stmt_end = stmt_end or stmt_start
   end
 
   -- Only clear after we confirm there's something to execute
@@ -258,6 +226,11 @@ function M.run_sql_request()
     end
   else
     indicators.set_indicator(src_buf, first_line - 1, "running")
+  end
+  -- Override running spinner to last line (same position as success indicator)
+  if stmt_end then
+    indicators.clear_all(src_buf)
+    indicators.set_indicator(src_buf, stmt_end - 1, "running")
   end
 
   local cmd = string.format("%s run %s --line %d --env %s --json --stdin",
@@ -329,7 +302,9 @@ local seq = current_seq
             for i, result in ipairs(results) do
               if result.error then
                 local err_line = stmt_lines[i] or first_line
-                indicators.set_indicator(src_buf, err_line - 1, "error")
+                local next_start = stmt_lines[i + 1]
+                local end_nr = next_start and (next_start - 1) or visual_sel_end or #buf_lines
+                indicators.set_indicator(src_buf, end_nr - 1, "error")
                 local err_text = type(result.error) == "string" and result.error or vim.inspect(result.error)
                 local lines = sql_format.format_error(err_text, data.connection or "")
                 sql_buffer.render_dataset(lines, { type = "error" }, { tab_index = i, exec_seq = seq })
@@ -366,7 +341,10 @@ local seq = current_seq
                 })
 
                 local line_nr = stmt_lines[i] or first_line
-                indicators.set_indicator(src_buf, line_nr - 1, "success", result.execution_time_ms)
+                -- Compute end line: next stmt start - 1, or visual sel end, or buffer end
+                local next_start = stmt_lines[i + 1]
+                local end_nr = next_start and (next_start - 1) or visual_sel_end or #buf_lines
+                indicators.set_indicator(src_buf, end_nr - 1, "success", result.execution_time_ms)
               end
             end
           else
@@ -395,10 +373,11 @@ local seq = current_seq
             })
 
             local has_err = results[1] and results[1].error
+            local result_line = stmt_end or first_line
             if has_err then
-              indicators.set_indicator(src_buf, first_line - 1, "error")
+              indicators.set_indicator(src_buf, result_line - 1, "error")
             else
-              indicators.set_indicator(src_buf, first_line - 1, "success", parsed.latency_ms)
+              indicators.set_indicator(src_buf, result_line - 1, "success", parsed.latency_ms)
               -- Log successful manual execution
               local edit_commit = require("poste.sql.edit_commit")
               local context = require("poste.sql.context").resolve_full_context(src_buf, first_line)
@@ -415,7 +394,8 @@ local seq = current_seq
           end
         else
           state.log("WARN", "SQL JSON parse failed, showing raw output")
-          indicators.set_indicator(src_buf, first_line - 1, "error")
+          local result_line = stmt_end or first_line
+          indicators.set_indicator(src_buf, result_line - 1, "error")
           local lines = sql_format.format_error("JSON parse failed\n\n" .. output, "")
           sql_buffer.render_dataset(lines, { type = "error" }, { exec_seq = seq })
         end
@@ -432,8 +412,8 @@ local seq = current_seq
         state.log("ERROR", string.format("SQL exit code %d", code))
         vim.schedule(function()
           if current_seq < exec_seq then return end
-          indicators.set_indicator(src_buf, first_line - 1, "error")
-          local stderr_text = table.concat(stderr_buf, "\n")
+indicators.set_indicator(src_buf, (stmt_end or first_line) - 1, "error")
+    vim.notify("Failed to start poste job", vim.log.levels.ERROR, { title = "Poste SQL" })
           local lines = sql_format.format_error(
             stderr_text ~= "" and stderr_text or "Query failed with exit code " .. code,
             state.sql.context.connection or ""
@@ -461,8 +441,7 @@ local seq = current_seq
     vim.fn.chansend(job_id, buf_content)
     vim.fn.chanclose(job_id, "stdin")
   else
-    indicators.set_indicator(src_buf, first_line - 1, "error")
-    vim.notify("Failed to start poste job", vim.log.levels.ERROR, { title = "Poste SQL" })
+    indicators.set_indicator(src_buf, (stmt_end or first_line) - 1, "error")
   end
 end
 
@@ -509,6 +488,19 @@ local function setup_db_browser_keymap(buf)
 end
 
 function M.setup(_)
+  -- Check if Tree-sitter SQL parser is available
+  local ok_ts = pcall(vim.treesitter.language.get_lang, "sql")
+  if not ok_ts then
+    vim.notify(
+      "poste-sql: Tree-sitter SQL parser not found. "
+        .. "Run :TSInstall sql to enable syntax highlighting, "
+        .. "boundary detection, and diagnostics. "
+        .. "Falling back to Rust/Lua heuristics.",
+      vim.log.levels.WARN,
+      { title = "Poste SQL" }
+    )
+  end
+
   local ok = pcall(register_sql_completion)
   if not ok then
     local group = vim.api.nvim_create_augroup("PosteSQLCmpRegister", { clear = true })
@@ -525,8 +517,8 @@ function M.setup(_)
   vim.api.nvim_create_autocmd("FileType", {
     pattern = { "poste_sql", "poste_sqlite" },
     callback = function(args)
-      pcall(vim.treesitter.language.register, "__poste_sql_disabled__", "poste_sql")
-      pcall(vim.treesitter.language.register, "__poste_sql_disabled__", "poste_sqlite")
+      pcall(vim.treesitter.language.register, "sql", "poste_sql")
+      pcall(vim.treesitter.language.register, "sql", "poste_sqlite")
       buffer_setup.setup_buffer_keymaps(args.buf)
       ensure_sql_keymaps(args.buf)
       setup_db_browser_keymap(args.buf)
@@ -829,8 +821,8 @@ function M.setup(_)
   vim.api.nvim_create_autocmd({ "BufRead", "BufNewFile" }, {
     pattern = { "*.sql", "*.sqlite" },
     callback = function()
-      pcall(vim.treesitter.language.register, "__poste_sql_disabled__", "poste_sql")
-      pcall(vim.treesitter.language.register, "__poste_sql_disabled__", "poste_sqlite")
+      pcall(vim.treesitter.language.register, "sql", "poste_sql")
+      pcall(vim.treesitter.language.register, "sql", "poste_sqlite")
       local name = vim.api.nvim_buf_get_name(0)
       if name:match("%.sqlite$") then
         vim.bo.filetype = "poste_sqlite"

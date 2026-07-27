@@ -2,6 +2,7 @@
 -- @database inventory
 
 SELECT * FROM items ;
+
 SELECT count(1) FROM items ;
 
 SELECT * FROM blog.authors ;

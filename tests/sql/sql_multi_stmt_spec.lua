@@ -2,9 +2,21 @@
 --- - find_stmt_lines: locate statement start line numbers in buffer
 --- - extract_visual_block: build synthetic ### block from visual selection
 --- - extract_stmt_at_cursor: single-statement extraction (indicator placement)
+--- - try_ts_stmt_span: Tree-sitter statement boundary detection
 
 local init = require("poste.sql.init")
 local t = init._test
+
+local function make_buf(lines)
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  vim.bo[buf].filetype = "poste_sql"
+  vim.wait(500, function()
+    local ok, p = pcall(vim.treesitter.get_parser, buf, "sql")
+    return ok and p ~= nil
+  end)
+  return buf
+end
 
 describe("find_stmt_lines", function()
   it("returns one statement for a single line without semicolon", function()
@@ -101,7 +113,7 @@ describe("find_stmt_lines", function()
 end)
 
 describe("find_stmt_lines — edge cases and known bugs", function()
-  it("semicolon in single-quoted string — KNOWN BUG: falsely splits", function()
+  it("semicolon in single-quoted string — still uses ; heuristic, TS handles this via try_ts_stmt_ranges", function()
     -- BUG: find_stmt_lines uses `line:match(";")` which matches ANY semicolon
     -- on the line, including inside string literals.
     local lines = {
@@ -274,20 +286,15 @@ describe("extract_stmt_at_cursor — edge cases", function()
     assert.equals(2, stmt_start)
   end)
 
-  it("semicolon in string literal — KNOWN BUG: starts new statement at wrong line", function()
-    -- BUG: extract_stmt_at_cursor uses `txt:match(";")` which matches ANY ;
-    -- This means if a previous line has ; inside a string, the current
-    -- cursor position's stmt_start will be wrong
+  it("semicolon in string literal — handles correctly with TS buffer", function()
     local lines = {
       "###",
       "SELECT 'hello;world' as greeting;",
       "SELECT * FROM users;",
       "SELECT * FROM orders;",
     }
-    -- Cursor on line 3 (SELECT * FROM users;)
-    -- Search backward: line 2 has "; → stmt_start = 3
-    -- This happens to be correct here, but fragile
-    local content, adjusted_line, stmt_start = t.extract_stmt_at_cursor(lines, 3)
+    local buf = make_buf(lines)
+    local content, adjusted_line, stmt_start = t.extract_stmt_at_cursor(lines, 3, buf)
     assert.equals(3, stmt_start)
   end)
 
@@ -320,5 +327,47 @@ describe("extract_stmt_at_cursor — edge cases", function()
     -- stmt_start = 2 (SELECT line). indicators.set_indicator uses
     -- first_line - 1 = 2 - 1 = 1 → 0-indexed line 1 = SELECT line
     assert.equals(2, stmt_start)
+  end)
+end)
+
+describe("try_ts_stmt_span", function()
+  it("handles semicolon in string — no longer a bug with Tree-sitter", function()
+    local buf = make_buf({ "SELECT 'hello;world' as greeting;", "SELECT * FROM users;", "SELECT * FROM orders;" })
+    local span = t.try_ts_stmt_span(buf, 2)
+    assert.equals(2, span[1], "stmt_start should be line 2, not split by ; in string")
+    assert.equals(2, span[2])
+  end)
+
+  it("handles semicolon in double-quoted identifier — no longer a bug", function()
+    local buf = make_buf({ "SELECT \"col;name\" FROM users;", "SELECT * FROM orders;" })
+    local span = t.try_ts_stmt_span(buf, 2)
+    assert.equals(2, span[1])
+    assert.equals(2, span[2])
+  end)
+
+  it("handles multi-line string — no longer a bug", function()
+    local buf = make_buf({ "SELECT 'hello", ";world' FROM users;", "SELECT * FROM orders;" })
+    local span = t.try_ts_stmt_span(buf, 3)
+    assert.equals(3, span[1])
+  end)
+
+  it("handles nested parentheses in function calls", function()
+    local buf = make_buf({ "SELECT COUNT(DISTINCT id) FROM users;" })
+    local span = t.try_ts_stmt_span(buf, 1)
+    assert.equals(1, span[1])
+  end)
+end)
+
+describe("try_ts_stmt_ranges", function()
+  it("returns all statement start lines", function()
+    local buf = make_buf({ "SELECT 1;", "SELECT 2;", "SELECT 3;" })
+    local lines = t.try_ts_stmt_ranges(buf, 1, 3)
+    assert.same({ 1, 2, 3 }, lines)
+  end)
+
+  it("skips blank lines between statements", function()
+    local buf = make_buf({ "SELECT 1;", "", "SELECT 2;" })
+    local lines = t.try_ts_stmt_ranges(buf, 1, 3)
+    assert.same({ 1, 3 }, lines)
   end)
 end)
