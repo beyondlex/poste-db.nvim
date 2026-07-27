@@ -1,6 +1,8 @@
 -- @connection my-blog
 -- @database inventory
 
+show tables;
+
 SELECT * FROM items ;
 
 SELECT count(1) FROM items ;

@@ -6,6 +6,7 @@ local tree = require("poste.sql.db_browser.tree")
 local async = require("poste.sql.db_browser.async")
 local icons = require("poste.sql.db_browser.icons")
 local forms = require("poste.sql.db_browser.forms")
+local select_mod = require("poste.select")
 
 local HEADER_LINES = icons.HEADER_LINES
 local M = {}
@@ -294,6 +295,62 @@ function M.refresh(node, context)
       for i, n in ipairs(nm) do context.line_to_node[i] = n end
     end)
   end, search_dir)
+end
+
+--- Execute SQL File: pick a .sql file and execute it against this database.
+function M.exec_file(node, context)
+  local conn = get_connection_name(node, context)
+  local database = node.node_type == "database" and node.name
+    or (node.meta and node.meta.database)
+
+  -- Mode selection
+  local modes = {
+    { value = "greedy", label = "Greedy", desc = "Continue on error" },
+    { value = "transaction", label = "Transaction", desc = "Rollback on any error" },
+  }
+  vim.ui.select(modes, {
+    prompt = "Execution mode:",
+    format_item = function(m) return m.label .. "  " .. m.desc end,
+  }, function(choice)
+    if not choice then return end
+
+    -- File selection via beyondlex/finder
+    local ok, finder = pcall(require, "finder")
+    if ok then
+      finder.open({
+        mode = "both",
+        initial_path = vim.fn.getcwd(),
+        extensions = { "sql" },
+        on_confirm = function(path)
+          if not path then return end
+          local file_exec = require("poste.sql.file_exec")
+          file_exec.run({
+            filepath = path,
+            conn = conn,
+            database = database,
+            mode = choice.value,
+          })
+        end,
+        on_cancel = function() end,
+      })
+    else
+      -- Fallback: vim.ui.input with file completion
+      vim.ui.input({
+        prompt = "SQL file path: ",
+        default = vim.fn.getcwd() .. "/",
+        completion = "file",
+      }, function(path)
+        if not path or path == "" then return end
+        local file_exec = require("poste.sql.file_exec")
+        file_exec.run({
+          filepath = path,
+          conn = conn,
+          database = database,
+          mode = choice.value,
+        })
+      end)
+    end
+  end)
 end
 
 --- Insert a new query block with connection context.

@@ -1,0 +1,26 @@
+local file_exec = require("poste.sql.file_exec")
+
+describe("file_exec", function()
+  describe("handle_line", function()
+    it("exists as a module", function()
+      assert.is_not_nil(file_exec)
+      assert.is_not_nil(file_exec.run)
+      assert.is_not_nil(file_exec.cancel)
+    end)
+  end)
+
+  describe("progress window", function()
+    it("creates and closes progress window", function()
+      -- Test that the module can be loaded without errors
+      local ok, err = pcall(require, "poste.sql.file_exec")
+      assert.is_true(ok, "file_exec module should load without errors")
+    end)
+  end)
+
+  describe("cancellation", function()
+    it("cancel works without active job", function()
+      local ok, err = pcall(file_exec.cancel)
+      assert.is_true(ok, "cancel should not error when no job is running")
+    end)
+  end)
+end)

@@ -19,6 +19,7 @@ local MENU_DEFS = {
     { letter = "q", label = "New Query",           action = "new_query",   group = "query" },
     { letter = "r", label = "Refresh",             action = "refresh",     group = "query" },
     { letter = "s", label = "Set as Default",      action = "set_default", group = "query" },
+    { letter = "f", label = "Execute SQL File...", action = "exec_file",   group = "query" },
     { letter = "c", label = "Copy Name",           action = "copy_name",   group = "query" },
     { letter = "t", label = "New Table",           action = "new_table",   group = "modify" },
   },
