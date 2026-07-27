@@ -22,11 +22,16 @@ local S = {
   conn = nil,
   db = nil,
   mode = nil,
+  rolled_back = false,
+  stmt_counts = {
+    create = 0, alter = 0, drop = 0,
+    insert = 0, update = 0, delete = 0, select = 0, other = 0,
+  },
 }
 
 local MAX_LOG_LINES = 5
 local PROGRESS_WIDTH = 60
-local PROGRESS_HEIGHT = 18
+local PROGRESS_HEIGHT = 20
 
 local function fmt_time(ms)
   if ms >= 1000 then
@@ -51,10 +56,12 @@ end
 
 local function cell(text, width)
   local s = tostring(text)
-  if #s > width then
-    return s:sub(1, width - 3) .. "..."
+  local dw = vim.fn.strdisplaywidth(s)
+  if dw > width then
+    return vim.fn.strcharpart(s, 0, width - 3) .. "..."
   end
-  return string.format("%-" .. width .. "s", s)
+  local pad = width - dw
+  return s .. string.rep(" ", pad)
 end
 
 local function render_bar(filled, total)
@@ -66,23 +73,87 @@ local function render_bar(filled, total)
   return string.format("[%s] %d/%d %s", bar, filled, total, pct_text)
 end
 
+local function fmt_filepath(path, max_len)
+  if not path or path == "" then return "" end
+  max_len = max_len or 48
+  if #path <= max_len then return path end
+  local half = math.floor((max_len - 3) / 2)
+  return path:sub(1, half) .. "..." .. path:sub(#path - half + 1)
+end
+
+local function classify_stmt(sql)
+  local s = sql:gsub("%s+", " "):gsub("^%s+", ""):upper()
+  if s:find("^CREATE") then return "create" end
+  if s:find("^ALTER") then return "alter" end
+  if s:find("^DROP") then return "drop" end
+  if s:find("^INSERT") then return "insert" end
+  if s:find("^UPDATE") then return "update" end
+  if s:find("^DELETE") then return "delete" end
+  if s:find("^SELECT") then return "select" end
+  return "other"
+end
+
 local function build_progress_lines()
   local lines = {}
   local content_width = PROGRESS_WIDTH - 4
   local conn_label = S.conn or ""
   if S.db then conn_label = conn_label .. " / " .. S.db end
 
-  table.insert(lines, "┌─ Execute SQL File " .. string.rep("─", PROGRESS_WIDTH - 21) .. "┐")
-  table.insert(lines, "│ " .. cell("Connection: " .. conn_label, content_width) .. " │")
-  table.insert(lines, "│ " .. cell("Mode: " .. (S.mode or "greedy"), content_width) .. " │")
-  table.insert(lines, "│ " .. cell(render_bar(S.n_succeeded + S.n_failed, S.total), content_width) .. " │")
-  table.insert(lines, "│ " .. cell("Elapsed: " .. fmt_elapsed(), content_width) .. " │")
+  local close_tag = S.is_running and "[c] Cancel" or "[q] Close"
+  local title_left = "┌─ Execute SQL File "
+  local title_right = " " .. close_tag .. " ─┐"
+  local left_dw = vim.fn.strdisplaywidth(title_left)
+  local right_dw = vim.fn.strdisplaywidth(title_right)
+  local fill = math.max(0, PROGRESS_WIDTH - left_dw - right_dw)
+  table.insert(lines, title_left .. string.rep("─", fill) .. title_right)
 
-  if S.current_sql and S.is_running then
-    table.insert(lines, "│ " .. cell("→ " .. fmt_sql(S.current_sql), content_width) .. " │")
+  local half = 27
+  local half2 = content_width - 1 - half
+
+  table.insert(lines, "│ " .. cell("Connection: " .. conn_label, content_width) .. " │")
+
+  local mode_label = S.mode == "transaction" and "Transaction" or "Greedy"
+  local stats
+  if S.rolled_back then
+    stats = string.format("Mode: %s   Failed: %d   (rolled back: %d)", mode_label, S.n_failed, S.n_succeeded)
   else
-    table.insert(lines, "│ " .. cell("", content_width) .. " │")
+    stats = string.format("Mode: %s   Succeeded: %d   Failed: %d", mode_label, S.n_succeeded, S.n_failed)
   end
+  table.insert(lines, "│ " .. cell(stats, content_width) .. " │")
+
+  table.insert(lines, "│ " .. cell("", content_width) .. " │")
+
+  local c = S.stmt_counts
+  local ddl_rows = {
+    { "create", c.create },
+    { "modify", c.alter },
+    { "drop", c.drop },
+  }
+  local dml_rows = {
+    { "insert", c.insert },
+    { "update", c.update },
+    { "delete", c.delete },
+    { "select", c.select },
+  }
+
+  table.insert(lines, "│ " .. cell("DDL", half) .. " " .. cell("DML", half2) .. " │")
+  for i = 1, 4 do
+    local ddl = ddl_rows[i]
+    local dml = dml_rows[i]
+    local left = ddl and string.format("%s: %d", ddl[1], ddl[2]) or ""
+    local right = dml and string.format("%s: %d", dml[1], dml[2]) or ""
+    table.insert(lines, "│ " .. cell(left, half) .. " " .. cell(right, half2) .. " │")
+  end
+
+  table.insert(lines, "│ " .. cell("", content_width) .. " │")
+
+  local bar = render_bar(S.n_succeeded + S.n_failed, S.total)
+  local elapsed = "Elapsed: " .. fmt_elapsed()
+  local bar_dw = vim.fn.strdisplaywidth(bar)
+  local elapsed_dw = vim.fn.strdisplaywidth(elapsed)
+  local pad = math.max(1, content_width - bar_dw - elapsed_dw)
+  table.insert(lines, "│ " .. bar .. string.rep(" ", pad) .. elapsed .. " │")
+  table.insert(lines, "│ " .. cell("File: " .. fmt_filepath(S.filepath), content_width) .. " │")
 
   table.insert(lines, "│" .. string.rep("─", PROGRESS_WIDTH - 2) .. "│")
 
@@ -94,18 +165,91 @@ local function build_progress_lines()
     table.insert(lines, "│ " .. cell(icon .. " " .. summary, content_width) .. " │")
   end
 
-  while #lines < PROGRESS_HEIGHT - 2 do
+  while #lines < PROGRESS_HEIGHT - 1 do
     table.insert(lines, "│ " .. cell("", content_width) .. " │")
   end
 
-  if S.is_running then
-    table.insert(lines, "│ " .. cell("[c] Cancel", content_width) .. " │")
-  else
-    table.insert(lines, "│ " .. cell("[q] Close", content_width) .. " │")
-  end
   table.insert(lines, "└" .. string.rep("─", PROGRESS_WIDTH - 2) .. "┘")
 
   return lines
+end
+
+local function apply_highlights()
+  vim.api.nvim_buf_clear_namespace(S.buf, NS, 0, -1)
+  local lines = vim.api.nvim_buf_get_lines(S.buf, 0, -1, false)
+
+  for i, line in ipairs(lines) do
+    if line:sub(1, 6) == "│ Mo" then
+      local s = line:find("Succeeded:", 1, true)
+      if s then
+        local e = line:find("   ", s + 11, true)
+        if e then
+          vim.api.nvim_buf_set_extmark(S.buf, NS, i - 1, s - 1, { end_col = e - 1, hl_group = "PosteSqlSucceeded" })
+        end
+      end
+      s = line:find("Failed:", 1, true)
+      if s then
+        local e = line:find(" │", s + 8, true)
+        if e then
+          vim.api.nvim_buf_set_extmark(S.buf, NS, i - 1, s - 1, { end_col = e - 1, hl_group = "PosteSqlFailed" })
+        end
+      end
+    end
+
+    if line:sub(1, 5) == "│ [" then
+      local s = line:find("Elapsed:", 1, true)
+      if s then
+        local e = line:find("s", s + 8, true)
+        if e then
+          vim.api.nvim_buf_set_extmark(S.buf, NS, i - 1, s - 1, { end_col = e, hl_group = "PosteSqlConstant" })
+        end
+      end
+    end
+
+    if line:sub(1, 6) == "│ Fi" then
+      local s = line:find("File: ", 1, true)
+      if s then
+        local path_start = s + 5
+        local pipe = line:find("│", s + 6, true)
+        if pipe and pipe > path_start then
+          vim.api.nvim_buf_set_extmark(S.buf, NS, i - 1, path_start, {
+            end_row = i - 1,
+            end_col = pipe - 3,
+            hl_group = "PosteSqlFilepath",
+          })
+        end
+      end
+    end
+
+    if line:sub(1, 5) == "│ \226" then
+      local check = line:find("\226\156\147", 1, true)
+      if check then
+        vim.api.nvim_buf_set_extmark(S.buf, NS, i - 1, check - 1, { end_col = check + 2, hl_group = "PosteLogSuccess" })
+        local sql_start = check + 3
+        local pipe = line:find("│", sql_start, true)
+        if pipe then
+          vim.api.nvim_buf_set_extmark(S.buf, NS, i - 1, sql_start, {
+            end_row = i - 1,
+            end_col = pipe - 3,
+            hl_group = "PosteLogSQL",
+          })
+        end
+      end
+      local cross = line:find("\226\156\152", 1, true)
+      if cross then
+        vim.api.nvim_buf_set_extmark(S.buf, NS, i - 1, cross - 1, { end_col = cross + 2, hl_group = "PosteLogError" })
+        local sql_start = cross + 3
+        local pipe = line:find("│", sql_start, true)
+        if pipe then
+          vim.api.nvim_buf_set_extmark(S.buf, NS, i - 1, sql_start, {
+            end_row = i - 1,
+            end_col = pipe - 3,
+            hl_group = "PosteLogSQL",
+          })
+        end
+      end
+    end
+  end
 end
 
 local function render_progress()
@@ -119,6 +263,7 @@ local function render_progress()
   if not ok then
     state.log("ERROR", "ExecFile render failed: " .. tostring(err))
   end
+  pcall(apply_highlights)
   vim.cmd("redraw")
 end
 
@@ -205,6 +350,8 @@ local function handle_line(line)
     local row_count = event.row_count or 0
     local elapsed = event.execution_time_ms or 0
     local sql = event.sql or ""
+    local stmt_type = classify_stmt(sql)
+    S.stmt_counts[stmt_type] = S.stmt_counts[stmt_type] + 1
 
     if status == "ok" then
       S.n_succeeded = S.n_succeeded + 1
@@ -231,23 +378,9 @@ local function handle_line(line)
     S.n_failed = event.failed or S.n_failed
     S.total_rows = event.total_rows or S.total_rows
     S.total_affected = event.total_affected or S.total_affected
+    S.rolled_back = event.rolled_back or false
     S.is_running = false
     S.current_sql = nil
-
-    local lines = {
-      string.format("Exec File: %s", S.filepath),
-      string.format("Connection: %s", event.connection or S.conn or "?"),
-      string.format("Database: %s", event.database or S.db or "?"),
-      string.format("Mode: %s", event.mode or S.mode),
-      "",
-      string.format("Total: %d statements", event.total),
-      string.format("Succeeded: %d", event.succeeded),
-      string.format("Failed: %d", event.failed),
-      string.format("Rows returned: %d", event.total_rows),
-      string.format("Rows affected: %d", event.total_affected),
-      string.format("Total time: %s", fmt_time(event.total_time_ms or 0)),
-    }
-    vim.notify(table.concat(lines, "\n"), vim.log.levels.INFO, { title = "Poste Exec File" })
     render_progress()
   end
 end
@@ -281,7 +414,9 @@ function M.run(opts)
   S.conn = conn
   S.db = db
   S.mode = mode
+  S.rolled_back = false
   S.current_sql = nil
+  S.stmt_counts = { create = 0, alter = 0, drop = 0, insert = 0, update = 0, delete = 0, select = 0, other = 0 }
 
   create_progress_win()
   render_progress()

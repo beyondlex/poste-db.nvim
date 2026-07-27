@@ -162,9 +162,15 @@ function M.setup()
   -- SQL Log viewer: status icons
   vim.api.nvim_set_hl(0, "PosteLogSuccess", { fg = dark and 0x4ec94e or 0x2d8a2d })
   vim.api.nvim_set_hl(0, "PosteLogError",   { fg = dark and 0xf07070 or 0xc04040 })
-  vim.api.nvim_set_hl(0, "PosteLogSQL",     { fg = dark and 0x9cdcfe or 0x0a6db5 })
+  vim.api.nvim_set_hl(0, "PosteLogSQL",     { fg = dark and 0x7f848e or 0x6a737d })
   vim.api.nvim_set_hl(0, "PosteLogSQLKeyword", { fg = dark and 0xc586c0 or 0x8250df, bold = true })
   vim.api.nvim_set_hl(0, "PosteLogFilter",  { fg = dark and 0xd7d700 or 0x9a7d00, bold = true })
+  -- File exec progress window: labels
+  vim.api.nvim_set_hl(0, "PosteSqlTotal",     { fg = dark and 0x61afef or 0x0550ae, bold = true })
+  vim.api.nvim_set_hl(0, "PosteSqlSucceeded", { fg = dark and 0x4ec94e or 0x2d8a2d, bold = true })
+  vim.api.nvim_set_hl(0, "PosteSqlFailed",    { fg = dark and 0xf07070 or 0xc04040, bold = true })
+  vim.api.nvim_set_hl(0, "PosteSqlConstant",  { link = "Constant" })
+  vim.api.nvim_set_hl(0, "PosteSqlFilepath",  { fg = dark and 0x7f848e or 0x6a737d })
   -- Detail background: subtle green
   vim.api.nvim_set_hl(0, "PosteLogDetail", { bg = dark and 0x1a3a1a or 0xe8f5e9 })
 
@@ -180,6 +186,7 @@ function M.setup()
     "PosteInsertHint", "PosteSqlError",
     "PosteWinbarAdded", "PosteWinbarModified", "PosteWinbarDeleted",
     "PosteLogSuccess", "PosteLogError", "PosteLogSQL", "PosteLogSQLKeyword", "PosteLogFilter",
+    "PosteSqlTotal", "PosteSqlSucceeded", "PosteSqlFailed", "PosteSqlConstant", "PosteSqlFilepath",
   })
 end
 
