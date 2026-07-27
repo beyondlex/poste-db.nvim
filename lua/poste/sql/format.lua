@@ -165,53 +165,55 @@ end
 --- @return number[] widths Array of column display widths
 local function calc_column_widths(columns, rows, max_width)
   local widths = {}
+  local min_data_widths = {}
   for i, col in ipairs(columns) do
-    -- Minimum width = header name length
     widths[i] = displaywidth(col.name)
+    min_data_widths[i] = widths[i]
   end
 
-  -- Expand to fit data
   for _, row in ipairs(rows) do
     for i, val in ipairs(row) do
       if i <= #widths then
         local s = cell_to_string(val, columns[i])
-        widths[i] = math.max(widths[i], displaywidth(s))
+        local dw = displaywidth(s)
+        widths[i] = math.max(widths[i], dw)
+        min_data_widths[i] = math.max(min_data_widths[i], dw)
       end
     end
   end
 
-  -- Cap column widths if total exceeds max_width
   if max_width and max_width > 0 then
-    -- Each column has 2 padding spaces + 1 separator = 3 extra chars
-    -- Total = sum(widths) + (ncols * 3) + 1 (leading │)
     local overhead = #widths * 3 + 1
     local available = max_width - overhead
     if available < #widths then
-      available = #widths -- minimum 1 char per column
+      available = #widths
     end
 
     local total = 0
     for _, w in ipairs(widths) do total = total + w end
 
     if total > available then
-      -- Proportionally shrink columns, minimum 4 chars each
       local scale = available / total
       for i = 1, #widths do
         widths[i] = math.max(4, math.floor(widths[i] * scale))
       end
-      -- Ensure column names are never truncated: each column must be at
-      -- least as wide as its header name, even if that exceeds the cap.
       for i, col in ipairs(columns) do
         local name_w = displaywidth(col.name or "")
         if name_w > widths[i] then
           widths[i] = name_w
         end
       end
+      -- Protect date/time columns from truncation: column name or value
+      -- pattern suggests a timestamp — ensure full value fits (capped at 25).
+      for i, col in ipairs(columns) do
+        local name = (col.name or ""):lower()
+        if name:match("date") or name:match("time") or name:match("_at$") or name:match("timestamp") then
+          widths[i] = math.max(widths[i], math.min(min_data_widths[i], 25))
+        end
+      end
     end
   end
 
-  -- Reserve 2 display columns per data column for sort indicator
-  -- This prevents header jitter when indicator appears/disappears
   for i = 1, #widths do
     widths[i] = widths[i] + 2
   end
