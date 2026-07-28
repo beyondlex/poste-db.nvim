@@ -18,7 +18,7 @@ local function insert_ddl(source_buf, ddl, label)
 
   local lines = {
     "",
-    "### " .. label,
+    "-- " .. label,
     ddl,
     "",
   }
@@ -26,7 +26,7 @@ local function insert_ddl(source_buf, ddl, label)
   local line_count = vim.api.nvim_buf_line_count(source_buf)
   vim.api.nvim_buf_set_lines(source_buf, line_count, line_count, false, lines)
 
-  -- Move cursor to the ### line in source buf
+  -- Move cursor to the label line in source buf
   local target_win = vim.fn.bufwinid(source_buf)
   if target_win and target_win ~= -1 then
     vim.api.nvim_set_current_win(target_win)

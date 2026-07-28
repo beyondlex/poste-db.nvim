@@ -395,7 +395,7 @@ function M.generate_select_query(buf_line, context)
 
   local query_lines = {
     "",
-    "### Query: " .. table_node.name,
+    "-- Query: " .. table_node.name,
   }
   for _, line in ipairs(context_lines) do
     table.insert(query_lines, line)
@@ -460,7 +460,7 @@ function M.generate_describe_query(buf_line, context)
 
   local query_lines = {
     "",
-    "### Describe: " .. table_node.name,
+    "-- Describe: " .. table_node.name,
   }
   for _, line in ipairs(context_lines) do
     table.insert(query_lines, line)
