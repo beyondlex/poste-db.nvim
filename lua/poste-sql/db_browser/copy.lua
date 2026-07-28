@@ -8,6 +8,7 @@ local M = {}
 local function setup_highlights()
   vim.api.nvim_set_hl(0, "PosteCopySuccess", { fg = "#9ece6a" })
   vim.api.nvim_set_hl(0, "PosteCopyError", { fg = "#f7768e" })
+  vim.api.nvim_set_hl(0, "PosteCopyProgress", { fg = "#565f89" })
 end
 
 setup_highlights()
@@ -392,7 +393,10 @@ local function show_progress_dialog(source, target, table_names, on_close)
     local bar = string.rep("█", filled) .. string.rep("░", bar_len - filled)
     table.insert(lines, "  Source: " .. source.conn .. "." .. source.db)
     table.insert(lines, "  Target: " .. target.conn .. "." .. target.db)
-    table.insert(lines, "  " .. bar .. "  " .. done .. "/" .. total .. " (" .. pct .. "%)")
+    table.insert(lines, "")
+    local bar_line = "  " .. bar .. "  " .. done .. "/" .. total .. " (" .. pct .. "%)"
+    table.insert(lines, bar_line)
+    table.insert(highlights, { line = #lines - 1, col_start = 0, col_end = #bar_line, hl_group = "PosteCopyProgress" })
     table.insert(lines, "")
 
     for _, name in ipairs(table_names) do
