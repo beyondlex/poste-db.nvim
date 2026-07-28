@@ -164,6 +164,7 @@ local function start_copy(buf_line)
       target_db.loading = true
       render_tree()
       async.fetch_children(target_db, function()
+        target_db.expanded = true
         vim.schedule(function()
           render_tree()
         end)
