@@ -38,5 +38,17 @@
     "database": "inventory",
     "user": "root",
     "password": "poste_test"
+  },
+  "sqlite-dev": {
+    "dialect": "sqlite",
+    "path": "./playground/sql/init/sqlite/test.db"
+  },
+  "maria-dev": {
+    "dialect": "mariadb",
+    "host": "localhost",
+    "port": 13307,
+    "database": "blog",
+    "user": "root",
+    "password": "poste_test"
   }
 }

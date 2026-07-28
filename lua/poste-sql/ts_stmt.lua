@@ -145,8 +145,8 @@ function M.find_error_nodes(buf)
     -- and cascading errors (short fragments from nested parser errors).
     local upper = text:upper()
 
-    -- Filter cascading parser errors: single char or punctuation-only
-    if #text <= 2 then
+    -- Filter cascading parser errors: single char, punctuation-only, or short parenthesized identifiers
+    if #text <= 2 or upper:match("^%(%w+%)$") then
       goto continue
     end
 
@@ -157,10 +157,24 @@ function M.find_error_nodes(buf)
         USE = true, SET = true, DESC = true, DESCRIBE = true,
         ANALYZE = true, KILL = true, FLUSH = true, CALL = true,
         LOAD = true, REPAIR = true, CHECK = true,
+        ON = true, FOR = true, NOTIFY = true, TABLE = true,
+        BEGIN = true, SETS = true, PERCENTILE_CONT = true,
       }
       if known_false_positives[stmt_kw] then
         goto continue
       end
+    end
+
+    -- Filter PG-specific constructs that the parser misparses
+    if upper:match("^%(%w+%)%s+DO%s+UPDATE") or upper:match("^%(%w+%)%s+ON%s+CONFLICT") then
+      goto continue
+    end
+
+    -- Filter SQLite-specific INSERT OR conflict clauses
+    if upper:match("^OR%s+REPLACE%s+INTO") or upper:match("^OR%s+ROLLBACK%s+INTO")
+      or upper:match("^OR%s+ABORT%s+INTO") or upper:match("^OR%s+FAIL%s+INTO")
+      or upper:match("^OR%s+IGNORE%s+INTO") then
+      goto continue
     end
 
     errors[#errors + 1] = {

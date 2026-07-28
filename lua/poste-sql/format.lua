@@ -18,7 +18,12 @@ end
 --- Uses Neovim's built-in strdisplaywidth() which correctly handles CJK, emoji, etc.
 local function displaywidth(s)
   if not s then return 0 end
-  return vim.fn.strdisplaywidth(s)
+  if type(s) ~= "string" then
+    s = tostring(s)
+  end
+  local ok, result = pcall(vim.fn.strdisplaywidth, s)
+  if ok then return result end
+  return #s
 end
 
 --- Truncate a string to fit within a given display width, preserving UTF-8 validity.
@@ -105,8 +110,27 @@ local function pad_left(s, width)
   return string.rep(" ", width - dw) .. s
 end
 
+--- Convert a datetime string to local timezone for display.
+--- Only converts if the string has a timezone indicator (Z or +/-HH:MM).
+--- @param s string
+--- @return string
+local function format_datetime_local(s)
+  if not s or s == "" then return s end
+  local has_tz = s:match("Z$") or s:match("[%+%-]%d%d:%d%d$")
+  if not has_tz then return s end
+  local ts = s:match("^(%d%d%d%d%-%d%d%-%d%d[T ]%d%d:%d%d:%d%d)")
+  if not ts then return s end
+  local y, mo, d, h, mi, sec = ts:match("^(%d%d%d%d)%-(%d%d)%-(%d%d)[T ](%d%d):(%d%d):(%d%d)")
+  if not y then return s end
+  local ok, result = pcall(os.date, "%Y-%m-%d %H:%M:%S", os.time({
+    year = y, month = mo, day = d, hour = h, min = mi, sec = sec,
+  }))
+  return ok and result or s
+end
+
 --- Convert a cell value to display string.
 --- Newlines are replaced with ⏎ to keep table layout intact.
+--- Timestamps are converted to local timezone.
 local function cell_to_string(val, col)
   if val == "[Auto]" then
     return "<auto>"
@@ -135,8 +159,14 @@ local function cell_to_string(val, col)
     -- JSON/JSONB values — compact encode
     local ok, encoded = pcall(vim.json.encode, val)
     s = ok and encoded or vim.inspect(val)
+  elseif type(val) == "blob" then
+    s = "<blob: " .. #val .. " bytes>"
   else
     s = tostring(val)
+  end
+  -- Convert timestamps to local timezone
+  if col and col.type and col.type:upper():match("TIME") then
+    s = format_datetime_local(s)
   end
   -- Replace newlines with a visual indicator so nvim_buf_set_lines doesn't break
   s = s:gsub("\r\n", "⏎"):gsub("\n", "⏎"):gsub("\r", "⏎")

@@ -81,6 +81,13 @@ function M.setup(buf)
       M.clear_diagnostics(buf)
     end,
   })
+  vim.api.nvim_create_autocmd("BufEnter", {
+    group = group,
+    buffer = buf,
+    callback = function()
+      M.debounced_update(buf)
+    end,
+  })
 
   M.update_diagnostics(buf)
 end

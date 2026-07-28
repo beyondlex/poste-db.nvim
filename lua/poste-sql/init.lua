@@ -424,13 +424,14 @@ local seq = current_seq
         if l ~= "" then table.insert(stderr_buf, l) end
       end
     end,
-    on_exit = function(_, code)
+on_exit = function(_, code)
       if code ~= 0 then
         state.log("ERROR", string.format("SQL exit code %d", code))
         vim.schedule(function()
           if current_seq < exec_seq then return end
-indicators.set_indicator(src_buf, (stmt_end or first_line) - 1, "error")
-    vim.notify("Failed to start poste job", vim.log.levels.ERROR, { title = "Poste SQL" })
+          local stderr_text = table.concat(stderr_buf, "\n")
+          indicators.set_indicator(src_buf, (stmt_end or first_line) - 1, "error")
+          vim.notify("Failed to start poste job", vim.log.levels.ERROR, { title = "Poste SQL" })
           local lines = sql_format.format_error(
             stderr_text ~= "" and stderr_text or "Query failed with exit code " .. code,
             state.sql.context.connection or ""
@@ -836,6 +837,17 @@ function M.setup(opts)
   end, {
     nargs = "*",
     desc = "Switch SQL execution context (connection/database)",
+  })
+
+  vim.api.nvim_create_user_command("PosteSQLRunFile", function(args)
+    require("poste-sql.file_exec").run({
+      filepath = args.args,
+      mode = "greedy",
+    })
+  end, {
+    nargs = 1,
+    complete = "file",
+    desc = "Execute a SQL file",
   })
 
   vim.api.nvim_create_autocmd({ "BufRead", "BufNewFile" }, {

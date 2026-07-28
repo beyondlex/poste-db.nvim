@@ -27,6 +27,7 @@ local FORMATTERS = {
     default_dialect = "ansi",
     dialect_map = {
       mysql = "mysql",
+      mariadb = "mysql",
       postgres = "postgres",
       postgresql = "postgres",
       sqlite = "sqlite",

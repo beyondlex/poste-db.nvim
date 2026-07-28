@@ -61,7 +61,12 @@ function M.get_connection_config(name)
     _config_cache = parsed
     _config_cache_path = config_path
   end
-  return _config_cache[name]
+  local conn = _config_cache[name]
+  if conn and conn.dialect == "mariadb" then
+    conn = vim.deepcopy(conn)
+    conn.dialect = "mysql"
+  end
+  return conn
 end
 
 ---------------------------------------------------------------------------
@@ -115,6 +120,7 @@ end
 local dialect_icons = {
   postgres = "🐘",
   mysql = "🐬",
+  mariadb = "🐬",
   sqlite = "📦",
 }
 

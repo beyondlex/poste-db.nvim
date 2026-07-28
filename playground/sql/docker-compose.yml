@@ -29,3 +29,18 @@ services:
       interval: 2s
       timeout: 3s
       retries: 10
+
+  mariadb:
+    image: mariadb:lts-ubi10
+    container_name: poste-test-mariadb
+    environment:
+      MARIADB_ROOT_PASSWORD: poste_test
+    ports:
+      - "13307:3306"
+    volumes:
+      - ./init/mariadb:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-pposte_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 10
