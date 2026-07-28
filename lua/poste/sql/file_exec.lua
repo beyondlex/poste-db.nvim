@@ -121,6 +121,7 @@ local function build_content()
   local bar = layout.progress(S.n_succeeded + S.n_failed, S.total, { bar_width = 20 })[1]
   local elapsed = "Elapsed: " .. fmt_elapsed()
   table.insert(lines, layout.space_between(bar, elapsed, { width = cw })[1])
+  table.insert(highlights, { line = #lines - 1, col_start = 0, col_end = cw, hl_group = "PosteProgressBar" })
 
   local elapsed_start = (#lines[#lines] or 0) > 0 and lines[#lines]:find("Elapsed:", 1, true)
   if elapsed_start then
