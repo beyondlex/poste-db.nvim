@@ -64,7 +64,7 @@ local function ensure_sql_keymaps(buf)
   -- g?: show keymap help
   k = state.get_keymap("sql_source", "help", "g?")
   if k then
-    vim.keymap.set("n", k, function() require("poste.help").open() end, keymap_opts)
+    vim.keymap.set("n", k, function() require("poste-sql.help").open() end, keymap_opts)
   end
 
   -- <leader>l: toggle SQL execution log

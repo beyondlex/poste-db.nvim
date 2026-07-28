@@ -130,7 +130,7 @@ function M.get_dataset_buffer()
 
   k = state.get_keymap("sql_dataset", "help", "g?")
   if k then
-    vim.keymap.set("n", k, function() require("poste.help").open() end, opts)
+    vim.keymap.set("n", k, function() require("poste-sql.help").open() end, opts)
   end
 
   -- BufWriteCmd: :w triggers commit

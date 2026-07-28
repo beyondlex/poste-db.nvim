@@ -166,7 +166,7 @@ function M.open(node, context)
   vim.bo[menu_buf].modifiable = false
 
   local win_opts = {
-    relative = "editor",
+    relative = "win",
     row = row,
     col = col,
     width = width,

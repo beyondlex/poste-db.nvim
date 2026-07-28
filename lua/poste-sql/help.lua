@@ -92,7 +92,21 @@ function M.open()
   local highlights = {}
   local width = 50
 
-  for _, section in ipairs({ "sql_source", "sql_dataset", "sql_table_ops", "sql_db_browser", "sql_introspect" }) do
+  local buf = vim.api.nvim_get_current_buf()
+  local ft = vim.bo[buf].filetype
+  local buf_name = vim.api.nvim_buf_get_name(buf)
+  local sections
+  if ft == "poste_sql" or ft == "poste_sqlite" or ft == "sql" then
+    sections = { "sql_source" }
+  elseif ft == "poste_dataset" or ft == "PosteDataset" then
+    sections = { "sql_dataset" }
+  elseif buf_name:match("poste://db_browser") then
+    sections = { "sql_db_browser" }
+  else
+    sections = { "sql_source", "sql_dataset", "sql_table_ops", "sql_db_browser", "sql_introspect" }
+  end
+
+  for _, section in ipairs(sections) do
     local title = SECTION_TITLES[section] or section
     local km = state.config.keymaps[section] or {}
     local desc = DESCRIPTIONS[section] or {}
