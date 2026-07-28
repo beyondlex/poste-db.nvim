@@ -401,13 +401,13 @@ local function show_progress_dialog(source, target, table_names, on_close)
       if r.status == "done" then
         local line = "  ✓ " .. name .. "  (" .. r.row_count .. " rows, " .. r.elapsed .. ")"
         table.insert(lines, line)
-        table.insert(highlights, { line = #lines - 1, col_start = 0, col_end = -1, hl_group = "PosteCopySuccess" })
+        table.insert(highlights, { line = #lines - 1, col_start = 0, col_end = #line, hl_group = "PosteCopySuccess" })
       elseif r.status == "copying" then
         table.insert(lines, "  ⟳ " .. name .. "  (copying...)")
       elseif r.status == "error" then
         local line = "  ✘ " .. name
         table.insert(lines, line)
-        table.insert(highlights, { line = #lines - 1, col_start = 0, col_end = -1, hl_group = "PosteCopyError" })
+        table.insert(highlights, { line = #lines - 1, col_start = 0, col_end = #line, hl_group = "PosteCopyError" })
       else
         table.insert(lines, "  ◻ " .. name .. "  (pending)")
       end

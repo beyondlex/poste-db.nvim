@@ -1,6 +1,9 @@
 -- @connection my-blog
 -- @database inventory
 
+select * from poste_test_metrics;
+select * from poste_test_events;;
+
 show tables;
 
 SELECT * FROM items ;
@@ -18,6 +21,8 @@ select id, slug FROM blog.posts ;
 -- UPDATE posts SET bio = '' AFTERE id i
 
 -- @database blog
+select * from poste_test_metrics;
+select * from poste_test_events;;
 
 drop table poste_test_events;
 drop table poste_test_metrics;
