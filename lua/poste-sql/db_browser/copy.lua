@@ -24,12 +24,8 @@ local function dialect_table_exists_sql(dialect)
 end
 
 local function find_search_dir()
-  local buf = vim.api.nvim_get_current_buf()
-  local buf_name = vim.api.nvim_buf_get_name(buf)
-  if buf_name and buf_name ~= "" then
-    return vim.fn.fnamemodify(buf_name, ":p:h")
-  end
-  return vim.fn.getcwd()
+  local browser = require("poste-sql.db_browser")
+  return browser.get_search_dir()
 end
 
 local function run_sql_on_conn(conn_name, database, sql, on_result, on_error)
@@ -321,6 +317,37 @@ local function show_confirm_dialog(source, target, table_names, on_confirm, on_c
   dlg:update(lines)
 end
 
+local function show_summary_dialog(completed, failed, errors)
+  local lines = {
+    "  Succeeded: " .. completed .. "  |  Failed: " .. failed,
+    "",
+  }
+  if failed > 0 then
+    for name, err in pairs(errors) do
+      table.insert(lines, "  ✘ " .. name)
+      local line_len = 50
+      local pos = 1
+      while pos <= #err do
+        local chunk = err:sub(pos, pos + line_len - 1)
+        table.insert(lines, "      " .. chunk)
+        pos = pos + line_len
+      end
+    end
+  end
+
+  local height = math.max(6, 4 + #lines)
+  height = math.min(height, 24)
+
+  local dlg = dialog.open({
+    title = "Copy Complete",
+    width = 60,
+    height = height,
+    border = "rounded",
+    backdrop = false,
+  })
+  dlg:update(lines)
+end
+
 local function show_progress_dialog(source, target, table_names, on_close)
   local popts = popup_options()
   local height = math.max(14, 8 + #table_names)
@@ -438,37 +465,6 @@ local function show_progress_dialog(source, target, table_names, on_close)
     cancelled = true
     dlg:close()
   end
-end
-
-local function show_summary_dialog(completed, failed, errors)
-  local lines = {
-    "  Succeeded: " .. completed .. "  |  Failed: " .. failed,
-    "",
-  }
-  if failed > 0 then
-    for name, err in pairs(errors) do
-      table.insert(lines, "  ✘ " .. name)
-      local line_len = 50
-      local pos = 1
-      while pos <= #err do
-        local chunk = err:sub(pos, pos + line_len - 1)
-        table.insert(lines, "      " .. chunk)
-        pos = pos + line_len
-      end
-    end
-  end
-
-  local height = math.max(6, 4 + #lines)
-  height = math.min(height, 24)
-
-  local dlg = dialog.open({
-    title = "Copy Complete",
-    width = 60,
-    height = height,
-    border = "rounded",
-    backdrop = false,
-  })
-  dlg:update(lines)
 end
 
 function M.copy_tables(source, target, table_names, on_complete)

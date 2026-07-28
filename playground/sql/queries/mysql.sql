@@ -19,6 +19,11 @@ select id, slug FROM blog.posts ;
 
 -- @database blog
 
+drop table poste_test_events;
+drop table poste_test_metrics;
+drop table poste_test_users;
+drop table shipments;
+
 SELECT id, page_id, url, measured_at, metric_01 from web_vitals ;
 SELECT * from web_vitals ;
 

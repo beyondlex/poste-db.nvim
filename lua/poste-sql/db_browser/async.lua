@@ -86,7 +86,9 @@ function M.fetch_children(node, callback, search_dir)
         node.children = {}
         if result and result.items then
           for _, item in ipairs(result.items) do
-            table.insert(node.children, tree.make_table_node(item, nil, nil, conn))
+            local child = tree.make_table_node(item, nil, nil, conn)
+            child.parent = node
+            table.insert(node.children, child)
           end
         end
         callback()
@@ -104,7 +106,9 @@ function M.fetch_children(node, callback, search_dir)
               template0 = true, template1 = true,
             }
             if not skip[item.name] then
-              table.insert(node.children, tree.make_database_node(item, conn, dialect))
+              local child = tree.make_database_node(item, conn, dialect)
+              child.parent = node
+              table.insert(node.children, child)
             end
           end
         end
@@ -123,7 +127,9 @@ function M.fetch_children(node, callback, search_dir)
             if item.name ~= "pg_catalog"
               and item.name ~= "information_schema"
               and item.name:sub(1, 8) ~= "pg_toast" then
-              table.insert(node.children, tree.make_schema_node(item, conn, node.name))
+              local child = tree.make_schema_node(item, conn, node.name)
+              child.parent = node
+              table.insert(node.children, child)
             end
           end
         end
@@ -135,7 +141,9 @@ function M.fetch_children(node, callback, search_dir)
         node.children = {}
         if result and result.items then
           for _, item in ipairs(result.items) do
-            table.insert(node.children, tree.make_table_node(item, nil, node.name, conn))
+            local child = tree.make_table_node(item, nil, node.name, conn)
+            child.parent = node
+            table.insert(node.children, child)
           end
         end
         callback()
@@ -149,7 +157,9 @@ function M.fetch_children(node, callback, search_dir)
       node.children = {}
       if result and result.items then
         for _, item in ipairs(result.items) do
-          table.insert(node.children, tree.make_table_node(item, node.name, db_name, conn))
+          local child = tree.make_table_node(item, node.name, db_name, conn)
+          child.parent = node
+          table.insert(node.children, child)
         end
       end
       callback()
@@ -177,13 +187,19 @@ function M.fetch_children(node, callback, search_dir)
         end
         node.children = {}
         for _, item in ipairs(pk_cols) do
-          table.insert(node.children, tree.make_column_node(item))
+          local child = tree.make_column_node(item)
+          child.parent = node
+          table.insert(node.children, child)
         end
         for _, item in ipairs(regular_cols) do
-          table.insert(node.children, tree.make_column_node(item))
+          local child = tree.make_column_node(item)
+          child.parent = node
+          table.insert(node.children, child)
         end
         for _, item in ipairs(fk_cols) do
-          table.insert(node.children, tree.make_column_node(item))
+          local child = tree.make_column_node(item)
+          child.parent = node
+          table.insert(node.children, child)
         end
 
         local key_items = {}
@@ -204,15 +220,18 @@ function M.fetch_children(node, callback, search_dir)
             expanded = false, loading = false,
           }
           for _, ki in ipairs(key_items) do
-            table.insert(keys_node.children, {
+            local child = {
               node_type = "key_item",
               name = ki.name,
               full_name = ki.name,
               children = {},
               expanded = false, loading = false,
               meta = { is_pk = ki.type == "pk" },
-            })
+            }
+            child.parent = keys_node
+            table.insert(keys_node.children, child)
           end
+          keys_node.parent = node
           table.insert(node.children, keys_node)
         end
 
@@ -250,14 +269,17 @@ function M.fetch_children(node, callback, search_dir)
             if fi.ref_table and fi.ref_table ~= "" then
               label = label .. " -> " .. fi.ref_table .. "(" .. fi.ref_column .. ")"
             end
-            table.insert(fk_node.children, {
+            local child = {
               node_type = "fk_item",
               name = label,
               full_name = label,
               children = {},
               expanded = false, loading = false,
-            })
+            }
+            child.parent = fk_node
+            table.insert(fk_node.children, child)
           end
+          fk_node.parent = node
           table.insert(node.children, fk_node)
         end
 
@@ -276,15 +298,18 @@ function M.fetch_children(node, callback, search_dir)
             expanded = false, loading = false,
           }
           for _, ii in ipairs(idx_items) do
-            table.insert(idx_node.children, {
+            local child = {
               node_type = "index_item",
               name = ii.name,
               full_name = ii.name,
               children = {},
               expanded = false, loading = false,
               meta = { is_pk = ii.is_pk },
-            })
+            }
+            child.parent = idx_node
+            table.insert(idx_node.children, child)
           end
+          idx_node.parent = node
           table.insert(node.children, idx_node)
         end
         callback()
