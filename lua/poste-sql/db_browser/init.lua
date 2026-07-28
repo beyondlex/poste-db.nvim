@@ -12,6 +12,132 @@ local root_nodes = {}
 local line_to_node = {}
 local source_buf = nil
 
+local multi_select = {
+  active = false,
+  source_db = nil,
+  selected = {},
+}
+
+local function exit_multi_select()
+  if not multi_select.active then return end
+  multi_select.active = false
+  multi_select.source_db = nil
+  multi_select.selected = {}
+  render_tree()
+end
+
+local function find_db_parent(node)
+  while node do
+    if node.node_type == "database" then return node end
+    node = node.parent
+  end
+  return nil
+end
+
+local function toggle_multi_select_on_table(buf_line)
+  local node = tree.get_node_at_line(line_to_node, buf_line)
+  if not node or node.node_type ~= "table" then return end
+
+  local db_parent = find_db_parent(node)
+  if not db_parent then return end
+
+  if not multi_select.active then
+    multi_select.active = true
+    multi_select.source_db = db_parent
+    multi_select.selected = {}
+  elseif multi_select.source_db ~= db_parent then
+    return
+  end
+
+  if multi_select.selected[node] then
+    multi_select.selected[node] = nil
+  else
+    multi_select.selected[node] = true
+  end
+
+  render_tree()
+
+  local total_lines = vim.api.nvim_buf_line_count(browser_buf)
+  local next_line = buf_line + 1
+  if next_line <= total_lines then
+    vim.api.nvim_win_set_cursor(browser_win or 0, { next_line, 0 })
+  end
+end
+
+local function get_selected_table_names()
+  local names = {}
+  for node, _ in pairs(multi_select.selected) do
+    table.insert(names, node.name)
+  end
+  table.sort(names)
+  return names
+end
+
+local function find_target_db(buf_line)
+  local idx = buf_line - HEADER_LINES
+  for i = idx, 1, -1 do
+    local n = line_to_node[i]
+    if n and n.node_type == "database" then return n end
+    if n and n.node_type == "connection" then return nil end
+  end
+  return nil
+end
+
+local function start_copy(buf_line)
+  if not multi_select.active or not next(multi_select.selected) then
+    vim.notify("No tables selected. Use <Tab> to select tables first.", vim.log.levels.INFO)
+    return
+  end
+
+  local target_db = find_target_db(buf_line)
+  if not target_db then
+    vim.notify("Move cursor to a target database", vim.log.levels.INFO)
+    return
+  end
+
+  if target_db == multi_select.source_db then
+    vim.notify("Target database is the same as source. Select a different database.", vim.log.levels.WARN)
+    return
+  end
+
+  local source_conn_name = multi_select.source_db.meta and multi_select.source_db.meta.connection
+  local target_conn_name = target_db.meta and target_db.meta.connection
+
+  local function get_dialect(conn_name)
+    for _, root in ipairs(root_nodes) do
+      if root.name == conn_name then
+        return root.meta and root.meta.dialect or "postgres"
+      end
+    end
+    return "postgres"
+  end
+
+  local src_dialect = get_dialect(source_conn_name)
+  local tgt_dialect = get_dialect(target_conn_name)
+
+  if src_dialect ~= tgt_dialect then
+    vim.notify(string.format(
+      "Cannot copy: dialect mismatch (%s → %s). Both must be the same dialect.",
+      src_dialect, tgt_dialect
+    ), vim.log.levels.ERROR)
+    return
+  end
+
+  local table_names = get_selected_table_names()
+  local copy_mod = require("poste-sql.db_browser.copy")
+  copy_mod.copy_tables({
+    conn = source_conn_name,
+    db = multi_select.source_db.name,
+    dialect = src_dialect,
+  }, {
+    conn = target_conn_name,
+    db = target_db.name,
+    dialect = tgt_dialect,
+  }, table_names, function()
+    exit_multi_select()
+  end)
+end
+
 local function make_context()
   local conn_label = state.sql.db_browser.connection or "No connection"
   return {
@@ -20,13 +146,14 @@ local function make_context()
     root_nodes = root_nodes,
     source_buf = source_buf,
     conn_label = conn_label,
+    multi_select = multi_select,
   }
 end
 
 local function render_tree()
   if not browser_buf or not vim.api.nvim_buf_is_valid(browser_buf) then return end
   local conn_label = state.sql.db_browser.connection or "No connection"
-  local new_map = tree.render_tree(browser_buf, line_to_node, root_nodes, conn_label)
+  local new_map = tree.render_tree(browser_buf, line_to_node, root_nodes, conn_label, multi_select)
   line_to_node = new_map
 end
 
@@ -108,6 +235,30 @@ local function setup_browser_buffer()
   k = state.get_keymap("sql_db_browser", "help", "g?")
   if k then
     vim.keymap.set("n", k, function() require("poste-sql.help").open() end, opts)
+  end
+
+  -- Multi-select: Tab toggles selection on table nodes
+  k = state.get_keymap("sql_db_browser", "multi_select_toggle", "<Tab>")
+  if k then
+    vim.keymap.set("n", k, function()
+      toggle_multi_select_on_table(vim.fn.line("."))
+    end, opts)
+  end
+
+  -- Multi-select: Esc exits selection mode
+  k = state.get_keymap("sql_db_browser", "multi_select_exit", "<Esc>")
+  if k then
+    vim.keymap.set("n", k, function()
+      exit_multi_select()
+    end, opts)
+  end
+
+  -- Copy: p triggers copy to target database
+  k = state.get_keymap("sql_db_browser", "copy_tables", "p")
+  if k then
+    vim.keymap.set("n", k, function()
+      start_copy(vim.fn.line("."))
+    end, opts)
   end
 
   local table_ops = require("poste-sql.table_ops")
@@ -412,6 +563,7 @@ function M.open()
 end
 
 function M.close()
+  exit_multi_select()
   if browser_win and vim.api.nvim_win_is_valid(browser_win) then
     vim.api.nvim_win_close(browser_win, true)
     browser_win = nil

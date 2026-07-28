@@ -4,6 +4,8 @@ local DIALECT_ICONS = icons.DIALECT_ICONS
 local MARKER_COLLAPSED = icons.MARKER_COLLAPSED
 local MARKER_EXPANDED = icons.MARKER_EXPANDED
 local MARKER_LOADING = icons.MARKER_LOADING
+local MARKER_SELECTED = icons.MARKER_SELECTED
+local MARKER_UNSELECTED = icons.MARKER_UNSELECTED
 local HEADER_LINES = icons.HEADER_LINES
 local hl_ns = icons.hl_ns
 
@@ -109,8 +111,9 @@ function M.make_index_node(item)
   }
 end
 
-function M.flatten_tree(nodes, depth)
+function M.flatten_tree(nodes, depth, multi_select)
   depth = depth or 0
+  multi_select = multi_select or {}
   local lines = {}
   local node_map = {}
   local count_ranges = {}
@@ -133,7 +136,13 @@ function M.flatten_tree(nodes, depth)
     end
 
     local marker
-    if node.node_type == "column" or node.node_type == "index"
+    if node.node_type == "table" and multi_select.active then
+      if multi_select.selected and multi_select.selected[node] then
+        marker = MARKER_SELECTED .. " "
+      else
+        marker = MARKER_UNSELECTED .. " "
+      end
+    elseif node.node_type == "column" or node.node_type == "index"
         or node.node_type == "key_item" or node.node_type == "fk_item"
         or node.node_type == "index_item" then
       marker = "  "
@@ -178,7 +187,7 @@ function M.flatten_tree(nodes, depth)
 
     if node.expanded and node.children then
       local line_offset = #lines
-      local child_lines, child_map, child_ranges = M.flatten_tree(node.children, depth + 1)
+      local child_lines, child_map, child_ranges = M.flatten_tree(node.children, depth + 1, multi_select)
       for _, cl in ipairs(child_lines) do table.insert(lines, cl) end
       for _, cn in ipairs(child_map) do table.insert(node_map, cn) end
       for _, cr in ipairs(child_ranges) do
@@ -198,7 +207,8 @@ local function calc_icon_position(text)
   if first_content == 0 then return -1 end
 
   local first_3 = text:sub(first_content, first_content + 2)
-  if first_3 == MARKER_EXPANDED or first_3 == MARKER_COLLAPSED or first_3 == MARKER_LOADING then
+  if first_3 == MARKER_EXPANDED or first_3 == MARKER_COLLAPSED or first_3 == MARKER_LOADING
+      or first_3 == MARKER_SELECTED or first_3 == MARKER_UNSELECTED then
     return first_content + 3
   else
     return first_content - 1
@@ -247,7 +257,8 @@ function M.apply_highlights(buf, line_count, count_ranges, line_to_node)
 
     local first_3 = text:sub(first_content, first_content + 2)
     local icon_byte_start
-    if first_3 == MARKER_EXPANDED or first_3 == MARKER_COLLAPSED or first_3 == MARKER_LOADING then
+    if first_3 == MARKER_EXPANDED or first_3 == MARKER_COLLAPSED or first_3 == MARKER_LOADING
+        or first_3 == MARKER_SELECTED or first_3 == MARKER_UNSELECTED then
       icon_byte_start = first_content + 3
       vim.api.nvim_buf_add_highlight(buf, hl_ns, "PosteSqlBrowserMarker",
         i - 1, first_content - 1, first_content + 2)
@@ -317,10 +328,10 @@ function M.apply_highlights(buf, line_count, count_ranges, line_to_node)
   end
 end
 
-function M.render_tree(browser_buf, line_to_node, root_nodes, conn_label)
+function M.render_tree(browser_buf, line_to_node, root_nodes, conn_label, multi_select)
   if not browser_buf or not vim.api.nvim_buf_is_valid(browser_buf) then return end
 
-  local lines, node_map, count_ranges = M.flatten_tree(root_nodes)
+  local lines, node_map, count_ranges = M.flatten_tree(root_nodes, 0, multi_select)
 
   local si = _G.poste_search_info
   local title
