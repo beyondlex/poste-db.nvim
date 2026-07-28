@@ -26,7 +26,7 @@ covers what docs don't: workflow, rules of thumb, historical pitfalls.
 - Table, alias, schema, or column extraction logic
 - Statement boundary detection
 - New SQL constructs (CTEs, window functions, `SHOW`, `COPY`, `FOR UPDATE`)
-- Any change in `crates/poste-core/src/sql_context/` or `lua/poste/sql/completion*.lua`
+- Any change in `crates/poste-core/src/sql_context/` or `lua/poste-sql/completion*.lua`
 
 ## Source-of-Truth Rules
 
@@ -201,8 +201,8 @@ Tokenizer changes must preserve:
 | `crates/poste-core/src/sql_context/tables.rs` | Table/schema/alias extraction |
 | `crates/poste-core/src/sql_context/functions.rs` | SQL function list |
 | `crates/poste-cli/src/main.rs` | `poste context detect` JSON shape |
-| `lua/poste/sql/completion.lua` | Completion orchestrator |
-| `lua/poste/sql/completion_ctx.lua` | Legacy Lua regex fallback (deprecated) |
-| `lua/poste/sql/completion_data.lua` | Async introspection, cache, fallback lists |
-| `lua/poste/sql/context.lua` | Connection/database resolution |
+| `lua/poste-sql/completion.lua` | Completion orchestrator |
+| `lua/poste-sql/completion_ctx.lua` | Legacy Lua regex fallback (deprecated) |
+| `lua/poste-sql/completion_data.lua` | Async introspection, cache, fallback lists |
+| `lua/poste-sql/context.lua` | Connection/database resolution |
 | `crates/poste-exec/src/sql_dialect.rs` | Runtime dialect behavior for introspection/execution |

@@ -2,10 +2,10 @@
 --- Covers tree data model, rendering, node resolution, and public API.
 --- Run via: ./tests/run.sh  (Plenary Busted)
 
-local db_browser = require("poste.sql.db_browser")
-local icons = require("poste.sql.db_browser.icons")
-local tree = require("poste.sql.db_browser.tree")
-local actions = require("poste.sql.db_browser.actions")
+local db_browser = require("poste-sql.db_browser")
+local icons = require("poste-sql.db_browser.icons")
+local tree = require("poste-sql.db_browser.tree")
+local actions = require("poste-sql.db_browser.actions")
 
 local ICONS = icons.ICONS
 local MARKER_COLLAPSED = icons.MARKER_COLLAPSED

@@ -27,7 +27,7 @@
     "saghen/blink.cmp",
   },
   config = function()
-    require("poste.sql.init").setup()
+    require("poste-sql.init").setup()
   end,
 }
 ```

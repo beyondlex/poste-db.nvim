@@ -1,5 +1,5 @@
 --- Tests for SQL execution log viewer.
-local log = require("poste.sql.log_viewer")
+local log = require("poste-sql.log_viewer")
 
 describe("log viewer _format_time", function()
   it("formats as MM-DD HH:mm:ss", function()

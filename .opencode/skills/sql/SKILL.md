@@ -36,7 +36,7 @@ For SQL completion specific work, also load `.opencode/skills/sql-completion/SKI
 | `lua/poste/util.lua` | `clean_nil`, `find_file_upwards`, `ensure_job_data` |
 | `lua/poste/help.lua` | Keymap help (SQL section) |
 
-### SQL Lua (`lua/poste/sql/`)
+### SQL Lua (`lua/poste-sql/`)
 
 #### Execution & Connection
 

@@ -150,7 +150,7 @@ extract_stmt_at_cursor:
 
 **Current**: Calls `cli.run_async({ "context", "stmt", ... })` with 50ms debounce.
 
-**Change**: Replace `cli.run_async` call with `require("poste.sql.ts_stmt").find_stmt_span()`.
+**Change**: Replace `cli.run_async` call with `require("poste-sql.ts_stmt").find_stmt_span()`.
 
 **Effect**: Async job eliminated. No more `_job_id` tracking. Result is synchronous (Tree-sitter parse is fast). Debounce can be reduced further or removed.
 
@@ -224,7 +224,7 @@ New test file for `ts_stmt.lua`. Uses `vim.treesitter` to parse SQL strings and 
 **Test structure**:
 
 ```lua
-local ts_stmt = require("poste.sql.ts_stmt")
+local ts_stmt = require("poste-sql.ts_stmt")
 
 describe("find_stmt_span", function()
   it("returns correct span for single statement", function()

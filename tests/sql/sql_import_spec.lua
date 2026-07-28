@@ -3,7 +3,7 @@
 
 -- Enable test-only exports in import.lua
 _G._TEST = true
-local import = require("poste.sql.import")
+local import = require("poste-sql.import")
 
 -- Mock table columns matching typical database introspection output
 local TABLE_COLS = {

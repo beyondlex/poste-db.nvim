@@ -1,4 +1,4 @@
-local file_exec = require("poste.sql.file_exec")
+local file_exec = require("poste-sql.file_exec")
 
 describe("file_exec", function()
   describe("handle_line", function()
@@ -12,7 +12,7 @@ describe("file_exec", function()
   describe("progress window", function()
     it("creates and closes progress window", function()
       -- Test that the module can be loaded without errors
-      local ok, err = pcall(require, "poste.sql.file_exec")
+      local ok, err = pcall(require, "poste-sql.file_exec")
       assert.is_true(ok, "file_exec module should load without errors")
     end)
   end)

@@ -1,6 +1,6 @@
 --- Tests for ts_stmt.lua — Tree-sitter-based statement boundary detection.
 
-local ts_stmt = require("poste.sql.ts_stmt")
+local ts_stmt = require("poste-sql.ts_stmt")
 
 local function make_buf(lines)
   local buf = vim.api.nvim_create_buf(false, true)

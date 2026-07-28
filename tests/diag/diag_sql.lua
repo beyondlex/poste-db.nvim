@@ -7,7 +7,7 @@ vim.opt.runtimepath:prepend(".")
 local out = {}
 local function log(s) table.insert(out, s) end
 
-local ok, sql_comp = pcall(require, "poste.sql.completion")
+local ok, sql_comp = pcall(require, "poste-sql.completion")
 if not ok then
   log("FAIL: could not load sql.completion: " .. tostring(sql_comp))
   vim.fn.writefile(out, "/tmp/poste_sql_diag.txt")

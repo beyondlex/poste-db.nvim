@@ -4,7 +4,7 @@
 --- - extract_stmt_at_cursor: single-statement extraction (indicator placement)
 --- - try_ts_stmt_span: Tree-sitter statement boundary detection
 
-local init = require("poste.sql.init")
+local init = require("poste-sql.init")
 local t = init._test
 
 local function make_buf(lines)

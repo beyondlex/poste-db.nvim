@@ -15,7 +15,7 @@ setlocal tabstop=2
 setlocal expandtab
 
 " Register SQL completion source
-lua pcall(function() require("poste.sql.completion").register() end)
+lua pcall(function() require("poste-sql.completion").register() end)
 
 " ─── Code formatter support ────────────────────────────
 " Auto-detect and set up the best available SQL formatter.
@@ -26,7 +26,7 @@ lua pcall(function() require("poste.sql.completion").register() end)
 "   - :PosteFormat or keymap (default <leader>ff) — direct usage
 " All integrations handle timing — work regardless of plugin load order.
 lua << EOF
-local ok, source_format = pcall(require, "poste.sql.source_format")
+local ok, source_format = pcall(require, "poste-sql.source_format")
 if ok then
   -- Register with LazyVim's format system (for <leader>cf)
   -- This is the primary path if you use LazyVim
