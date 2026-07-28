@@ -156,11 +156,12 @@ local function build_content()
     local line = prefix .. sql_display .. suffix
     table.insert(lines, layout.cell(line, cw))
     local hl = r.status == "ok" and "PosteLogSuccess" or "PosteLogError"
-    table.insert(highlights, { line = #lines - 1, col_start = 0, col_end = prefix_dw, hl_group = hl })
-    local sql_start = prefix_dw
-    local sql_end = prefix_dw + vim.fn.strdisplaywidth(sql_display)
+    local prefix_bytes = #prefix
+    table.insert(highlights, { line = #lines - 1, col_start = 0, col_end = prefix_bytes, hl_group = hl })
+    local sql_start = prefix_bytes
+    local sql_end = prefix_bytes + #sql_display
     if sql_end > sql_start then
-      table.insert(highlights, { line = #lines - 1, col_start = prefix_dw, col_end = sql_end, hl_group = "PosteLogSQL" })
+      table.insert(highlights, { line = #lines - 1, col_start = prefix_bytes, col_end = sql_end, hl_group = "PosteLogSQL" })
     end
   end
 
