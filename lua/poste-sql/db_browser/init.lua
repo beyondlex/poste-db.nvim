@@ -158,6 +158,17 @@ local function start_copy(buf_line)
     dialect = tgt_dialect,
   }, table_names, function()
     exit_multi_select()
+    if target_db then
+      target_db.children = nil
+      target_db.expanded = false
+      target_db.loading = true
+      render_tree()
+      async.fetch_children(target_db, function()
+        vim.schedule(function()
+          render_tree()
+        end)
+      end, get_search_dir())
+    end
   end)
 end
 
