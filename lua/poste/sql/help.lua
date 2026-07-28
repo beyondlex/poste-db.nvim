@@ -1,5 +1,6 @@
 --- SQL keymap help — displays SQL-specific keymaps in a floating window.
 local state = require("poste.state")
+local dialog = require("poste.dialog")
 
 local M = {}
 
@@ -88,6 +89,7 @@ local SECTION_TITLES = {
 
 function M.open()
   local lines = {}
+  local highlights = {}
   local width = 50
 
   for _, section in ipairs({ "sql_source", "sql_dataset", "sql_table_ops", "sql_db_browser", "sql_introspect" }) do
@@ -97,7 +99,9 @@ function M.open()
 
     table.insert(lines, "")
     table.insert(lines, "  " .. title)
+    table.insert(highlights, { line = #lines - 1, col_start = 2, col_end = 2 + #title, hl_group = "Title" })
     table.insert(lines, "  " .. string.rep("─", 46))
+    table.insert(highlights, { line = #lines - 1, col_start = 2, col_end = 48, hl_group = "Comment" })
 
     local actions = {}
     for action, _ in pairs(km) do
@@ -113,6 +117,10 @@ function M.open()
         local line = string.format("  %-12s  %s", key_display, description)
         table.insert(lines, line)
         width = math.max(width, #line + 2)
+        local _, key_e = line:find("%S+", 3)
+        if key_e then
+          table.insert(highlights, { line = #lines - 1, col_start = 2, col_end = key_e, hl_group = "Special" })
+        end
       end
     end
   end
@@ -134,40 +142,12 @@ function M.open()
   local close_text = #close_parts > 0 and table.concat(close_parts, " / ") or "q"
   table.insert(lines, "  " .. close_text .. "  close")
 
-  local buf = vim.api.nvim_create_buf(false, true)
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-  vim.bo[buf].modifiable = false
-  vim.bo[buf].bufhidden = "wipe"
-  vim.bo[buf].buftype = "nofile"
-  vim.bo[buf].filetype = "poste_help"
-
-  local height = math.min(#lines, vim.o.lines - 4)
-  local win = vim.api.nvim_open_win(buf, true, {
-    relative = "editor",
-    row = 2, col = math.floor((vim.o.columns - width) / 2),
-    width = width, height = height,
-    style = "minimal",
-    border = "rounded",
+  local d = dialog.open({
     title = " Poste SQL Keymaps ",
-    title_pos = "center",
+    width = width,
+    height = math.min(#lines, vim.o.lines - 4),
   })
-
-  vim.keymap.set("n", "q", function() pcall(vim.api.nvim_win_close, win, true) end, { buffer = buf, nowait = true })
-  vim.keymap.set("n", "<Esc>", function() pcall(vim.api.nvim_win_close, win, true) end, { buffer = buf, nowait = true })
-
-  local ns = vim.api.nvim_create_namespace("poste_help")
-  for i, line in ipairs(lines) do
-    if line:find("^  %u%a") then
-      vim.api.nvim_buf_add_highlight(buf, ns, "Title", i - 1, 2, -1)
-    elseif line:find("^  ─") then
-      vim.api.nvim_buf_add_highlight(buf, ns, "Comment", i - 1, 2, -1)
-    else
-      local key_s, key_e = line:find("%S+", 3)
-      if key_s then
-        vim.api.nvim_buf_add_highlight(buf, ns, "Special", i - 1, key_s - 1, key_e)
-      end
-    end
-  end
+  d:update(lines, highlights)
 end
 
 return M

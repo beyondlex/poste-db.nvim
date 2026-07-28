@@ -1,3 +1,5 @@
+local dialog = require("poste.dialog")
+
 local M = {}
 
 local function build_preview_lines(table_info, total_rows, valid_count, bad_rows,
@@ -152,79 +154,40 @@ function M.show_preview(table_info, total_rows, valid_count, bad_rows,
   local lines = content
   local height = math.min(#lines + 2, math.floor(vim.o.lines * 0.6))
 
-  local right_title = " [P]roceed  [A]bort "
-  if #bad_rows > 0 then
-    right_title = " [P]roceed  [S]kip bad  [A]bort "
-  end
-  local left_title = " Import Preview "
-  local interior = width - 2
-  local left_w = vim.fn.strdisplaywidth(left_title)
-  local right_w = vim.fn.strdisplaywidth(right_title)
-  local middle_w = interior - left_w - right_w
-  local title
-  if middle_w >= 1 then
-    title = left_title .. string.rep("─", middle_w) .. right_title
-  else
-    title = " Import Preview "
-  end
-
-  local buf = vim.api.nvim_create_buf(false, true)
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-  vim.bo[buf].modifiable = false
-
-  local win_opts = {
-    relative = "editor",
-    row = math.floor((vim.o.lines - height) / 2),
-    col = math.floor((vim.o.columns - width) / 2),
-    width = width, height = height, style = "minimal",
-    border = "rounded", title = title, title_pos = "left",
+  local keymaps = {
+    a = function() d:close(); callback(nil) end,
+    A = function() d:close(); callback(nil) end,
+    p = function() d:close(); callback("proceed") end,
+    P = function() d:close(); callback("proceed") end,
   }
-  local ok, win = pcall(vim.api.nvim_open_win, buf, true, win_opts)
-  if not ok then
-    win_opts.title = nil
-    win = vim.api.nvim_open_win(buf, true, win_opts)
+  if #bad_rows > 0 then
+    keymaps.s = function() d:close(); callback("skip") end
+    keymaps.S = function() d:close(); callback("skip") end
   end
 
-  vim.wo[win].cursorline = false
-  vim.wo[win].cursorcolumn = false
+  local d = dialog.open({
+    title = "Import Preview",
+    width = width,
+    height = height,
+    keymaps = keymaps,
+  })
 
-  local ns = vim.api.nvim_create_namespace("poste_import_preview")
-
+  local highlights = {}
   local parsed_li = 2
   local parsed_text = lines[parsed_li + 1]
   if parsed_text then
     local s1, e1 = parsed_text:find("%d+", 9)
     local s2, e2 = parsed_text:find("%d+", e1 + 1)
     local s3, e3 = parsed_text:find("%d+", e2 + 1)
-    if s1 then vim.api.nvim_buf_add_highlight(buf, ns, "Number", parsed_li, s1 - 1, e1) end
-    if s2 then vim.api.nvim_buf_add_highlight(buf, ns, "String", parsed_li, s2 - 1, e2) end
-    if s3 then vim.api.nvim_buf_add_highlight(buf, ns, "DiagnosticError", parsed_li, s3 - 1, e3) end
+    if s1 then table.insert(highlights, { line = parsed_li, col_start = s1 - 1, col_end = e1, hl_group = "Number" }) end
+    if s2 then table.insert(highlights, { line = parsed_li, col_start = s2 - 1, col_end = e2, hl_group = "String" }) end
+    if s3 then table.insert(highlights, { line = parsed_li, col_start = s3 - 1, col_end = e3, hl_group = "DiagnosticError" }) end
   end
-
   for _, li in ipairs(orange_rows) do
-    vim.api.nvim_buf_add_highlight(buf, ns, "DiagnosticWarn", li - 1, 0, -1)
+    table.insert(highlights, { line = li - 1, col_start = 0, col_end = -1, hl_group = "DiagnosticWarn" })
   end
 
-  local closed = false
-  local function close()
-    if closed then return end
-    closed = true
-    if win and vim.api.nvim_win_is_valid(win) then
-      vim.api.nvim_win_close(win, true)
-    end
-  end
-
-  local sopts = { buffer = buf, noremap = true, silent = true, nowait = true }
-  vim.keymap.set("n", "q", close, sopts)
-  vim.keymap.set("n", "<Esc>", close, sopts)
-  vim.keymap.set("n", "a", function() close(); callback(nil) end, sopts)
-  vim.keymap.set("n", "A", function() close(); callback(nil) end, sopts)
-  vim.keymap.set("n", "p", function() close(); callback("proceed") end, sopts)
-  vim.keymap.set("n", "P", function() close(); callback("proceed") end, sopts)
-  if #bad_rows > 0 then
-    vim.keymap.set("n", "s", function() close(); callback("skip") end, sopts)
-    vim.keymap.set("n", "S", function() close(); callback("skip") end, sopts)
-  end
+  d:update(lines, highlights)
 end
 
 return M

@@ -7,6 +7,7 @@
 local cli = require("poste.cli")
 local state = require("poste.state")
 local util = require("poste.util")
+local dialog = require("poste.dialog")
 
 local M = {}
 

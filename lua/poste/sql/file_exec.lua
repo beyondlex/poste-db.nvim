@@ -1,14 +1,13 @@
 local state = require("poste.state")
 local indicators = require("poste.indicators")
+local dialog = require("poste.dialog")
+local layout = require("poste.layout")
 
 local M = {}
 
-local NS = vim.api.nvim_create_namespace("poste_file_exec")
-
 local S = {
   job_id = nil,
-  buf = nil,
-  win = nil,
+  dialog = nil,
   is_running = false,
   cancelled = false,
   n_succeeded = 0,
@@ -30,8 +29,8 @@ local S = {
 }
 
 local MAX_LOG_LINES = 5
-local PROGRESS_WIDTH = 60
-local PROGRESS_HEIGHT = 20
+local DIALOG_WIDTH = 70
+local DIALOG_HEIGHT = 20
 
 local function fmt_time(ms)
   if ms >= 1000 then
@@ -46,39 +45,13 @@ local function fmt_elapsed()
   return fmt_time(elapsed)
 end
 
-local function fmt_sql(sql)
+local function fmt_sql(sql, max_len)
   local s = sql:gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
-  if #s > 50 then
-    s = s:sub(1, 47) .. "..."
+  max_len = max_len or 50
+  if #s > max_len then
+    s = s:sub(1, max_len - 3) .. "..."
   end
   return s
-end
-
-local function cell(text, width)
-  local s = tostring(text)
-  local dw = vim.fn.strdisplaywidth(s)
-  if dw > width then
-    return vim.fn.strcharpart(s, 0, width - 3) .. "..."
-  end
-  local pad = width - dw
-  return s .. string.rep(" ", pad)
-end
-
-local function render_bar(filled, total)
-  local bar_width = 20
-  local pct = total > 0 and math.floor((filled / total) * bar_width) or 0
-  pct = math.min(pct, bar_width)
-  local bar = string.rep("■", pct) .. string.rep("░", bar_width - pct)
-  local pct_text = total > 0 and string.format("%d%%", math.floor(filled / total * 100)) or "0%"
-  return string.format("[%s] %d/%d %s", bar, filled, total, pct_text)
-end
-
-local function fmt_filepath(path, max_len)
-  if not path or path == "" then return "" end
-  max_len = max_len or 48
-  if #path <= max_len then return path end
-  local half = math.floor((max_len - 3) / 2)
-  return path:sub(1, half) .. "..." .. path:sub(#path - half + 1)
 end
 
 local function classify_stmt(sql)
@@ -93,178 +66,115 @@ local function classify_stmt(sql)
   return "other"
 end
 
-local function build_progress_lines()
+local function build_content()
+  local d = S.dialog
+  if not d then return {}, {} end
+  local cw = d.content_width
   local lines = {}
-  local content_width = PROGRESS_WIDTH - 4
+  local highlights = {}
   local conn_label = S.conn or ""
   if S.db then conn_label = conn_label .. " / " .. S.db end
 
-  local close_tag = S.is_running and "[c] Cancel" or "[q] Close"
-  local title_left = "┌─ Execute SQL File "
-  local title_right = " " .. close_tag .. " ─┐"
-  local left_dw = vim.fn.strdisplaywidth(title_left)
-  local right_dw = vim.fn.strdisplaywidth(title_right)
-  local fill = math.max(0, PROGRESS_WIDTH - left_dw - right_dw)
-  table.insert(lines, title_left .. string.rep("─", fill) .. title_right)
-
-  local half = 27
-  local half2 = content_width - 1 - half
-
-  table.insert(lines, "│ " .. cell("Connection: " .. conn_label, content_width) .. " │")
+  table.insert(lines, layout.cell("Connection: " .. conn_label, cw))
 
   local mode_label = S.mode == "transaction" and "Transaction" or "Greedy"
-  local stats
+  local stats_text
   if S.rolled_back then
-    stats = string.format("Mode: %s   Failed: %d   (rolled back: %d)", mode_label, S.n_failed, S.n_succeeded)
+    stats_text = string.format("Mode: %s   Failed: %d   (rolled back: %d)", mode_label, S.n_failed, S.n_succeeded)
   else
-    stats = string.format("Mode: %s   Succeeded: %d   Failed: %d", mode_label, S.n_succeeded, S.n_failed)
+    stats_text = string.format("Mode: %s   Succeeded: %d   Failed: %d", mode_label, S.n_succeeded, S.n_failed)
   end
-  table.insert(lines, "│ " .. cell(stats, content_width) .. " │")
+  table.insert(lines, stats_text)
 
-  table.insert(lines, "│ " .. cell("", content_width) .. " │")
+  local succeeded_start = stats_text:find("Succeeded:", 1, true)
+  if succeeded_start then
+    local num_end = stats_text:find("   ", succeeded_start + 11, true) or #stats_text + 1
+    table.insert(highlights, { line = #lines - 1, col_start = succeeded_start - 1, col_end = num_end - 1, hl_group = "PosteSqlSucceeded" })
+  end
+  local failed_start = stats_text:find("Failed:", 1, true)
+  if failed_start then
+    local num_end = stats_text:find("   ", failed_start + 8, true) or #stats_text + 1
+    table.insert(highlights, { line = #lines - 1, col_start = failed_start - 1, col_end = num_end - 1, hl_group = "PosteSqlFailed" })
+  end
+
+  table.insert(lines, "")
 
   local c = S.stmt_counts
-  local ddl_rows = {
-    { "create", c.create },
-    { "modify", c.alter },
-    { "drop", c.drop },
-  }
-  local dml_rows = {
-    { "insert", c.insert },
-    { "update", c.update },
-    { "delete", c.delete },
-    { "select", c.select },
-  }
+  local cols = layout.columns({
+    { title = "DDL", items = {
+      string.format("create: %d", c.create),
+      string.format("modify: %d", c.alter),
+      string.format("drop: %d", c.drop),
+    }},
+    { title = "DML", items = {
+      string.format("insert: %d", c.insert),
+      string.format("update: %d", c.update),
+      string.format("delete: %d", c.delete),
+      string.format("select: %d", c.select),
+    }},
+  }, { width = cw, title_hl = "Title" })
+  for _, l in ipairs(cols.lines) do table.insert(lines, l) end
+  for _, h in ipairs(cols.highlights) do table.insert(highlights, h) end
 
-  table.insert(lines, "│ " .. cell("DDL", half) .. " " .. cell("DML", half2) .. " │")
-  for i = 1, 4 do
-    local ddl = ddl_rows[i]
-    local dml = dml_rows[i]
-    local left = ddl and string.format("%s: %d", ddl[1], ddl[2]) or ""
-    local right = dml and string.format("%s: %d", dml[1], dml[2]) or ""
-    table.insert(lines, "│ " .. cell(left, half) .. " " .. cell(right, half2) .. " │")
+  table.insert(lines, "")
+
+  local bar = layout.progress(S.n_succeeded + S.n_failed, S.total, { bar_width = 20 })[1]
+  local elapsed = "Elapsed: " .. fmt_elapsed()
+  table.insert(lines, layout.space_between(bar, elapsed, { width = cw })[1])
+
+  local elapsed_start = (#lines[#lines] or 0) > 0 and lines[#lines]:find("Elapsed:", 1, true)
+  if elapsed_start then
+    table.insert(highlights, { line = #lines - 1, col_start = elapsed_start - 1, col_end = #lines[#lines], hl_group = "PosteSqlConstant" })
   end
 
-  table.insert(lines, "│ " .. cell("", content_width) .. " │")
+  table.insert(lines, layout.dynamic_line({
+    text = "File: " .. S.filepath,
+    container_width = cw,
+    truncate_at = "mid",
+  }))
+  local file_line = #lines
+  local file_label_end = ("File: "):len()
+  table.insert(highlights, { line = file_line - 1, col_start = file_label_end, col_end = cw, hl_group = "PosteSqlFilepath" })
 
-  local bar = render_bar(S.n_succeeded + S.n_failed, S.total)
-  local elapsed = "Elapsed: " .. fmt_elapsed()
-  local bar_dw = vim.fn.strdisplaywidth(bar)
-  local elapsed_dw = vim.fn.strdisplaywidth(elapsed)
-  local pad = math.max(1, content_width - bar_dw - elapsed_dw)
-  table.insert(lines, "│ " .. bar .. string.rep(" ", pad) .. elapsed .. " │")
-  table.insert(lines, "│ " .. cell("File: " .. fmt_filepath(S.filepath), content_width) .. " │")
-
-  table.insert(lines, "│" .. string.rep("─", PROGRESS_WIDTH - 2) .. "│")
+  table.insert(lines, layout.separator({ width = cw })[1])
 
   local start = math.max(1, #S.results - MAX_LOG_LINES + 1)
   for i = start, #S.results do
     local r = S.results[i]
     local icon = r.status == "ok" and "✓" or "✘"
-    local summary = r.summary or ""
-    table.insert(lines, "│ " .. cell(icon .. " " .. summary, content_width) .. " │")
-  end
-
-  while #lines < PROGRESS_HEIGHT - 1 do
-    table.insert(lines, "│ " .. cell("", content_width) .. " │")
-  end
-
-  table.insert(lines, "└" .. string.rep("─", PROGRESS_WIDTH - 2) .. "┘")
-
-  return lines
-end
-
-local function apply_highlights()
-  vim.api.nvim_buf_clear_namespace(S.buf, NS, 0, -1)
-  local lines = vim.api.nvim_buf_get_lines(S.buf, 0, -1, false)
-
-  for i, line in ipairs(lines) do
-    if line:sub(1, 6) == "│ Mo" then
-      local s = line:find("Succeeded:", 1, true)
-      if s then
-        local e = line:find("   ", s + 11, true)
-        if e then
-          vim.api.nvim_buf_set_extmark(S.buf, NS, i - 1, s - 1, { end_col = e - 1, hl_group = "PosteSqlSucceeded" })
-        end
-      end
-      s = line:find("Failed:", 1, true)
-      if s then
-        local e = line:find(" │", s + 8, true)
-        if e then
-          vim.api.nvim_buf_set_extmark(S.buf, NS, i - 1, s - 1, { end_col = e - 1, hl_group = "PosteSqlFailed" })
-        end
-      end
+    local prefix = icon .. " (" .. r.seq .. ") "
+    local suffix = ""
+    if r.status == "ok" and r.row_count > 0 then
+      suffix = string.format(" (%d rows, %s)", r.row_count, fmt_time(r.elapsed))
+    elseif r.status == "ok" then
+      suffix = string.format(" (%s)", fmt_time(r.elapsed))
     end
-
-    if line:sub(1, 5) == "│ [" then
-      local s = line:find("Elapsed:", 1, true)
-      if s then
-        local e = line:find("s", s + 8, true)
-        if e then
-          vim.api.nvim_buf_set_extmark(S.buf, NS, i - 1, s - 1, { end_col = e, hl_group = "PosteSqlConstant" })
-        end
-      end
-    end
-
-    if line:sub(1, 6) == "│ Fi" then
-      local s = line:find("File: ", 1, true)
-      if s then
-        local path_start = s + 5
-        local pipe = line:find("│", s + 6, true)
-        if pipe and pipe > path_start then
-          vim.api.nvim_buf_set_extmark(S.buf, NS, i - 1, path_start, {
-            end_row = i - 1,
-            end_col = pipe - 3,
-            hl_group = "PosteSqlFilepath",
-          })
-        end
-      end
-    end
-
-    if line:sub(1, 5) == "│ \226" then
-      local check = line:find("\226\156\147", 1, true)
-      if check then
-        vim.api.nvim_buf_set_extmark(S.buf, NS, i - 1, check - 1, { end_col = check + 2, hl_group = "PosteLogSuccess" })
-        local sql_start = check + 3
-        local pipe = line:find("│", sql_start, true)
-        if pipe then
-          vim.api.nvim_buf_set_extmark(S.buf, NS, i - 1, sql_start, {
-            end_row = i - 1,
-            end_col = pipe - 3,
-            hl_group = "PosteLogSQL",
-          })
-        end
-      end
-      local cross = line:find("\226\156\152", 1, true)
-      if cross then
-        vim.api.nvim_buf_set_extmark(S.buf, NS, i - 1, cross - 1, { end_col = cross + 2, hl_group = "PosteLogError" })
-        local sql_start = cross + 3
-        local pipe = line:find("│", sql_start, true)
-        if pipe then
-          vim.api.nvim_buf_set_extmark(S.buf, NS, i - 1, sql_start, {
-            end_row = i - 1,
-            end_col = pipe - 3,
-            hl_group = "PosteLogSQL",
-          })
-        end
-      end
+    local prefix_dw = vim.fn.strdisplaywidth(prefix)
+    local suffix_dw = vim.fn.strdisplaywidth(suffix)
+    local max_sql_dw = math.max(10, cw - prefix_dw - suffix_dw - 1)
+    local sql_display = fmt_sql(r.sql, max_sql_dw)
+    local line = prefix .. sql_display .. suffix
+    table.insert(lines, layout.cell(line, cw))
+    local hl = r.status == "ok" and "PosteLogSuccess" or "PosteLogError"
+    table.insert(highlights, { line = #lines - 1, col_start = 0, col_end = prefix_dw, hl_group = hl })
+    local sql_start = prefix_dw
+    local sql_end = prefix_dw + vim.fn.strdisplaywidth(sql_display)
+    if sql_end > sql_start then
+      table.insert(highlights, { line = #lines - 1, col_start = prefix_dw, col_end = sql_end, hl_group = "PosteLogSQL" })
     end
   end
+
+  while #lines < d.content_height do
+    table.insert(lines, "")
+  end
+
+  return lines, highlights
 end
 
 local function render_progress()
-  if not S.buf or not vim.api.nvim_buf_is_valid(S.buf) then return end
-  if not S.win or not vim.api.nvim_win_is_valid(S.win) then return end
-
-  local lines = build_progress_lines()
-  vim.bo[S.buf].modifiable = true
-  local ok, err = pcall(vim.api.nvim_buf_set_lines, S.buf, 0, -1, false, lines)
-  vim.bo[S.buf].modifiable = false
-  if not ok then
-    state.log("ERROR", "ExecFile render failed: " .. tostring(err))
-  end
-  pcall(apply_highlights)
-  vim.cmd("redraw")
+  if not S.dialog then return end
+  local lines, highlights = build_content()
+  S.dialog:update(lines, highlights)
 end
 
 local function close_progress(force)
@@ -276,54 +186,30 @@ local function close_progress(force)
     end)
     return
   end
-
-  if S.win and vim.api.nvim_win_is_valid(S.win) then
-    vim.api.nvim_win_close(S.win, true)
+  if S.dialog then
+    S.dialog:close()
   end
-  S.win = nil
-  S.buf = nil
+  S.dialog = nil
 end
 
 local function create_progress_win()
-  if S.buf and vim.api.nvim_buf_is_valid(S.buf) then
-    vim.api.nvim_buf_set_lines(S.buf, 0, -1, false, {})
-    if S.win and vim.api.nvim_win_is_valid(S.win) then
-      return
-    end
+  if S.dialog then
+    S.dialog:update({}, {})
+    return
   end
-
-  S.buf = vim.api.nvim_create_buf(false, true)
-  vim.bo[S.buf].modifiable = false
-  vim.bo[S.buf].bufhidden = "wipe"
-
-  local width = PROGRESS_WIDTH
-  local height = PROGRESS_HEIGHT
-  local row = math.floor((vim.o.lines - height) / 2)
-  local col = math.floor((vim.o.columns - width) / 2)
-
-  S.win = vim.api.nvim_open_win(S.buf, true, {
-    relative = "editor",
-    width = width,
-    height = height,
-    row = row,
-    col = col,
-    style = "minimal",
-    border = "none",
-    focusable = false,
+  S.dialog = dialog.open({
+    title = "Execute SQL File",
+    width = DIALOG_WIDTH,
+    height = DIALOG_HEIGHT,
+    keymaps = {
+      c = function()
+        M.cancel()
+      end,
+    },
+    on_close = function()
+      S.dialog = nil
+    end,
   })
-
-  vim.wo[S.win].winhl = "Normal:NormalFloat"
-
-  local km_opts = { buffer = S.buf, noremap = true, silent = true, nowait = true }
-  vim.keymap.set("n", "c", function()
-    M.cancel()
-  end, km_opts)
-  vim.keymap.set("n", "q", function()
-    close_progress(false)
-  end, km_opts)
-  vim.keymap.set("n", "<Esc>", function()
-    close_progress(false)
-  end, km_opts)
 end
 
 function M.cancel()
@@ -356,18 +242,24 @@ local function handle_line(line)
     if status == "ok" then
       S.n_succeeded = S.n_succeeded + 1
       S.total_rows = S.total_rows + row_count
-      local summary = string.format("(%d) %s", seq, fmt_sql(sql))
-      if row_count > 0 then
-        summary = summary .. string.format(" (%d rows, %s)", row_count, fmt_time(elapsed))
-      else
-        summary = summary .. string.format(" (%s)", fmt_time(elapsed))
-      end
-      table.insert(S.results, { status = "ok", summary = summary })
+      table.insert(S.results, {
+        status = "ok",
+        seq = seq,
+        sql = sql,
+        row_count = row_count,
+        elapsed = elapsed,
+      })
     else
       S.n_failed = S.n_failed + 1
       local error_msg = event.error or "unknown error"
-      local summary = string.format("(%d) %s", seq, fmt_sql(sql))
-      table.insert(S.results, { status = "error", summary = summary })
+      table.insert(S.results, {
+        status = "error",
+        seq = seq,
+        sql = sql,
+        row_count = 0,
+        elapsed = elapsed,
+        error = error_msg,
+      })
       vim.notify(string.format("[%d/%d] %s", seq, S.total, error_msg), vim.log.levels.ERROR, { title = "Poste Exec File" })
     end
     render_progress()
@@ -399,7 +291,6 @@ function M.run(opts)
     return
   end
 
-  -- Reset state
   S.job_id = nil
   S.is_running = true
   S.cancelled = false
