@@ -184,7 +184,7 @@ function M.show_preview(table_info, total_rows, valid_count, bad_rows,
     if s3 then table.insert(highlights, { line = parsed_li, col_start = s3 - 1, col_end = e3, hl_group = "DiagnosticError" }) end
   end
   for _, li in ipairs(orange_rows) do
-    table.insert(highlights, { line = li - 1, col_start = 0, col_end = -1, hl_group = "DiagnosticWarn" })
+    table.insert(highlights, { line = li - 1, col_start = 0, col_end = #content[li], hl_group = "DiagnosticWarn" })
   end
 
   d:update(lines, highlights)
