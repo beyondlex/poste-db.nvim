@@ -135,7 +135,11 @@ end
 local function open_window()
   if browser_win and vim.api.nvim_win_is_valid(browser_win) then return browser_win end
 
-  vim.cmd("topleft 40vsplit")
+  local cfg = state.config.db_browser or {}
+  local pos = cfg.split_position or "right"
+  local width = cfg.split_width or 40
+  local dir = pos == "right" and "botright" or "topleft"
+  vim.cmd(dir .. " " .. width .. "vsplit")
   browser_win = vim.api.nvim_get_current_win()
   vim.api.nvim_win_set_buf(browser_win, browser_buf)
   vim.api.nvim_set_option_value("winfixwidth", true, { win = browser_win })

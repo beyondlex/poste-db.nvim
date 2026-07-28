@@ -504,7 +504,10 @@ local function setup_db_browser_keymap(buf)
   end
 end
 
-function M.setup(_)
+function M.setup(opts)
+  opts = opts or {}
+  local state = require("poste.state")
+  state.config.db_browser = vim.tbl_deep_extend("force", state.config.db_browser, opts.db_browser or {})
   -- Check if Tree-sitter SQL parser is available
   local ok_ts = pcall(vim.treesitter.language.get_lang, "sql")
   if not ok_ts then
