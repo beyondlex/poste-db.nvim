@@ -203,6 +203,7 @@ local function create_progress_win()
     title = "Execute SQL File",
     width = DIALOG_WIDTH,
     height = DIALOG_HEIGHT,
+    backdrop = true,
     keymaps = {
       c = function()
         M.cancel()
