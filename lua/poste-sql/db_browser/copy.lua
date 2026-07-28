@@ -390,10 +390,9 @@ local function show_progress_dialog(source, target, table_names, on_close)
     local bar_len = 20
     local filled = math.floor(done / total * bar_len)
     local bar = string.rep("█", filled) .. string.rep("░", bar_len - filled)
-    table.insert(lines, "  " .. bar .. "  " .. done .. "/" .. total .. " (" .. pct .. "%)")
-    table.insert(lines, "")
     table.insert(lines, "  Source: " .. source.conn .. "." .. source.db)
     table.insert(lines, "  Target: " .. target.conn .. "." .. target.db)
+    table.insert(lines, "  " .. bar .. "  " .. done .. "/" .. total .. " (" .. pct .. "%)")
     table.insert(lines, "")
 
     for _, name in ipairs(table_names) do
@@ -415,7 +414,13 @@ local function show_progress_dialog(source, target, table_names, on_close)
 
     if done == total then
       table.insert(lines, "")
-      table.insert(lines, "  Done. " .. completed .. " succeeded, " .. failed .. " failed.")
+      local done_line = "  Done. " .. completed .. " succeeded, " .. failed .. " failed."
+      table.insert(lines, done_line)
+      local succeeded_str = tostring(completed) .. " succeeded"
+      local succeeded_start = done_line:find(succeeded_str, 1, true) - 1
+      if succeeded_start and completed > 0 then
+        table.insert(highlights, { line = #lines - 1, col_start = succeeded_start, col_end = succeeded_start + #succeeded_str, hl_group = "PosteCopySuccess" })
+      end
       if failed > 0 then
         table.insert(lines, "  Press [q] to see errors")
       end
