@@ -5,6 +5,14 @@ local dialog = require("poste.dialog")
 
 local M = {}
 
+local function setup_highlights()
+  vim.api.nvim_set_hl(0, "PosteCopySuccess", { fg = "#9ece6a" })
+  vim.api.nvim_set_hl(0, "PosteCopyError", { fg = "#f7768e" })
+end
+
+setup_highlights()
+vim.api.nvim_create_autocmd("ColorScheme", { callback = setup_highlights })
+
 local function quote(name, dialect)
   if dialect == "mysql" then
     return "`" .. name:gsub("`", "``") .. "`"
@@ -376,6 +384,7 @@ local function show_progress_dialog(source, target, table_names, on_close)
 
   local function render()
     local lines = {}
+    local highlights = {}
     local done = completed + failed
     local pct = total > 0 and math.floor(done / total * 100) or 0
     local bar_len = 20
@@ -390,11 +399,15 @@ local function show_progress_dialog(source, target, table_names, on_close)
     for _, name in ipairs(table_names) do
       local r = results[name]
       if r.status == "done" then
-        table.insert(lines, "  ✓ " .. name .. "  (" .. r.row_count .. " rows, " .. r.elapsed .. ")")
+        local line = "  ✓ " .. name .. "  (" .. r.row_count .. " rows, " .. r.elapsed .. ")"
+        table.insert(lines, line)
+        table.insert(highlights, { line = #lines - 1, col_start = 0, col_end = -1, hl_group = "PosteCopySuccess" })
       elseif r.status == "copying" then
         table.insert(lines, "  ⟳ " .. name .. "  (copying...)")
       elseif r.status == "error" then
-        table.insert(lines, "  ✘ " .. name)
+        local line = "  ✘ " .. name
+        table.insert(lines, line)
+        table.insert(highlights, { line = #lines - 1, col_start = 0, col_end = -1, hl_group = "PosteCopyError" })
       else
         table.insert(lines, "  ◻ " .. name .. "  (pending)")
       end
@@ -408,7 +421,7 @@ local function show_progress_dialog(source, target, table_names, on_close)
       end
     end
 
-    dlg:update(lines)
+    dlg:update(lines, highlights)
   end
 
   render()
