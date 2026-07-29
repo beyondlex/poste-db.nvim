@@ -22,6 +22,126 @@ local function quote(name, dialect)
   end
 end
 
+local function has_value(v)
+  return v ~= nil and v ~= vim.NIL
+end
+
+local function quote_value(val)
+  if not has_value(val) then
+    return "NULL"
+  end
+  local t = type(val)
+  if t == "number" then
+    return tostring(val)
+  elseif t == "boolean" then
+    return val and "TRUE" or "FALSE"
+  elseif t == "string" then
+    return "'" .. val:gsub("'", "''") .. "'"
+  elseif t == "table" then
+    local ok, json_str = pcall(vim.json.encode, val)
+    if ok then
+      return "'" .. json_str:gsub("'", "''") .. "'"
+    end
+    return "NULL"
+  end
+  return "'" .. tostring(val):gsub("'", "''") .. "'"
+end
+
+local function extract_row_count(r)
+  if has_value(r.affected_rows) then return tostring(r.affected_rows) end
+  if has_value(r.row_count) then return tostring(r.row_count) end
+  return "?"
+end
+
+local function extract_elapsed(r)
+  if has_value(r.execution_time_ms) then return tostring(r.execution_time_ms) .. "ms" end
+  return "?"
+end
+
+local function check_result_error(decoded)
+  if decoded and decoded.results and decoded.results[1] then
+    local r = decoded.results[1]
+    if has_value(r.error) then return r.error end
+    if has_value(r.message) then return r.message end
+  end
+  return nil
+end
+
+local function extract_schema_from_ddl(ddl, table_name, dialect)
+  if dialect == "mysql" then
+    return nil
+  end
+  local quoted = '"' .. table_name .. '"'
+  local pattern = '^CREATE TABLE "([^"]+)"%.' .. quoted
+  local schema = ddl:match(pattern)
+  if schema then return schema end
+  return nil
+end
+
+local function extract_sequences_from_ddl(ddl, schema)
+  local sequences = {}
+  local seen = {}
+  for seq_name in ddl:gmatch("nextval%('([^']+)'%:%:regclass%)") do
+    if not seen[seq_name] then
+      seen[seq_name] = true
+      table.insert(sequences, seq_name)
+    end
+  end
+  return sequences
+end
+
+local function column_type_for_seq(ddl, seq_name)
+  local seq_ref = "nextval('" .. seq_name .. "'::regclass)"
+  local seq_pos = ddl:find(seq_ref, 1, true)
+  if not seq_pos then return "integer" end
+  local before = ddl:sub(1, seq_pos - 1)
+  local col_type = before:match('"[^"]+"%s+(%w+)%s+[^,]-%s+DEFAULT%s*$')
+  if not col_type then
+    col_type = before:match('"[^"]+"%s+(%w+)%s+DEFAULT%s*$')
+  end
+  if col_type == "bigint" then return "bigint" end
+  if col_type == "smallint" then return "smallint" end
+  return "integer"
+end
+
+local function rename_seq_reference(ddl, seq_name, new_seq_name)
+  local old = "nextval('" .. seq_name .. "'::regclass)"
+  local new = "nextval('" .. new_seq_name .. "'::regclass)"
+  return ddl:gsub(old, new, 1)
+end
+
+local function prepare_table_ddl(ddl, target_table_name, table_name, schema, dialect)
+  local modified = ddl:gsub("`" .. table_name .. "`", "`" .. target_table_name .. "`")
+  modified = modified:gsub('"' .. table_name .. '"', '"' .. target_table_name .. '"')
+
+  if dialect ~= "postgres" then
+    return modified
+  end
+
+  local sequences = extract_sequences_from_ddl(modified, schema)
+  if #sequences == 0 then
+    return modified
+  end
+
+  local q = function(n) return quote(n, dialect) end
+  local seq_stmts = {}
+  for _, seq_name in ipairs(sequences) do
+    local new_seq_name = seq_name:gsub(table_name, target_table_name)
+    local seq_type = column_type_for_seq(ddl, seq_name)
+    local qualified
+    if schema then
+      qualified = q(schema) .. "." .. q(new_seq_name)
+    else
+      qualified = q(new_seq_name)
+    end
+    table.insert(seq_stmts, "CREATE SEQUENCE IF NOT EXISTS " .. qualified .. " AS " .. seq_type .. ";")
+    modified = rename_seq_reference(modified, seq_name, new_seq_name)
+  end
+
+  table.insert(seq_stmts, modified)
+  return table.concat(seq_stmts, "\n")
+end
+
 local function dialect_table_exists_sql(dialect)
   if dialect == "mysql" then
     return "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '%s'"
@@ -204,9 +324,159 @@ local function resolve_table_name(conn_name, database, dialect, base_name, on_re
   end, on_error)
 end
 
-local function copy_one_table(source, target, table_name, target_table_name, on_done, on_error)
+local function copy_data_same_server(source, target, schema, table_name, target_table_name, on_done, on_error)
   local q = function(n) return quote(n, source.dialect) end
+  local function tbl(name)
+    if schema and source.dialect ~= "sqlite" then
+      return q(schema) .. "." .. q(name)
+    end
+    return q(name)
+  end
+  local insert_sql = "INSERT INTO " .. tbl(target_table_name) .. " SELECT * FROM " .. tbl(table_name) .. ";"
+
+  run_sql_on_conn(target.conn, target.db, insert_sql, function(insert_output)
+    local ok, parsed = pcall(vim.json.decode, insert_output)
+    if not ok or not parsed then
+      on_error("Failed to parse INSERT result for " .. table_name)
+      return
+    end
+    local err = parsed.error
+    if has_value(err) then
+      on_error(tostring(err))
+      return
+    end
+    if not parsed.body then
+      on_error("No body in INSERT result for " .. table_name)
+      return
+    end
+    local ok_body, decoded = pcall(vim.json.decode, parsed.body)
+    if not ok_body or not decoded then
+      on_error("Failed to decode INSERT result for " .. table_name)
+      return
+    end
+    local r_err = check_result_error(decoded)
+    if r_err then
+      on_error(tostring(r_err))
+      return
+    end
+    local r = decoded.results and decoded.results[1]
+    if not r then
+      on_error("No result in INSERT response for " .. table_name)
+      return
+    end
+    on_done(extract_row_count(r), extract_elapsed(r))
+  end, on_error)
+end
+
+local function check_response(output, label, on_error)
+  local ok, parsed = pcall(vim.json.decode, output)
+  if not ok or not parsed then
+    on_error("Failed to parse " .. label .. " response")
+    return false
+  end
+  local err = parsed.error
+  if has_value(err) then
+    on_error(tostring(err))
+    return false
+  end
+  local body = parsed.body
+  if not body then
+    on_error("No body in " .. label .. " response")
+    return false
+  end
+  local ok_body, decoded = pcall(vim.json.decode, body)
+  if not ok_body or not decoded then
+    on_error("Failed to decode " .. label .. " body")
+    return false
+  end
+  local r_err = check_result_error(decoded)
+  if r_err then
+    on_error(tostring(r_err))
+    return false
+  end
+  return true, decoded
+end
+
+local function copy_data_cross_server(source, target, schema, table_name, target_table_name, on_done, on_error)
+  local q = function(n) return quote(n, source.dialect) end
+  local function tbl(name)
+    if schema and source.dialect ~= "sqlite" then
+      return q(schema) .. "." .. q(name)
+    end
+    return q(name)
+  end
+  local select_sql = "SELECT * FROM " .. tbl(table_name) .. ";"
+
+  run_sql_on_conn(source.conn, source.db, select_sql, function(select_output)
+    local ok, decoded = check_response(select_output, "SELECT", on_error)
+    if not ok then return end
+
+    local r = decoded.results and decoded.results[1]
+    if not r then
+      on_error("No result in SELECT response for " .. table_name)
+      return
+    end
+    local columns = r.columns
+    local rows = r.rows
+    if not columns or not rows then
+      on_error("No columns or rows in SELECT result for " .. table_name)
+      return
+    end
+    if #rows == 0 then
+      on_done("0", "0ms")
+      return
+    end
+
+    local col_names = {}
+    for _, col in ipairs(columns) do
+      table.insert(col_names, q(col.name))
+    end
+    local col_list = table.concat(col_names, ", ")
+
+    local total_rows = 0
+    local total_elapsed = "?"
+    local batch_size = 500
+    local function insert_batch(start_idx)
+      if start_idx > #rows then
+        on_done(tostring(total_rows), total_elapsed)
+        return
+      end
+
+      local end_idx = math.min(start_idx + batch_size - 1, #rows)
+      local value_groups = {}
+      for i = start_idx, end_idx do
+        local row = rows[i]
+        local vals = {}
+        for j = 1, #row do
+          table.insert(vals, quote_value(row[j]))
+        end
+        table.insert(value_groups, "(" .. table.concat(vals, ", ") .. ")")
+      end
+
+      local insert_sql = "INSERT INTO " .. tbl(target_table_name)
+        .. " (" .. col_list .. ") VALUES\n"
+        .. table.concat(value_groups, ",\n")
+        .. ";"
+
+      run_sql_on_conn(target.conn, target.db, insert_sql, function(insert_output)
+        local ok_insert, decoded = check_response(insert_output, "INSERT", on_error)
+        if not ok_insert then return end
+        local r = decoded.results and decoded.results[1]
+        if r then
+          total_elapsed = extract_elapsed(r)
+        end
+        total_rows = total_rows + (end_idx - start_idx + 1)
+        insert_batch(end_idx + 1)
+      end, on_error)
+    end
+
+    insert_batch(1)
+  end, on_error)
+end
+
+local function copy_one_table(source, target, table_name, target_table_name, on_done, on_error)
   local same_server = source.conn == target.conn
+  local same_db = source.db == target.db
 
   introspect_ddl(source.conn, source.db, table_name, function(ddl_output)
     local ok, parsed = pcall(vim.json.decode, ddl_output)
@@ -222,43 +492,19 @@ local function copy_one_table(source, target, table_name, target_table_name, on_
     end
 
     local ddl = items[1].ddl
-    local ddl_modified = ddl:gsub("`" .. table_name .. "`", "`" .. target_table_name .. "`")
-    ddl_modified = ddl_modified:gsub('"' .. table_name .. '"', '"' .. target_table_name .. '"')
+    local schema = extract_schema_from_ddl(ddl, table_name, source.dialect)
+    local ddl_prepared = prepare_table_ddl(ddl, target_table_name, table_name, schema, source.dialect)
 
-    run_sql_on_conn(target.conn, target.db, ddl_modified, function()
-      local insert_sql
-      if same_server then
-        local quoted_src = q(source.db) .. "." .. q(table_name)
-        local quoted_tgt = q(target.db) .. "." .. q(target_table_name)
-        insert_sql = "INSERT INTO " .. quoted_tgt .. " SELECT * FROM " .. quoted_src .. ";"
+    run_sql_on_conn(target.conn, target.db, ddl_prepared, function(ddl_output)
+      local ok = check_response(ddl_output, "DDL", on_error)
+      if not ok then return end
+      if same_server and same_db then
+        copy_data_same_server(source, target, schema, table_name, target_table_name, on_done, on_error)
       else
-        on_error("Cross-server copy not yet supported")
-        return
+        copy_data_cross_server(source, target, schema, table_name, target_table_name, on_done, on_error)
       end
-
-      run_sql_on_conn(target.conn, target.db, insert_sql, function(insert_output)
-        local ok2, parsed2 = pcall(vim.json.decode, insert_output)
-        local row_count = "?"
-        local elapsed = "?"
-        if ok2 and parsed2 and parsed2.body then
-          local ok_body, decoded = pcall(vim.json.decode, parsed2.body)
-          if ok_body and decoded and decoded.results and decoded.results[1] then
-            local r = decoded.results[1]
-            if r.row_count then row_count = tostring(r.row_count) end
-            if r.execution_time_ms then elapsed = tostring(r.execution_time_ms) .. "ms" end
-            if r.affected_rows then row_count = tostring(r.affected_rows) end
-          end
-        end
-        on_done(row_count, elapsed)
-      end, function(err)
-        on_error(err)
-      end)
-    end, function(err)
-      on_error(err)
-    end)
-  end, function(err)
-    on_error(err)
-  end)
+    end, on_error)
+  end, on_error)
 end
 
 local function popup_options()
@@ -288,13 +534,13 @@ local function show_confirm_dialog(source, target, table_names, on_confirm, on_c
   local tgt_dialect_tag = " (" .. target.dialect .. ")"
   local same_dialect = source.dialect == target.dialect
   local same_server = source.conn == target.conn
-  local can_copy = same_dialect and same_server
+  local can_copy = same_dialect
 
   local status_text
   if not same_dialect then
     status_text = "  MISMATCH - dialect differs"
   elseif not same_server then
-    status_text = "  Cross-server copy not yet supported"
+    status_text = "  Cross-server (SELECT+INSERT)"
   else
     status_text = "  Ready"
   end
@@ -504,10 +750,7 @@ local function show_progress_dialog(source, target, table_names, on_close)
 end
 
 function M.copy_tables(source, target, table_names, on_complete)
-  local same_dialect = source.dialect == target.dialect
-  local same_server = source.conn == target.conn
-
-  if not same_dialect or not same_server then
+  if source.dialect ~= target.dialect then
     show_confirm_dialog(source, target, table_names, nil, nil)
     return
   end
