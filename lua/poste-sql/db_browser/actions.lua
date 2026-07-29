@@ -185,8 +185,24 @@ function M.expand_or_child(buf_line, context)
   if is_leaf then return end
 
   if not node.expanded then
-    -- Expand (same as toggle)
-    M.toggle_node(buf_line, context)
+    -- Expand node directly (don't call toggle_node which executes SELECT on tables)
+    if node.children then
+      node.expanded = true
+      local new_map = tree.render_tree(context.browser_buf, context.line_to_node, context.root_nodes, context.conn_label)
+      for i, n in ipairs(new_map) do context.line_to_node[i] = n end
+    else
+      node.loading = true
+      local new_map = tree.render_tree(context.browser_buf, context.line_to_node, context.root_nodes, context.conn_label)
+      for i, n in ipairs(new_map) do context.line_to_node[i] = n end
+      local search_dir = vim.fn.getcwd()
+      async.fetch_children(node, function()
+        node.expanded = true
+        vim.schedule(function()
+          local nm = tree.render_tree(context.browser_buf, context.line_to_node, context.root_nodes, context.conn_label)
+          for i, n in ipairs(nm) do context.line_to_node[i] = n end
+        end)
+      end, search_dir)
+    end
   else
     -- Already expanded → jump to first child (next line)
     local total_lines = vim.api.nvim_buf_line_count(context.browser_buf)

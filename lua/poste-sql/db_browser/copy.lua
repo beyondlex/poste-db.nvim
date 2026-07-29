@@ -57,13 +57,13 @@ local function run_sql_on_conn(conn_name, database, sql, on_result, on_error)
     vim.fn.shellescape(binary),
     vim.fn.shellescape(file),
     vim.fn.shellescape(state.current_env or "dev"),
-    vim.fn.shellescape(url),
+    vim.fn.shellescape(url)
   )
   if database and database ~= "" then
     cmd = cmd .. " --database " .. vim.fn.shellescape(database)
   end
 
-  local content = sql
+  local content = "-- @connection " .. url .. "\n" .. sql
 
   local stderr_buf = {}
   local job_id = vim.fn.jobstart(cmd, {
@@ -111,15 +111,20 @@ local function introspect_ddl(conn_name, db_name, table_name, on_result, on_erro
     return
   end
 
-  local search_dir = find_search_dir()
+  local connections = require("poste-sql.connections")
+  local url, err = connections.resolve_connection_url(conn_name)
+  if not url then
+    if on_error then on_error(err or "unknown error") end
+    return
+  end
+
   local args = {
     binary,
-    "introspect", conn_name,
+    "introspect",
+    "--connection-url", url,
     "--type", "ddl",
     "--table", table_name,
     "--database", db_name,
-    "--env", state.current_env or "dev",
-    "--path", search_dir,
   }
 
   local stderr_buf = {}
@@ -342,10 +347,11 @@ local function show_summary_dialog(completed, failed, errors)
   if failed > 0 then
     for name, err in pairs(errors) do
       table.insert(lines, "  ✘ " .. name)
+      local clean = err:gsub("\n", " "):gsub("\r", "")
       local line_len = 50
       local pos = 1
-      while pos <= #err do
-        local chunk = err:sub(pos, pos + line_len - 1)
+      while pos <= #clean do
+        local chunk = clean:sub(pos, pos + line_len - 1)
         table.insert(lines, "      " .. chunk)
         pos = pos + line_len
       end

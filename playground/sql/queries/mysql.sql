@@ -2,7 +2,7 @@
 -- @database inventory
 
 select * from poste_test_metrics;
-select * from poste_test_events;;
+select * from poste_test_events;
 
 show tables;
 

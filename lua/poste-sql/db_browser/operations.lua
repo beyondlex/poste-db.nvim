@@ -892,6 +892,8 @@ execute_drop = function(table_node, qualified, conn, schema_prefix, context)
     return
   end
 
+  sql = "-- @connection " .. url .. "\n" .. sql
+
   local file_path = search_dir .. "/browser_drop.sql"
   local cmd = string.format("%s run %s --stdin --line 1 --env %s --json --connection-url %s",
     vim.fn.shellescape(binary),
