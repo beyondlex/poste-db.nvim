@@ -469,6 +469,17 @@ function M.search_filter(buf_line, context)
   end)
 end
 
+function M.search_clear(context)
+  local c = context or search_state.context
+  if not c then return end
+  search_state = { matches = {}, current = 0, pattern = "", context = nil }
+  _G.poste_search_info = nil
+  local new_map = tree.render_tree(c.browser_buf, c.line_to_node, c.root_nodes, c.conn_label)
+  for i, n in ipairs(new_map) do c.line_to_node[i] = n end
+  vim.api.nvim_buf_clear_namespace(c.browser_buf, search_hl_ns, 0, -1)
+  vim.api.nvim_buf_clear_namespace(c.browser_buf, search_char_ns, 0, -1)
+end
+
 function M.search_next()
   if #search_state.matches == 0 then return end
   do_jump(search_state.current + 1)

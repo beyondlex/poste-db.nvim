@@ -336,16 +336,14 @@ function M.render_tree(browser_buf, line_to_node, root_nodes, conn_label, multi_
 
   local lines, node_map, count_ranges = M.flatten_tree(root_nodes, 0, multi_select)
 
-  local winbar_parts = {}
+  local winbar = " DB Browser"
   local si = _G.poste_search_info
   if si and si.pattern ~= "" then
     if si.total == 0 then
-      table.insert(winbar_parts, " Search: " .. si.pattern .. " (0 matches)")
+      winbar = " Search: " .. si.pattern .. " (0 matches)"
     else
-      table.insert(winbar_parts, " Search: " .. si.pattern .. " (" .. si.current .. "/" .. si.total .. ")")
+      winbar = " Search: " .. si.pattern .. " (" .. si.current .. "/" .. si.total .. ")"
     end
-  else
-    table.insert(winbar_parts, " DB Browser")
   end
 
   if multi_select and multi_select.active then
@@ -354,12 +352,16 @@ function M.render_tree(browser_buf, line_to_node, root_nodes, conn_label, multi_
       count = count + 1
     end
     if count > 0 then
-      table.insert(winbar_parts, "  [" .. count .. " selected]")
+      winbar = winbar .. "%#PosteSqlBrowserSelected#  [" .. count .. " selected]%*"
     end
   end
-
-  local winbar = table.concat(winbar_parts, "")
-  local browser_win = vim.api.nvim_find_buf_win(browser_buf)
+  local browser_win
+  for _, win in ipairs(vim.api.nvim_list_wins()) do
+    if vim.api.nvim_win_get_buf(win) == browser_buf then
+      browser_win = win
+      break
+    end
+  end
   if browser_win then
     vim.api.nvim_set_option_value("winbar", winbar, { win = browser_win })
   end

@@ -262,11 +262,12 @@ local function setup_browser_buffer()
     end, opts)
   end
 
-  -- Multi-select: Esc exits selection mode
+  -- Esc: exit multi-select and/or clear search
   k = state.get_keymap("sql_db_browser", "multi_select_exit", "<Esc>")
   if k then
     vim.keymap.set("n", k, function()
       exit_multi_select()
+      actions.search_clear(make_context())
     end, opts)
   end
 
