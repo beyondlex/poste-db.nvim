@@ -152,7 +152,7 @@ function M.switch_context(args)
   local connections = require("poste-sql.connections")
   connections.list_connections(function(conn_list)
     if #conn_list == 0 then
-      vim.notify("No connections found. Create a connections.json file.", vim.log.levels.WARN)
+      vim.notify("No connections found. Create a connections.toml file.", vim.log.levels.WARN)
       return
     end
 

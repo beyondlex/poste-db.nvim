@@ -340,7 +340,7 @@ function M.navigate_to(conn_name, db_name)
     end
     if not conn_node then
       render_tree()
-      vim.notify("Connection '" .. conn_name .. "' not found in connections.json", vim.log.levels.WARN)
+      vim.notify("Connection '" .. conn_name .. "' not found in connections.toml", vim.log.levels.WARN)
       return
     end
 

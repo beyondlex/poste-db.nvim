@@ -325,7 +325,7 @@ function M.show_table_ddl()
     local conn_name = vim.trim(conn_match)
     local config = require("poste-sql.connections").get_connection_config(conn_name)
     if not config then
-      vim.notify("Connection '" .. conn_name .. "' not found in connections.json", vim.log.levels.WARN, { title = "Poste SQL" })
+      vim.notify("Connection '" .. conn_name .. "' not found in connections.toml", vim.log.levels.WARN, { title = "Poste SQL" })
       return
     end
     local lines = {}

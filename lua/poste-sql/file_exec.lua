@@ -340,7 +340,7 @@ function M.run(opts)
     else
       if S.dialog then S.dialog:close(); S.dialog = nil end
       S.is_running = false
-      vim.notify("Connection '" .. conn .. "' not found: " .. (err or "create a connections.json in your project root"), vim.log.levels.ERROR, { title = "Poste SQL" })
+      vim.notify("Connection '" .. conn .. "' not found: " .. (err or "create a connections.toml in your project root"), vim.log.levels.ERROR, { title = "Poste SQL" })
       return
     end
   end

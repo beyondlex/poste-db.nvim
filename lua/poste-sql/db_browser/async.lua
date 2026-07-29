@@ -344,58 +344,34 @@ function M.fetch_children(node, callback, search_dir)
 end
 
 function M.load_connections(callback, search_dir)
-  local cmd = { "connection", "list", "--path", search_dir, "--json" }
-
   state.log("INFO", "DB Browser load_connections: search_dir=" .. search_dir)
 
-  local stdout_done = false
-  local exit_done = false
-  local conn_list = {}
+  local util = require("poste.util")
+  local config_path = util.find_file_upwards("connections.toml", search_dir)
 
-  local function try_finish()
-    if not stdout_done or not exit_done then return end
-    vim.schedule(function()
-      local nodes = {}
-      for _, conn in ipairs(conn_list) do
-        table.insert(nodes, tree.make_connection_node(conn))
-      end
-      state.log("INFO", "DB Browser: loaded " .. #nodes .. " connections")
-      callback(nodes)
-    end)
-  end
-
-  cli.run_async(cmd, {
-    on_stdout = function(data)
-      stdout_done = true
-      if data then
-        while #data > 0 and data[#data] == "" do data[#data] = nil end
-        if #data > 0 then
-          local output = table.concat(data, "\n")
-          local ok, parsed = pcall(vim.json.decode, output)
-          if ok and type(parsed) == "table" then
-            conn_list = parsed
-          else
-            state.log("WARN", "DB Browser: JSON parse failed: " .. output:sub(1, 200))
-          end
+  vim.schedule(function()
+    local nodes = {}
+    if config_path then
+      local toml = require("poste-sql.toml")
+      local parsed, err = toml.parse_file(config_path)
+      if parsed then
+        for name, conn in pairs(parsed) do
+          local entry = { name = name, dialect = conn.dialect or "postgres" }
+          if conn.host then entry.host = conn.host end
+          if conn.port then entry.port = conn.port end
+          if conn.database then entry.database = conn.database end
+          if conn.path then entry.path = conn.path end
+          table.insert(nodes, tree.make_connection_node(entry))
         end
+      else
+        state.log("WARN", "DB Browser: TOML parse failed: " .. (err or "unknown"))
       end
-      try_finish()
-    end,
-    on_stderr = function(data)
-      if data then
-        for _, l in ipairs(data) do
-          if l ~= "" then state.log("WARN", "DB Browser stderr: " .. l) end
-        end
-      end
-    end,
-    on_exit = function(code)
-      exit_done = true
-      if code ~= 0 then
-        state.log("ERROR", "DB Browser: connection list exited with code " .. code)
-      end
-      try_finish()
-    end,
-  })
+    else
+      state.log("WARN", "DB Browser: connections.toml not found")
+    end
+    state.log("INFO", "DB Browser: loaded " .. #nodes .. " connections")
+    callback(nodes)
+  end)
 end
 
 return M

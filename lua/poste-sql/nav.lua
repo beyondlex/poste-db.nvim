@@ -17,18 +17,18 @@ function M.goto_definition()
     else
       search_dir = vim.fn.getcwd()
     end
-    local config_path = connections.find_connections_json(search_dir)
+    local config_path = connections.find_connections_toml(search_dir)
     if not config_path then
-      vim.notify("connections.json not found", vim.log.levels.WARN)
+      vim.notify("connections.toml not found", vim.log.levels.WARN)
       return
     end
     local config_lines = vim.fn.readfile(config_path)
     if not config_lines then
-      vim.notify("Cannot read connections.json", vim.log.levels.WARN)
+      vim.notify("Cannot read connections.toml", vim.log.levels.WARN)
       return
     end
     local target_line = nil
-    local pattern = '^%s*"' .. vim.pesc(conn_name) .. '"%s*:'
+    local pattern = '^%[' .. vim.pesc(conn_name) .. '%]'
     for i, l in ipairs(config_lines) do
       if l:match(pattern) then
         target_line = i
@@ -36,7 +36,7 @@ function M.goto_definition()
       end
     end
     if not target_line then
-      vim.notify("Connection '" .. conn_name .. "' not found in connections.json", vim.log.levels.WARN)
+      vim.notify("Connection '" .. conn_name .. "' not found in connections.toml", vim.log.levels.WARN)
       return
     end
     vim.cmd("normal! m'")

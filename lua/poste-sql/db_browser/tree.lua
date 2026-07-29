@@ -362,7 +362,7 @@ function M.render_tree(browser_buf, line_to_node, root_nodes, conn_label, multi_
 
   if #lines == 0 then
     table.insert(header, "  (no connections found)")
-    table.insert(header, "  need: connections.json")
+    table.insert(header, "  need: connections.toml")
   end
 
   vim.api.nvim_set_option_value("modifiable", true, { buf = browser_buf })

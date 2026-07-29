@@ -401,7 +401,7 @@ function M.set_default(node, context)
   vim.notify("Set default: " .. node.name, vim.log.levels.INFO)
 end
 
---- Open connections.json at this connection's entry.
+--- Open connections.toml at this connection's entry.
 function M.edit_conn(node, context)
   local conn_name = node.node_type == "connection" and node.name
     or (node.meta and node.meta.connection)
@@ -411,9 +411,9 @@ function M.edit_conn(node, context)
   end
 
   local connections = require("poste-sql.connections")
-  local config_path = connections.find_connections_json(get_search_dir(context))
+  local config_path = connections.find_connections_toml(get_search_dir(context))
   if not config_path then
-    vim.notify("connections.json not found", vim.log.levels.WARN)
+    vim.notify("connections.toml not found", vim.log.levels.WARN)
     return
   end
 
@@ -423,8 +423,8 @@ function M.edit_conn(node, context)
   end
   vim.cmd("edit " .. vim.fn.fnameescape(config_path))
 
-  -- Jump to the connection entry
-  local search_target = '"' .. conn_name .. '"'
+  -- Jump to the connection entry (TOML [section] header)
+  local search_target = '[' .. conn_name .. ']'
   local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
   local found_line = nil
   for i, line in ipairs(lines) do

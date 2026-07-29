@@ -8,7 +8,7 @@ local select_mod = require("poste.select")
 local M = {}
 
 -----------------------------------------------------------------------
--- Get search directory for connections.json
+-- Get search directory for connections.toml
 -----------------------------------------------------------------------
 local function get_search_dir()
   local buf_name = vim.api.nvim_buf_get_name(0)
@@ -24,15 +24,15 @@ end
 
 local _config_search_cache = {}
 
---- Walk up from `search_dir` to find connections.json (matches Rust logic).
+--- Walk up from `search_dir` to find connections.toml.
 --- Caches results to avoid directory traversal on every cursor move.
 --- @param search_dir string Directory to start from
---- @return string|nil Path to connections.json
-function M.find_connections_json(search_dir)
+--- @return string|nil Path to connections.toml
+function M.find_connections_toml(search_dir)
   if _config_search_cache[search_dir] ~= nil then
     return _config_search_cache[search_dir] ~= false and _config_search_cache[search_dir] or nil
   end
-  local result = util.find_file_upwards("connections.json", search_dir)
+  local result = util.find_file_upwards("connections.toml", search_dir)
   _config_search_cache[search_dir] = result or false
   return result
 end
@@ -40,24 +40,23 @@ end
 local _config_cache = nil
 local _config_cache_path = nil
 
---- Get the config for a named connection by reading connections.json directly.
+--- Get the config for a named connection by reading connections.toml directly.
 --- Returns raw values (before {{var}} substitution — use env-aware call for that).
 --- Caches parsed config to avoid file I/O on every cursor move.
 --- @param name string Connection name
 --- @return table|nil Connection config or nil
 function M.get_connection_config(name)
   local search_dir = get_search_dir()
-  local config_path = M.find_connections_json(search_dir)
+  local config_path = M.find_connections_toml(search_dir)
   if not config_path then
     _config_cache = nil
     _config_cache_path = nil
     return nil
   end
   if _config_cache_path ~= config_path then
-    local ok, data = pcall(vim.fn.readfile, config_path)
-    if not ok or not data then return nil end
-    local ok2, parsed = pcall(vim.json.decode, table.concat(data, "\n"))
-    if not ok2 or type(parsed) ~= "table" then return nil end
+    local toml = require("poste-sql.toml")
+    local parsed, err = toml.parse_file(config_path)
+    if not parsed then return nil end
     _config_cache = parsed
     _config_cache_path = config_path
   end
@@ -69,20 +68,19 @@ function M.get_connection_config(name)
   return conn
 end
 
---- Resolve a connection name to a URL by reading connections.json from cwd.
---- Replicates Rust's ConnectionConfig::to_url() logic without env var substitution.
+--- Resolve a connection name to a URL by reading connections.toml from cwd.
+--- Replicates Rust's ConnectionConfig::to_url() logic.
 --- @param name string Connection name
 --- @return string|nil, string|nil url, error_message
 function M.resolve_connection_url(name)
   local search_dir = vim.fn.getcwd()
-  local config_path = M.find_connections_json(search_dir)
+  local config_path = M.find_connections_toml(search_dir)
   if not config_path then
-    return nil, "connections.json not found (searched from " .. search_dir .. ")"
+    return nil, "connections.toml not found (searched from " .. search_dir .. ")"
   end
-  local ok, data = pcall(vim.fn.readfile, config_path)
-  if not ok then return nil, "Failed to read " .. config_path end
-  local ok2, parsed = pcall(vim.json.decode, table.concat(data, "\n"))
-  if not ok2 then return nil, "Failed to parse " .. config_path end
+  local toml = require("poste-sql.toml")
+  local parsed, err = toml.parse_file(config_path)
+  if not parsed then return nil, err end
   local conn = parsed[name]
   if not conn then return nil, "Connection '" .. name .. "' not found in " .. config_path end
 
@@ -122,40 +120,26 @@ end
 -- List connections
 ---------------------------------------------------------------------------
 
---- Fetch connections from CLI and parse JSON.
+--- Fetch connections from connections.toml.
 --- @param callback function(connections: table[]) Called with parsed connection list
 function M.list_connections(callback)
   local search_dir = get_search_dir()
-  local cmd = { "connection", "list", "--path", search_dir, "--json" }
-
-  cli.run_async(cmd, {
-    on_stdout = function(data)
-      if not data then return end
-      while #data > 0 and data[#data] == "" do data[#data] = nil end
-      if #data == 0 then
-        callback({})
-        return
-      end
-
-      local output = table.concat(data, "\n")
-      local ok, connections = pcall(vim.json.decode, output)
-      if not ok or type(connections) ~= "table" then
-        callback({})
-        return
-      end
-
-      vim.schedule(function()
-        callback(connections)
-      end)
-    end,
-    on_exit = function(_, code)
-      if code ~= 0 then
-        vim.schedule(function()
-          callback({})
-        end)
-      end
-    end,
-  })
+  local config_path = M.find_connections_toml(search_dir)
+  if not config_path then
+    vim.schedule(function() callback({}) end)
+    return
+  end
+  local toml = require("poste-sql.toml")
+  local parsed, _ = toml.parse_file(config_path)
+  if not parsed then
+    vim.schedule(function() callback({}) end)
+    return
+  end
+  local list = {}
+  for name, conn in pairs(parsed) do
+    table.insert(list, { name = name, dialect = conn.dialect, host = conn.host, port = conn.port, database = conn.database, path = conn.path })
+  end
+  vim.schedule(function() callback(list) end)
 end
 
 ---------------------------------------------------------------------------
@@ -191,7 +175,7 @@ end
 function M.select_connection()
   M.list_connections(function(connections)
     if #connections == 0 then
-      vim.notify("No connections found. Create a connections.json file.", vim.log.levels.WARN)
+      vim.notify("No connections found. Create a connections.toml file.", vim.log.levels.WARN)
       return
     end
 

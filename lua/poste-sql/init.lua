@@ -277,7 +277,7 @@ function M.run_sql_request()
       cmd = cmd .. " --connection-url " .. vim.fn.shellescape(url)
     else
       indicators.clear_all(src_buf)
-      vim.notify("Connection '" .. ctx.connection .. "' not found: " .. (err or "create a connections.json in your project root"), vim.log.levels.ERROR, { title = "Poste SQL" })
+      vim.notify("Connection '" .. ctx.connection .. "' not found: " .. (err or "create a connections.toml in your project root"), vim.log.levels.ERROR, { title = "Poste SQL" })
       return
     end
   end
