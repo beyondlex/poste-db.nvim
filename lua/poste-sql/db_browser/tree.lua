@@ -233,9 +233,6 @@ local icon_hl = {
 function M.apply_highlights(buf, line_count, count_ranges, line_to_node, multi_select)
   vim.api.nvim_buf_clear_namespace(buf, hl_ns, 0, -1)
 
-  vim.api.nvim_buf_add_highlight(buf, hl_ns, "PosteSqlBrowserHeader", 0, 0, -1)
-  vim.api.nvim_buf_add_highlight(buf, hl_ns, "PosteSqlBrowserSeparator", 1, 0, -1)
-
   for _, cr in ipairs(count_ranges or {}) do
     local lnum, col_start, col_end = cr[1], cr[2], cr[3]
     vim.api.nvim_buf_add_highlight(buf, hl_ns, "PosteSqlBrowserCount",
@@ -339,37 +336,45 @@ function M.render_tree(browser_buf, line_to_node, root_nodes, conn_label, multi_
 
   local lines, node_map, count_ranges = M.flatten_tree(root_nodes, 0, multi_select)
 
+  local winbar_parts = {}
   local si = _G.poste_search_info
-  local title
   if si and si.pattern ~= "" then
     if si.total == 0 then
-      title = " Search: " .. si.pattern .. " (0 matches)"
+      table.insert(winbar_parts, " Search: " .. si.pattern .. " (0 matches)")
     else
-      title = " Search: " .. si.pattern .. " (" .. si.current .. "/" .. si.total .. ")"
+      table.insert(winbar_parts, " Search: " .. si.pattern .. " (" .. si.current .. "/" .. si.total .. ")")
     end
   else
-    title = " DB Browser [" .. conn_label .. "]"
+    table.insert(winbar_parts, " DB Browser")
   end
 
-  local header = {
-    title,
-    string.rep("─", 40),
-    "",
-  }
-  for _, line in ipairs(lines) do
-    table.insert(header, line)
+  if multi_select and multi_select.active then
+    local count = 0
+    for _ in pairs(multi_select.selected or {}) do
+      count = count + 1
+    end
+    if count > 0 then
+      table.insert(winbar_parts, "  [" .. count .. " selected]")
+    end
   end
 
-  if #lines == 0 then
-    table.insert(header, "  (no connections found)")
-    table.insert(header, "  need: connections.toml")
+  local winbar = table.concat(winbar_parts, "")
+  local browser_win = vim.api.nvim_find_buf_win(browser_buf)
+  if browser_win then
+    vim.api.nvim_set_option_value("winbar", winbar, { win = browser_win })
   end
 
   vim.api.nvim_set_option_value("modifiable", true, { buf = browser_buf })
-  vim.api.nvim_buf_set_lines(browser_buf, 0, -1, false, header)
+  vim.api.nvim_buf_set_lines(browser_buf, 0, -1, false, lines)
   vim.api.nvim_set_option_value("modifiable", false, { buf = browser_buf })
 
-  M.apply_highlights(browser_buf, #header, count_ranges, node_map, multi_select)
+  if #lines == 0 then
+    vim.api.nvim_set_option_value("modifiable", true, { buf = browser_buf })
+    vim.api.nvim_buf_set_lines(browser_buf, 0, -1, false, { "  (no connections found)", "  need: connections.toml" })
+    vim.api.nvim_set_option_value("modifiable", false, { buf = browser_buf })
+  end
+
+  M.apply_highlights(browser_buf, #lines, count_ranges, node_map, multi_select)
 
   return node_map
 end

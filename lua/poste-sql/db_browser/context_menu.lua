@@ -31,7 +31,7 @@ local MENU_DEFS = {
   },
   table = {
     { letter = "s", label = "SELECT * LIMIT 100",  action = "select_star",      group = "query" },
-    { letter = "D", label = "Show DDL",            action = "show_ddl",         group = "query" },
+    { letter = "b", label = "Show DDL",            action = "show_ddl",         group = "query" },
     { letter = "c", label = "Copy Name",           action = "copy_name",        group = "query" },
     { letter = "i", label = "INSERT template",     action = "insert_template",  group = "generate" },
     { letter = "u", label = "UPDATE template",     action = "update_template",  group = "generate" },

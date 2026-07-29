@@ -97,10 +97,17 @@ local function show_column_info(binary, conn, db, file, table_name, col_name, sc
     return
   end
 
-  local args = { binary, "introspect", conn,
-    "--type", "columns", "--table", table_name,
-    "--path", vim.fn.fnamemodify(file, ":h"),
-    "--env", state.current_env or "dev" }
+  local connections = require("poste-sql.connections")
+  local url, url_err = connections.resolve_connection_url(conn)
+  if not url then
+    vim.schedule(function()
+      vim.notify("Column info: " .. (url_err or "unknown error"), vim.log.levels.ERROR, { title = "Poste SQL" })
+    end)
+    return
+  end
+
+  local args = { binary, "introspect", "--connection-url", url,
+    "--type", "columns", "--table", table_name }
 
   -- For MySQL, schema = database, so use schema as the database override
   -- For PG, keep db as the database and pass schema as --schema
@@ -205,14 +212,14 @@ end
 --- @param db_name string
 --- @param file string
 local function list_tables_in_db(binary, conn, db_name, file)
-  local search_dir = vim.fn.fnamemodify(file, ":h")
-  local cmd = string.format("%s introspect %s --type tables --database %s --env %s --path %s",
-    vim.fn.shellescape(binary),
-    vim.fn.shellescape(conn),
-    vim.fn.shellescape(db_name),
-    vim.fn.shellescape(state.current_env),
-    vim.fn.shellescape(search_dir))
-  vim.fn.jobstart(cmd, {
+  local connections = require("poste-sql.connections")
+  local url, url_err = connections.resolve_connection_url(conn)
+  if not url then
+    vim.notify("Table listing: " .. (url_err or "unknown error"), vim.log.levels.ERROR, { title = "Poste SQL" })
+    return
+  end
+  local args = { binary, "introspect", "--connection-url", url, "--type", "tables", "--database", db_name }
+  vim.fn.jobstart(args, {
     stdout_buffered = true,
     stderr_buffered = true,
     on_stdout = function(_, data)
@@ -277,8 +284,13 @@ function M.show_table_ddl()
     end
     local file = vim.api.nvim_buf_get_name(buf)
     if file == "" then file = vim.fn.getcwd() .. "/query.sql" end
-    local search_dir = vim.fn.fnamemodify(file, ":h")
-    local cmd = { "introspect", conn, "--type", "tables", "--database", db_name, "--env", state.current_env, "--path", search_dir }
+    local connections = require("poste-sql.connections")
+    local url, url_err = connections.resolve_connection_url(conn)
+    if not url then
+      vim.notify("Table listing: " .. (url_err or "unknown error"), vim.log.levels.ERROR, { title = "Poste SQL" })
+      return
+    end
+    local cmd = { "introspect", "--connection-url", url, "--type", "tables", "--database", db_name }
     cli.run_async(cmd, {
       on_stdout = function(data)
         data = util.ensure_job_data(data)
@@ -596,22 +608,21 @@ function M.show_table_ddl()
   end
 
   -- Fallback: show DDL (table mode)
-  local cmd = string.format("%s introspect %s --type ddl --table %s --env %s",
-    vim.fn.shellescape(binary),
-    vim.fn.shellescape(conn),
-    vim.fn.shellescape(cword),
-    vim.fn.shellescape(state.current_env)
-  )
-  if file and file ~= "" then
-    cmd = cmd .. " --path " .. vim.fn.shellescape(vim.fn.fnamemodify(file, ":h"))
+  local connections = require("poste-sql.connections")
+  local url, url_err = connections.resolve_connection_url(conn)
+  if not url then
+    vim.notify("DDL: " .. (url_err or "unknown error"), vim.log.levels.ERROR, { title = "Poste SQL" })
+    return
   end
+
+  local args = { binary, "introspect", "--connection-url", url, "--type", "ddl", "--table", cword }
   if db and db ~= vim.NIL and db ~= "" then
-    cmd = cmd .. " --database " .. vim.fn.shellescape(db)
+    table.insert(args, "--database"); table.insert(args, db)
   end
 
-  state.log("INFO", "DDL cmd: " .. cmd)
+  state.log("INFO", "DDL args: " .. vim.inspect(args))
 
-  vim.fn.jobstart(cmd, {
+  vim.fn.jobstart(args, {
     stdout_buffered = true,
     stderr_buffered = true,
     on_stdout = function(_, data)

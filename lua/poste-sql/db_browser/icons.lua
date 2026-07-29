@@ -31,7 +31,7 @@ local MARKER_EXPANDED  = "\239\132\135"
 local MARKER_LOADING   = "\226\128\166"
 local MARKER_SELECTED  = "\226\151\143"
 local MARKER_UNSELECTED = "\226\151\139"
-local HEADER_LINES = 3
+local HEADER_LINES = 0
 
 local hl_ns = vim.api.nvim_create_namespace("poste_db_browser")
 

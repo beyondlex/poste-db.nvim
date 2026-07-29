@@ -136,7 +136,14 @@ function M.show_ddl(node, context)
   local schema = table_node.meta and table_node.meta.schema
   local database = table_node.meta and table_node.meta.database
 
-  local cmd = { "introspect", conn, "--type", "ddl", "--table", table_node.name, "--path", search_dir, "--env", state.current_env }
+  local connections = require("poste-sql.connections")
+  local url, url_err = connections.resolve_connection_url(conn)
+  if not url then
+    vim.notify("DDL: " .. (url_err or "unknown error"), vim.log.levels.ERROR)
+    return
+  end
+
+  local cmd = { "introspect", "--connection-url", url, "--type", "ddl", "--table", table_node.name }
   if schema then
     table.insert(cmd, "--schema"); table.insert(cmd, schema)
   end

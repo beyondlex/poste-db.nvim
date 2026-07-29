@@ -318,6 +318,7 @@ local function open_window()
   vim.api.nvim_set_option_value("cursorline", true, { win = browser_win })
   vim.api.nvim_set_option_value("conceallevel", 2, { win = browser_win })
   vim.api.nvim_set_option_value("spell", false, { win = browser_win })
+  vim.api.nvim_set_option_value("winbar", " DB Browser", { win = browser_win })
 
   return browser_win
 end
