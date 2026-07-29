@@ -230,7 +230,7 @@ local icon_hl = {
   index_item  = "PosteSqlBrowserCount",
 }
 
-function M.apply_highlights(buf, line_count, count_ranges, line_to_node)
+function M.apply_highlights(buf, line_count, count_ranges, line_to_node, multi_select)
   vim.api.nvim_buf_clear_namespace(buf, hl_ns, 0, -1)
 
   vim.api.nvim_buf_add_highlight(buf, hl_ns, "PosteSqlBrowserHeader", 0, 0, -1)
@@ -267,6 +267,12 @@ function M.apply_highlights(buf, line_count, count_ranges, line_to_node)
     end
 
     local icon_hl_group = icon_hl[node.node_type]
+
+    if node.node_type == "table" and multi_select and multi_select.active
+        and multi_select.selected and multi_select.selected[node] then
+      vim.api.nvim_buf_add_highlight(buf, hl_ns, "PosteSqlBrowserSelected",
+        i - 1, 0, -1)
+    end
 
     if node.node_type == "column" and node.meta then
       if node.meta.is_pk then
@@ -363,7 +369,7 @@ function M.render_tree(browser_buf, line_to_node, root_nodes, conn_label, multi_
   vim.api.nvim_buf_set_lines(browser_buf, 0, -1, false, header)
   vim.api.nvim_set_option_value("modifiable", false, { buf = browser_buf })
 
-  M.apply_highlights(browser_buf, #header, count_ranges, node_map)
+  M.apply_highlights(browser_buf, #header, count_ranges, node_map, multi_select)
 
   return node_map
 end

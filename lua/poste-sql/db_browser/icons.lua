@@ -70,6 +70,7 @@ local function setup_highlights()
     vim.api.nvim_set_hl(0, "PosteSqlBrowserKeyHint", { fg = "#9ece6a", bold = true })
     vim.api.nvim_set_hl(0, "PosteSqlBrowserSearchMatch", { bg = "#544d33", bold = true })
     vim.api.nvim_set_hl(0, "PosteSqlBrowserSearchChar", { fg = "#bb9af7", bold = true })
+    vim.api.nvim_set_hl(0, "PosteSqlBrowserSelected", { fg = "#7aa2f7", bold = true })
   else
     vim.api.nvim_set_hl(0, "PosteSqlBrowserHeader", { fg = "#2e7de9", bold = true })
     vim.api.nvim_set_hl(0, "PosteSqlBrowserSeparator", { fg = "#a8aecb" })
@@ -87,6 +88,7 @@ local function setup_highlights()
     vim.api.nvim_set_hl(0, "PosteSqlBrowserKeyHint", { fg = "#587539", bold = true })
     vim.api.nvim_set_hl(0, "PosteSqlBrowserSearchMatch", { bg = "#f5e6b8", bold = true })
     vim.api.nvim_set_hl(0, "PosteSqlBrowserSearchChar", { fg = "#9854f1", bold = true })
+    vim.api.nvim_set_hl(0, "PosteSqlBrowserSelected", { fg = "#2e7de9", bold = true })
   end
 
   state.apply_highlight_overrides({
@@ -96,7 +98,7 @@ local function setup_highlights()
     "PosteSqlBrowserIconTable", "PosteSqlBrowserIconCol",
     "PosteSqlBrowserIconPk", "PosteSqlBrowserIconFk",
     "PosteSqlBrowserKeyHint", "PosteSqlBrowserSearchMatch",
-    "PosteSqlBrowserSearchChar",
+    "PosteSqlBrowserSearchChar", "PosteSqlBrowserSelected",
   })
 end
 
