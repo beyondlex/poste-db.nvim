@@ -1,8 +1,8 @@
 
--- @connection sqlite-dev
+-- sqlite3 test.db < 01-schema.sql
 
 CREATE TABLE IF NOT EXISTS users (
-  id    INTEGER PRIMARY KEY AUTOINCREMENT,
+  id    INTEGER PRIMARY KEY,
   name  TEXT NOT NULL,
   email TEXT NOT NULL UNIQUE,
   age   INTEGER,
@@ -12,14 +12,14 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 CREATE TABLE IF NOT EXISTS products (
-  id    INTEGER PRIMARY KEY AUTOINCREMENT,
+  id    INTEGER PRIMARY KEY,
   name  TEXT NOT NULL,
   price REAL NOT NULL DEFAULT 0,
   stock INTEGER DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS orders (
-  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  id         INTEGER PRIMARY KEY,
   user_id    INTEGER NOT NULL REFERENCES users(id),
   status     TEXT DEFAULT 'pending',
   total      REAL NOT NULL DEFAULT 0,
@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS orders (
 );
 
 CREATE TABLE IF NOT EXISTS order_items (
-  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  id         INTEGER PRIMARY KEY,
   order_id   INTEGER NOT NULL REFERENCES orders(id),
   product_id INTEGER NOT NULL REFERENCES products(id),
   quantity   INTEGER NOT NULL DEFAULT 1,
@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS order_items (
 );
 
 CREATE TABLE IF NOT EXISTS accounts (
-  id      INTEGER PRIMARY KEY AUTOINCREMENT,
+  id      INTEGER PRIMARY KEY,
   name    TEXT NOT NULL,
   balance REAL NOT NULL DEFAULT 0
 );

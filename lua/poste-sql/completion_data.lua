@@ -239,6 +239,25 @@ function M.search_dir()
   return name ~= "" and vim.fn.fnamemodify(name, ":p:h") or vim.fn.getcwd()
 end
 
+local function resolve_conn_url(conn)
+  if not conn or conn == "" then return nil end
+  local lower = conn:lower()
+  if lower:match("^sqlite:")
+    or lower:match("^postgres://")
+    or lower:match("^postgresql://")
+    or lower:match("^mysql://")
+    or lower:match("^mariadb://")
+  then
+    return conn
+  end
+  local ok, conn_mod = pcall(require, "poste-sql.connections")
+  if ok then
+    local url, _ = conn_mod.resolve_connection_url(conn)
+    return url
+  end
+  return nil
+end
+
 ---------------------------------------------------------------------------
 -- Lazy fetch tables
 ---------------------------------------------------------------------------
@@ -273,9 +292,16 @@ function M.ensure_tables(callback)
     return
   end
 
-  local args = { binary, "introspect", ctx.connection,
-    "--type", "tables", "--path", M.search_dir(),
-    "--env", state.current_env or "dev" }
+  local url = resolve_conn_url(ctx.connection)
+  if not url then
+    fetching_tables[key] = false
+    for _, cb in ipairs(tables_callbacks[key] or {}) do cb() end
+    tables_callbacks[key] = nil
+    return
+  end
+
+  local args = { binary, "introspect", "--connection-url", url,
+    "--type", "tables" }
   if ctx.database and ctx.database ~= "" then
     vim.list_extend(args, { "--database", ctx.database })
   end
@@ -339,10 +365,16 @@ function M.ensure_tables_for_db(db_name, callback)
     return
   end
 
-  local args = { binary, "introspect", ctx.connection,
-    "--type", "tables", "--path", M.search_dir(),
-    "--env", state.current_env or "dev" }
-  vim.list_extend(args, { "--database", db_name })
+  local url = resolve_conn_url(ctx.connection)
+  if not url then
+    fetching_tables[db_cache_key] = false
+    for _, cb in ipairs(tables_callbacks[db_cache_key] or {}) do cb() end
+    tables_callbacks[db_cache_key] = nil
+    return
+  end
+
+  local args = { binary, "introspect", "--connection-url", url,
+    "--type", "tables", "--database", db_name }
 
   vim.fn.jobstart(args, {
     stdout_buffered = true,
@@ -400,9 +432,16 @@ function M.ensure_databases(callback)
   local binary = M.find_binary()
   if not binary then fetching_dbs[conn_key_str] = false; callback({}); return end
 
-  local args = { binary, "introspect", ctx.connection,
-    "--type", "databases", "--path", M.search_dir(),
-    "--env", state.current_env or "dev" }
+  local url = resolve_conn_url(ctx.connection)
+  if not url then
+    fetching_dbs[conn_key_str] = false
+    for _, cb in ipairs(dbs_callbacks[conn_key_str] or {}) do cb({}) end
+    dbs_callbacks[conn_key_str] = nil
+    return
+  end
+
+  local args = { binary, "introspect", "--connection-url", url,
+    "--type", "databases" }
 
   vim.fn.jobstart(args, {
     stdout_buffered = true,
@@ -502,11 +541,17 @@ function M.ensure_columns(tbl, schema, callback)
     return
   end
 
-  local args = { binary, "introspect", ctx.connection,
-    "--type", "columns", "--table", tbl,
-    "--path", M.search_dir(), "--env", state.current_env or "dev" }
+  local url = resolve_conn_url(ctx.connection)
+  if not url then
+    fetching_cols[fkey] = false
+    for _, cb in ipairs(cols_callbacks[fkey] or {}) do cb() end
+    cols_callbacks[fkey] = nil
+    return
+  end
 
-  -- For MySQL, schema = database, so use schema as the database override
+  local args = { binary, "introspect", "--connection-url", url,
+    "--type", "columns", "--table", tbl }
+
   local db_override = ctx.database
   if schema and schema ~= "" then
     local ok_conn, conn_mod = pcall(require, "poste-sql.connections")

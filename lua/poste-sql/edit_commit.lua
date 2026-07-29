@@ -393,6 +393,12 @@ function M.refresh_dataset(tab)
   end
   if db == "" then db = state.sql.context.database or "" end
 
+  local conn_url = nil
+  if conn and conn ~= "" then
+    local connections = require("poste-sql.connections")
+    conn_url, _ = connections.resolve_connection_url(conn)
+  end
+
   -- Strip directives and ### markers from SQL, since original_sql
   -- may contain the full buffer content (-- @connection, ###, etc.)
   local sql_lines = vim.split(sql, "\n", { plain = true })
@@ -405,8 +411,8 @@ function M.refresh_dataset(tab)
   end
 
   local content_lines = {}
-  if conn and conn ~= "" then
-    table.insert(content_lines, "-- @connection " .. conn)
+  if conn_url then
+    table.insert(content_lines, "-- @connection " .. conn_url)
   end
   if db and db ~= "" then
     table.insert(content_lines, "-- @database " .. db)
@@ -430,6 +436,10 @@ function M.refresh_dataset(tab)
   vim.fn.writefile(content_lines, tmpfile)
 
   local cmd_parts = { binary, "run", tmpfile, "--line", tostring(sql_start_line), "--env", state.current_env, "--json" }
+  if conn_url then
+    table.insert(cmd_parts, "--connection-url")
+    table.insert(cmd_parts, conn_url)
+  end
   if db and db ~= "" then
     local db_clean = vim.split(db, "/")
     table.insert(cmd_parts, "--database")
@@ -554,19 +564,23 @@ function M.commit_edits()
   end
   local src_file = tab.src_file or ""
 
-  -- poste run needs a FILE for connections.json discovery
+  -- poste run needs a FILE for env.json discovery
   if src_file == "" then
     src_file = vim.fn.tempname() .. ".sql"
   end
 
-  -- Pass connection via @connection directive in SQL content (poste run has no --connection flag)
-  local sql_content = ""
+  local conn_url = nil
   if connection and connection ~= "" then
-    sql_content = "-- @connection " .. connection .. "\n"
+    local connections = require("poste-sql.connections")
+    conn_url, _ = connections.resolve_connection_url(connection)
   end
-  sql_content = sql_content .. sql
 
+  local sql_content = sql
   local cmd = { binary, "run", "--stdin", "--line", "2", "--json", src_file }
+  if conn_url then
+    table.insert(cmd, "--connection-url")
+    table.insert(cmd, conn_url)
+  end
   if database and database ~= "" then
     table.insert(cmd, "--database")
     table.insert(cmd, database)

@@ -7,6 +7,16 @@ local util = require("poste.util")
 
 local HEADER_LINES = icons.HEADER_LINES
 
+local function deep_clean(t)
+  for k, v in pairs(t) do
+    if v == vim.NIL then
+      t[k] = nil
+    elseif type(v) == "table" then
+      deep_clean(v)
+    end
+  end
+end
+
 local M = {}
 
 local search_hl_ns = vim.api.nvim_create_namespace("poste_db_browser_search")
@@ -608,6 +618,120 @@ function M.generate_describe_query(buf_line, context)
   end
 
   vim.notify("Generated DESCRIBE for: " .. table_node.name, vim.log.levels.INFO)
+end
+
+local function format_bytes(bytes)
+  if type(bytes) ~= "number" then return tostring(bytes or "?") end
+  if bytes >= 1073741824 then return string.format("%.2f GB", bytes / 1073741824) end
+  if bytes >= 1048576 then return string.format("%.2f MB", bytes / 1048576) end
+  if bytes >= 1024 then return string.format("%.2f kB", bytes / 1024) end
+  return bytes .. " B"
+end
+
+function M.show_table_info(buf_line, context)
+  local idx = buf_line - HEADER_LINES
+  local table_node = M.find_table_node(context.line_to_node, idx)
+  if not table_node then
+    vim.notify("Move cursor to a table node", vim.log.levels.INFO)
+    return
+  end
+
+  local conn = get_connection(table_node, context.root_nodes)
+  local schema = table_node.meta and table_node.meta.schema
+  local database = table_node.meta and table_node.meta.database
+  local dialect = get_dialect(table_node, context.root_nodes)
+
+  local connections = require("poste-sql.connections")
+  local url, url_err = connections.resolve_connection_url(conn)
+  if not url then
+    vim.notify("Table info: " .. (url_err or "unknown error"), vim.log.levels.ERROR)
+    return
+  end
+
+  local cmd = { "introspect", "--connection-url", url, "--type", "table_info", "--table", table_node.name }
+  if dialect == "postgres" and schema then
+    table.insert(cmd, "--schema"); table.insert(cmd, schema)
+  end
+  if database then
+    table.insert(cmd, "--database"); table.insert(cmd, database)
+  end
+
+  cli.run_async(cmd, {
+    on_stdout = function(data)
+      if not data then return end
+      while #data > 0 and data[#data] == "" do data[#data] = nil end
+      if #data == 0 then return end
+      local output = table.concat(data, "\n")
+      local ok, parsed = pcall(vim.json.decode, output)
+      if not ok or type(parsed) ~= "table" then
+        vim.schedule(function()
+          vim.notify("Table info: failed to parse response", vim.log.levels.WARN)
+        end)
+        return
+      end
+      deep_clean(parsed)
+      local items = parsed.items
+      if not items or #items == 0 then
+        vim.schedule(function()
+          vim.notify("Table info: no data returned", vim.log.levels.WARN)
+        end)
+        return
+      end
+      local info = items[1]
+      local lines = {}
+      table.insert(lines, "Table:  " .. (info.table_name or "?"))
+      if info.schema_name then
+        table.insert(lines, "Schema: " .. info.schema_name)
+      end
+      if info.engine then
+        table.insert(lines, "Engine: " .. info.engine)
+      end
+      if info.row_count ~= nil or info.row_count_estimate ~= nil then
+        local rc = info.row_count or info.row_count_estimate
+        table.insert(lines, "Rows:   " .. tostring(rc))
+      end
+      if info.data_length ~= nil then
+        table.insert(lines, "Data:   " .. format_bytes(info.data_length))
+      end
+      if info.index_length ~= nil then
+        table.insert(lines, "Index:  " .. format_bytes(info.index_length))
+      end
+      if info.data_size then
+        table.insert(lines, "Data:   " .. info.data_size)
+      end
+      if info.index_size then
+        table.insert(lines, "Index:  " .. info.index_size)
+      end
+      if info.total_size then
+        table.insert(lines, "Total:  " .. info.total_size)
+      end
+      if info.create_time then
+        table.insert(lines, "Created: " .. info.create_time)
+      end
+      if info.update_time then
+        table.insert(lines, "Updated: " .. info.update_time)
+      end
+      if info.collation then
+        table.insert(lines, "Collation: " .. info.collation)
+      end
+      if info.auto_increment then
+        table.insert(lines, "Auto-inc:  " .. tostring(info.auto_increment))
+      end
+      if info.comment and info.comment ~= "" then
+        table.insert(lines, "Comment: " .. info.comment)
+      end
+      vim.schedule(function()
+        local title = "Table Info: " .. (info.table_name or "?")
+        require("poste-sql.introspect").show_float(lines, title, "text")
+      end)
+    end,
+    on_stderr = function(data)
+      if not data or #data == 0 then return end
+      vim.schedule(function()
+        vim.notify("Table info: " .. table.concat(data, "\n"), vim.log.levels.WARN)
+      end)
+    end,
+  })
 end
 
 return M

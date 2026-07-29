@@ -72,6 +72,7 @@ local DESCRIPTIONS = {
     close = "Close DB Browser",
     search_next = "Next search match",
     search_prev = "Previous search match",
+    table_info = "Show table info (rows, size, engine, etc.)",
   },
   sql_introspect = {
     close = "Close introspect window",

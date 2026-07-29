@@ -2,6 +2,7 @@ local state = require("poste.state")
 local indicators = require("poste.indicators")
 local dialog = require("poste.dialog")
 local layout = require("poste.layout")
+local connections = require("poste-sql.connections")
 
 local M = {}
 
@@ -215,6 +216,16 @@ local function create_progress_win()
   })
 end
 
+local function extract_connection_directive(filepath)
+  local ok, content = pcall(vim.fn.readfile, filepath)
+  if not ok or not content then return nil end
+  for _, line in ipairs(content) do
+    local conn_match = line:match("^%s*%-%-%s*@connection%s+(.+)")
+    if conn_match then return vim.trim(conn_match) end
+  end
+  return nil
+end
+
 function M.cancel()
   if not S.is_running or not S.job_id then return end
   S.cancelled = true
@@ -329,18 +340,23 @@ function M.run(opts)
     vim.fn.shellescape(state.current_env),
     vim.fn.shellescape(mode),
     timeout,
-    max_rows,
+    max_rows
   )
 
-  if conn then
-    local connections = require("poste-sql.connections")
-    local url, err = connections.resolve_connection_url(conn)
+  local resolved_conn = conn
+  if not resolved_conn then
+    resolved_conn = extract_connection_directive(filepath)
+  end
+
+  if resolved_conn then
+    local url, err = connections.resolve_connection_url(resolved_conn)
     if url then
+      S.conn = resolved_conn
       cmd = cmd .. " --connection " .. vim.fn.shellescape(url)
     else
       if S.dialog then S.dialog:close(); S.dialog = nil end
       S.is_running = false
-      vim.notify("Connection '" .. conn .. "' not found: " .. (err or "create a connections.toml in your project root"), vim.log.levels.ERROR, { title = "Poste SQL" })
+      vim.notify("Connection '" .. resolved_conn .. "' not found: " .. (err or "create a connections.toml in your project root"), vim.log.levels.ERROR, { title = "Poste SQL" })
       return
     end
   end

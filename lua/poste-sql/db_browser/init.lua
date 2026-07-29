@@ -271,6 +271,14 @@ local function setup_browser_buffer()
     end, opts)
   end
 
+  -- Table info: i shows table metadata
+  k = state.get_keymap("sql_db_browser", "table_info", "i")
+  if k then
+    vim.keymap.set("n", k, function()
+      actions.show_table_info(vim.fn.line("."), make_context())
+    end, opts)
+  end
+
   -- Copy: p triggers copy to target database
   k = state.get_keymap("sql_db_browser", "copy_tables", "p")
   if k then
