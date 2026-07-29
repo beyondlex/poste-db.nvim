@@ -329,11 +329,20 @@ function M.run(opts)
     vim.fn.shellescape(state.current_env),
     vim.fn.shellescape(mode),
     timeout,
-    max_rows
+    max_rows,
   )
 
   if conn then
-    cmd = cmd .. " --connection " .. vim.fn.shellescape(conn)
+    local connections = require("poste-sql.connections")
+    local url, err = connections.resolve_connection_url(conn)
+    if url then
+      cmd = cmd .. " --connection " .. vim.fn.shellescape(url)
+    else
+      if S.dialog then S.dialog:close(); S.dialog = nil end
+      S.is_running = false
+      vim.notify("Connection '" .. conn .. "' not found: " .. (err or "create a connections.json in your project root"), vim.log.levels.ERROR, { title = "Poste SQL" })
+      return
+    end
   end
 
   if db then

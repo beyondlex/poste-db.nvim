@@ -11,7 +11,6 @@ local browser_win = nil
 local root_nodes = {}
 local line_to_node = {}
 local source_buf = nil
-local cached_search_dir = nil
 
 local multi_select = {
   active = false,
@@ -92,16 +91,6 @@ local function find_target_db(buf_line)
 end
 
 local function get_search_dir()
-  if cached_search_dir then
-    return cached_search_dir
-  end
-  if source_buf and vim.api.nvim_buf_is_valid(source_buf) then
-    local buf_name = vim.api.nvim_buf_get_name(source_buf)
-    if buf_name ~= "" then
-      local dir = vim.fn.fnamemodify(buf_name, ":p:h")
-      return dir
-    end
-  end
   return vim.fn.getcwd()
 end
 M.get_search_dir = get_search_dir
@@ -335,7 +324,6 @@ end
 
 function M.navigate_to(conn_name, db_name)
   source_buf = vim.api.nvim_get_current_buf()
-  cached_search_dir = get_search_dir()
   setup_browser_buffer()
   open_window()
 
@@ -399,7 +387,6 @@ end
 
 function M.navigate_to_table(conn_name, db_name, table_name, column_name)
   source_buf = vim.api.nvim_get_current_buf()
-  cached_search_dir = get_search_dir()
   setup_browser_buffer()
   open_window()
 
@@ -558,7 +545,6 @@ end
 
 function M.open()
   source_buf = vim.api.nvim_get_current_buf()
-  cached_search_dir = get_search_dir()
   setup_browser_buffer()
   open_window()
 
@@ -585,7 +571,6 @@ end
 
 function M.close()
   exit_multi_select()
-  cached_search_dir = nil
   if browser_win and vim.api.nvim_win_is_valid(browser_win) then
     vim.api.nvim_win_close(browser_win, true)
     browser_win = nil

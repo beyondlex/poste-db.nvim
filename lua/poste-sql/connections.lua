@@ -69,6 +69,51 @@ function M.get_connection_config(name)
   return conn
 end
 
+--- Resolve a connection name to a URL by reading connections.json from cwd.
+--- Replicates Rust's ConnectionConfig::to_url() logic without env var substitution.
+--- @param name string Connection name
+--- @return string|nil, string|nil url, error_message
+function M.resolve_connection_url(name)
+  local search_dir = vim.fn.getcwd()
+  local config_path = M.find_connections_json(search_dir)
+  if not config_path then
+    return nil, "connections.json not found (searched from " .. search_dir .. ")"
+  end
+  local ok, data = pcall(vim.fn.readfile, config_path)
+  if not ok then return nil, "Failed to read " .. config_path end
+  local ok2, parsed = pcall(vim.json.decode, table.concat(data, "\n"))
+  if not ok2 then return nil, "Failed to parse " .. config_path end
+  local conn = parsed[name]
+  if not conn then return nil, "Connection '" .. name .. "' not found in " .. config_path end
+
+  -- Use url field directly if present
+  if conn.url and conn.url ~= "" then
+    return conn.url, nil
+  end
+
+  -- Build URL from individual fields
+  if conn.dialect == "sqlite" then
+    local path = conn.path or ":memory:"
+    if path == ":memory:" then
+      return "sqlite::memory:", nil
+    end
+    return "sqlite:" .. path .. "?mode=rwc", nil
+  end
+
+  local scheme = conn.dialect == "postgres" and "postgres" or "mysql"
+  local host = conn.host or "localhost"
+  local default_port = conn.dialect == "postgres" and 5432 or 3306
+  local port = conn.port or default_port
+  local db = conn.database or ""
+  local auth = ""
+  if conn.user and conn.password then
+    auth = conn.user .. ":" .. conn.password .. "@"
+  elseif conn.user then
+    auth = conn.user .. "@"
+  end
+  return scheme .. "://" .. auth .. host .. ":" .. port .. "/" .. db, nil
+end
+
 ---------------------------------------------------------------------------
 -- Binary discovery
 ---------------------------------------------------------------------------

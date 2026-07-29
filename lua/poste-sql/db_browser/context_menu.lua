@@ -35,7 +35,7 @@ local MENU_DEFS = {
     { letter = "c", label = "Copy Name",           action = "copy_name",        group = "query" },
     { letter = "i", label = "INSERT template",     action = "insert_template",  group = "generate" },
     { letter = "u", label = "UPDATE template",     action = "update_template",  group = "generate" },
-    { letter = "d", label = "DELETE template",     action = "delete_template",  group = "generate" },
+    { letter = "d", label = "Drop Table",           action = "drop_table",       group = "danger" },
     { letter = "I", label = "Import Data",         action = "import_data",      group = "modify" },
     { letter = "n", label = "New Column",          action = "new_column",       group = "modify" },
     { letter = "r", label = "Rename Table",        action = "rename",           group = "modify" },

@@ -44,18 +44,26 @@ local function run_sql_on_conn(conn_name, database, sql, on_result, on_error)
     return
   end
 
+  local connections = require("poste-sql.connections")
+  local url, err = connections.resolve_connection_url(conn_name)
+  if not url then
+    if on_error then on_error(err or "unknown error") end
+    return
+  end
+
   local search_dir = find_search_dir()
   local file = search_dir .. "/copy.sql"
-  local cmd = string.format("%s run %s --line 1 --env %s --json --stdin",
+  local cmd = string.format("%s run %s --line 1 --env %s --json --stdin --connection-url %s",
     vim.fn.shellescape(binary),
     vim.fn.shellescape(file),
-    vim.fn.shellescape(state.current_env or "dev")
+    vim.fn.shellescape(state.current_env or "dev"),
+    vim.fn.shellescape(url),
   )
   if database and database ~= "" then
     cmd = cmd .. " --database " .. vim.fn.shellescape(database)
   end
 
-  local content = "-- @connection " .. conn_name .. "\n" .. sql
+  local content = sql
 
   local stderr_buf = {}
   local job_id = vim.fn.jobstart(cmd, {

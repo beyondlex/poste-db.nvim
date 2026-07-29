@@ -2,6 +2,8 @@ local icons = require("poste-sql.db_browser.icons")
 local tree = require("poste-sql.db_browser.tree")
 local async = require("poste-sql.db_browser.async")
 local state = require("poste.state")
+local cli = require("poste.cli")
+local util = require("poste.util")
 
 local HEADER_LINES = icons.HEADER_LINES
 
@@ -81,9 +83,17 @@ local function get_search_dir(source_buf)
   return vim.fn.getcwd()
 end
 
+local execute_table_select  -- forward declaration
+
 function M.toggle_node(buf_line, context)
   local node = tree.get_node_at_line(context.line_to_node, buf_line)
   if not node then return end
+
+  -- Table node: execute SELECT * directly instead of expanding
+  if node.node_type == "table" then
+    execute_table_select(node, context)
+    return
+  end
 
   if node.node_type == "column" or node.node_type == "index"
       or node.node_type == "key_item" or node.node_type == "fk_item"
@@ -214,6 +224,98 @@ function M.refresh_node(buf_line, context)
       for i, n in ipairs(nm) do context.line_to_node[i] = n end
     end)
   end, search_dir)
+end
+
+--- Execute SELECT * on a table node and render results in the dataset buffer.
+execute_table_select = function(node, context)
+  local dialect = get_dialect(node, context.root_nodes)
+  local conn = get_connection(node, context.root_nodes)
+  local schema_prefix = ""
+  if node.meta and node.meta.schema and dialect == "postgres" then
+    schema_prefix = node.meta.schema .. "."
+  end
+
+  local sql = "-- @connection " .. conn .. "\nSELECT * FROM " .. schema_prefix .. node.name .. " LIMIT 100;"
+  local search_dir = vim.fn.getcwd()
+
+  local connections = require("poste-sql.connections")
+  local url, err = connections.resolve_connection_url(conn)
+  if not url then
+    vim.notify("Connection '" .. conn .. "' not found: " .. (err or "unknown"), vim.log.levels.ERROR)
+    return
+  end
+
+  local binary = cli.binary()
+  if not binary then
+    vim.notify("Poste binary not found", vim.log.levels.ERROR)
+    return
+  end
+
+  local file_path = search_dir .. "/browser_select.sql"
+  local cmd = string.format("%s run %s --line 1 --env %s --json --stdin --connection-url %s",
+    vim.fn.shellescape(binary),
+    vim.fn.shellescape(file_path),
+    vim.fn.shellescape(state.current_env),
+    vim.fn.shellescape(url)
+  )
+  if node.meta and node.meta.database then
+    cmd = cmd .. " --database " .. vim.fn.shellescape(node.meta.database)
+  end
+
+  local stderr_buf = {}
+  local job_id = vim.fn.jobstart(cmd, {
+    stdin = "pipe",
+    stdout_buffered = true,
+    stderr_buffered = true,
+    on_stdout = function(_, data)
+      if not data then return end
+      data = util.ensure_job_data(data)
+      if #data == 0 then return end
+      local output = table.concat(data, "\n")
+      local ok, parsed = pcall(vim.json.decode, output)
+      if not ok or type(parsed) ~= "table" then
+        vim.schedule(function()
+          vim.notify("Failed to parse query result for: " .. node.name, vim.log.levels.ERROR)
+        end)
+        return
+      end
+      vim.schedule(function()
+        local sql_format = require("poste-sql.format")
+        local sql_buffer = require("poste-sql.buffer")
+        local lines, meta, layout = sql_format.format_dataset(parsed)
+        meta = meta or {}
+        meta.table_name = node.name
+        sql_buffer.render_dataset(lines, meta, {
+          layout = layout,
+          original_sql = sql,
+          src_file = "poste://db_browser",
+          src_buf = context.source_buf,
+        })
+      end)
+    end,
+    on_stderr = function(_, data)
+      if data then
+        for _, l in ipairs(data) do
+          if l ~= "" then table.insert(stderr_buf, l) end
+        end
+      end
+    end,
+    on_exit = function(_, code)
+      if code ~= 0 then
+        vim.schedule(function()
+          local err = table.concat(stderr_buf, "\n")
+          vim.notify("Query failed for '" .. node.name .. "': " .. (err ~= "" and err or "exit " .. code), vim.log.levels.ERROR)
+        end)
+      end
+    end,
+  })
+
+  if job_id > 0 then
+    vim.fn.chansend(job_id, sql)
+    vim.fn.chanclose(job_id, "stdin")
+  else
+    vim.notify("Failed to start poste job", vim.log.levels.ERROR)
+  end
 end
 
 local function ensure_expanded(node, search_dir, callback)

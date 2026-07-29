@@ -268,6 +268,20 @@ function M.run_sql_request()
   -- Persist resolved context so it's available for dataset editing (PK introspection etc.)
   if ctx.connection then state.sql.context.connection = ctx.connection end
   if ctx.database then state.sql.context.database = ctx.database end
+
+  -- Resolve connection name to URL and pass directly (bypasses Rust connections.json lookup)
+  if ctx.connection and ctx.connection ~= "" then
+    local connections = require("poste-sql.connections")
+    local url, err = connections.resolve_connection_url(ctx.connection)
+    if url then
+      cmd = cmd .. " --connection-url " .. vim.fn.shellescape(url)
+    else
+      indicators.clear_all(src_buf)
+      vim.notify("Connection '" .. ctx.connection .. "' not found: " .. (err or "create a connections.json in your project root"), vim.log.levels.ERROR, { title = "Poste SQL" })
+      return
+    end
+  end
+
   local db = ctx.database
   if db and db ~= vim.NIL and db ~= "" then
     cmd = cmd .. " --database " .. vim.fn.shellescape(db)

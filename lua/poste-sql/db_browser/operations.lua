@@ -799,20 +799,174 @@ function M.import_data(node, context)
   require("poste-sql.import").run(node, context)
 end
 
---- DELETE template: generate DELETE FROM ... WHERE based on table columns.
-function M.delete_template(node, context)
+--- Drop Table: show confirmation dialog, then execute DROP TABLE.
+-----------------------------------------------------------------------------
+
+local ns_drop = vim.api.nvim_create_namespace("poste_db_drop_confirm")
+
+local execute_drop  -- forward declaration
+
+--- Show a confirmation dialog for dropping a table (red warning text).
+local function show_drop_confirm(table_node, qualified, conn, schema_prefix, context)
+  local width = 52
+  local lines = {
+    "┌ Drop Table " .. string.rep("─", math.max(0, width - 14)) .. "┐",
+    "",
+    "  DANGER: This will permanently drop the table:",
+    "    " .. qualified,
+    "",
+    "  DROP TABLE " .. qualified .. ";",
+    "",
+    "  [y] Confirm  [n] Cancel",
+    "",
+    "└" .. string.rep("─", width - 2) .. "┘",
+  }
+  local height = #lines
+
+  local row = math.floor((vim.o.lines - height) / 2)
+  local col = math.floor((vim.o.columns - width) / 2)
+
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  vim.bo[buf].modifiable = false
+
+  local win_opts = {
+    relative = "editor",
+    row = row,
+    col = col,
+    width = width,
+    height = height,
+    style = "minimal",
+    border = "none",
+  }
+  local ok, win = pcall(vim.api.nvim_open_win, buf, true, win_opts)
+  if not ok then return end
+
+  vim.wo[win].cursorline = false
+  vim.wo[win].winhl = "Normal:NormalFloat"
+
+  -- Highlight danger text in red
+  vim.api.nvim_buf_add_highlight(buf, ns_drop, "DiagnosticError", 2, 0, -1)
+  vim.api.nvim_buf_add_highlight(buf, ns_drop, "DiagnosticError", 3, 0, -1)
+  vim.api.nvim_buf_add_highlight(buf, ns_drop, "DiagnosticError", 5, 0, -1)
+
+  local closed = false
+  local function close()
+    if closed then return end
+    closed = true
+    if win and vim.api.nvim_win_is_valid(win) then
+      vim.api.nvim_win_close(win, true)
+    end
+  end
+
+  local km_opts = { buffer = buf, noremap = true, silent = true, nowait = true }
+
+  vim.keymap.set("n", "y", function()
+    close()
+    vim.schedule(function()
+      execute_drop(table_node, qualified, conn, schema_prefix, context)
+    end)
+  end, km_opts)
+
+  vim.keymap.set("n", "n", close, km_opts)
+  vim.keymap.set("n", "<Esc>", close, km_opts)
+end
+
+--- Execute DROP TABLE and refresh the browser tree.
+execute_drop = function(table_node, qualified, conn, schema_prefix, context)
+  local sql_lines = {}
+  table.insert(sql_lines, "DROP TABLE " .. qualified .. ";")
+  local sql = table.concat(sql_lines, "\n")
+
+  local search_dir = get_search_dir(context)
+  local binary = state.find_poste_binary()
+  if not binary then
+    vim.notify("Poste binary not found", vim.log.levels.ERROR)
+    return
+  end
+
+  local connections = require("poste-sql.connections")
+  local url, err = connections.resolve_connection_url(conn)
+  if not url then
+    vim.notify("Drop table failed: " .. (err or "unknown"), vim.log.levels.ERROR)
+    return
+  end
+
+  local file_path = search_dir .. "/browser_drop.sql"
+  local cmd = string.format("%s run %s --stdin --line 1 --env %s --json --connection-url %s",
+    vim.fn.shellescape(binary),
+    vim.fn.shellescape(file_path),
+    vim.fn.shellescape(state.current_env),
+    vim.fn.shellescape(url)
+  )
+  if table_node.meta and table_node.meta.database then
+    cmd = cmd .. " --database " .. vim.fn.shellescape(table_node.meta.database)
+  end
+
+  -- Find parent db/schema node to refresh
+  local parent = table_node.parent
+  while parent and parent.node_type ~= "database" and parent.node_type ~= "schema" do
+    parent = parent.parent
+  end
+
+  local stderr_buf = {}
+  local job_id = vim.fn.jobstart(cmd, {
+    stdin = "pipe",
+    stdout_buffered = true,
+    stderr_buffered = true,
+    on_stdout = function()
+      vim.schedule(function()
+        vim.notify("Dropped table: " .. qualified, vim.log.levels.INFO)
+        if parent then
+          parent.children = nil
+          parent.expanded = false
+          parent.loading = true
+          local nm = tree.render_tree(context.browser_buf, context.line_to_node, context.root_nodes, context.conn_label)
+          for i, n in ipairs(nm) do context.line_to_node[i] = n end
+          local async = require("poste-sql.db_browser.async")
+          async.fetch_children(parent, function()
+            parent.expanded = true
+            vim.schedule(function()
+              local nm2 = tree.render_tree(context.browser_buf, context.line_to_node, context.root_nodes, context.conn_label)
+              for i, n in ipairs(nm2) do context.line_to_node[i] = n end
+            end)
+          end, search_dir)
+        end
+      end)
+    end,
+    on_stderr = function(_, data)
+      if data then
+        for _, l in ipairs(data) do
+          if l ~= "" then table.insert(stderr_buf, l) end
+        end
+      end
+    end,
+    on_exit = function(_, code)
+      if code ~= 0 then
+        vim.schedule(function()
+          local err = table.concat(stderr_buf, "\n")
+          vim.notify("Failed to drop table '" .. qualified .. "': " .. (err ~= "" and err or "exit " .. code), vim.log.levels.ERROR)
+        end)
+      end
+    end,
+  })
+
+  if job_id > 0 then
+    vim.fn.chansend(job_id, sql)
+    vim.fn.chanclose(job_id, "stdin")
+  else
+    vim.notify("Failed to start poste job", vim.log.levels.ERROR)
+  end
+end
+
+--- Drop a table: confirm dialog, then execute DROP TABLE and refresh tree.
+function M.drop_table(node, context)
   local table_node = node
   if node.node_type ~= "table" then
     table_node = find_table_node(context, vim.fn.line(".") - HEADER_LINES)
   end
   if not table_node or table_node.node_type ~= "table" then
     vim.notify("Move cursor to a table node", vim.log.levels.INFO)
-    return
-  end
-
-  local cols = get_columns_from_node(table_node)
-  if not cols then
-    vim.notify("Expand the table first to see columns", vim.log.levels.WARN)
     return
   end
 
@@ -823,35 +977,8 @@ function M.delete_template(node, context)
     schema_prefix = table_node.meta.schema .. "."
   end
 
-  local pk_cols = {}
-  for _, c in ipairs(cols) do
-    if c.is_pk then
-      local q = dialect == "mysql" and "`" or ""
-      table.insert(pk_cols, q .. c.name .. q)
-    end
-  end
-
-  local lines = { "" }
-  local cursor_offset = 2
-  if conn then
-    table.insert(lines, "-- @connection " .. conn)
-    cursor_offset = cursor_offset + 1
-  end
-  if table_node.meta and table_node.meta.database then
-    table.insert(lines, "-- @database " .. table_node.meta.database)
-    cursor_offset = cursor_offset + 1
-  end
-
-  table.insert(lines, "DELETE FROM " .. schema_prefix .. table_node.name)
-  if #pk_cols > 0 then
-    table.insert(lines, "WHERE " .. table.concat(pk_cols, " = ? AND ") .. " = ?;")
-  else
-    table.insert(lines, "WHERE ?;")
-  end
-  table.insert(lines, "")
-
-  insert_into_source(context, lines, cursor_offset)
-  vim.notify("Generated DELETE template for: " .. table_node.name, vim.log.levels.INFO)
+  local qualified = schema_prefix .. table_node.name
+  show_drop_confirm(table_node, qualified, conn, schema_prefix, context)
 end
 
 return M

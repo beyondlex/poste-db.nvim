@@ -5,7 +5,17 @@ local tree = require("poste-sql.db_browser.tree")
 local M = {}
 
 function M.run_introspect(conn_name, introspect_type, schema, table_name, database, callback, search_dir)
-  local cmd = { "introspect", conn_name, "--type", introspect_type, "--path", search_dir, "--env", state.current_env }
+  local connections = require("poste-sql.connections")
+  local url, err = connections.resolve_connection_url(conn_name)
+  if not url then
+    vim.schedule(function()
+      vim.notify("Introspect failed: " .. (err or "unknown error"), vim.log.levels.ERROR)
+      callback(nil)
+    end)
+    return
+  end
+
+  local cmd = { "introspect", "--connection-url", url, "--type", introspect_type }
 
   if schema then
     table.insert(cmd, "--schema"); table.insert(cmd, schema)

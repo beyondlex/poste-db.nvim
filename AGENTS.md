@@ -24,6 +24,27 @@ See `docs/dev/sql/README.md` for detailed file index.
   Never create files under `lua/poste-sql/` in `poste-http.nvim` — they would shadow
   this repo's modules silently.
 
+## Lua Pitfalls
+
+### Local function forward declaration
+
+When function A (e.g. `show_drop_confirm`) calls function B (e.g. `execute_drop`) that is defined
+later in the same file, B must be forward-declared:
+
+```lua
+local B  -- forward declaration
+local function A()
+  B()  -- works: B is declared (even if nil at this point)
+end
+B = function()
+  -- body
+end
+```
+
+Without the forward declaration, `local function B() ... end` creates a new local binding that
+is only visible *after* its definition, and A will capture `nil`. This is a Lua lexical scoping
+rule — `local` bindings are not hoisted.
+
 ## References
 
 | Want | Go to |
