@@ -1,6 +1,8 @@
 -- @connection pg-ecommerce
 -- @database ecommerce
 
+select * from events;
+
 SELECT 1;
 
 use ecommerce;

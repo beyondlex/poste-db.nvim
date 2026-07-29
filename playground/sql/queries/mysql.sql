@@ -1,6 +1,7 @@
 -- @connection my-blog
 -- @database inventory
 
+
 select * from poste_test_metrics;
 select * from poste_test_events;
 

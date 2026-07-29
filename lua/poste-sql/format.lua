@@ -145,6 +145,9 @@ local function cell_to_string(val, col)
     return "<null>"
   end
   if type(val) == "boolean" then
+    if col and col.type and col.type:lower():match("^tinyint") then
+      return val and "1" or "0"
+    end
     return tostring(val)
   end
   if type(val) == "number" then
