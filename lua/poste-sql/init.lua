@@ -122,7 +122,7 @@ local function ensure_sql_keymaps(buf)
         if vim.api.nvim_get_current_buf() ~= buf then return end
         local ok, ctx_mod = pcall(require, "poste-sql.context")
         if ok and ctx_mod then
-          local ok2, text = pcall(ctx_mod.get_cursor_status_text, ctx_mod, buf)
+          local ok2, text = pcall(ctx_mod.get_cursor_status_text, buf)
           if ok2 and text then
             vim.b[buf].poste_sql_context = text
           end
@@ -560,6 +560,8 @@ function M.setup(opts)
       setup_db_browser_keymap(args.buf)
     end,
   })
+
+  require("poste-sql.statusline").setup()
 
   vim.api.nvim_set_hl(0, "SqlDirectiveComment", { link = "Special" })
 

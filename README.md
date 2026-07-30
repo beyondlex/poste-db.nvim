@@ -38,19 +38,16 @@ Open a `.sql` file and press `<CR>` on a statement to execute.
 
 ### Connection management
 
-Connections are defined in `connections.json` (walked up from the SQL file):
+Connections are defined in `connections.toml` (walked up from the SQL file):
 
-```json
-{
-  "pg-dev": {
-    "dialect": "postgres",
-    "host": "localhost",
-    "port": 5432,
-    "database": "myapp",
-    "user": "app_user",
-    "password": "local-pass"
-  }
-}
+```toml
+[pg-dev]
+dialect = "postgres"
+host = "localhost"
+port = 5432
+database = "myapp"
+user = "app_user"
+password = "local-pass"
 ```
 
 Reference in `.sql` files:
@@ -62,6 +59,32 @@ SELECT * FROM users WHERE active = true;
 ```
 
 The `USE database;` statement switches the active database for parsing/completion context.
+
+### Statusline context
+
+The current connection and database are shown in the statusline as `[connection/database]` when `mini.statusline` is installed. The context updates as you move the cursor (respects `@connection`, `@database`, and `USE` statements).
+
+**Per-connection colors** — add a `color` or `link` field in `connections.toml`:
+
+```toml
+[production]
+color = "#ff0000"
+
+[staging]
+link = "WarningMsg"
+
+[development]
+color = "SkyBlue"
+```
+
+| Field | Type | Example |
+|-------|------|---------|
+| `color = "#rrggbb"` | Hex color | `color = "#ff0000"` |
+| `color = "CSS"` | CSS named color | `color = "Red"`, `color = "SkyBlue"` |
+| `color = "HL"` | Highlight group (auto-detected) | `color = "Function"` |
+| `link = "HL"` | Explicit highlight group link | `link = "ErrorMsg"` |
+
+Auto-detection: `color` values that are valid Neovim highlight groups are linked (`:link`), others are treated as CSS color names.
 
 ### Dataset buffer
 
