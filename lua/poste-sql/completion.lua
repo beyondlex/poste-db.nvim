@@ -585,6 +585,17 @@ function M:get_completions(blink_ctx, callback)
         table.insert(deduped, item)
       end
     end
+    -- Append snippet items when prefix matches a trigger word
+    local prefix = line_before:match("[%w_]*$") or ""
+    if #prefix > 0 then
+      local snippets = require("poste-sql.snippets")
+      for _, sitem in ipairs(snippets.get_completion_items(prefix)) do
+        if not seen[sitem.label] then
+          seen[sitem.label] = true
+          table.insert(deduped, sitem)
+        end
+      end
+    end
     if vim.g.poste_sql_debug then
       state.log("INFO", string.format("SQL completion: %d items (deduped from %d)", #deduped, #items))
     end
@@ -597,6 +608,20 @@ end
 
 function M:resolve(item, callback) callback(item) end
 function M:execute(exec_ctx, item, callback, default_impl)
+  if item.data and item.data.snippet then
+    vim.schedule(function()
+      local line = vim.api.nvim_get_current_line()
+      local col = vim.api.nvim_win_get_cursor(0)[2]
+      local trigger = item.data.trigger
+      local word_start = col - #trigger + 1
+      local new_line = line:sub(1, word_start - 1) .. line:sub(col + 1)
+      vim.api.nvim_buf_set_lines(0, vim.fn.line(".") - 1, vim.fn.line("."), false, { new_line })
+      vim.api.nvim_win_set_cursor(0, { vim.fn.line("."), word_start - 1 })
+      vim.snippet.expand(item.data.body)
+    end)
+    callback()
+    return
+  end
   if item.data and item.data.directive_fallback then
     vim.schedule(function()
       local buf = vim.api.nvim_get_current_buf()

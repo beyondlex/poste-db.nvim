@@ -594,6 +594,48 @@ function M.new_table(node, context)
   end)
 end
 
+--- Create Table Template: insert CREATE TABLE snippet with tab stops.
+function M.create_table_template(node, context)
+  local conn = get_connection_name(node, context)
+
+  if not context.source_buf or not vim.api.nvim_buf_is_valid(context.source_buf) then
+    vim.notify("No source SQL buffer found", vim.log.levels.WARN)
+    return
+  end
+
+  local target_win = vim.fn.bufwinid(context.source_buf)
+  if target_win and target_win ~= -1 then
+    vim.api.nvim_set_current_win(target_win)
+  end
+
+  local line_count = vim.api.nvim_buf_line_count(context.source_buf)
+  local insert_line = { "" }
+  if conn then
+    insert_line = { "", "-- @connection " .. conn, "" }
+  end
+  vim.api.nvim_buf_set_lines(context.source_buf, line_count, line_count, false, insert_line)
+  line_count = vim.api.nvim_buf_line_count(context.source_buf)
+  vim.api.nvim_win_set_cursor(0, { line_count, 0 })
+
+  local snippet = [[
+create table ${1:table_name} (
+  ${2:column_name} ${3:INTEGER} ${4:NOT NULL}
+);
+]]
+
+  local ok, _ = pcall(vim.snippet.expand, snippet)
+  if not ok then
+    vim.api.nvim_buf_set_lines(context.source_buf, line_count - 1, line_count, false, {
+      "create table ",
+      "  ",
+      ");",
+    })
+    vim.api.nvim_win_set_cursor(0, { line_count - 1, 13 })
+  end
+
+  vim.notify("Generated CREATE TABLE template", vim.log.levels.INFO)
+end
+
 --- New Column: open form with name/type/nullable/default, generate ALTER TABLE ADD COLUMN.
 function M.new_column(node, context)
   local table_node = node
@@ -988,6 +1030,14 @@ function M.drop_table(node, context)
 
   local qualified = schema_prefix .. table_node.name
   show_drop_confirm(table_node, qualified, conn, schema_prefix, context)
+end
+
+function M.create_database(node, context)
+  require("poste-sql.db_browser.db_create").open(node, context)
+end
+
+function M.create_schema(node, context)
+  require("poste-sql.db_browser.schema_create").open(node, context)
 end
 
 return M

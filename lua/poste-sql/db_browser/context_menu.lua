@@ -13,6 +13,7 @@ local MENU_DEFS = {
   connection = {
     { letter = "r", label = "Refresh All",         action = "refresh",    group = "query" },
     { letter = "e", label = "Edit Connection",     action = "edit_conn",  group = "modify" },
+    { letter = "N", label = "Create Database",     action = "create_database", group = "modify" },
     { letter = "c", label = "Copy Name",           action = "copy_name",  group = "query" },
   },
   database = {
@@ -21,13 +22,16 @@ local MENU_DEFS = {
     { letter = "s", label = "Set as Default",      action = "set_default", group = "query" },
     { letter = "f", label = "Execute SQL File...", action = "exec_file",   group = "query" },
     { letter = "c", label = "Copy Name",           action = "copy_name",   group = "query" },
+    { letter = "N", label = "Create Schema",       action = "create_schema", group = "modify" },
     { letter = "t", label = "New Table",           action = "new_table",   group = "modify" },
+    { letter = "T", label = "Create Table Template", action = "create_table_template", group = "generate" },
   },
   schema = {
     { letter = "s", label = "Set as Default",      action = "set_default", group = "query" },
     { letter = "r", label = "Refresh",             action = "refresh",     group = "query" },
     { letter = "c", label = "Copy Name",           action = "copy_name",   group = "query" },
     { letter = "t", label = "New Table",           action = "new_table",   group = "modify" },
+    { letter = "T", label = "Create Table Template", action = "create_table_template", group = "generate" },
   },
   table = {
     { letter = "s", label = "SELECT * LIMIT 100",  action = "select_star",      group = "query" },

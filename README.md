@@ -110,6 +110,16 @@ Press `<leader>db` in a SQL file to open the database tree browser.
 | `/` | Search filter |
 | `q` | Close |
 
+Context menu (`x`) shows node-specific actions. On **schema/database** nodes, `T` inserts a **CREATE TABLE template** with tab-stop placeholders:
+
+```
+create table table_name (
+  column_name INTEGER NOT NULL
+);
+```
+
+Press `<Tab>` to jump between placeholders, `<S-Tab>` to go back.
+
 ### SQL completion
 
 - **Keywords** — `SELECT`, `FROM`, `WHERE`, `JOIN`, etc.
@@ -118,6 +128,44 @@ Press `<leader>db` in a SQL file to open the database tree browser.
 - **Connection-aware** — Completions reflect the actual schema
 
 Requires **blink.cmp**. Auto-registers as `poste_sql` source.
+
+### SQL Snippets
+
+Built-in snippets appear as completion items when the prefix matches a trigger word:
+
+| Trigger | Template |
+|---------|----------|
+| `ct` | `create table` |
+| `sf` / `sl` | `select * from ... limit 100` |
+| `cnt` | `select count(*)` |
+| `ins` | `insert into ... values` |
+| `upd` | `update ... set ... where` |
+| `del` | `delete from ... where` |
+| `wh` | `where` clause |
+| `cola` | `alter table add column` |
+| `colu` | `alter table modify column` |
+| `cte` | `with ... as` |
+| `idx` | `create index` |
+| `uni` | `union all` |
+
+All snippets use **LSP-style syntax** (`${1:placeholder}`, `$0` for exit, `$$` for literal `$`). See `:help vim.snippet` or the [LSP spec](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#snippet_syntax) for details.
+
+**Custom snippets** via `setup()`:
+
+```lua
+require("poste-sql").setup({
+  snippets = {
+    -- Simple: trigger word → snippet body
+    myq = "SELECT * FROM ${1:table} WHERE ${2:condition};",
+
+    -- Full form: trigger, label, and snippet
+    myf = {
+      label = "my custom query",
+      snippet = "with ${1:cte} as (\n  ${2:select_query}\n)\nselect * from ${1:cte};",
+    },
+  },
+})
+```
 
 ## Integration Tests
 
