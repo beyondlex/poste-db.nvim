@@ -168,4 +168,6 @@ SELECT
   COUNT(*) FILTER (WHERE event_type = 'page_view') AS views,
   COUNT(*) FILTER (WHERE event_type = 'add_cart')  AS add_to_cart,
   COUNT(*) FILTER (WHERE event_type = 'purchase')  AS purchases
+
 FROM events;
+

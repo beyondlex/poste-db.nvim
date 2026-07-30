@@ -612,8 +612,14 @@ function M:execute(exec_ctx, item, callback, default_impl)
     vim.schedule(function()
       local line = vim.api.nvim_get_current_line()
       local col = vim.api.nvim_win_get_cursor(0)[2]
-      local trigger = item.data.trigger
-      local word_start = col - #trigger + 1
+      local before = line:sub(1, col)
+      local word = before:match("([%w_]+)$")
+      if not word then
+        if default_impl then default_impl() end
+        callback()
+        return
+      end
+      local word_start = col - #word + 1
       local new_line = line:sub(1, word_start - 1) .. line:sub(col + 1)
       vim.api.nvim_buf_set_lines(0, vim.fn.line(".") - 1, vim.fn.line("."), false, { new_line })
       vim.api.nvim_win_set_cursor(0, { vim.fn.line("."), word_start - 1 })

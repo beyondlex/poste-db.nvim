@@ -45,4 +45,47 @@ function M.highlight_directive_comments(buf)
   end
 end
 
+--- SQL keyword highlighting for a single line via extmarks.
+--- Used by log_viewer to highlight SQL in detail view.
+--- @param buf number  Buffer handle
+--- @param ns number   Namespace for extmarks
+--- @param line_idx number  Buffer line (1-indexed)
+--- @param text string  Text content to highlight (without buffer prefix)
+--- @param offset number  Column offset in buffer where text starts
+function M.highlight_line(buf, ns, line_idx, text, offset)
+  local keywords = {
+    "SELECT", "FROM", "WHERE", "INSERT", "INTO", "VALUES", "UPDATE", "SET",
+    "DELETE", "CREATE", "TABLE", "ALTER", "DROP", "INDEX", "VIEW", "WITH",
+    "AND", "OR", "NOT", "NULL", "IN", "AS", "ON", "JOIN", "LEFT", "RIGHT",
+    "INNER", "OUTER", "FULL", "CROSS", "GROUP", "BY", "ORDER", "HAVING",
+    "LIMIT", "OFFSET", "DISTINCT", "CASE", "WHEN", "THEN", "ELSE", "END",
+    "EXISTS", "UNION", "ALL", "BETWEEN", "LIKE", "IS", "TRUE", "FALSE",
+    "PRIMARY", "KEY", "FOREIGN", "REFERENCES", "CASCADE", "DEFAULT",
+    "INTEGER", "INT", "BIGINT", "SMALLINT", "TEXT", "VARCHAR", "CHAR",
+    "BOOLEAN", "BOOL", "FLOAT", "DOUBLE", "DECIMAL", "NUMERIC",
+    "DATE", "TIMESTAMP", "TIME", "JSON", "JSONB", "SERIAL", "BIGSERIAL",
+    "COUNT", "SUM", "AVG", "MIN", "MAX", "COALESCE", "CAST",
+  }
+  local kw_map = {}
+  for _, kw in ipairs(keywords) do
+    kw_map[kw] = true
+  end
+
+  local hl_group = "Statement"
+  local i = 1
+  while i <= #text do
+    local word_start, word_end = text:find("[%w_]+", i)
+    if not word_start then break end
+    if kw_map[text:sub(word_start, word_end):upper()] then
+      vim.api.nvim_buf_set_extmark(buf, ns, line_idx - 1, offset + word_start - 1, {
+        end_col = offset + word_end,
+        hl_group = hl_group,
+        priority = 150,
+        hl_mode = "combine",
+      })
+    end
+    i = word_end + 1
+  end
+end
+
 return M

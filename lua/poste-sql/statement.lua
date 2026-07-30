@@ -165,8 +165,10 @@ end
 function M.extract_stmt_at_cursor(buf_lines, cursor_line, buf)
   local directives = {}
   for _, l in ipairs(buf_lines) do
-    if l:match("^%s*%-%-") or l:match("^%s*$") then
+    if l:match("^%s*%-%-%s*@") or l:match("^%s*$") then
       table.insert(directives, l)
+    elseif l:match("^%s*%-%-") then
+      -- skip non-directive comments (e.g. -- drop database ...)
     else
       break
     end

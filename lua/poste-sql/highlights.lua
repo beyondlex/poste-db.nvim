@@ -234,6 +234,24 @@ function M.apply_dataset_highlights(buf, lines, meta)
           hl_group = "PosteSqlMeta",
         })
       end
+      -- Highlight "OK" in green (PosteSqlSucceeded)
+      local ok_start, ok_end = line:find("OK")
+      if ok_start and ok_end then
+        vim.api.nvim_buf_set_extmark(buf, ns, i - 1, ok_start - 1, {
+          end_row = i - 1,
+          end_col = ok_end,
+          hl_group = "PosteSqlSucceeded",
+        })
+      end
+      -- Highlight "Xms" in orange (PosteSqlConstant)
+      local ms_start, ms_end = line:find("%d+ms")
+      if ms_start and ms_end then
+        vim.api.nvim_buf_set_extmark(buf, ns, i - 1, ms_start - 1, {
+          end_row = i - 1,
+          end_col = ms_end,
+          hl_group = "PosteSqlConstant",
+        })
+      end
     end
     return
   end

@@ -287,6 +287,19 @@ local function setup_browser_buffer()
     end, opts)
   end
 
+  -- Create object: a on connection → create database, a on database → create schema
+  k = state.get_keymap("sql_db_browser", "create_object", "a")
+  if k then
+    vim.keymap.set("n", k, function()
+      local node = tree.get_node_at_line(line_to_node, vim.fn.line("."))
+      if node and node.node_type == "connection" then
+        require("poste-sql.db_browser.db_create").open(node, make_context())
+      elseif node and node.node_type == "database" then
+        require("poste-sql.db_browser.schema_create").open(node, make_context())
+      end
+    end, opts)
+  end
+
   local table_ops = require("poste-sql.table_ops")
   table_ops.register_keymaps(browser_buf, function()
     local buf_line = vim.fn.line(".")

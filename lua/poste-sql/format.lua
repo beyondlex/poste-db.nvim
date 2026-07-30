@@ -6,6 +6,14 @@ local M = {}
 -- Helpers
 ---------------------------------------------------------------------------
 
+local function short_connection(conn)
+  if not conn or conn == "" then return "" end
+  local s = conn:gsub("^%w+://", "")
+  s = s:gsub("^[^@]+@", "")
+  s = s:gsub("/+$", "")
+  return s
+end
+
 local function split_lines(s)
   local lines = {}
   for line in (s .. "\n"):gmatch("(.-)\n") do
@@ -376,9 +384,9 @@ function M.format_dataset(r)
     end
     table.insert(lines, "")
     local db = data.database
-    if type(db) ~= "string" then db = nil end
-    table.insert(lines, string.format("  Connection: %s%s",
-      data.connection or "",
+    if type(db) ~= "string" or db == "" then db = nil end
+    table.insert(lines, string.format("  %s%s",
+      short_connection(data.connection or ""),
       db and (" / " .. db) or ""
     ))
     table.insert(lines, "")

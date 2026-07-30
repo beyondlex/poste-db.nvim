@@ -1,12 +1,16 @@
 -- @connection my-blog
 -- @database inventory
 
+
+-- drop database cc;
+
 select * from poste_test_metrics;
 select * from poste_test_events;
 
 show tables;
 
-SELECT * FROM items ;
+
+SELECT * FROM items  ;
 
 SELECT count(1) FROM items ;
 
@@ -58,9 +62,6 @@ show tables;
 use blog;
 
 select * from posts;
-
-
-use inventory;
 
 SELECT w.name AS warehouse,
        w.city,
@@ -150,5 +151,12 @@ LEFT JOIN shipment_items si ON si.shipment_id = sh.id
 LEFT JOIN items i ON i.id = si.item_id
 WHERE sh.status != 'delivered'
 GROUP BY sh.id, wf.name, wt.name, sh.status;
+
+
+
+-- @connection my-blog
+create table table_name (
+  column_name INTEGER NOT NULL
+);
 
 

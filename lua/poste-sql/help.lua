@@ -73,6 +73,7 @@ local DESCRIPTIONS = {
     search_next = "Next search match",
     search_prev = "Previous search match",
     table_info = "Show table info (rows, size, engine, etc.)",
+    create_object = "Create database/schema (contextual)",
   },
   sql_introspect = {
     close = "Close introspect window",

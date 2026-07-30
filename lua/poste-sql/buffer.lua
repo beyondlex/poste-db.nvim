@@ -591,11 +591,11 @@ function M.render_dataset(lines, meta, opts)
     vim.api.nvim_buf_set_lines(write_buf, 0, -1, false, padded)
     vim.api.nvim_set_option_value("modifiable", false, { buf = write_buf })
 
+    if meta then
+      sql_highlights.apply_dataset_highlights(write_buf, padded, meta)
+    end
     if not is_error then
-      sql_highlights.apply_dataset_highlights(write_buf, padded, meta)
       require("poste-sql.buffer_search").apply_search_highlights()
-    elseif meta and meta.type == "error" then
-      sql_highlights.apply_dataset_highlights(write_buf, padded, meta)
     end
   end
 

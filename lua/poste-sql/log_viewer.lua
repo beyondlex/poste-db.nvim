@@ -217,6 +217,24 @@ local function apply_highlights(line_idx, entry, _)
   vim.api.nvim_buf_set_extmark(buf, ns, line_idx - 1, 27 + TBL_W, {
     end_col = 33 + TBL_W, hl_group = "PosteSqlMetaDim", priority = 150,
   })
+
+  -- Filter word highlight
+  if filter_text ~= "" and line_len > 0 then
+    local lower = line:lower()
+    local ftext = filter_text:lower()
+    local pos = 1
+    while pos <= line_len do
+      local start = lower:find(ftext, pos, true)
+      if not start then break end
+      vim.api.nvim_buf_set_extmark(buf, ns, line_idx - 1, start - 1, {
+        end_col = start - 1 + #filter_text,
+        hl_group = "PosteSearchActive",
+        priority = 180,
+        hl_mode = "combine",
+      })
+      pos = start + #filter_text
+    end
+  end
 end
 
 --- Apply SQL syntax highlighting to a single line via shared syntax module.
@@ -295,6 +313,24 @@ local function apply_detail_highlights(line_idx, entry, detail_idx)
       end_col = line_len, hl_group = "PosteSqlMetaDim", priority = 160,
     })
   end
+
+  -- Filter word highlight on detail lines
+  if filter_text ~= "" and line_len > 0 then
+    local lower = line:lower()
+    local ftext = filter_text:lower()
+    local pos = 1
+    while pos <= line_len do
+      local start = lower:find(ftext, pos, true)
+      if not start then break end
+      vim.api.nvim_buf_set_extmark(buf, ns, line_idx - 1, start - 1, {
+        end_col = start - 1 + #filter_text,
+        hl_group = "PosteSearchActive",
+        priority = 180,
+        hl_mode = "combine",
+      })
+      pos = start + #filter_text
+    end
+  end
 end
 
 local function update_winbar()
@@ -312,7 +348,7 @@ local function update_winbar()
   if count < total then
     table.insert(parts, "  %#PosteSqlMetaDim#filtered%#PosteSqlMeta#")
   end
-  table.insert(parts, "  %#PosteSqlMetaDim#│  q=close  f=filter  F=clear  C=clear-all  ↵=expand%#PosteSqlMeta#")
+  table.insert(parts, "  %#PosteSqlMetaDim#│  q=close  f=filter  F=clear  C=delete-all  ↵=expand%#PosteSqlMeta#")
   pcall(vim.api.nvim_set_option_value, "winbar", table.concat(parts), { win = win })
 end
 

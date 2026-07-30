@@ -612,29 +612,24 @@ local conn_names_cache = nil
 
 function M.ensure_conn_names(callback)
   if conn_names_cache then callback(conn_names_cache); return end
-  local binary = M.find_binary()
-  if not binary then callback({}); return end
-  local args = { binary, "connection", "list", "--json", "--path", M.search_dir(), "--env", state.current_env or "dev" }
-  vim.fn.jobstart(args, {
-    stdout_buffered = true,
-    on_stdout = function(_, data)
-      if not data then return end
-      while #data > 0 and data[#data] == "" do data[#data] = nil end
-      if #data == 0 then return end
-      local ok, parsed = pcall(vim.json.decode, table.concat(data, "\n"))
-      local names = {}
-      if ok and parsed then
-        for _, item in ipairs(parsed) do
-          table.insert(names, item.name)
+  vim.schedule(function()
+    local search_dir = M.search_dir()
+    local util = require("poste.util")
+    local config_path = util.find_file_upwards("connections.toml", search_dir)
+    local names = {}
+    if config_path then
+      local toml = require("poste-sql.toml")
+      local parsed, _ = toml.parse_file(config_path)
+      if parsed then
+        for name, _ in pairs(parsed) do
+          table.insert(names, name)
         end
+        table.sort(names)
         conn_names_cache = names
       end
-      callback(names)
-    end,
-    on_exit = function(_, code)
-      if code ~= 0 then callback({}) end
-    end,
-  })
+    end
+    callback(names)
+  end)
 end
 
 return M
