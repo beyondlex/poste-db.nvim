@@ -34,7 +34,7 @@ function M.func_items(prefix, funcs)
     if fn:lower():sub(1, #low) == low then
       table.insert(items, {
         label = fn,
-        kind = 10,
+        kind = 3,
         insertText = fn,
         sortText = "2" .. fn,
         documentation = "function"

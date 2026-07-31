@@ -22,4 +22,6 @@ M.db_browser = {        -- database structure browser
   connection = nil,   -- current connection name being browsed
 }
 
+M.icons = {}  -- { [kind_name_or_int] = "icon_string" }, set via setup({ icons = {...} })
+
 return M

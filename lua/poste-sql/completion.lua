@@ -596,6 +596,19 @@ function M:get_completions(blink_ctx, callback)
         end
       end
     end
+    -- Apply custom kind_icon from poste-sql state.icons
+    local icons = require("poste-sql.state").icons
+    if next(icons) then
+      local ok, types = pcall(require, "blink.cmp.types")
+      if ok and types and types.CompletionItemKind then
+        for _, item in ipairs(deduped) do
+          local kind_name = type(item.kind) == "number" and types.CompletionItemKind[item.kind]
+          if kind_name then
+            item.kind_icon = icons[kind_name] or icons[item.kind]
+          end
+        end
+      end
+    end
     if vim.g.poste_sql_debug then
       state.log("INFO", string.format("SQL completion: %d items (deduped from %d)", #deduped, #items))
     end
