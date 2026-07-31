@@ -1,5 +1,6 @@
 local cli = require("poste.cli")
 local state = require("poste.state")
+local dml = require("poste-sql.dml")
 local edit_commit = require("poste-sql.edit_commit")
 local mapping = require("poste-sql.import.mapping")
 
@@ -109,7 +110,7 @@ function M.execute_import(table_info, valid_rows, col_map, table_cols, callback)
     local sql_parts = {}
     for i = start_idx, end_idx do
       local row_vals = valid_rows[i]
-      local stmt = edit_commit.generate_insert(
+      local stmt = dml.generate_insert(
         table_info.schema, table_info.name, norm_cols, row_vals, table_info.dialect)
       table.insert(sql_parts, stmt)
     end
