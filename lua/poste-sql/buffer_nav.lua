@@ -834,6 +834,12 @@ local function build_status_winbar(meta)
   local text = left .. "%=" .. right
   return "%#PosteSqlMeta#" .. text
 end
+
 M.build_status_winbar = build_status_winbar
+M._test = {
+  build_header_index = build_header_index,
+  format_conn_short = format_conn_short,
+  build_status_winbar = build_status_winbar,
+}
 
 return M
