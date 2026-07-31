@@ -2,13 +2,13 @@
 
 **Date**: 2026-07-31
 **Scope**: All Lua source files (~35K lines, 64 files)
-**Focus**: Code smells, duplication, magic numbers, encapsulation, modularity
+**Focus**: Code smells, duplication, magic constants/strings, encapsulation, modularity
 
 ---
 
 ## Executive Summary
 
-The codebase is **well-structured at the module level** — clear separation of concerns (completion, format, buffer, editor, db_browser, etc.) and good use of shared infrastructure from `poste.nvim`. However, individual modules have grown too large, contain significant duplicated code, and mix multiple responsibilities. The most critical issues are: (1) ~200 lines of identical header extraction code in `buffer.lua`, (2) duplicated UTF-8 character walking across 3 modules, (3) ~30+ magic numbers, and (4) deeply nested control flow in `nav.lua`.
+The codebase is **well-structured at the module level** — clear separation of concerns (completion, format, buffer, editor, db_browser, etc.) and good use of shared infrastructure from `poste.nvim`. However, individual modules have grown too large, contain significant duplicated code, and mix multiple responsibilities. The most critical issues are: (1) ~200 lines of identical header extraction code in `buffer.lua`, (2) duplicated UTF-8 character walking across 3 modules, (3) many magic numbers and string literals that should be centralized, and (4) deeply nested control flow in `nav.lua`.
 
 ---
 
@@ -113,7 +113,7 @@ local job_id = vim.fn.jobstart(cmd, {
 
 ---
 
-## 2. Magic Numbers (30+ instances)
+## 2. Magic Constants and Literals (30+ instances)
 
 ### 2.1 Page Size: `50`
 
@@ -165,6 +165,25 @@ local job_id = vim.fn.jobstart(cmd, {
 `highlights.lua:33-205` — ~30 inline hex color values (e.g., `0x001e00`, `0xc6efc6`, etc.). These are hard to maintain and tune.
 
 **Fix**: Consider extracting to a config table or grouping by semantic purpose with comments. The current approach of computing dark/light variants inline is reasonable but could be consolidated.
+
+### 2.5 Magic Strings / UI Literals
+
+**Pattern**: Repeated or semantically important string literals that act like constants.
+
+**Examples**:
+- `Poste SQL`, `DB Browser`, `Search`, `Import Preview`, `SQL Preview`
+- `postgres`, `mysql`, `sqlite`, `mariadb`, `resultset`, `poste_sql`, `poste_sqlite`
+- `Raw mode — toggle to exit`
+- `Unsaved changes, commit (<leader>w) or revert (R) first`
+
+**Problem**: These literals are spread across modules and often encode shared UI copy or protocol-like values. Some are fine as local one-offs, but repeated values should be centralized so they can be changed consistently.
+
+**Fix**: Introduce shared constants for:
+- common UI titles and notify text
+- dialect/filetype identifiers
+- repeated winbar labels and mode strings
+
+**Boundary**: Do not treat domain SQL templates or generated SQL fragments as magic strings by default. Multi-line DDL/DML templates in `db_browser/*`, `editor/*`, and import/export helpers are expected to be explicit SQL, not centralized UI copy.
 
 ---
 
@@ -252,7 +271,7 @@ local function handle_dot_column(rust_ctx, line_text, end_col) ... end
 1. **Unify header extraction** in `buffer.lua` — extract `extract_and_pad_header()` function, removing ~30 lines of duplication
 2. **Fix `update_winbar` duplication** — `buffer_search.lua` should call `buffer_page.update_winbar()` instead of duplicating
 3. **Remove dead code** — `parse_connection_short()` in `format.lua`
-4. **Define magic number constants** — page size (50), port defaults (5432/3306), LEFT_PADDING (2), stderr truncation limits
+4. **Define magic number and string constants** — page size (50), port defaults (5432/3306), LEFT_PADDING (2), stderr truncation limits, repeated UI copy
 
 ### P1 — Short-term (1 week)
 
@@ -297,6 +316,6 @@ local function handle_dot_column(rust_ctx, line_text, end_col) ... end
 
 **Strengths**: Good module-level separation, clear naming conventions, consistent use of `poste.nvim` shared infra, well-documented public API functions.
 
-**Weaknesses**: Overlarge modules, duplicated rendering logic, ~30+ magic numbers, 300-line god function, inconsistent job API usage, dead code, shared float window pattern not unified.
+**Weaknesses**: Overlarge modules, duplicated rendering logic, many magic numbers and string literals, 300-line god function, inconsistent job API usage, dead code, shared float window pattern not unified.
 
 **Overall**: The codebase is maintainable but has accumulated significant technical debt as features were added. The P0-P1 fixes would reduce code duplication by ~15% and clarify the architecture significantly.
