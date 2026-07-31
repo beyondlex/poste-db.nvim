@@ -5,6 +5,7 @@ local sql_highlights = require("poste-sql.highlights")
 local util = require("poste-sql.util")
 local float_window = require("poste-sql.float_window")
 local ui = require("poste-sql.buffer_nav_ui")
+local cell = require("poste-sql.buffer_nav_cell")
 local M = {}
 
 local preview_win = nil
@@ -399,72 +400,6 @@ function M.position_cursor(row, col)
   return line or ""
 end
 
-local function json_pretty(val, indent)
-  indent = indent or 0
-  local pad = string.rep("  ", indent)
-  local pad1 = string.rep("  ", indent + 1)
-  if type(val) == "table" then
-    local is_array = #val > 0
-    if is_array then
-      local items = {}
-      for _, v in ipairs(val) do
-        items[#items + 1] = pad1 .. json_pretty(v, indent + 1)
-      end
-      return "[\n" .. table.concat(items, ",\n") .. "\n" .. pad .. "]"
-    else
-      local items = {}
-      for k, v in pairs(val) do
-        items[#items + 1] = pad1 .. '"' .. tostring(k) .. '": ' .. json_pretty(v, indent + 1)
-      end
-      table.sort(items)
-      return "{\n" .. table.concat(items, ",\n") .. "\n" .. pad .. "}"
-    end
-  elseif val == vim.NIL or val == nil then
-    return "null"
-  elseif type(val) == "boolean" then
-    return tostring(val)
-  elseif type(val) == "number" then
-    return tostring(val)
-  else
-    local ok, encoded = pcall(vim.json.encode, val)
-    return ok and encoded or ('"' .. tostring(val) .. '"')
-  end
-end
-
-local function try_pretty_json(s)
-  local ok, decoded = pcall(vim.json.decode, s)
-  if ok and type(decoded) == "table" then
-    return json_pretty(decoded)
-  end
-  if ok and type(decoded) == "string" then
-    local ok2, decoded2 = pcall(vim.json.decode, decoded)
-    if ok2 and type(decoded2) == "table" then
-      return json_pretty(decoded2)
-    end
-  end
-  return nil
-end
-
-local function pretty_print(val)
-  if val == nil or val == vim.NIL then
-    return "(NULL)", "text"
-  end
-  if type(val) == "table" then
-    return json_pretty(val), "json"
-  end
-  local s = tostring(val)
-  if type(val) == "string" then
-    local pretty = try_pretty_json(s)
-    if pretty then return pretty, "json" end
-    local trimmed = s:match("^%s*(.*)")
-    if trimmed ~= s then
-      pretty = try_pretty_json(trimmed)
-      if pretty then return pretty, "json" end
-    end
-  end
-  return s, "text"
-end
-
 function M.preview_cell()
   if preview_win and vim.api.nvim_win_is_valid(preview_win) then
     vim.api.nvim_win_close(preview_win, true)
@@ -474,16 +409,12 @@ function M.preview_cell()
 
   local tab = D.T()
   if not tab or not tab.data or not tab.meta or tab.meta.type ~= "resultset" then return end
-  local data = tab.data
-  if not data or not data.results or #data.results == 0 then return end
-
-  local res = data.results[1]
   local row = state.sql.cell.row
   local col = state.sql.cell.col
 
-  if not res.rows or not res.rows[row] then return end
-  local raw_val = res.rows[row][col]
-  local text, ft = pretty_print(raw_val)
+  local res, raw_val = cell.get_resultset_cell(tab, row, col)
+  if not res then return end
+  local text, ft = cell.pretty_print(raw_val)
 
   local lines = {}
   for line in (text .. "\n"):gmatch("(.-)\n") do
@@ -523,26 +454,13 @@ end
 function M.yank_cell()
   local tab = D.T()
   if not tab or not tab.data or not tab.meta or tab.meta.type ~= "resultset" then return end
-  local data = tab.data
-  if not data or not data.results or #data.results == 0 then return end
-
-  local res = data.results[1]
   local row = state.sql.cell.row
   local col = state.sql.cell.col
-  if not res.rows or not res.rows[row] then return end
-
-  local val = res.rows[row][col]
-  if val == nil or val == vim.NIL then
-    val = ""
-  elseif type(val) == "table" then
-    local ok, encoded = pcall(vim.json.encode, val)
-    val = ok and encoded or vim.inspect(val)
-  else
-    val = tostring(val)
-  end
+  local _, val = cell.get_resultset_cell(tab, row, col)
+  val = cell.clipboard_text(val)
   vim.fn.setreg('"', val)
   vim.fn.setreg('+', val)
-  vim.notify(string.format('Yanked to clipboard: %s', val:sub(1, C.YANK_PREVIEW_CHARS)), vim.log.levels.INFO, { title = C.TITLE })
+  vim.notify(string.format('Yanked to clipboard: %s', cell.yank_preview_text(val)), vim.log.levels.INFO, { title = C.TITLE })
 end
 
 function M.yank_column()
