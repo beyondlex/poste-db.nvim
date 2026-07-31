@@ -23,4 +23,38 @@ describe("buffer header test helpers", function()
     assert.equals(0, buffer._test.active_tab_idx())
     assert.is_nil(D.T())
   end)
+
+  it("normalizes resultset header and padding", function()
+    local tab = buffer._test.create_tab(1)
+    local padded, out_meta = buffer._test.normalize_rendered_page(tab, {
+      "┌────┐",
+      "│ id │",
+      "├────┤",
+      "│ 1  │",
+      "└────┘",
+    }, {
+      type = "resultset",
+      header_line = 2,
+      data_start_line = 4,
+      data_end_line = 4,
+      row_count = 1,
+    })
+
+    assert.equals("", padded[1])
+    assert.equals("  │ 1  │", padded[#padded])
+    assert.equals(2, out_meta.data_start_line)
+    assert.equals(2, out_meta.data_end_line)
+    assert.equals("│ id │", tab.header_text)
+  end)
+
+  it("normalizes non-resultset lines without inserting header padding", function()
+    local tab = buffer._test.create_tab(1)
+    local padded, out_meta = buffer._test.normalize_rendered_page(tab, {
+      "hello",
+      "world",
+    }, { type = "raw" })
+
+    assert.same({ "  hello", "  world" }, padded)
+    assert.equals("raw", out_meta.type)
+  end)
 end)

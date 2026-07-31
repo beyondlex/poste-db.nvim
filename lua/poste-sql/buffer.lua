@@ -769,6 +769,9 @@ M._test = {
     D.active_tab_idx = idx
     return old
   end,
+  normalize_rendered_page = function(tab, lines, meta)
+    return normalize_rendered_page(tab, lines, meta)
+  end,
 }
 
 return M
