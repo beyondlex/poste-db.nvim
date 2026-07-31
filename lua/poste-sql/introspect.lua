@@ -8,6 +8,8 @@ local cli = require("poste.cli")
 local state = require("poste.state")
 local util = require("poste.util")
 local dialog = require("poste.dialog")
+local float_window = require("poste-sql.float_window")
+local helpers = require("poste-sql.introspect_helpers")
 
 local M = {}
 
@@ -24,34 +26,17 @@ function M.show_float(lines, title, ft)
     vim.notify("No content to display", vim.log.levels.WARN, { title = "Poste SQL" })
     return
   end
-
-  local max_width = math.min(math.floor(vim.o.columns * 0.7), 100)
-  local width = 0
-  for _, l in ipairs(lines) do
-    width = math.max(width, vim.fn.strdisplaywidth(l))
-  end
-  width = math.min(width + 4, max_width)
-
-  local max_height = math.floor(vim.o.lines * 0.5)
-  local height = math.max(3, math.min(#lines + 2, max_height))
-
-  local float_buf = vim.api.nvim_create_buf(false, true)
-  vim.api.nvim_buf_set_lines(float_buf, 0, -1, false, lines)
-  vim.bo[float_buf].filetype = ft or "sql"
-  vim.bo[float_buf].modifiable = false
-
-  local win_opts = {
-    relative = "editor",
-    row = math.floor((vim.o.lines - height) / 2),
-    col = math.floor((vim.o.columns - width) / 2),
-    width = width, height = height, style = "minimal",
-    border = "rounded", title = title, title_pos = "left",
-  }
-  local ok, win = pcall(vim.api.nvim_open_win, float_buf, true, win_opts)
-  if not ok then
-    win_opts.title = nil; win_opts.title_pos = nil
-    win = vim.api.nvim_open_win(float_buf, true, win_opts)
-  end
+  local float_buf, win = float_window.open_centered(lines, {
+    filetype = ft or "sql",
+    title = title,
+    title_pos = "left",
+    width_ratio = 0.7,
+    max_width = 100,
+    width_padding = 4,
+    height_ratio = 0.5,
+    min_height = 3,
+    extra_height = 2,
+  })
 
   vim.wo[win].wrap = true
   vim.wo[win].linebreak = true
@@ -130,10 +115,8 @@ local function show_column_info(binary, conn, db, file, table_name, col_name, sc
   state.log("INFO", "Column info args: " .. vim.inspect(args))
 
   local stderr_lines = {}
-  vim.fn.jobstart(args, {
-    stdout_buffered = true,
-    stderr_buffered = true,
-    on_stdout = function(_, data)
+  cli.run_async(args, {
+    on_stdout = function(data)
       data = util.ensure_job_data(data)
       if #data == 0 then return end
 
@@ -160,26 +143,10 @@ local function show_column_info(binary, conn, db, file, table_name, col_name, sc
           return
         end
 
-        local lines = {
-          "  Table:    " .. table_name,
-          "  Type:     " .. tostring(col.type or ""),
-          "  Nullable: " .. tostring(col.nullable == true and "YES" or (col.nullable == false and "NO" or "?")),
-          "  Default:  " .. (col.default ~= vim.NIL and col.default or "(null)"),
-        }
-        if col.extra and col.extra ~= "" and col.extra ~= vim.NIL then
-          table.insert(lines, "  Extra:    " .. tostring(col.extra))
-        end
-        if col.max_length then
-          table.insert(lines, "  Max Len:  " .. tostring(col.max_length))
-        end
-        if col.comment and col.comment ~= vim.NIL then
-          table.insert(lines, "  Comment:  '" .. tostring(col.comment) .. "'")
-        end
-
-        M.show_float(lines, "Column: " .. col_name, "sql")
+        M.show_float(helpers.build_column_info_lines(table_name, col), "Column: " .. col_name, "sql")
       end)
     end,
-    on_stderr = function(_, data)
+    on_stderr = function(data)
       if not data then return end
       for _, l in ipairs(data) do
         if l ~= "" then
@@ -188,7 +155,7 @@ local function show_column_info(binary, conn, db, file, table_name, col_name, sc
         end
       end
     end,
-    on_exit = function(_, code)
+    on_exit = function(code)
       if code ~= 0 then
         vim.schedule(function()
           local msg = "Column introspection exited with code " .. code
@@ -219,10 +186,8 @@ local function list_tables_in_db(binary, conn, db_name, file)
     return
   end
   local args = { binary, "introspect", "--connection-url", url, "--type", "tables", "--database", db_name }
-  vim.fn.jobstart(args, {
-    stdout_buffered = true,
-    stderr_buffered = true,
-    on_stdout = function(_, data)
+  cli.run_async(args, {
+    on_stdout = function(data)
       data = util.ensure_job_data(data)
       if #data == 0 then return end
       local output = table.concat(data, "\n")
@@ -237,20 +202,16 @@ local function list_tables_in_db(binary, conn, db_name, file)
           vim.notify("No tables found in database '" .. db_name .. "'", vim.log.levels.WARN, { title = "Poste SQL" })
           return
         end
-        local lines = {}
-        for _, t in ipairs(items) do
-          table.insert(lines, "  " .. t.name .. "  (" .. t.type .. ")")
-        end
-        M.show_float(lines, "Tables: " .. db_name)
+        M.show_float(helpers.build_table_lines(items), "Tables: " .. db_name)
       end)
     end,
-    on_stderr = function(_, data)
+    on_stderr = function(data)
       if not data then return end
       for _, l in ipairs(data) do
         if l ~= "" then state.log("ERROR", "introspect stderr: " .. l) end
       end
     end,
-    on_exit = function(_, code)
+    on_exit = function(code)
       if code ~= 0 then
         vim.schedule(function()
           vim.notify("Table listing failed with exit code " .. code, vim.log.levels.ERROR, { title = "Poste SQL" })
@@ -307,11 +268,7 @@ function M.show_table_ddl()
             vim.notify("No tables found in database '" .. db_name .. "'", vim.log.levels.WARN, { title = "Poste SQL" })
             return
           end
-          local lines = {}
-          for _, t in ipairs(items) do
-            table.insert(lines, "  " .. t.name .. "  (" .. t.type .. ")")
-          end
-          M.show_float(lines, "Tables: " .. db_name)
+          M.show_float(helpers.build_table_lines(items), "Tables: " .. db_name)
         end)
       end,
       on_stderr = function(data)
@@ -340,22 +297,7 @@ function M.show_table_ddl()
       vim.notify("Connection '" .. conn_name .. "' not found in connections.toml", vim.log.levels.WARN, { title = "Poste SQL" })
       return
     end
-    local lines = {}
-    local label_width = 10
-    local fields = {
-      { "Dialect", config.dialect },
-      { "Host", config.host },
-      { "Port", config.port },
-      { "Database", config.database },
-      { "User", config.user },
-      { "Socket", config.path },
-    }
-    for _, f in ipairs(fields) do
-      if f[2] and f[2] ~= "" then
-        table.insert(lines, string.format("  %s%s  %s", string.rep(" ", label_width - #f[1]), f[1], f[2]))
-      end
-    end
-    M.show_float(lines, "Connection: " .. conn_name)
+    M.show_float(helpers.build_connection_lines(config), "Connection: " .. conn_name)
     return
   end
 
@@ -622,10 +564,8 @@ function M.show_table_ddl()
 
   state.log("INFO", "DDL args: " .. vim.inspect(args))
 
-  vim.fn.jobstart(args, {
-    stdout_buffered = true,
-    stderr_buffered = true,
-    on_stdout = function(_, data)
+  cli.run_async(args, {
+    on_stdout = function(data)
       data = util.ensure_job_data(data)
       if #data == 0 then return end
 
@@ -653,13 +593,13 @@ function M.show_table_ddl()
         M.show_float(lines, "DDL: " .. cword, "sql")
       end)
     end,
-    on_stderr = function(_, data)
+    on_stderr = function(data)
       if not data then return end
       for _, l in ipairs(data) do
         if l ~= "" then state.log("ERROR", "DDL stderr: " .. l) end
       end
     end,
-    on_exit = function(_, code)
+    on_exit = function(code)
       if code ~= 0 then
         vim.schedule(function()
           vim.notify("DDL introspection exited with code " .. code, vim.log.levels.ERROR, { title = "Poste SQL" })
