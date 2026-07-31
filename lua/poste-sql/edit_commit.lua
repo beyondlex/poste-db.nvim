@@ -4,6 +4,7 @@ local editor = require("poste-sql.editor")
 local sql_format = require("poste-sql.format")
 local sql_buffer = require("poste-sql.buffer")
 local cli = require("poste.cli")
+local exec = require("poste-sql.edit_commit_exec")
 local log = require("poste-sql.edit_commit_log")
 
 local M = {}
@@ -525,8 +526,8 @@ function M.commit_edits()
         local elapsed = vim.uv.now() - start_time
         local output = table.concat(data, "\n")
 
-        local ok_r, resp = pcall(vim.json.decode, output)
-        if not ok_r or not resp then
+        local resp, resp_err = exec.decode_json(output)
+        if not resp then
           local stderr_text = table.concat(stderr_buf, "\n")
           vim.notify("Commit: failed to parse poste response\n" .. stderr_text:sub(1, 300), vim.log.levels.ERROR)
           log.write_log({
@@ -539,32 +540,17 @@ function M.commit_edits()
             status = "error",
             elapsed_ms = elapsed,
             edit_summary = summary,
-            error_msg = "JSON parse error: " .. (stderr_text:sub(1, 200)),
+            error_msg = "JSON parse error: " .. (resp_err or stderr_text:sub(1, 200)),
           })
           return
         end
 
         -- Decode inner body to get per-statement errors
-        local ok_body, body = pcall(vim.json.decode, resp.body or "{}")
-        if not ok_body or type(body) ~= "table" then
-          body = {}
-        end
-
-        -- Collect per-statement errors
-        local errors = {}
-        if body.results then
-          for i, result in ipairs(body.results) do
-            if result.error and result.error ~= "" then
-              table.insert(errors, "stmt " .. i .. ": " .. result.error)
-            end
-          end
-        end
+        local body = exec.decode_body(resp)
+        local errors = exec.collect_statement_errors(body)
 
         if body.has_error or #errors > 0 then
-          local err_msg = table.concat(errors, "\n")
-          if err_msg == "" then
-            err_msg = "Unknown SQL error (has_error=true)"
-          end
+          local err_msg = exec.build_commit_error_message(body, errors)
           vim.notify("Commit failed:\n" .. err_msg:sub(1, 500), vim.log.levels.ERROR)
           log.write_log({
             source = "dataset_commit",
@@ -582,13 +568,7 @@ function M.commit_edits()
         end
 
         -- Success
-        local affected = 0
-        if body.results then
-          for _, result in ipairs(body.results) do
-            local ar = result.affected_rows
-            if type(ar) == "number" then affected = affected + ar end
-          end
-        end
+        local affected = exec.count_affected_rows(body)
 
         vim.notify(string.format("Committed: %d update(s), %d insert(s), %d delete(s) (%d row(s) affected)",
           summary.updates, summary.inserts, summary.deletes, affected), vim.log.levels.INFO)
