@@ -3,6 +3,8 @@
 local editor = require("poste-sql.editor")
 local sql_format = require("poste-sql.format")
 local sql_buffer = require("poste-sql.buffer")
+local cli = require("poste.cli")
+local log = require("poste-sql.edit_commit_log")
 
 local M = {}
 
@@ -263,75 +265,9 @@ end
 ---------------------------------------------------------------------------
 -- SQL Log
 ---------------------------------------------------------------------------
-
-local SQL_LOG_PATH = nil
-
---- Get or create the SQL log file path.
-local function get_log_path()
-  if SQL_LOG_PATH then return SQL_LOG_PATH end
-  SQL_LOG_PATH = vim.fn.stdpath("data") .. "/poste/sql_log.jsonl"
-  -- Ensure directory exists
-  local dir = vim.fn.fnamemodify(SQL_LOG_PATH, ":h")
-  if vim.fn.isdirectory(dir) == 0 then
-    vim.fn.mkdir(dir, "p")
-  end
-  return SQL_LOG_PATH
-end
-
---- Format a log entry as JSON string.
---- @param entry table Log entry fields
---- @return string JSON line
-function M.format_log_entry(entry)
-  local data = {
-    ts = os.date("!%Y-%m-%dT%H:%M:%S"),
-  }
-  if entry.source then data.source = entry.source end
-  if entry.table_name then data["table"] = entry.table_name end
-  if entry.connection then data.connection = entry.connection end
-  if entry.dialect then data.dialect = entry.dialect end
-  if entry.database then data.database = entry.database end
-  if entry.sql then data.sql = entry.sql end
-  if entry.status then data.status = entry.status end
-  if entry.elapsed_ms then data.elapsed_ms = entry.elapsed_ms end
-  if entry.error_msg then data.error = entry.error_msg end
-  if entry.edit_summary then data.edit_summary = entry.edit_summary end
-  if entry.affected_rows then data.affected_rows = entry.affected_rows end
-  return vim.json.encode(data)
-end
-
-local MAX_LOG_ENTRIES = 1000
-local _log_write_count = 0
-
---- Write a log entry to the JSONL file, trimming to MAX_LOG_ENTRIES.
---- @param entry table Log entry fields
-function M.write_log(entry)
-  local path = get_log_path()
-  local line = M.format_log_entry(entry) .. "\n"
-  local f = io.open(path, "a")
-  if f then
-    f:write(line)
-    f:close()
-  end
-  -- Trim to MAX_LOG_ENTRIES (every 10th write to amortize)
-  _log_write_count = _log_write_count + 1
-  if _log_write_count < 10 then return end
-  _log_write_count = 0
-  local lines = {}
-  for l in io.lines(path) do
-    lines[#lines + 1] = l
-  end
-  if #lines > MAX_LOG_ENTRIES then
-    local keep = {}
-    for i = #lines - MAX_LOG_ENTRIES + 1, #lines do
-      keep[#keep + 1] = lines[i]
-    end
-    f = io.open(path, "w")
-    if f then
-      f:write(table.concat(keep, "\n"), "\n")
-      f:close()
-    end
-  end
-end
+function M.format_log_entry(entry) return log.format_log_entry(entry) end
+function M.write_log(entry) return log.write_log(entry) end
+function M.set_log_path(path) return log.set_log_path(path) end
 
 ---------------------------------------------------------------------------
 -- Commit / Rollback
@@ -359,11 +295,6 @@ function M.generate_combined_dml(es, tab, dialect)
   end
 
   return table.concat(sql_parts, "\n"), summary
-end
-
---- Set log path override (for testing).
-function M.set_log_path(path)
-  SQL_LOG_PATH = path
 end
 
 --- Re-execute original SELECT and refresh the dataset in-place.
@@ -451,10 +382,8 @@ function M.refresh_dataset(tab)
 
   local stderr_buf = {}
 
-  local job_id = vim.fn.jobstart(cmd_parts, {
-    stdout_buffered = true,
-    stderr_buffered = true,
-    on_stdout = function(_, data)
+  local job_id = cli.run_async(cmd_parts, {
+    on_stdout = function(data)
       if not data or #data == 0 then return end
       local output = table.concat(data, "\n")
       vim.schedule(function()
@@ -480,13 +409,13 @@ function M.refresh_dataset(tab)
         })
       end)
     end,
-    on_stderr = function(_, data)
+    on_stderr = function(data)
       if not data then return end
       for _, l in ipairs(data) do
         if l ~= "" then table.insert(stderr_buf, l) end
       end
     end,
-    on_exit = function(_, code)
+    on_exit = function(code)
       pcall(vim.fn.delete, tmpfile)
       if code ~= 0 then
         vim.schedule(function()
@@ -588,10 +517,9 @@ function M.commit_edits()
 
   local stderr_buf = {}
   local start_time = vim.uv.now()
-  local job_id = vim.fn.jobstart(cmd, {
-    stdout_buffered = true,
-    stderr_buffered = true,
-    on_stdout = function(_, data)
+  local job_id = cli.run_async(cmd, {
+    stdin = sql_content,
+    on_stdout = function(data)
       if not data or #data == 0 then return end
       vim.schedule(function()
         local elapsed = vim.uv.now() - start_time
@@ -601,7 +529,7 @@ function M.commit_edits()
         if not ok_r or not resp then
           local stderr_text = table.concat(stderr_buf, "\n")
           vim.notify("Commit: failed to parse poste response\n" .. stderr_text:sub(1, 300), vim.log.levels.ERROR)
-          M.write_log({
+          log.write_log({
             source = "dataset_commit",
             table_name = table_name,
             connection = connection,
@@ -638,7 +566,7 @@ function M.commit_edits()
             err_msg = "Unknown SQL error (has_error=true)"
           end
           vim.notify("Commit failed:\n" .. err_msg:sub(1, 500), vim.log.levels.ERROR)
-          M.write_log({
+          log.write_log({
             source = "dataset_commit",
             table_name = table_name,
             connection = connection,
@@ -664,7 +592,7 @@ function M.commit_edits()
 
         vim.notify(string.format("Committed: %d update(s), %d insert(s), %d delete(s) (%d row(s) affected)",
           summary.updates, summary.inserts, summary.deletes, affected), vim.log.levels.INFO)
-        M.write_log({
+        log.write_log({
           source = "dataset_commit",
           table_name = table_name,
           connection = connection,
@@ -682,13 +610,13 @@ function M.commit_edits()
         M.refresh_dataset(tab)
       end)
     end,
-    on_stderr = function(_, data)
+    on_stderr = function(data)
       if not data then return end
       for _, l in ipairs(data) do
         if l ~= "" then table.insert(stderr_buf, l) end
       end
     end,
-    on_exit = function(_, code)
+    on_exit = function(code)
       if code ~= 0 then
         vim.schedule(function()
           local stderr_text = table.concat(stderr_buf, "\n")
@@ -699,10 +627,7 @@ function M.commit_edits()
     end,
   })
 
-  if job_id > 0 then
-    vim.fn.chansend(job_id, sql_content)
-    vim.fn.chanclose(job_id, "stdin")
-  else
+  if not job_id or job_id <= 0 then
     vim.notify("Failed to start poste job", vim.log.levels.ERROR)
   end
 end
