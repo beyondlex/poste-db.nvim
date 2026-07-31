@@ -5,6 +5,7 @@ local M = {}
 
 local preview_win = nil
 local raw_buffer = nil  -- scratch buffer for raw mode
+local _saved_hide_header_float = false
 
 -- Helper: get pre-computed column positions for a data row
 local function get_col_starts(tab, row)
@@ -713,6 +714,7 @@ function M.restore_from_raw_mode()
   end
   raw_buffer = nil
   state.sql._raw_mode = false
+  state.sql._hide_header_float = _saved_hide_header_float
 end
 
 function M.toggle_raw_mode()
@@ -734,6 +736,8 @@ function M.toggle_raw_mode()
     return
   end
 
+  _saved_hide_header_float = state.sql._hide_header_float
+  state.sql._hide_header_float = true
   D.close_header_float()
 
   local fmt = require("poste-sql.format")
