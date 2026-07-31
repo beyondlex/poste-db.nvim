@@ -125,6 +125,7 @@ local function ensure_sql_keymaps(buf)
           local ok2, text = pcall(ctx_mod.get_cursor_status_text, buf)
           if ok2 and text then
             vim.b[buf].poste_sql_context = text
+            vim.cmd("redrawstatus")
           end
         end
         local stmt_indicator = require("poste-sql.statement_indicator")

@@ -123,9 +123,9 @@ function M.get_cursor_status_text(buf)
   local ctx = M.resolve_full_context(buf)
   if not ctx.connection then return "" end
   if ctx.database then
-    return string.format("[%s/%s]", ctx.connection, ctx.database)
+    return string.format("%s/%s", ctx.connection, ctx.database)
   end
-  return string.format("[%s]", ctx.connection)
+  return ctx.connection
 end
 
 ---------------------------------------------------------------------------

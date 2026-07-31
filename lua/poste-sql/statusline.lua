@@ -1,12 +1,6 @@
 local M = {}
 
-local hl_cache = {}
-
 local function get_ctx_color(conn_name)
-  if hl_cache[conn_name] then
-    return hl_cache[conn_name]
-  end
-
   local ok, connections = pcall(require, "poste-sql.connections")
   if not ok then return nil end
 
@@ -15,45 +9,57 @@ local function get_ctx_color(conn_name)
 
   local color = config.color
   local link = config.link
+  local bg = config.bg
   if not color and not link then return nil end
 
   local hl_name = "PosteSQLCtx" .. conn_name:gsub("[^%w_]", "_")
 
   if link then
-    pcall(vim.api.nvim_set_hl, 0, hl_name, { link = link, default = true })
-    hl_cache[conn_name] = hl_name
+    pcall(vim.api.nvim_set_hl, 0, hl_name, { link = link })
     return hl_name
   end
 
   if not color then return nil end
 
-  local ok_hl
+  local hl_opts = {}
+  if bg then
+    if bg:sub(1, 1) == "#" then
+      hl_opts.bg = bg
+    else
+      local bg_ok, bg_hl = pcall(vim.api.nvim_get_hl, 0, { name = bg })
+      if bg_ok and bg_hl.bg then
+        hl_opts.bg = bg_hl.bg
+      else
+        hl_opts.bg = bg
+      end
+    end
+  end
   if color:sub(1, 1) == "#" then
-    ok_hl = pcall(vim.api.nvim_set_hl, 0, hl_name, { fg = color, default = true })
+    hl_opts.fg = color
   else
     local hl_exists = pcall(vim.api.nvim_get_hl, 0, { name = color })
     if hl_exists then
-      ok_hl = pcall(vim.api.nvim_set_hl, 0, hl_name, { link = color, default = true })
+      hl_opts.link = color
     else
-      ok_hl = pcall(vim.api.nvim_set_hl, 0, hl_name, { fg = color, default = true })
+      hl_opts.fg = color
     end
   end
+  local ok_hl = pcall(vim.api.nvim_set_hl, 0, hl_name, hl_opts)
   if not ok_hl then return nil end
 
-  hl_cache[conn_name] = hl_name
   return hl_name
 end
 
 local function fmt_ctx(ctx)
-  local conn_name = ctx:match("^%[(.-)[]/]")
+  local conn_name = ctx:match("^(.-)[/]")
   if not conn_name then
-    conn_name = ctx:match("^%[(.-)%]$")
+    conn_name = ctx
   end
   if not conn_name then return ctx end
 
   local hl_name = get_ctx_color(conn_name)
   if hl_name then
-    return "%#" .. hl_name .. "#" .. ctx .. "%*"
+    return "%#" .. hl_name .. "# " .. ctx .. " "
   end
   return ctx
 end
@@ -67,9 +73,39 @@ function M.setup()
     statusline.section_fileinfo = function(...)
       local ctx = vim.b.poste_sql_context
       if ctx and ctx ~= "" then
-        return fmt_ctx(ctx)
+        return ctx
       end
       return orig_fileinfo(...)
+    end
+
+    statusline.config.content.active = function()
+      local ctx = vim.b.poste_sql_context
+      local ctx_hl = nil
+      if ctx and ctx ~= "" then
+        local conn_name = ctx:match("^(.-)[/]") or ctx
+        ctx_hl = get_ctx_color(conn_name)
+      end
+
+      local mode, mode_hl = statusline.section_mode({ trunc_width = 120 })
+      local git = statusline.section_git({ trunc_width = 40 })
+      local diff = statusline.section_diff({ trunc_width = 75 })
+      local diagnostics = statusline.section_diagnostics({ trunc_width = 75 })
+      local lsp = statusline.section_lsp({ trunc_width = 75 })
+      local filename = statusline.section_filename({ trunc_width = 140 })
+      local fileinfo = statusline.section_fileinfo({ trunc_width = 120 })
+      local location = statusline.section_location({ trunc_width = 75 })
+      local search = statusline.section_searchcount({ trunc_width = 75 })
+
+      return statusline.combine_groups({
+        { hl = mode_hl,                  strings = { mode } },
+        { hl = 'MiniStatuslineDevinfo',  strings = { git, diff, diagnostics, lsp } },
+        '%<',
+        { hl = 'MiniStatuslineFilename', strings = { filename } },
+        '%=',
+        { hl = ctx_hl or 'MiniStatuslineFileinfo', strings = { fileinfo } },
+        { hl = 'MiniStatuslineFileinfo', strings = { location } },
+        { hl = 'MiniStatuslineFileinfo', strings = { search } },
+      })
     end
   end)
 end
