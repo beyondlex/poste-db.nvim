@@ -3,6 +3,7 @@ local C = require("poste-sql.constants")
 local state = require("poste.state")
 local sql_highlights = require("poste-sql.highlights")
 local util = require("poste-sql.util")
+local float_window = require("poste-sql.float_window")
 local M = {}
 
 local preview_win = nil
@@ -488,35 +489,18 @@ function M.preview_cell()
     lines[#lines + 1] = line
   end
 
-  local max_width = math.min(math.floor(vim.o.columns * 0.7), 120)
-  local width = 0
-  for _, l in ipairs(lines) do
-    width = math.max(width, vim.fn.strdisplaywidth(l))
-  end
-  width = math.min(width + 2, max_width)
-
-  local max_height = math.floor(vim.o.lines * 0.6)
-  local height = math.max(3, math.min(#lines + 1, max_height))
-
   local col_name = res.columns[col] and res.columns[col].name or "?"
 
-  local float_buf = vim.api.nvim_create_buf(false, true)
-  vim.api.nvim_buf_set_lines(float_buf, 0, -1, false, lines)
-  vim.bo[float_buf].filetype = ft
-  vim.bo[float_buf].modifiable = false
-
-  local win_opts = {
-    relative = "editor",
-    row = math.floor((vim.o.lines - height) / 2),
-    col = math.floor((vim.o.columns - width) / 2),
-    width = width, height = height, style = "minimal",
-    border = "rounded", title = col_name, title_pos = "left",
-  }
-  local ok, win = pcall(vim.api.nvim_open_win, float_buf, true, win_opts)
-  if not ok then
-    win_opts.title = nil; win_opts.title_pos = nil
-    win = vim.api.nvim_open_win(float_buf, true, win_opts)
-  end
+  local float_buf, win = float_window.open_centered(lines, {
+    filetype = ft,
+    title = col_name,
+    title_pos = "left",
+    width_ratio = 0.7,
+    max_width = 120,
+    width_padding = 2,
+    height_ratio = 0.6,
+    extra_height = 1,
+  })
 
   vim.wo[win].wrap = true
   vim.wo[win].linebreak = true

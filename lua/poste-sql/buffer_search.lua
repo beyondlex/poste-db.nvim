@@ -3,6 +3,7 @@ local C = require("poste-sql.constants")
 local state = require("poste.state")
 local sql_highlights = require("poste-sql.highlights")
 local sql_format = require("poste-sql.format")
+local float_window = require("poste-sql.float_window")
 local M = {}
 
 -- Forward declarations
@@ -73,29 +74,21 @@ function M.show_search()
   local tab = D.T()
   if not tab or not tab.data or not tab.meta then return end
 
-  local buf = vim.api.nvim_create_buf(false, true)
-  vim.api.nvim_set_option_value("buftype", "prompt", { buf = buf })
-  vim.api.nvim_set_option_value("filetype", "poste_search", { buf = buf })
-  vim.api.nvim_set_option_value("swapfile", false, { buf = buf })
-  vim.api.nvim_set_option_value("complete", "", { buf = buf })
-
-  local ui = vim.api.nvim_list_uis()[1]
-  local width = 50
-  local height = 1
-  local row = math.floor((ui.height - height) * 0.4) - 1
-  local col = math.floor((ui.width - width) / 2)
-
-  local win = vim.api.nvim_open_win(buf, true, {
-    relative = "editor",
-    width = width,
-    height = height,
-    row = row,
-    col = col,
-    style = "minimal",
-    border = "rounded",
+  local buf, win = float_window.open_centered({}, {
+    filetype = "poste_search",
     title = " Search ",
     title_pos = "center",
+    width_ratio = 0.5,
+    max_width = 50,
+    width_padding = 0,
+    height_ratio = 0.4,
+    min_height = 1,
+    extra_height = 1,
   })
+  vim.api.nvim_set_option_value("buftype", "prompt", { buf = buf })
+  vim.api.nvim_set_option_value("modifiable", true, { buf = buf })
+  vim.api.nvim_set_option_value("swapfile", false, { buf = buf })
+  vim.api.nvim_set_option_value("complete", "", { buf = buf })
 
   vim.fn.prompt_setprompt(buf, "> ")
   vim.api.nvim_set_option_value("winhl", "Normal:NormalFloat,FloatBorder:FloatBorder", { win = win })
