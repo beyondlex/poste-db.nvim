@@ -4,6 +4,7 @@ local state = require("poste.state")
 local sql_highlights = require("poste-sql.highlights")
 local util = require("poste-sql.util")
 local float_window = require("poste-sql.float_window")
+local ui = require("poste-sql.buffer_nav_ui")
 local M = {}
 
 local preview_win = nil
@@ -491,16 +492,9 @@ function M.preview_cell()
 
   local col_name = res.columns[col] and res.columns[col].name or "?"
 
-  local float_buf, win = float_window.open_centered(lines, {
-    filetype = ft,
-    title = col_name,
-    title_pos = "left",
-    width_ratio = C.FLOAT_WIDTH_RATIO,
-    max_width = C.FLOAT_MAX_WIDTH,
-    width_padding = 2,
-    height_ratio = C.FLOAT_HEIGHT_RATIO,
-    extra_height = 1,
-  })
+  local opts = ui.build_preview_float_opts(col_name)
+  opts.filetype = ft
+  local float_buf, win = float_window.open_centered(lines, opts)
 
   vim.wo[win].wrap = true
   vim.wo[win].linebreak = true
@@ -737,79 +731,14 @@ function M.goto_header()
   M.goto_first_row()
 end
 
-local function format_conn_short(conn)
-  if not conn or conn == "" then return nil end
-  local host, port, db = conn:match("^%w+://[^@]*@([^:]+):(%d+)/([^?]+)")
-  if host then return string.format("%s:%s/%s", host, port, db) end
-  return conn:match("/([^/]+)$") or conn
-end
-
 local function build_status_winbar(meta)
-  if not meta or meta.type ~= "resultset" then return nil end
-
-  local rows = meta.total_rows or meta.row_count or 0
-  local ms = meta.total_execution_time_ms or 0
-
-  local left = string.format("  %d row%s · %dms", rows, rows == 1 and "" or "s", ms)
-
-  local tab = D.T()
-  if tab and tab.sort then
-    local col_name = meta.columns and meta.columns[tab.sort.col] and meta.columns[tab.sort.col].name
-    if col_name then
-      local arrow = tab.sort.ascending and " ↑" or " ↓"
-      left = left .. "   " .. col_name .. arrow
-    end
-  end
-
-  if tab and tab.num_pages and tab.num_pages > 1 and (tab.padded_full or tab.layout) then
-    if tab.pagination_enabled then
-      left = left .. string.format("  %sPage %d/%d%s",
-        "%#PosteSqlMetaDim#", tab.page, tab.num_pages, "%#PosteSqlMeta#")
-    else
-      left = left .. "  %#PosteSqlMetaDim#All%#PosteSqlMeta#"
-    end
-  end
-
-  if tab and tab.filter_active and tab.filter_col_name then
-    local fv = tab.filter_val
-    local fvs = (fv == nil or fv == vim.NIL) and "NULL" or tostring(fv)
-    left = left .. string.format("  %sfilter: %s=%s%s",
-      "%#PosteFilterActive#", tab.filter_col_name, fvs, "%#PosteSqlMeta#")
-  end
-
-  if tab and tab.search_text and #tab.search_matches > 0 then
-    local cnt = string.format("%d/%d", tab.search_idx or 0, #tab.search_matches)
-    local info = tab.search_text .. " (" .. cnt .. ")"
-    left = left .. string.format("  %ssearch: %s%s",
-      "%#PosteSearchActive#", info, "%#PosteSqlMeta#")
-  elseif tab and tab.search_text then
-    left = left .. string.format("  %ssearch: %s (0)%s",
-      "%#PosteSearchActive#", tab.search_text, "%#PosteSqlMeta#")
-  end
-
-  local right = ""
-  local current_tab = D.T()
-  local pending = current_tab and current_tab.edit_state and current_tab.edit_state.dirty
-    and require("poste-sql.editor").pending_changes_text(current_tab.edit_state)
-  if pending then
-    right = right .. pending .. "  "
-  end
-  if #D.tabs > 1 then
-    local label = meta.table_name or ("result " .. D.active_tab_idx)
-    right = right .. string.format("[%d/%d: %s] ", D.active_tab_idx, #D.tabs, label)
-  elseif meta.table_name then
-    right = right .. string.format("[%s] ", meta.table_name)
-  end
-  right = right .. (format_conn_short(meta.connection) or "")
-
-  local text = left .. "%=" .. right
-  return "%#PosteSqlMeta#" .. text
+  return ui.build_status_winbar(meta, D.T(), #D.tabs, D.active_tab_idx)
 end
 
 M.build_status_winbar = build_status_winbar
 M._test = {
   build_header_index = build_header_index,
-  format_conn_short = format_conn_short,
+  format_conn_short = ui.format_conn_short,
   build_status_winbar = build_status_winbar,
 }
 
