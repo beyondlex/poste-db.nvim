@@ -6,6 +6,7 @@ local util = require("poste-sql.util")
 local float_window = require("poste-sql.float_window")
 local ui = require("poste-sql.buffer_nav_ui")
 local cell = require("poste-sql.buffer_nav_cell")
+local sort_helper = require("poste-sql.buffer_nav_sort")
 local M = {}
 
 local preview_win = nil
@@ -507,45 +508,20 @@ function M.sort_by_current_col()
   if not res.rows or #res.rows == 0 then return end
 
   local col = state.sql.cell.col
-  local ascending, is_reset
-  if not tab.sort or tab.sort.col ~= col then
-    ascending = true; is_reset = false
-  elseif tab.sort.ascending then
-    ascending = false; is_reset = false
-  else
-    is_reset = true
-  end
-
+  local next_sort, is_reset = sort_helper.next_sort_state(tab, col)
   if is_reset then
     tab.sort = nil
   else
-    tab.sort = { col = col, ascending = ascending }
+    tab.sort = next_sort
   end
 
   tab.rows_source = tab.rows_source or res.rows
   D.compute_view_indices(tab)
 
   tab.is_sorting = true
-  local sql_format = require("poste-sql.format")
-  local layout = tab.layout
-  if layout then
-    local lines, meta = sql_format.render_view(
-      layout, tab.view_indices, tab.page, tab.page_size,
-      { row_number_mode = tab.row_number_mode or "source" }
-    )
-    local buffer = require("poste-sql.buffer")
-    buffer.render_dataset(lines, meta, {
-      keep_tabs = true,
-      tab_index = D.active_tab_idx,
-      layout = layout,
-      view_indices = tab.view_indices,
-    })
-  else
-    local new_data = vim.deepcopy(data)
-    local lines, meta = sql_format.format_resultset(new_data)
-    local buffer = require("poste-sql.buffer")
-    buffer.render_dataset(lines, meta, { keep_tabs = true, tab_index = D.active_tab_idx })
-  end
+  local lines, meta, render_opts = sort_helper.build_sort_render_payload(tab, data, D.active_tab_idx)
+  local buffer = require("poste-sql.buffer")
+  buffer.render_dataset(lines, meta, render_opts)
   tab.is_sorting = false
   M.move_cell(0, 0)
 end
