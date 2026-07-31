@@ -7,7 +7,7 @@ local MARKER_EXPANDED  = "\239\132\135"  -- nf-fa-angle_down (3 bytes)
 local MARKER_LOADING   = "\226\128\166"  -- U+2026 (3 bytes)
 
 local ICON_TABLE  = "\239\131\142"  -- nf-fa-table (3 bytes)
-local ICON_COLUMN = "\226\151\143"  -- U+25CF ● (3 bytes)
+local ICON_COLUMN = "\239\131\155"  -- nf-fa-columns (3 bytes)
 local ICON_INDEX  = "#"             -- 1 byte
 local ICON_DB     = "\239\135\128"  -- nf-fa-database (3 bytes)
 

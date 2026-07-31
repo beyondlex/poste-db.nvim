@@ -183,6 +183,27 @@ function M.setup()
   -- Detail background: subtle green
   vim.api.nvim_set_hl(0, "PosteLogDetail", { bg = dark and 0x1a3a1a or 0xe8f5e9 })
 
+-- Completion kind icon highlights
+  local completion_kind_colors = {
+    Variable =      dark and 0xa9b1d6 or 0x6172b0,
+    Field =         dark and 0x7dcfff or 0x1880a8,
+    Text =          dark and 0xe0af68 or 0x8c6c3e,
+    Class =         dark and 0x9ece6a or 0x587539,
+    Interface =     dark and 0xbb9af7 or 0x9854f1,
+    Function =      dark and 0x7aa2f7 or 0x2e7de9,
+    Keyword =       dark and 0xc586c0 or 0x8250df,
+    TypeParameter = dark and 0x56b6c2 or 0x0a7a8a,
+  }
+  local completion_kind_names = {
+    "Text", "Field", "Variable", "Class", "Interface",
+    "Function", "Keyword", "TypeParameter",
+  }
+  for _, name in ipairs(completion_kind_names) do
+    local hl_name = "PosteSqlCompletionKind" .. name
+    vim.api.nvim_set_hl(0, hl_name, { fg = completion_kind_colors[name] })
+    pcall(vim.api.nvim_set_hl, 0, "BlinkCmpKind" .. name, { fg = completion_kind_colors[name] })
+  end
+
   state.apply_highlight_overrides({
     "PosteSqlModified", "PosteSqlDeleted", "PosteSqlAdded",
     "PosteSqlCellText", "PosteSqlSep", "PosteSqlBorder",
@@ -191,11 +212,14 @@ function M.setup()
     "PosteSqlNumber", "PosteSqlBool", "PosteSqlSortIndicator",
     "PosteSqlRowNum", "PosteSqlCellSelected", "PosteSqlCursorLine",
     "PosteSearchMatch", "PosteSearchCurrent",
-    "PosteFilterActive", "PosteSearchActive",
     "PosteInsertHint", "PosteSqlError",
     "PosteWinbarAdded", "PosteWinbarModified", "PosteWinbarDeleted",
     "PosteLogSuccess", "PosteLogError", "PosteLogSQL", "PosteLogSQLKeyword", "PosteLogFilter",
     "PosteSqlTotal", "PosteSqlSucceeded", "PosteSqlFailed", "PosteSqlConstant", "PosteSqlFilepath",
+    "PosteSqlCompletionKindText", "PosteSqlCompletionKindField", "PosteSqlCompletionKindVariable",
+    "PosteSqlCompletionKindClass", "PosteSqlCompletionKindInterface",
+    "PosteSqlCompletionKindFunction", "PosteSqlCompletionKindKeyword",
+    "PosteSqlCompletionKindTypeParameter",
   })
 end
 
