@@ -1,6 +1,8 @@
 local D = require("poste-sql.dataset")
+local C = require("poste-sql.constants")
 local state = require("poste.state")
 local sql_highlights = require("poste-sql.highlights")
+local util = require("poste-sql.util")
 local M = {}
 
 local preview_win = nil
@@ -41,18 +43,7 @@ end
 
 --- Truncate a string to fit within a given display width, preserving UTF-8 validity.
 local function trunc_disp(s, max_dw)
-  local dw = 0
-  local i = 1
-  while i <= #s do
-    local b = s:byte(i)
-    local char_byte_len = b < 128 and 1 or b < 224 and 2 or b < 240 and 3 or 4
-    local char = s:sub(i, i + char_byte_len - 1)
-    local char_dw = vim.fn.strdisplaywidth(char)
-    if dw + char_dw > max_dw then break end
-    dw = dw + char_dw
-    i = i + char_byte_len
-  end
-  return s:sub(1, i - 1)
+  return util.truncate_displaywidth(s, max_dw)
 end
 
 local function build_header_index(line)
@@ -67,11 +58,7 @@ local function build_header_index(line)
       char_bytes, char_width, is_sep = sep_len, 1, true
     else
       local b = line:byte(byte_idx)
-      if b < 0x80 then char_bytes = 1
-      elseif b < 0xE0 then char_bytes = 2
-      elseif b < 0xF0 then char_bytes = 3
-      else char_bytes = 4
-      end
+      char_bytes = util.utf8_char_bytes(b)
       if byte_idx + char_bytes - 1 > #line then char_bytes = #line - byte_idx + 1 end
       char_width = char_bytes == 1 and 1
         or vim.fn.strdisplaywidth(line:sub(byte_idx, byte_idx + char_bytes - 1))
@@ -577,7 +564,7 @@ function M.yank_cell()
   end
   vim.fn.setreg('"', val)
   vim.fn.setreg('+', val)
-  vim.notify(string.format('Yanked to clipboard: %s', val:sub(1, 50)), vim.log.levels.INFO, { title = "Poste SQL" })
+  vim.notify(string.format('Yanked to clipboard: %s', val:sub(1, 50)), vim.log.levels.INFO, { title = C.TITLE })
 end
 
 function M.yank_column()
@@ -607,14 +594,14 @@ function M.yank_column()
   vim.fn.setreg('"', result)
   vim.fn.setreg('+', result)
   local col_name = res.columns and res.columns[col] and res.columns[col].name or tostring(col)
-  vim.notify(string.format('Yanked %d values from "%s"', #values, col_name), vim.log.levels.INFO, { title = "Poste SQL" })
+  vim.notify(string.format('Yanked %d values from "%s"', #values, col_name), vim.log.levels.INFO, { title = C.TITLE })
 end
 
 function M.sort_by_current_col()
   local tab = D.T()
   if not tab or not tab.data or not tab.meta or tab.meta.type ~= "resultset" then return end
   if tab.edit_state and tab.edit_state.dirty then
-    vim.notify("Unsaved changes, commit (<leader>w) or revert (R) first", vim.log.levels.WARN)
+    vim.notify(C.EDIT_CONFLICT_MSG, vim.log.levels.WARN, { title = C.TITLE })
     return
   end
   local data = tab.data
@@ -676,7 +663,7 @@ function M.toggle_cell_highlight()
     sql_highlights.clear_cell_highlight(D.dataset_buffer)
   end
   vim.notify(string.format("Cell highlight: %s", state.sql.highlight_cell and "ON" or "OFF"),
-    vim.log.levels.INFO, { title = "Poste SQL" })
+    vim.log.levels.INFO, { title = C.TITLE })
 end
 
 function M.toggle_header_float()
@@ -687,7 +674,7 @@ function M.toggle_header_float()
     M.update_header_float()
   end
   vim.notify(string.format("Header float: %s", state.sql._hide_header_float and "OFF" or "ON"),
-    vim.log.levels.INFO, { title = "Poste SQL" })
+    vim.log.levels.INFO, { title = C.TITLE })
 end
 
 function M.toggle_row_numbers()
@@ -697,7 +684,7 @@ function M.toggle_row_numbers()
     sql_highlights.apply_dataset_highlights(D.dataset_buffer, tab.padded, tab.meta)
   end
   vim.notify(string.format("Row numbers: %s", state.sql._hide_row_numbers and "OFF" or "ON"),
-    vim.log.levels.INFO, { title = "Poste SQL" })
+    vim.log.levels.INFO, { title = C.TITLE })
 end
 
 function M.restore_from_raw_mode()
@@ -728,11 +715,11 @@ function M.toggle_raw_mode()
   local win = D.dataset_window and vim.api.nvim_win_is_valid(D.dataset_window) and D.dataset_window
 
   if not tab or not tab.layout then
-    vim.notify("No dataset to display in raw mode", vim.log.levels.WARN, { title = "Poste SQL" })
+    vim.notify("No dataset to display in raw mode", vim.log.levels.WARN, { title = C.TITLE })
     return
   end
   if not win then
-    vim.notify("No dataset window", vim.log.levels.WARN, { title = "Poste SQL" })
+    vim.notify("No dataset window", vim.log.levels.WARN, { title = C.TITLE })
     return
   end
 
@@ -756,10 +743,10 @@ function M.toggle_raw_mode()
   state.sql._raw_mode = true
 
   vim.api.nvim_win_set_buf(win, raw_buffer)
-  pcall(vim.api.nvim_set_option_value, "winbar", " Raw mode — toggle to exit ", { win = win })
+  pcall(vim.api.nvim_set_option_value, "winbar", C.RAW_MODE_WINBAR, { win = win })
   pcall(vim.api.nvim_buf_set_name, raw_buffer, "poste://raw-mode")
 
-  vim.notify("Raw mode: ON (browse table)", vim.log.levels.INFO, { title = "Poste SQL" })
+  vim.notify("Raw mode: ON (browse table)", vim.log.levels.INFO, { title = C.TITLE })
 end
 
 function M.goto_header()

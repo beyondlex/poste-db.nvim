@@ -1,5 +1,6 @@
 --- SQL Dataset buffer — core: state, keymaps, tab switching, render, close.
 local D = require("poste-sql.dataset")
+local C = require("poste-sql.constants")
 local state = require("poste.state")
 local sql_highlights = require("poste-sql.highlights")
 
@@ -205,7 +206,7 @@ local function switch_tab(idx)
   -- Block tab switch if current tab has dirty edits
   local current = D.T()
   if current and current.edit_state and current.edit_state.dirty then
-    vim.notify("Unsaved changes, commit (<leader>w) or revert (R) first", vim.log.levels.WARN)
+    vim.notify(C.EDIT_CONFLICT_MSG, vim.log.levels.WARN, { title = C.TITLE })
     return
   end
   save_active_tab_state()

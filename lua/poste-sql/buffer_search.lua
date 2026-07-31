@@ -1,4 +1,5 @@
 local D = require("poste-sql.dataset")
+local C = require("poste-sql.constants")
 local state = require("poste.state")
 local sql_highlights = require("poste-sql.highlights")
 local sql_format = require("poste-sql.format")
@@ -149,7 +150,7 @@ function M.show_search()
     else
       tab.search_idx = 0
       M.apply_search_highlights(); update_winbar()
-      vim.notify("No matches for '" .. text .. "'", vim.log.levels.INFO, { title = "Poste SQL" })
+      vim.notify("No matches for '" .. text .. "'", vim.log.levels.INFO, { title = C.TITLE })
     end
   end)
 
@@ -178,7 +179,7 @@ function M.filter_by_current_cell()
   local tab = D.T()
   if not tab or not tab.data or not tab.meta then return end
   if tab.edit_state and tab.edit_state.dirty then
-    vim.notify("Unsaved changes, commit (<leader>w) or revert (R) first", vim.log.levels.WARN)
+    vim.notify(C.EDIT_CONFLICT_MSG, vim.log.levels.WARN, { title = C.TITLE })
     return
   end
   local res = tab.data.results and tab.data.results[1]
@@ -262,7 +263,7 @@ function M.clear_filter_search()
   if had_filter then parts[#parts+1] = "filter" end
   if had_search then parts[#parts+1] = "search" end
   if #parts > 0 then
-    vim.notify("Cleared " .. table.concat(parts, " + "), vim.log.levels.INFO, { title = "Poste SQL" })
+    vim.notify("Cleared " .. table.concat(parts, " + "), vim.log.levels.INFO, { title = C.TITLE })
   end
 end
 
@@ -270,7 +271,7 @@ function M.find_column()
   local tab = D.T()
   if not tab or not tab.meta or tab.meta.type ~= "resultset" then return end
   if not tab.meta.columns or #tab.meta.columns == 0 then
-    vim.notify("No columns to search", vim.log.levels.WARN, { title = "Poste SQL" })
+    vim.notify("No columns to search", vim.log.levels.WARN, { title = C.TITLE })
     return
   end
 

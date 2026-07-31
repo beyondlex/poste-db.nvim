@@ -1,4 +1,5 @@
 local D = require("poste-sql.dataset")
+local C = require("poste-sql.constants")
 local state = require("poste.state")
 local sql_highlights = require("poste-sql.highlights")
 local M = {}
@@ -130,7 +131,7 @@ end
 
 local function block_if_dirty()
   if is_dirty() then
-    vim.notify("Unsaved changes, commit (<leader>w) or revert (R) first", vim.log.levels.WARN)
+    vim.notify(C.EDIT_CONFLICT_MSG, vim.log.levels.WARN, { title = C.TITLE })
     return true
   end
   return false
@@ -181,7 +182,7 @@ function M.toggle_pagination()
   M.refresh_page()
   local status = tab.pagination_enabled and ("Page " .. tab.page .. "/" .. tab.num_pages) or "All"
   vim.notify(string.format("Pagination: %s", status),
-    vim.log.levels.INFO, { title = "Poste SQL" })
+    vim.log.levels.INFO, { title = C.TITLE })
 end
 
 function M.update_winbar()
