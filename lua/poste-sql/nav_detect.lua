@@ -1,3 +1,5 @@
+local const = require("poste-sql.constants")
+
 local M = {}
 
 local function pick_table_match(parsed_tables, word_lower)
@@ -47,7 +49,7 @@ function M.extract_sql_block(all_lines, line_num, line_text, end_col)
   local block_start = 1
   if line_num > 1 then
     for i = line_num - 1, 1, -1 do
-      if all_lines[i] and all_lines[i]:match("^###") then
+      if const.is_section_marker(all_lines[i]) then
         block_start = i + 1
         break
       end
@@ -56,7 +58,7 @@ function M.extract_sql_block(all_lines, line_num, line_text, end_col)
 
   local block_end = #all_lines
   for i = line_num + 1, #all_lines do
-    if all_lines[i] and all_lines[i]:match("^###") then
+    if const.is_section_marker(all_lines[i]) then
       block_end = i - 1
       break
     end

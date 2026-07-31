@@ -4,6 +4,7 @@ local cli = require("poste.cli")
 local state = require("poste.state")
 local util = require("poste.util")
 local select_mod = require("poste.select")
+local const = require("poste-sql.constants")
 
 local M = {}
 
@@ -211,28 +212,28 @@ function M.apply_connection(conn)
   local found = false
 
   for i, line in ipairs(lines) do
-    if line:match("^%s*--%s*@connection%s") then
+    if const.match_directive(line, const.DIRECTIVE_CONNECTION) then
       -- Update existing directive
-      vim.api.nvim_buf_set_lines(buf, i - 1, i, false, { "-- @connection " .. conn_name })
+      vim.api.nvim_buf_set_lines(buf, i - 1, i, false, { "-- @" .. const.DIRECTIVE_CONNECTION .. " " .. conn_name })
       found = true
       break
     end
     -- Stop searching after first ### marker
-    if line:match("^%s*###") then break end
+    if const.is_section_marker(line) then break end
   end
 
   if not found then
     -- Insert at the top of the file (before first ### or at line 1)
     local insert_line = 1
     for i, line in ipairs(lines) do
-      if line:match("^%s*###") then
+      if const.is_section_marker(line) then
         insert_line = i
         break
       end
       insert_line = i + 1
     end
     vim.api.nvim_buf_set_lines(buf, insert_line - 1, insert_line - 1, false, {
-      "-- @connection " .. conn_name,
+      "-- @" .. const.DIRECTIVE_CONNECTION .. " " .. conn_name,
       "",
     })
   end

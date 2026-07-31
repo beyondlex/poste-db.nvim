@@ -1,5 +1,6 @@
 local M = {}
 local ns = vim.api.nvim_create_namespace("poste_insert_hint")
+local const = require("poste-sql.constants")
 
 local _debounce_timer = nil
 local DEBOUNCE_MS = 150
@@ -32,7 +33,7 @@ function M.update()
 
   local block_start = 1
   for i = #lines, 1, -1 do
-    if (lines[i] or ""):match("^###") then block_start = i; break end
+    if const.is_section_marker(lines[i]) then block_start = i; break end
   end
   dbg("block_start=" .. block_start .. " first line=" .. (lines[1] or "nil"))
 

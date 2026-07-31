@@ -4,6 +4,7 @@ local editor = require("poste-sql.editor")
 local sql_format = require("poste-sql.format")
 local sql_buffer = require("poste-sql.buffer")
 local cli = require("poste.cli")
+local const = require("poste-sql.constants")
 local exec = require("poste-sql.edit_commit_exec")
 local log = require("poste-sql.edit_commit_log")
 
@@ -337,20 +338,20 @@ function M.refresh_dataset(tab)
   local clean_sql_lines = {}
   for _, line in ipairs(sql_lines) do
     local trimmed = line:match("^%s*(.*)$")
-    if trimmed ~= "" and not trimmed:match("^%-%-") and not trimmed:match("^###") then
+    if trimmed ~= "" and not trimmed:match("^%-%-") and not const.is_section_marker(trimmed) then
       table.insert(clean_sql_lines, line)
     end
   end
 
   local content_lines = {}
   if conn_url then
-    table.insert(content_lines, "-- @connection " .. conn_url)
+    table.insert(content_lines, "-- @" .. const.DIRECTIVE_CONNECTION .. " " .. conn_url)
   end
   if db and db ~= "" then
-    table.insert(content_lines, "-- @database " .. db)
+    table.insert(content_lines, "-- @" .. const.DIRECTIVE_DATABASE .. " " .. db)
   end
   table.insert(content_lines, "")
-  table.insert(content_lines, "### refresh")
+  table.insert(content_lines, const.SECTION_MARKER .. " refresh")
   local sql_start_line = #content_lines + 1
   for _, line in ipairs(clean_sql_lines) do
     table.insert(content_lines, line)

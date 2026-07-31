@@ -6,6 +6,7 @@
 local cli = require("poste.cli")
 local state = require("poste.state")
 local ts_stmt = require("poste-sql.ts_stmt")
+local const = require("poste-sql.constants")
 
 local M = {}
 
@@ -19,7 +20,7 @@ function M.find_block_for_line(buf_lines, line)
   -- Search backward for the opening ###
   local start = line
   while start >= 1 do
-    if buf_lines[start]:match("^%s*###") then
+    if const.is_section_marker(buf_lines[start]) then
       start = start + 1  -- skip past the ### line
       break
     end
@@ -29,7 +30,7 @@ function M.find_block_for_line(buf_lines, line)
   -- Search forward for the closing ### (or end of buffer)
   local finish = line
   while finish < #buf_lines do
-    if buf_lines[finish + 1]:match("^%s*###") then
+    if const.is_section_marker(buf_lines[finish + 1]) then
       break
     end
     finish = finish + 1
@@ -104,7 +105,7 @@ function M.try_rust_stmt_ranges(buf_lines, start_line, end_line)
     -- Advance past blank/directive/comment lines within the range
     while abs_start <= abs_end and abs_start <= end_line do
       local t = (buf_lines[abs_start] or ""):match("^%s*(.*)$") or ""
-      if t == "" or t:match("^%-%-") or t:match("^%s*###") or t:upper():match("^USE ") then
+      if t == "" or t:match("^%-%-") or const.is_section_marker(t) or t:upper():match("^USE ") then
         abs_start = abs_start + 1
       else
         break
@@ -165,7 +166,7 @@ end
 function M.extract_stmt_at_cursor(buf_lines, cursor_line, buf)
   local directives = {}
   for _, l in ipairs(buf_lines) do
-    if l:match("^%s*%-%-%s*@") or l:match("^%s*$") then
+    if const.is_directive_comment(l) or l:match("^%s*$") then
       table.insert(directives, l)
     elseif l:match("^%s*%-%-") then
       -- skip non-directive comments (e.g. -- drop database ...)
@@ -210,7 +211,7 @@ function M.extract_stmt_at_cursor(buf_lines, cursor_line, buf)
     -- and blank lines before the cursor.
     while stmt_start < cursor_line and stmt_start <= #buf_lines do
       local l = buf_lines[stmt_start] or ""
-      if l:match("^%s*$") or l:match("^%s*%-%-") or l:match("^%s*###") then
+      if l:match("^%s*$") or l:match("^%s*%-%-") or const.is_section_marker(l) then
         stmt_start = stmt_start + 1
       else
         break
@@ -232,7 +233,7 @@ function M.extract_stmt_at_cursor(buf_lines, cursor_line, buf)
           stmt_start = i + 1
           break
         end
-        if txt:match("^%s*###") or txt:match("^%s*%-%-%s*@") then
+        if const.is_section_marker(txt) or const.is_directive_comment(txt) then
           stmt_start = i + 1
           break
         end
@@ -285,7 +286,7 @@ function M.extract_stmt_at_cursor(buf_lines, cursor_line, buf)
 
   local parts = {}
   for _, l in ipairs(directives) do table.insert(parts, l) end
-  table.insert(parts, "###")
+  table.insert(parts, const.SECTION_MARKER)
   for _, l in ipairs(stmt_lines) do table.insert(parts, l) end
 
   -- When cursor is below the statement (e.g. on blank lines below), clamp
@@ -318,8 +319,8 @@ function M.find_stmt_lines(buf_lines, start_line, end_line)
 
     -- Skip blank lines and directive comments
     if trimmed == "" then goto continue end
-    if trimmed:match("^%-%-%s*@") then goto continue end
-    if trimmed:match("^%s*###") then goto continue end
+    if const.is_directive_comment(trimmed) then goto continue end
+    if const.is_section_marker(trimmed) then goto continue end
     if trimmed:upper():match("^USE ") then goto continue end
     if trimmed:match("^%-%-") then goto continue end
 
@@ -360,7 +361,7 @@ function M.extract_visual_block(buf_lines, start_line, end_line)
 
   local parts = {}
   for _, l in ipairs(directives) do table.insert(parts, l) end
-  table.insert(parts, "###")
+  table.insert(parts, const.SECTION_MARKER)
   for i = start_line, end_line do
     table.insert(parts, buf_lines[i] or "")
   end

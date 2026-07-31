@@ -4,6 +4,7 @@
 --- via after/queries/poste_sql/highlights.scm.
 
 local M = {}
+local const = require("poste-sql.constants")
 
 -- Define highlight groups for directive comments.
 -- These are still needed because Tree-sitter doesn't understand
@@ -13,7 +14,11 @@ vim.api.nvim_set_hl(0, "sqlDirectiveValue", { fg = "#E5C07B" })
 vim.api.nvim_set_hl(0, "sqlDirectiveComment", { link = "Special" })
 
 local DIRECTIVE_NS = vim.api.nvim_create_namespace("poste_sql_directive")
-local DIRECTIVE_KEYWORDS = { "connection", "database", "protocol" }
+local DIRECTIVE_KEYWORDS = {
+  const.DIRECTIVE_CONNECTION,
+  const.DIRECTIVE_DATABASE,
+  const.DIRECTIVE_PROTOCOL,
+}
 
 --- Highlight -- @connection / @database / @protocol lines using extmarks.
 --- Uses priority 101-102 (> Tree-sitter's default 100) to override

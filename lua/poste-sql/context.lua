@@ -2,6 +2,7 @@
 --- Handles connection → database context resolution and status display.
 local state = require("poste.state")
 local select_mod = require("poste.select")
+local const = require("poste-sql.constants")
 
 local M = {}
 
@@ -25,10 +26,10 @@ function M.resolve_context(buf, limit_line)
   local database = nil
 
   for i, line in ipairs(lines) do
-    if line:match("^%s*###") then break end
-    local conn_match = line:match("^%s*--%s*@connection%s+(.+)")
+    if const.is_section_marker(line) then break end
+    local conn_match = const.match_directive(line, const.DIRECTIVE_CONNECTION)
     if conn_match then connection = vim.trim(conn_match) end
-    local db_match = line:match("^%s*--%s*@database%s+(.+)")
+    local db_match = const.match_directive(line, const.DIRECTIVE_DATABASE)
     if db_match then database = vim.trim(db_match) end
   end
 
@@ -39,9 +40,9 @@ function M.resolve_context(buf, limit_line)
     if not line then break end
 
     -- Block-level directive override
-    local conn_match = line:match("^%s*--%s*@connection%s+(.+)")
+    local conn_match = const.match_directive(line, const.DIRECTIVE_CONNECTION)
     if conn_match then connection = vim.trim(conn_match) end
-    local db_match = line:match("^%s*--%s*@database%s+(.+)")
+    local db_match = const.match_directive(line, const.DIRECTIVE_DATABASE)
     if db_match then database = vim.trim(db_match) end
 
     -- USE statement: last one before cursor wins

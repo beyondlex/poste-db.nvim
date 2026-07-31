@@ -8,6 +8,7 @@ local state = require("poste.state")
 local data = require("poste-sql.completion_data")
 local ctx = require("poste-sql.completion_ctx")
 local debug = require("poste-sql.completion_debug")
+local const = require("poste-sql.constants")
 
 local M = {}
 
@@ -55,7 +56,7 @@ local function extract_sql_block(bufnr, line_before, cursor_line)
   local block_start = 1
   if cursor_line > 1 then
     for i = cursor_line - 1, 1, -1 do
-      if all_lines[i] and all_lines[i]:match("^###") then
+      if const.is_section_marker(all_lines[i]) then
         block_start = i + 1
         break
       end
@@ -64,7 +65,7 @@ local function extract_sql_block(bufnr, line_before, cursor_line)
 
   local block_end = total_lines
   for i = cursor_line + 1, total_lines do
-    if all_lines[i] and all_lines[i]:match("^###") then
+    if const.is_section_marker(all_lines[i]) then
       block_end = i - 1
       break
     end
@@ -195,9 +196,9 @@ local function get_items(bufnr, line_before, cursor_line, callback)
   end
 
   -- Directive lines: handle immediately, bypass Rust path entirely
-  if line_before:match("^%s*%-%-%s*@connection") then
-    local cp = line_before:match("@connection$")
-      or line_before:match("@connection%s+(%S*)$")
+  if line_before:match(const.DIRECTIVE_PREFIX_PATTERN .. const.DIRECTIVE_CONNECTION) then
+    local cp = line_before:match("@" .. const.DIRECTIVE_CONNECTION .. "$")
+      or line_before:match("@" .. const.DIRECTIVE_CONNECTION .. "%s+(%S*)$")
       or ""
     data.ensure_conn_names(function(names)
       callback(ctx.filter(ctx.make_items(names, 6, "connection: "), cp))
@@ -205,9 +206,9 @@ local function get_items(bufnr, line_before, cursor_line, callback)
     return
   end
 
-  if line_before:match("^%s*%-%-%s*@database") then
-    local db_prefix = line_before:match("@database$")
-      or line_before:match("@database%s+(%S*)$")
+  if line_before:match(const.DIRECTIVE_PREFIX_PATTERN .. const.DIRECTIVE_DATABASE) then
+    local db_prefix = line_before:match("@" .. const.DIRECTIVE_DATABASE .. "$")
+      or line_before:match("@" .. const.DIRECTIVE_DATABASE .. "%s+(%S*)$")
       or ""
     data.ensure_databases(function(names)
       if #names == 0 then
@@ -232,10 +233,13 @@ local function get_items(bufnr, line_before, cursor_line, callback)
   end
 
   -- Partial directive: show @connection, @database while user types
-  if line_before:match("^%s*%-%-%s*@%w*$") then
+  if line_before:match(const.DIRECTIVE_PREFIX_PATTERN .. "%w*$") then
     local partial = line_before:match("@(%w*)$") or ""
     local low = partial:lower()
-    local directives = { "@connection", "@database" }
+    local directives = {
+      "@" .. const.DIRECTIVE_CONNECTION,
+      "@" .. const.DIRECTIVE_DATABASE,
+    }
     local items = {}
     for _, d in ipairs(directives) do
       local name = d:sub(2)
@@ -262,8 +266,8 @@ local function get_items(bufnr, line_before, cursor_line, callback)
     end
 
     if ctx_type == "connection" then
-      local cp = line_before:match("@connection$")
-        or line_before:match("@connection%s+(%S*)$")
+      local cp = line_before:match("@" .. const.DIRECTIVE_CONNECTION .. "$")
+        or line_before:match("@" .. const.DIRECTIVE_CONNECTION .. "%s+(%S*)$")
         or ""
       data.ensure_conn_names(function(names)
         callback(ctx.filter(ctx.make_items(names, 6, "connection: "), cp))
@@ -274,8 +278,8 @@ local function get_items(bufnr, line_before, cursor_line, callback)
     if ctx_type == "database" then
       local db_prefix
       if ctx_data == "directive" then
-        db_prefix = line_before:match("@database$")
-          or line_before:match("@database%s+(%S*)$")
+        db_prefix = line_before:match("@" .. const.DIRECTIVE_DATABASE .. "$")
+          or line_before:match("@" .. const.DIRECTIVE_DATABASE .. "%s+(%S*)$")
           or ""
       else
         db_prefix = line_before:match("[Uu][Ss][Ee]%s+(%S*)$") or ""
@@ -647,10 +651,10 @@ function M:execute(exec_ctx, item, callback, default_impl)
       local lnum = vim.fn.line(".")
       local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
       local indent = (lines[lnum] or ""):match("^(%s*)") or ""
-      table.insert(lines, lnum, indent .. "-- @connection " .. item.data.conn_name)
-      lines[lnum + 1] = indent .. "-- @database "
+      table.insert(lines, lnum, indent .. "-- @" .. const.DIRECTIVE_CONNECTION .. " " .. item.data.conn_name)
+      lines[lnum + 1] = indent .. "-- @" .. const.DIRECTIVE_DATABASE .. " "
       vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-      vim.api.nvim_win_set_cursor(0, { lnum + 1, #(indent .. "-- @database ") })
+      vim.api.nvim_win_set_cursor(0, { lnum + 1, #(indent .. "-- @" .. const.DIRECTIVE_DATABASE .. " ") })
       vim.cmd("startinsert!")
       vim.fn.feedkeys(vim.api.nvim_replace_termcodes(" ", true, false, true), "n")
     end)
@@ -681,10 +685,10 @@ function M.source:execute(entry, callback)
       local lnum = vim.fn.line(".")
       local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
       local indent = (lines[lnum] or ""):match("^(%s*)") or ""
-      table.insert(lines, lnum, indent .. "-- @connection " .. item.data.conn_name)
-      lines[lnum + 1] = indent .. "-- @database "
+      table.insert(lines, lnum, indent .. "-- @" .. const.DIRECTIVE_CONNECTION .. " " .. item.data.conn_name)
+      lines[lnum + 1] = indent .. "-- @" .. const.DIRECTIVE_DATABASE .. " "
       vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-      vim.api.nvim_win_set_cursor(0, { lnum + 1, #(indent .. "-- @database ") })
+      vim.api.nvim_win_set_cursor(0, { lnum + 1, #(indent .. "-- @" .. const.DIRECTIVE_DATABASE .. " ") })
       vim.cmd("startinsert!")
       vim.fn.feedkeys(vim.api.nvim_replace_termcodes(" ", true, false, true), "n")
     end)

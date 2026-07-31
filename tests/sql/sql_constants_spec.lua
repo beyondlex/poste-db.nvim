@@ -1,0 +1,15 @@
+local const = require("poste-sql.constants")
+
+describe("constants helpers", function()
+  it("detects section markers", function()
+    assert.is_true(const.is_section_marker("###"))
+    assert.is_true(const.is_section_marker("   ### refresh"))
+    assert.is_false(const.is_section_marker("-- @connection foo"))
+  end)
+
+  it("matches directive values", function()
+    assert.equals("analytics", const.match_directive("-- @connection analytics", const.DIRECTIVE_CONNECTION))
+    assert.equals("blog", const.match_directive("  -- @database blog", const.DIRECTIVE_DATABASE))
+    assert.is_nil(const.match_directive("###", const.DIRECTIVE_CONNECTION))
+  end)
+end)

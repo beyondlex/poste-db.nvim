@@ -2,6 +2,7 @@
 --- Reads sql_log.jsonl, renders entries in a buffer with expand/collapse.
 local M = {}
 
+local const = require("poste-sql.constants")
 local syntax = require("poste-sql.syntax")
 local ns = vim.api.nvim_create_namespace("poste_sql_log")
 local buf = nil
@@ -83,7 +84,7 @@ local function clean_sql(sql)
   local lines = {}
   for line in (sql .. "\n"):gmatch("(.-)\n") do
     local trimmed = line:match("^%s*(.-)%s*$")
-    if trimmed and not trimmed:match("^%-%-%s*@") and trimmed ~= "###" then
+    if trimmed and not const.is_directive_comment(trimmed) and trimmed ~= const.SECTION_MARKER then
       table.insert(lines, trimmed)
     end
   end
