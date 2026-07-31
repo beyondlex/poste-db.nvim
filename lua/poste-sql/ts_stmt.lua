@@ -177,11 +177,12 @@ function M.find_error_nodes(buf)
       goto continue
     end
 
+    local start_row, start_col, end_row, end_col = node:range()
     errors[#errors + 1] = {
-      lnum = node:start() + 1,
-      col = node:start() + 1,
-      end_lnum = node:end_() + 1,
-      end_col = node:end_() + 1,
+      lnum = start_row + 1,
+      col = start_col + 1,
+      end_lnum = end_row + 1,
+      end_col = end_col + 1,
       text = "Unexpected token: " .. text,
     }
     ::continue::

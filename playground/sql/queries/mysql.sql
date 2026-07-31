@@ -1,7 +1,8 @@
 -- @connection my-blog
 -- @database inventory
 
-select * from poste_test_metrics;
+
+select * from poste_test_metrics ;
 select * from poste_test_events;
 
 show tables;
@@ -22,7 +23,7 @@ select id, slug FROM blog.posts ;
 -- UPDATE posts SET bio = '' AFTERE id i
 
 -- @database blog
-select * from poste_test_metrics;
+select * from poste_test_metrics; 
 select * from poste_test_events;;
 
 drop table poste_test_events;
@@ -30,7 +31,7 @@ drop table poste_test_metrics;
 drop table poste_test_users;
 drop table shipments;
 
-SELECT id, page_id, url, measured_at, metric_01 from web_vitals ;
+SELECT id, page_id, url, measured_at, metric_01 from web_vitals  ;
 SELECT * from web_vitals ;
 
 
@@ -59,6 +60,8 @@ show tables;
 use blog;
 
 select * from posts;
+
+use inventory;
 
 SELECT w.name AS warehouse,
        w.city,

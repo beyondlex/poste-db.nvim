@@ -1,6 +1,7 @@
 --- Tree-sitter-based SQL syntax diagnostics.
 --- Maps Tree-sitter ERROR nodes to vim.diagnostic entries.
 --- On TextChanged/TextChangedI (debounced) and BufWritePost.
+--- Also runs semantic diagnostics (table/column existence checks).
 
 local ts_stmt = require("poste-sql.ts_stmt")
 
@@ -9,6 +10,7 @@ local M = {}
 local _timer = nil
 local DEBOUNCE_MS = 300
 local ns = vim.api.nvim_create_namespace("poste_sql_diagnostics")
+local ns_hl = vim.api.nvim_create_namespace("poste_sql_diagnostics_highlight")
 
 --- Update diagnostics for a buffer using Tree-sitter ERROR nodes.
 --- @param buf number  buffer handle
@@ -30,7 +32,23 @@ function M.update_diagnostics(buf)
       message = err.text,
     }
   end
-  vim.diagnostic.set(ns, buf, diags)
+  vim.diagnostic.set(ns, buf, diags, { priority = 200 })
+  vim.api.nvim_buf_clear_namespace(buf, ns_hl, 0, -1)
+  for _, d in ipairs(diags) do
+    vim.api.nvim_buf_set_extmark(buf, ns_hl, d.lnum, d.col, {
+      end_row = d.end_lnum,
+      end_col = d.end_col,
+      hl_group = "Error",
+      hl_mode = "combine",
+      priority = 200,
+    })
+  end
+
+  -- Semantic diagnostics (table/column existence checks)
+  local ok_sem, sem = pcall(require, "poste-sql.semantic_diagnostics")
+  if ok_sem then
+    sem.update(buf)
+  end
 end
 
 --- Debounced update.
@@ -52,6 +70,11 @@ end
 function M.clear_diagnostics(buf)
   if vim.api.nvim_buf_is_valid(buf) then
     vim.diagnostic.reset(ns, buf)
+    vim.api.nvim_buf_clear_namespace(buf, ns_hl, 0, -1)
+  end
+  local ok_sem, sem = pcall(require, "poste-sql.semantic_diagnostics")
+  if ok_sem then
+    sem.clear(buf)
   end
 end
 
