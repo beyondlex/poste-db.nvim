@@ -1,7 +1,9 @@
 -- @connection pg-ecommerce
 -- @database ecommerce
 
-select * from events;
+alter table table_name add column column_name INTEGER NOT NULL DEFAULT 0 COMMENT '';
+
+select * from events ;
 
 SELECT 1;
 

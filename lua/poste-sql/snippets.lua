@@ -8,67 +8,72 @@ local DEFAULT_SNIPPETS = {
   ct = {
     trigger = "ct",
     label = "create table template",
-    snippet = "create table ${1:table_name} (\n  ${2:column_name} ${3:INTEGER} ${4:NOT NULL}\n);",
+    snippet = "CREATE TABLE ${1:table_name} (\n  ${2:column_name} ${3:INTEGER} ${4:NOT NULL}\n);",
+  },
+  tab = {
+    trigger = "tab",
+    label = "create table with timesamp template",
+    snippet = "CREATE TABLE ${1:table_name} (\n  id INTEGER NOT NULL PRIMARY KEY AUTO_INCREMENT,\n  ${2:-- columns}\n  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP\n);",
+  },
+  col = {
+    trigger = "col",
+    label = "column",
+    snippet = "${1:col_name} ${2:INT} NOT NULL DEFAULT ${3:0} COMMENT '${4}' ${5:,}",
+  },
+  colv = {
+    trigger = "colv",
+    label = "column varchar",
+    snippet = "${1:col_name} VARCHAR(${2:255}) NOT NULL DEFAULT '${3}' COMMENT '${4}' ${5:,}",
   },
   sf = {
     trigger = "sf",
     label = "select * from",
-    snippet = "select * from ${1:table_name} limit 100;",
-  },
-  sl = {
-    trigger = "sl",
-    label = "select limit 100",
-    snippet = "select * from ${1:table_name} limit 100;",
+    snippet = "SELECT * FROM ${1:table_name} LIMIT 100;",
   },
   cnt = {
     trigger = "cnt",
     label = "select count(*)",
-    snippet = "select count(*) from ${1:table_name};",
+    snippet = "SELECT COUNT(*) FROM ${1:table_name};",
   },
   ins = {
     trigger = "ins",
     label = "insert into template",
-    snippet = "insert into ${1:table_name} (${2:columns}) values (${3:values});",
+    snippet = "INSERT INTO ${1:table_name} (${2:columns}) VALUES (${3:values});",
   },
   upd = {
     trigger = "upd",
     label = "update template",
-    snippet = "update ${1:table_name} set ${2:column} = ${3:value} where ${4:condition};",
+    snippet = "UPDATE ${1:table_name} SET ${2:column} = ${3:value} WHERE ${4:condition};",
   },
   del = {
     trigger = "del",
     label = "delete template",
-    snippet = "delete from ${1:table_name} where ${2:condition};",
-  },
-  wh = {
-    trigger = "wh",
-    label = "where clause",
-    snippet = "where ${1:condition}",
+    snippet = "DELETE FROM ${1:table_name} WHERE ${2:condition};",
   },
   cte = {
     trigger = "cte",
     label = "with cte",
-    snippet = "with ${1:cte_name} as (\n  ${2:select_query}\n)\n${3:final_query};",
+    snippet = "WITH ${1:cte_name} AS (\n  ${2:select_query}\n)\n${3:final_query};",
   },
   idx = {
     trigger = "idx",
     label = "create index",
-    snippet = "create index ${1:idx_name} on ${2:table_name} (${3:column});",
+    snippet = "CREATE INDEX ${1:idx_name} ON ${2:table_name} (${3:column});",
   },
   cola = {
     trigger = "cola",
     label = "alter table add column",
-    snippet = "alter table ${1:table_name} add column ${2:column_name} ${3:INTEGER};",
+    snippet = "ALTER TABLE ${1:table_name} ADD COLUMN ${2:column_name} ${3:INTEGER} ${4:NOT NULL} DEFAULT ${5:0} COMMENT '${5}';",
   },
   colu = {
     trigger = "colu",
     label = "alter table modify column",
-    snippet = "alter table ${1:table_name} modify column ${2:column_name} ${3:NEW_TYPE};",
+    snippet = "ALTER TABLE ${1:table_name} MODIFY COLUMN ${2:column_name} ${3:INTEGER} ${4:NOT NULL} DEFAULT ${5:0} COMMENT '${5}';",
   },
   uni = {
     trigger = "uni",
     label = "union all",
-    snippet = "union all\n${1:select_query}",
+    snippet = "UNION ALL\n${1:select_query}",
   },
 }
 

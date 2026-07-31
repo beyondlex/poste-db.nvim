@@ -5,7 +5,7 @@ port = 15432
 database = "ecommerce"
 user = "poste"
 password = "poste_test"
-color = "Constant"
+color = "MiniStatuslineModeOther"
 
 [pg-analytics]
 dialect = "postgres"
@@ -22,7 +22,7 @@ port = 13306
 database = "blog"
 user = "root"
 password = "poste_test"
-color = "#ff0000"
+color = "MiniStatuslineModeReplace"
 
 [my-inventory]
 dialect = "mysql"

@@ -593,8 +593,8 @@ function M.ensure_columns(tbl, schema, callback)
       end)
     end,
     on_exit = function(_, code)
-      fetching_cols[fkey] = false
-      if code ~= 0 then
+      if fetching_cols[fkey] then
+        fetching_cols[fkey] = false
         vim.schedule(function()
           for _, cb in ipairs(cols_callbacks[fkey] or {}) do cb() end
           cols_callbacks[fkey] = nil

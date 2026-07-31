@@ -1,9 +1,6 @@
 -- @connection my-blog
 -- @database inventory
 
-
--- drop database cc;
-
 select * from poste_test_metrics;
 select * from poste_test_events;
 
@@ -154,7 +151,7 @@ GROUP BY sh.id, wf.name, wt.name, sh.status;
 
 
 
--- @connection my-blog
+-- @connection pg-ecommerce 
 create table table_name (
   column_name INTEGER NOT NULL
 );

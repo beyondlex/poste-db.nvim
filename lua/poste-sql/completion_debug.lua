@@ -17,8 +17,12 @@ end
 local function open_win(b)
   local prev = vim.api.nvim_get_current_win()
   vim.cmd("vert split")
-  -- vim.api.nvim_win_set_height(0, 12)
-  vim.api.nvim_win_set_buf(0, b)
+  local ok = pcall(vim.api.nvim_win_set_buf, 0, b)
+  if not ok then
+    vim.cmd("q")
+    vim.api.nvim_set_current_win(prev)
+    return nil
+  end
   vim.api.nvim_set_option_value("wrap", true, { win = 0 })
   vim.api.nvim_set_option_value("cursorline", false, { win = 0 })
   vim.api.nvim_win_set_option(0, "winfixheight", true)
@@ -39,8 +43,9 @@ end
 local function render()
   if not _enabled then return end
   if not _win or not vim.api.nvim_win_is_valid(_win) then
-    if not _buf then _buf = alloc_buf() end
+    if not _buf or not vim.api.nvim_buf_is_valid(_buf) then _buf = alloc_buf() end
     _win = open_win(_buf)
+    if not _win then return end
   end
 
   local lines = {}

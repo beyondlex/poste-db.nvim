@@ -412,7 +412,7 @@ local function get_items(bufnr, line_before, cursor_line, callback)
             prefix, #items, #funcs, tostring(rust_functions ~= nil)))
         end
         vim.list_extend(items, funcs)
-        if #prefix > 0 then
+        if #all == 0 or #prefix > 0 then
           vim.list_extend(items, ctx.kw_items(prefix, dialect))
         end
         callback(items)
