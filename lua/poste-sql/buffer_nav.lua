@@ -495,10 +495,10 @@ function M.preview_cell()
     filetype = ft,
     title = col_name,
     title_pos = "left",
-    width_ratio = 0.7,
-    max_width = 120,
+    width_ratio = C.FLOAT_WIDTH_RATIO,
+    max_width = C.FLOAT_MAX_WIDTH,
     width_padding = 2,
-    height_ratio = 0.6,
+    height_ratio = C.FLOAT_HEIGHT_RATIO,
     extra_height = 1,
   })
 
@@ -548,7 +548,7 @@ function M.yank_cell()
   end
   vim.fn.setreg('"', val)
   vim.fn.setreg('+', val)
-  vim.notify(string.format('Yanked to clipboard: %s', val:sub(1, 50)), vim.log.levels.INFO, { title = C.TITLE })
+  vim.notify(string.format('Yanked to clipboard: %s', val:sub(1, C.YANK_PREVIEW_CHARS)), vim.log.levels.INFO, { title = C.TITLE })
 end
 
 function M.yank_column()

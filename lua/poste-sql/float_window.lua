@@ -1,11 +1,12 @@
 local M = {}
+local const = require("poste-sql.constants")
 
 function M.centered_dimensions(lines, opts)
   opts = opts or {}
-  local width_ratio = opts.width_ratio or 0.7
-  local max_width = opts.max_width or 120
+  local width_ratio = opts.width_ratio or const.FLOAT_WIDTH_RATIO
+  local max_width = opts.max_width or const.FLOAT_MAX_WIDTH
   local width_padding = opts.width_padding or 2
-  local height_ratio = opts.height_ratio or 0.6
+  local height_ratio = opts.height_ratio or const.FLOAT_HEIGHT_RATIO
   local min_height = opts.min_height or 3
   local extra_height = opts.extra_height or 1
 

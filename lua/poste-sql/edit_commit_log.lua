@@ -1,7 +1,8 @@
 local M = {}
+local const = require("poste-sql.constants")
 
 local SQL_LOG_PATH = nil
-local MAX_LOG_ENTRIES = 1000
+local MAX_LOG_ENTRIES = const.LOG_MAX_ENTRIES
 local _log_write_count = 0
 
 local function get_log_path()
@@ -41,7 +42,7 @@ function M.write_log(entry)
     f:close()
   end
   _log_write_count = _log_write_count + 1
-  if _log_write_count < 10 then return end
+  if _log_write_count < const.LOG_TRIM_EVERY then return end
   _log_write_count = 0
   local lines = {}
   for l in io.lines(path) do

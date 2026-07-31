@@ -1,4 +1,5 @@
 local dialog = require("poste.dialog")
+local const = require("poste-sql.constants")
 
 local M = {}
 
@@ -152,7 +153,7 @@ function M.show_preview(table_info, total_rows, valid_count, bad_rows,
   width = math.min(text_area + 4, math.floor(vim.o.columns * 0.8))
 
   local lines = content
-  local height = math.min(#lines + 2, math.floor(vim.o.lines * 0.6))
+  local height = math.min(#lines + 2, math.floor(vim.o.lines * const.IMPORT_PREVIEW_HEIGHT_RATIO))
 
   local keymaps = {
     a = function() d:close(); callback(nil) end,

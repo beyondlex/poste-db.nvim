@@ -10,6 +10,7 @@ local util = require("poste.util")
 local dialog = require("poste.dialog")
 local float_window = require("poste-sql.float_window")
 local helpers = require("poste-sql.introspect_helpers")
+local const = require("poste-sql.constants")
 
 local M = {}
 
@@ -30,12 +31,12 @@ function M.show_float(lines, title, ft)
     filetype = ft or "sql",
     title = title,
     title_pos = "left",
-    width_ratio = 0.7,
-    max_width = 100,
-    width_padding = 4,
-    height_ratio = 0.5,
-    min_height = 3,
-    extra_height = 2,
+    width_ratio = const.INTROSPECT_FLOAT_WIDTH_RATIO,
+    max_width = const.INTROSPECT_FLOAT_MAX_WIDTH,
+    width_padding = const.INTROSPECT_FLOAT_WIDTH_PADDING,
+    height_ratio = const.INTROSPECT_FLOAT_HEIGHT_RATIO,
+    min_height = const.INTROSPECT_FLOAT_MIN_HEIGHT,
+    extra_height = const.INTROSPECT_FLOAT_EXTRA_HEIGHT,
   })
 
   vim.wo[win].wrap = true

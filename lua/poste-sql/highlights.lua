@@ -1,6 +1,7 @@
 --- Highlight groups and extmark application for SQL dataset buffer.
 local state = require("poste.state")
 local M = {}
+local const = require("poste-sql.constants")
 
 local function row_nums_hidden()
   return state.sql._hide_row_numbers
@@ -306,12 +307,12 @@ function M.apply_dataset_highlights(buf, lines, meta)
   -- Data rows: highlight NULL cells and row number column
   if meta.data_start_line and meta.data_end_line then
     local row_count = meta.data_end_line - meta.data_start_line + 1
-    local defer_row_nums = row_count > 1000
+    local defer_row_nums = row_count > const.HIGHLIGHTS_IMMEDIATE_ROW_LIMIT
 
     for row_idx = meta.data_start_line, meta.data_end_line do
       local line = lines[row_idx] or ""
 
-      -- Row number column (immediate for ≤1000 rows; deferred via schedule for large unpaginated)
+      -- Row number column (immediate for <= limit; deferred via schedule for large unpaginated)
       if not row_nums_hidden() and not defer_row_nums then
         local row_range = M.find_cell_range(line, 1)
         if row_range and row_range.ext_start <= #line then

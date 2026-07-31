@@ -1,4 +1,5 @@
 local M = {}
+local const = require("poste-sql.constants")
 
 local function get_ctx_color(conn_name)
   local ok, connections = pcall(require, "poste-sql.connections")
@@ -85,13 +86,13 @@ function M.setup()
           ctx_hl = get_ctx_color(conn_name)
         end
 
-        local mode, mode_hl = statusline.section_mode({ trunc_width = 120 })
+        local mode, mode_hl = statusline.section_mode({ trunc_width = const.STATUSLINE_TRUNC_WIDTH })
         local git = statusline.section_git({ trunc_width = 40 })
         local diff = statusline.section_diff({ trunc_width = 75 })
         local diagnostics = statusline.section_diagnostics({ trunc_width = 75 })
         local lsp = statusline.section_lsp({ trunc_width = 75 })
         local filename = statusline.section_filename({ trunc_width = 140 })
-        local fileinfo = statusline.section_fileinfo({ trunc_width = 120 })
+        local fileinfo = statusline.section_fileinfo({ trunc_width = const.STATUSLINE_TRUNC_WIDTH })
         local location = statusline.section_location({ trunc_width = 75 })
         local search = statusline.section_searchcount({ trunc_width = 75 })
 

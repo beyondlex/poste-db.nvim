@@ -2,6 +2,7 @@
 --- Handles cursor movement, cell editing dialogs, row ops.
 
 local cell = require("poste-sql.editor.cell")
+local const = require("poste-sql.constants")
 
 local M = {}
 
@@ -23,8 +24,8 @@ local function check_edit_guards(tab)
     vim.notify("Editing is not supported in raw mode", vim.log.levels.WARN)
     return false
   end
-  if tab.layout.rows and #tab.layout.rows > 5000 then
-    vim.notify("Editing is not supported for result sets > 5000 rows", vim.log.levels.WARN)
+  if tab.layout.rows and #tab.layout.rows > const.EDIT_MAX_ROWS then
+    vim.notify("Editing is not supported for result sets > " .. const.EDIT_MAX_ROWS .. " rows", vim.log.levels.WARN)
     return false
   end
   if tab.original_sql and cell.has_join(tab.original_sql) then
@@ -340,7 +341,7 @@ function M.insert_row()
   local sql_buffer = require("poste-sql.buffer")
   local buf = get_dataset().dataset_buffer
   if buf and vim.api.nvim_buf_is_valid(buf) then
-    local lines, meta = sql_format.render_page(tab.layout, tab.page or 1, tab.page_size or 50)
+    local lines, meta = sql_format.render_page(tab.layout, tab.page or 1, tab.page_size or const.EDITOR_PAGE_SIZE)
     meta.table_name = tab.meta and tab.meta.table_name
     sql_buffer.apply_rendered_page(tab, lines, meta)
     -- Re-apply edit highlights (green for added row)
