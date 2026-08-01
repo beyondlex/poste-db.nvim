@@ -10,6 +10,7 @@ local util = require("poste.util")
 local dialog = require("poste.dialog")
 local float_window = require("poste-sql.float_window")
 local helpers = require("poste-sql.introspect_helpers")
+local job = require("poste-sql.introspect_job")
 local const = require("poste-sql.constants")
 
 local M = {}
@@ -123,11 +124,8 @@ local function show_column_info(binary, conn, db, file, table_name, col_name, sc
 
       local output = table.concat(data, "\n")
       vim.schedule(function()
-        local ok, parsed = pcall(vim.json.decode, output)
-        if not ok or type(parsed) ~= "table" then
-          vim.notify("Failed to parse introspection response", vim.log.levels.ERROR, { title = "Poste SQL" })
-          return
-        end
+        local parsed = job.decode_json_table(output, "Failed to parse introspection response")
+        if not parsed then return end
 
         local items = parsed.items
         if not items or #items == 0 then
@@ -148,22 +146,12 @@ local function show_column_info(binary, conn, db, file, table_name, col_name, sc
       end)
     end,
     on_stderr = function(data)
-      if not data then return end
-      for _, l in ipairs(data) do
-        if l ~= "" then
-          table.insert(stderr_lines, l)
-          state.log("ERROR", "Column info stderr: " .. l)
-        end
-      end
+      job.append_stderr(stderr_lines, data, "Column info stderr: ")
     end,
     on_exit = function(code)
       if code ~= 0 then
         vim.schedule(function()
-          local msg = "Column introspection exited with code " .. code
-          if #stderr_lines > 0 then
-            msg = msg .. "\n" .. table.concat(stderr_lines, "\n")
-          end
-          vim.notify(msg, vim.log.levels.ERROR, { title = "Poste SQL" })
+          job.notify_exit_error("Column introspection", code, stderr_lines, "Poste SQL")
         end)
       end
     end,
@@ -187,17 +175,15 @@ local function list_tables_in_db(binary, conn, db_name, file)
     return
   end
   local args = { binary, "introspect", "--connection-url", url, "--type", "tables", "--database", db_name }
+  local stderr_lines = {}
   cli.run_async(args, {
     on_stdout = function(data)
       data = util.ensure_job_data(data)
       if #data == 0 then return end
       local output = table.concat(data, "\n")
       vim.schedule(function()
-        local ok, parsed = pcall(vim.json.decode, output)
-        if not ok or type(parsed) ~= "table" then
-          vim.notify("Failed to list tables", vim.log.levels.ERROR, { title = "Poste SQL" })
-          return
-        end
+        local parsed = job.decode_json_table(output, "Failed to list tables")
+        if not parsed then return end
         local items = parsed.items
         if not items or #items == 0 then
           vim.notify("No tables found in database '" .. db_name .. "'", vim.log.levels.WARN, { title = "Poste SQL" })
@@ -207,15 +193,12 @@ local function list_tables_in_db(binary, conn, db_name, file)
       end)
     end,
     on_stderr = function(data)
-      if not data then return end
-      for _, l in ipairs(data) do
-        if l ~= "" then state.log("ERROR", "introspect stderr: " .. l) end
-      end
+      job.append_stderr(stderr_lines, data, "introspect stderr: ")
     end,
     on_exit = function(code)
       if code ~= 0 then
         vim.schedule(function()
-          vim.notify("Table listing failed with exit code " .. code, vim.log.levels.ERROR, { title = "Poste SQL" })
+          job.notify_exit_error("Table listing", code, stderr_lines, "Poste SQL")
         end)
       end
     end,
@@ -257,13 +240,10 @@ function M.show_table_ddl()
       on_stdout = function(data)
         data = util.ensure_job_data(data)
         if #data == 0 then return end
-        local output = table.concat(data, "\n")
-        vim.schedule(function()
-          local ok, parsed = pcall(vim.json.decode, output)
-          if not ok or type(parsed) ~= "table" then
-            vim.notify("Failed to list tables", vim.log.levels.ERROR, { title = "Poste SQL" })
-            return
-          end
+      local output = table.concat(data, "\n")
+      vim.schedule(function()
+          local parsed = job.decode_json_table(output, "Failed to list tables")
+          if not parsed then return end
           local items = parsed.items
           if not items or #items == 0 then
             vim.notify("No tables found in database '" .. db_name .. "'", vim.log.levels.WARN, { title = "Poste SQL" })
@@ -273,15 +253,12 @@ function M.show_table_ddl()
         end)
       end,
       on_stderr = function(data)
-        if not data then return end
-        for _, l in ipairs(data) do
-          if l ~= "" then state.log("ERROR", "introspect stderr: " .. l) end
-        end
+        job.append_stderr({}, data, "introspect stderr: ")
       end,
       on_exit = function(code)
         if code ~= 0 then
           vim.schedule(function()
-            vim.notify("Table listing failed with exit code " .. code, vim.log.levels.ERROR, { title = "Poste SQL" })
+            job.notify_exit_error("Table listing", code, {}, "Poste SQL")
           end)
         end
       end,
@@ -565,6 +542,7 @@ function M.show_table_ddl()
 
   state.log("INFO", "DDL args: " .. vim.inspect(args))
 
+  local stderr_lines = {}
   cli.run_async(args, {
     on_stdout = function(data)
       data = util.ensure_job_data(data)
@@ -572,11 +550,8 @@ function M.show_table_ddl()
 
       local output = table.concat(data, "\n")
       vim.schedule(function()
-        local ok, parsed = pcall(vim.json.decode, output)
-        if not ok or type(parsed) ~= "table" then
-          vim.notify("Failed to parse DDL response", vim.log.levels.ERROR, { title = "Poste SQL" })
-          return
-        end
+        local parsed = job.decode_json_table(output, "Failed to parse DDL response")
+        if not parsed then return end
 
         local items = parsed.items
         if not items or #items == 0 then
@@ -595,15 +570,12 @@ function M.show_table_ddl()
       end)
     end,
     on_stderr = function(data)
-      if not data then return end
-      for _, l in ipairs(data) do
-        if l ~= "" then state.log("ERROR", "DDL stderr: " .. l) end
-      end
+      job.append_stderr(stderr_lines, data, "DDL stderr: ")
     end,
     on_exit = function(code)
       if code ~= 0 then
         vim.schedule(function()
-          vim.notify("DDL introspection exited with code " .. code, vim.log.levels.ERROR, { title = "Poste SQL" })
+          job.notify_exit_error("DDL introspection", code, stderr_lines, "Poste SQL")
         end)
       end
     end,
