@@ -3,9 +3,9 @@ local C = require("poste-sql.constants")
 local state = require("poste.state")
 local sql_highlights = require("poste-sql.highlights")
 local util = require("poste-sql.util")
-local float_window = require("poste-sql.float_window")
 local ui = require("poste-sql.buffer_nav_ui")
 local cell = require("poste-sql.buffer_nav_cell")
+local preview = require("poste-sql.buffer_nav_preview")
 local sort_helper = require("poste-sql.buffer_nav_sort")
 local M = {}
 
@@ -417,39 +417,17 @@ function M.preview_cell()
   if not res then return end
   local text, ft = cell.pretty_print(raw_val)
 
-  local lines = {}
-  for line in (text .. "\n"):gmatch("(.-)\n") do
-    lines[#lines + 1] = line
-  end
-
   local col_name = res.columns[col] and res.columns[col].name or "?"
 
-  local opts = ui.build_preview_float_opts(col_name)
-  opts.filetype = ft
-  local float_buf, win = float_window.open_centered(lines, opts)
-
-  vim.wo[win].wrap = true
-  vim.wo[win].linebreak = true
-  vim.wo[win].scrolloff = 1
-  vim.wo[win].cursorline = true
+  local float_buf, win = preview.open_preview_float(col_name, text, ft)
 
   preview_win = win
 
-  local sopts = { buffer = float_buf, noremap = true, silent = true }
-  vim.keymap.set("n", "j", "<C-e>", sopts)
-  vim.keymap.set("n", "k", "<C-y>", sopts)
-  vim.keymap.set("n", "d", "<C-d>", sopts)
-  vim.keymap.set("n", "u", "<C-u>", sopts)
-  vim.keymap.set("n", "g", "gg", sopts)
-  vim.keymap.set("n", "G", "G", sopts)
-  vim.keymap.set("n", "<Space>", "<C-f>", sopts)
-  vim.keymap.set("n", "<BS>", "<C-b>", sopts)
   local close_fn = function()
     if vim.api.nvim_win_is_valid(win) then vim.api.nvim_win_close(win, true) end
     preview_win = nil
   end
-  vim.keymap.set("n", "q", close_fn, sopts)
-  vim.keymap.set("n", "<Esc>", close_fn, sopts)
+  preview.set_preview_keymaps(float_buf, close_fn)
 end
 
 function M.yank_cell()
