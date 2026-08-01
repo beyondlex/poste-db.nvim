@@ -15,4 +15,4 @@
 
 ---
 
-*SQL developer documentation — Last updated: 2026-07-07*
+*SQL developer documentation — Last updated: 2026-08-01*
