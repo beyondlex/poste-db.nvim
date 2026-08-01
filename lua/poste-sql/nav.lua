@@ -1,6 +1,6 @@
 local detect = require("poste-sql.nav_detect")
 local handlers = require("poste-sql.nav_handlers")
-local const = require("poste-sql.constants")
+local route = require("poste-sql.nav_route")
 
 local M = {}
 
@@ -9,26 +9,25 @@ function M.goto_definition()
   local cursor = vim.api.nvim_win_get_cursor(0)
   local line_num = cursor[1]
   local line_text = vim.api.nvim_buf_get_lines(buf, line_num - 1, line_num, false)[1] or ""
-  local conn_match = const.match_directive(line_text, const.DIRECTIVE_CONNECTION)
-  if conn_match then
-    handlers.handle_connection_directive(buf, vim.trim(conn_match))
+  local target = route.resolve_definition_route(buf, line_num, line_text, cursor)
+  if not target then
+    vim.notify("No connection context. Add -- @connection <name> to the file header.", vim.log.levels.WARN)
     return
   end
-  local db_match = const.match_directive(line_text, const.DIRECTIVE_DATABASE)
-  if db_match then
-    handlers.handle_database_directive(buf, line_num, vim.trim(db_match))
+
+  if target.kind == "connection" then
+    handlers.handle_connection_directive(buf, target.conn_name)
     return
   end
-  local table_name = vim.fn.expand("<cword>")
-  if table_name and table_name ~= "" then
+  if target.kind == "database" then
+    handlers.handle_database_directive(buf, line_num, target.db_name)
+    return
+  end
+  if target.kind == "table" then
     local ctx = require("poste-sql.context")
     local full_ctx = ctx.resolve_full_context(buf, line_num)
-    if full_ctx.connection then
-      handlers.handle_table_reference(buf, line_num, line_text, cursor, full_ctx, table_name)
-      return
-    end
+    handlers.handle_table_reference(buf, line_num, line_text, cursor, full_ctx, target.table_name)
   end
-  vim.notify("No connection context. Add -- @connection <name> to the file header.", vim.log.levels.WARN)
 end
 
 M._test = {
