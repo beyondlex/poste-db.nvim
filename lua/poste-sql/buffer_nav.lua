@@ -481,22 +481,11 @@ function M.sort_by_current_col()
   local data = tab.data
   if not data or not data.results or #data.results == 0 then return end
 
-  local res = data.results[1]
-  if not res.rows or #res.rows == 0 then return end
-
   local col = state.sql.cell.col
-  local next_sort, is_reset = sort_helper.next_sort_state(tab, col)
-  if is_reset then
-    tab.sort = nil
-  else
-    tab.sort = next_sort
-  end
-
-  tab.rows_source = tab.rows_source or res.rows
-  D.compute_view_indices(tab)
+  local lines, meta, render_opts = sort_helper.prepare_current_col_sort(tab, data, D.active_tab_idx, col)
+  if not lines then return end
 
   tab.is_sorting = true
-  local lines, meta, render_opts = sort_helper.build_sort_render_payload(tab, data, D.active_tab_idx)
   local buffer = require("poste-sql.buffer")
   buffer.render_dataset(lines, meta, render_opts)
   tab.is_sorting = false

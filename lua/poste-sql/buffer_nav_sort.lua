@@ -33,4 +33,22 @@ function M.build_sort_render_payload(tab, data, active_idx)
   }
 end
 
+function M.prepare_current_col_sort(tab, data, active_idx, col)
+  if not tab or not data or not data.results or #data.results == 0 then return nil end
+
+  local res = data.results[1]
+  if not res.rows or #res.rows == 0 then return nil end
+
+  local next_sort, is_reset = M.next_sort_state(tab, col)
+  if is_reset then
+    tab.sort = nil
+  else
+    tab.sort = next_sort
+  end
+
+  tab.rows_source = tab.rows_source or res.rows
+  require("poste-sql.dataset").compute_view_indices(tab)
+  return M.build_sort_render_payload(tab, data, active_idx)
+end
+
 return M
