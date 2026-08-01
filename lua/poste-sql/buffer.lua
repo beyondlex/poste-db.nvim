@@ -3,6 +3,7 @@ local D = require("poste-sql.dataset")
 local C = require("poste-sql.constants")
 local state = require("poste.state")
 local sql_highlights = require("poste-sql.highlights")
+local render = require("poste-sql.buffer_render")
 
 local M = {}
 
@@ -272,125 +273,10 @@ end
 -- Render
 --------------------------------------------------------------------------------
 
-local function split_render_lines(lines)
-  local clean = {}
-  for i, line in ipairs(lines) do
-    if type(line) ~= "string" then line = tostring(line or "") end
-    for seg in (line .. "\n"):gmatch("(.-)\n") do
-      clean[#clean + 1] = seg
-    end
-  end
-  return clean
-end
-
-local function normalize_rendered_page(tab, lines, meta)
-  local clean = split_render_lines(lines)
-  local has_header = meta and meta.type == "resultset" and meta.header_line
-  if not has_header then
-    local padded = {}
-    for _, line in ipairs(clean) do
-      if line == "" then
-        padded[#padded + 1] = ""
-      else
-        padded[#padded + 1] = D.PADDING_SPACES .. line
-      end
-    end
-    return padded, meta, false
-  end
-
-  local header_line = clean[meta.header_line]
-  if header_line then
-    tab.header_text = header_line
-    if tab.sort then
-      local range = sql_highlights.find_cell_range(tab.header_text, tab.sort.col + 1)
-      if range then
-        local text_end = range.ext_end
-        while text_end > range.ext_start + 1 do
-          if tab.header_text:byte(text_end) ~= 0x20 then break end
-          text_end = text_end - 1
-        end
-        if text_end > range.ext_start then
-          local indicator = (tab.sort.ascending and " ↑" or " ↓")
-          local before = tab.header_text:sub(1, text_end)
-          local after = tab.header_text:sub(text_end + 3)
-          tab.header_text = before .. indicator .. after
-          tab.header_col_starts = nil  -- invalidated by sort modification
-        end
-      end
-    end
-    local padded_h = "  " .. tab.header_text
-    tab.header_index = require("poste-sql.buffer_nav").build_header_index(padded_h)
-
-    table.remove(clean, meta.header_line + 1)
-    table.remove(clean, meta.header_line)
-    if meta.header_line > 1 then table.remove(clean, meta.header_line - 1) end
-    meta.header_line = nil
-    meta.data_start_line = meta.data_start_line - 3
-    meta.data_end_line = meta.data_end_line - 3
-    table.remove(clean, meta.data_end_line + 1)
-  end
-
-  local padded = {}
-  for _, line in ipairs(clean) do
-    if line == "" then
-      padded[#padded + 1] = ""
-    else
-      padded[#padded + 1] = D.PADDING_SPACES .. line
-    end
-  end
-  table.insert(padded, 1, "")
-  meta.data_start_line = meta.data_start_line + 1
-  meta.data_end_line = meta.data_end_line + 1
-  return padded, meta, true
-end
-
-local function build_column_start_maps(tab, meta)
-  tab.buffer_col_starts = {}
-  if meta and meta.col_starts then
-    for i, starts in ipairs(meta.col_starts) do
-      local line_idx = meta.data_start_line + i - 1
-      local padded_starts = {}
-      local cum = D.LEFT_PADDING + 2
-      for col_idx, cell in ipairs(starts) do
-        local w = meta.col_widths and meta.col_widths[col_idx] or 0
-        local disp_start = cum
-        local disp_end = disp_start + w + 1
-        padded_starts[col_idx] = {
-          ext_start = cell.ext_start + D.LEFT_PADDING,
-          ext_end = cell.ext_end + D.LEFT_PADDING,
-          disp_start = disp_start,
-          disp_end = disp_end,
-        }
-        cum = disp_end + 2
-      end
-      tab.buffer_col_starts[line_idx] = padded_starts
-    end
-  end
-
-  tab.header_col_starts = nil
-  if meta and meta.header_col_starts then
-    local hdr = {}
-    local cum_disp = D.LEFT_PADDING
-    for col_idx, cell in ipairs(meta.header_col_starts) do
-      local cell_disp = cell.ext_end - cell.ext_start
-      local ext_start = cell.ext_start + D.LEFT_PADDING
-      local ext_end = cell.ext_end + D.LEFT_PADDING
-      hdr[col_idx] = {
-        ext_start = ext_start,
-        ext_end = ext_end,
-        disp_start = cum_disp + 1,
-        disp_end = cum_disp + 1 + cell_disp,
-      }
-      cum_disp = cum_disp + 1 + cell_disp
-    end
-    tab.header_col_starts = hdr
-  end
-end
-
 local function finalize_rendered_page(tab, padded, meta)
   tab.padded = padded
   tab.meta = meta
-  build_column_start_maps(tab, meta)
+  render.build_column_start_maps(tab, meta)
 
   local buf = M.get_dataset_buffer()
   vim.api.nvim_set_option_value("modifiable", true, { buf = buf })
@@ -427,12 +313,12 @@ local function render_dataset_layout(tab, lines, meta)
     layout._conn_str = tab.data.connection
   end
 
-  local padded, new_meta = normalize_rendered_page(tab, lines, meta)
+  local padded, new_meta = render.normalize_rendered_page(tab, lines, meta)
   finalize_rendered_page(tab, padded, new_meta)
 end
 
 local function render_dataset_legacy(tab, lines, meta)
-  local padded, new_meta = normalize_rendered_page(tab, lines, meta)
+  local padded, new_meta = render.normalize_rendered_page(tab, lines, meta)
   tab.padded_full = vim.deepcopy(padded)
   tab.meta_full = vim.deepcopy(new_meta)
   if new_meta and new_meta.type == "resultset" and new_meta.row_count then
@@ -467,7 +353,7 @@ end
 --- render_dataset and buffer_page.refresh_page. Handles header
 --- extraction, padding, buffer write, highlights, winbar.
 function M.apply_rendered_page(tab, lines, meta)
-  local padded, new_meta = normalize_rendered_page(tab, lines, meta)
+  local padded, new_meta = render.normalize_rendered_page(tab, lines, meta)
   finalize_rendered_page(tab, padded, new_meta)
 end
 
@@ -770,7 +656,7 @@ M._test = {
     return old
   end,
   normalize_rendered_page = function(tab, lines, meta)
-    return normalize_rendered_page(tab, lines, meta)
+    return render.normalize_rendered_page(tab, lines, meta)
   end,
 }
 
