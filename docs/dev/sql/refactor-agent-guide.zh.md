@@ -34,6 +34,7 @@
   - `buffer_nav_ui.lua` 已拆出 status winbar 左右半边 helper
   - `buffer_nav_ui.lua` 已拆出 pending changes 文案 helper 和纯 winbar 拼接 helper
   - `buffer_page.lua` / `buffer_search.lua` 已直接调用 `buffer_nav_ui.lua`
+  - `buffer_nav.lua` 已不再转发 `format_conn_short()`，只保留导航动作本身
 - Phase 4: `nav.lua` 的分支路由已拆出 `nav_route.lua`，执行逻辑仍在 `nav_handlers.lua`。
 - Phase 5: `introspect.lua` 的 job / context 路由已拆出：
   - `introspect_job.lua`

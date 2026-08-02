@@ -19,16 +19,6 @@ describe("buffer_nav helpers", function()
     assert.same({ 3, 10, 19 }, seps)
   end)
 
-  it("format_conn_short shortens postgres connection URLs", function()
-    local short = nav._test.format_conn_short("postgres://user:pass@localhost:5432/blog?sslmode=require")
-    assert.equals("localhost:5432/blog", short)
-  end)
-
-  it("format_conn_short falls back to last path segment", function()
-    local short = nav._test.format_conn_short("/tmp/blog.sqlite")
-    assert.equals("blog.sqlite", short)
-  end)
-
   it("build_status_winbar includes the main status fragments", function()
     local tab = D.alloc_tab(1)
     tab.sort = { col = 2, ascending = false }

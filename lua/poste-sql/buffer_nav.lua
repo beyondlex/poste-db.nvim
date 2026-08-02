@@ -3,7 +3,6 @@ local C = require("poste-sql.constants")
 local state = require("poste.state")
 local sql_highlights = require("poste-sql.highlights")
 local util = require("poste-sql.util")
-local ui = require("poste-sql.buffer_nav_ui")
 local nav_state = require("poste-sql.buffer_nav_state")
 local cell = require("poste-sql.buffer_nav_cell")
 local preview = require("poste-sql.buffer_nav_preview")
@@ -534,7 +533,6 @@ function M.goto_header()
 end
 M._test = {
   build_header_index = build_header_index,
-  format_conn_short = ui.format_conn_short,
 }
 
 return M
