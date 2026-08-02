@@ -24,6 +24,17 @@ local function pick_table_match(parsed_tables, word_lower)
   return matched, schema_matched
 end
 
+local function db_for_table(t, full_ctx)
+  return (t and t.schema and t.schema ~= "") and t.schema or full_ctx.database
+end
+
+local function table_by_name(parsed, name)
+  for _, t in ipairs(parsed.tables or {}) do
+    if t.name and t.name:lower() == (name or ""):lower() then return t end
+  end
+  return nil
+end
+
 local function resolve_alias(parsed, prefix)
   local resolved = nil
   if prefix and parsed and parsed.tables then
@@ -102,7 +113,7 @@ function M.resolve_detected_table_target(parsed, line_text, end_col, cword, full
     local cm = ad:match("^([%w_]+)")
     return {
       action = "navigate_to_table",
-      database = full_ctx.database,
+      database = parsed.ctx_schema or full_ctx.database,
       table_name = resolve_alias(parsed, prefix) or prefix,
       column_name = cm or cword,
     }
@@ -112,7 +123,7 @@ function M.resolve_detected_table_target(parsed, line_text, end_col, cword, full
     local cm = ad:match("^([%w_]+)")
     return {
       action = "navigate_to_table",
-      database = full_ctx.database,
+      database = parsed.ctx_schema or full_ctx.database,
       table_name = resolve_alias(parsed, prefix) or prefix,
       column_name = cm or cword,
     }
@@ -136,14 +147,14 @@ function M.resolve_detected_table_target(parsed, line_text, end_col, cword, full
     if matched then
       return {
         action = "navigate_to_table",
-        database = full_ctx.database,
+        database = db_for_table(matched, full_ctx),
         table_name = matched.name or matched.alias or cword,
         column_name = nil,
       }
     end
     return {
       action = "navigate_to_table",
-      database = full_ctx.database,
+      database = db_for_table(parsed.tables[1], full_ctx),
       table_name = cword,
       column_name = nil,
     }
@@ -160,7 +171,7 @@ function M.resolve_detected_table_target(parsed, line_text, end_col, cword, full
       if matched then
         return {
           action = "navigate_to_table",
-          database = full_ctx.database,
+          database = db_for_table(matched, full_ctx),
           table_name = matched.name or matched.alias or cword,
           column_name = after_dot_col,
         }
@@ -176,7 +187,7 @@ function M.resolve_detected_table_target(parsed, line_text, end_col, cword, full
       if resolved then
         return {
           action = "navigate_to_table",
-          database = full_ctx.database,
+          database = db_for_table(table_by_name(parsed, resolved), full_ctx),
           table_name = resolved,
           column_name = after_dot_col,
         }
@@ -186,7 +197,7 @@ function M.resolve_detected_table_target(parsed, line_text, end_col, cword, full
       if matched then
         return {
           action = "navigate_to_table",
-          database = full_ctx.database,
+          database = db_for_table(matched, full_ctx),
           table_name = matched.name or matched.alias or cword,
           column_name = nil,
         }
@@ -221,7 +232,7 @@ function M.resolve_detected_table_target(parsed, line_text, end_col, cword, full
       if resolved then
         return {
           action = "navigate_to_table",
-          database = full_ctx.database,
+          database = db_for_table(table_by_name(parsed, resolved), full_ctx),
           table_name = resolved,
           column_name = cword,
         }
@@ -230,7 +241,7 @@ function M.resolve_detected_table_target(parsed, line_text, end_col, cword, full
       if target then
         return {
           action = "navigate_to_table",
-          database = full_ctx.database,
+          database = db_for_table(parsed.tables[1], full_ctx),
           table_name = target,
           column_name = cword,
         }
