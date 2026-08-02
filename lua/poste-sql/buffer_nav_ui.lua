@@ -23,9 +23,8 @@ function M.build_preview_float_opts(title)
   }
 end
 
-function M.build_status_winbar(meta, tab, total_tabs, active_idx)
+function M.build_status_left(meta, tab)
   if not meta or meta.type ~= "resultset" then return nil end
-
   local rows = meta.total_rows or meta.row_count or 0
   local ms = meta.total_execution_time_ms or 0
 
@@ -65,10 +64,13 @@ function M.build_status_winbar(meta, tab, total_tabs, active_idx)
       "%#PosteSearchActive#", tab.search_text, "%#PosteSqlMeta#")
   end
 
+  return left
+end
+
+function M.build_status_right(meta, total_tabs, active_idx, pending)
+  if not meta or meta.type ~= "resultset" then return nil end
+
   local right = ""
-  local current_tab = D.T()
-  local pending = current_tab and current_tab.edit_state and current_tab.edit_state.dirty
-    and require("poste-sql.editor").pending_changes_text(current_tab.edit_state)
   if pending then
     right = right .. pending .. "  "
   end
@@ -79,6 +81,18 @@ function M.build_status_winbar(meta, tab, total_tabs, active_idx)
     right = right .. string.format("[%s] ", meta.table_name)
   end
   right = right .. (M.format_conn_short(meta.connection) or "")
+
+  return right
+end
+
+function M.build_status_winbar(meta, tab, total_tabs, active_idx)
+  if not meta or meta.type ~= "resultset" then return nil end
+
+  local left = M.build_status_left(meta, tab)
+  local current_tab = D.T()
+  local pending = current_tab and current_tab.edit_state and current_tab.edit_state.dirty
+    and require("poste-sql.editor").pending_changes_text(current_tab.edit_state)
+  local right = M.build_status_right(meta, total_tabs, active_idx, pending)
 
   local text = left .. "%=" .. right
   return "%#PosteSqlMeta#" .. text

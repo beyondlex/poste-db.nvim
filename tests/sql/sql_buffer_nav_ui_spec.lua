@@ -45,4 +45,37 @@ describe("buffer_nav_ui", function()
     assert.truthy(text:find("search: needle (2/2)", 1, true))
     assert.truthy(text:find("localhost:5432/blog", 1, true))
   end)
+
+  it("builds status winbar halves", function()
+    local left = ui.build_status_left({
+      type = "resultset",
+      total_rows = 1,
+      total_execution_time_ms = 7,
+      columns = { [2] = { name = "title" } },
+    }, {
+      sort = { col = 2, ascending = true },
+      pagination_enabled = false,
+      num_pages = 2,
+      padded_full = true,
+      filter_active = true,
+      filter_col_name = "status",
+      filter_val = "open",
+      search_text = "needle",
+      search_matches = {},
+    })
+    local right = ui.build_status_right({
+      type = "resultset",
+      table_name = "posts",
+      connection = "postgres://user:pass@localhost:5432/blog?sslmode=require",
+    }, 3, 2, "pending changes")
+
+    assert.truthy(left:find("1 row", 1, true))
+    assert.truthy(left:find("title ↑", 1, true))
+    assert.truthy(left:find("All", 1, true))
+    assert.truthy(left:find("filter: status=open", 1, true))
+    assert.truthy(left:find("search: needle (0)", 1, true))
+    assert.truthy(right:find("pending changes", 1, true))
+    assert.truthy(right:find("[2/3: posts]", 1, true))
+    assert.truthy(right:find("localhost:5432/blog", 1, true))
+  end)
 end)
