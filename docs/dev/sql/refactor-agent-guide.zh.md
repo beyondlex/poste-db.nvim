@@ -41,6 +41,13 @@
   - `introspect_column.lua`
   - `introspect_table.lua`
   - 文本构造仍在 `introspect_helpers.lua`。
+- Phase 6: `init.lua` 的 SQL 执行路径已完成拆分：
+  - `sql_runner.lua`
+  - `init.lua` 现在只保留 setup / 兼容转发
+  - `completion_handlers.lua`
+  - `dml.lua`
+  - `highlights_theme.lua`
+  - `highlights_render.lua`
 
 ### 仍未完成
 
@@ -50,7 +57,8 @@
 - Phase 5 还没做完：
   - `introspect.lua` 仍然承担 `show_table_ddl()` 的入口路由。
   - 还可以继续把入口检测逻辑拆成更细的 job/view helper。
-- Phase 6 还未开始。
+- Phase 6 已完成：
+  - `highlights.lua` 现在只保留对外入口和主题加载。
 
 ### 已写入的测试
 
@@ -231,9 +239,9 @@ AI agent 在改动任何高风险逻辑前，必须先补最小化回归测试�
 - 列信息、表列表、DDL 仍可打开
 - 错误信息不丢失
 
-### Phase 6: 大模块后续拆分
+### 后续候选
 
-如果前面几阶段稳定，再继续拆：
+如果后面还要继续拆，可以从这些方向再看：
 
 - `init.lua` → `sql_runner.lua`
 - `edit_commit.lua` → `dml.lua`
