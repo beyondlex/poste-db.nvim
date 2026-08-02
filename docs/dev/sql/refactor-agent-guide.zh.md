@@ -14,7 +14,7 @@
 
 ## 0.1 当前进度
 
-> 更新时间：2026-08-01。下面这份状态是按当前 `refactor-sql-rewrite` 分支整理的，方便后续 AI agent 接着干。
+> 更新时间：2026-08-02。下面这份状态是按当前 `refactor-sql-rewrite` 分支整理的，方便后续 AI agent 接着干。
 
 ### 已完成
 
@@ -27,7 +27,12 @@
   - `buffer_nav_raw.lua`
   - `buffer_nav_sort.lua`
 - Phase 4: `nav.lua` 的分支路由已拆出 `nav_route.lua`，执行逻辑仍在 `nav_handlers.lua`。
-- Phase 5: `introspect.lua` 的 job 回调处理已拆出 `introspect_job.lua`，文本构造仍在 `introspect_helpers.lua`。
+- Phase 5: `introspect.lua` 的 job / context 路由已拆出：
+  - `introspect_job.lua`
+  - `introspect_exec.lua`
+  - `introspect_route.lua`
+  - `introspect_context.lua`
+  - 文本构造仍在 `introspect_helpers.lua`。
 
 ### 仍未完成
 
@@ -35,8 +40,8 @@
   - `buffer_nav.lua` 里仍保留 `yank_cell()`、`yank_column()`、`toggle_cell_highlight()` 等直接 UI 操作。
   - `build_status_winbar()` 仍是 `buffer_nav_ui.lua` 的一体化输出。
 - Phase 5 还没做完：
-  - `introspect.lua` 仍然承担大部分分支路由与参数组装。
-  - `show_table_ddl()` 仍然包含 `@database` / `@connection` / 普通 DDL 的多分支。
+  - `introspect.lua` 仍然承担 `show_table_ddl()` 的入口路由与一部分参数组装。
+  - 列表 / DDL / column info 的 UI 展示仍然耦合在同一模块里。
   - 还可以继续抽 `introspect_ui.lua` 或更细的 job/view helper。
 - Phase 6 还未开始。
 
@@ -49,6 +54,9 @@
 - `tests/sql/sql_buffer_nav_sort_spec.lua`
 - `tests/sql/sql_nav_route_spec.lua`
 - `tests/sql/sql_introspect_job_spec.lua`
+- `tests/sql/sql_introspect_exec_spec.lua`
+- `tests/sql/sql_introspect_route_spec.lua`
+- `tests/sql/sql_introspect_context_spec.lua`
 
 ## 1. 总目标
 

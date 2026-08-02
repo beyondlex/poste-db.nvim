@@ -66,14 +66,12 @@ end
 ---------------------------------------------------------------------------
 
 --- Show column info in a float window.
---- @param binary string
 --- @param conn string
 --- @param db string|nil
---- @param file string
 --- @param table_name string Parent table
 --- @param col_name string Column name under cursor
 --- @param schema string|nil Schema name (for PG)
-local function show_column_info(binary, conn, db, file, table_name, col_name, schema)
+local function show_column_info(conn, db, table_name, col_name, schema)
   -- Strip backtick/quote quoting from names (from RENAME/CHANGE COLUMN SQL)
   table_name = table_name:gsub("^`", ""):gsub("`$", ""):gsub('^"', ''):gsub('"$', '')
   col_name = col_name:gsub("^`", ""):gsub("`$", ""):gsub('^"', ''):gsub('"$', '')
@@ -93,7 +91,7 @@ local function show_column_info(binary, conn, db, file, table_name, col_name, sc
     return
   end
 
-  local args = { binary, "introspect", "--connection-url", url,
+  local args = { "introspect", "--connection-url", url,
     "--type", "columns", "--table", table_name }
 
   -- For MySQL, schema = database, so use schema as the database override
@@ -141,17 +139,16 @@ end
 ---------------------------------------------------------------------------
 
 --- List all tables in a database and show them in a float window.
---- @param binary string
 --- @param conn string
 --- @param db_name string
-local function list_tables_in_db(binary, conn, db_name)
+local function list_tables_in_db(conn, db_name)
   local connections = require("poste-sql.connections")
   local url, url_err = connections.resolve_connection_url(conn)
   if not url then
     vim.notify("Table listing: " .. (url_err or "unknown error"), vim.log.levels.ERROR, { title = "Poste SQL" })
     return
   end
-  local args = { binary, "introspect", "--connection-url", url, "--type", "tables", "--database", db_name }
+  local args = { "introspect", "--connection-url", url, "--type", "tables", "--database", db_name }
   exec.run_json_items_job(args, {
     title = "Poste SQL",
     failure_message = "Failed to list tables",
@@ -236,10 +233,6 @@ function M.show_table_ddl()
     return
   end
 
-  local file = vim.api.nvim_buf_get_name(buf)
-  if file == "" then
-    file = vim.fn.getcwd() .. "/query.sql"
-  end
   local db = ctx.database
 
   -- Try to detect if cursor is on a column name via Rust context detection
@@ -302,7 +295,7 @@ function M.show_table_ddl()
           util.clean_nil(parsed)
           local target = context_resolver.resolve_detected_target(parsed, cword, db, after_dot_col)
           if target and target.kind == "column" and target.parent_table then
-            show_column_info(binary, conn, target.db or db, file, target.parent_table, target.column_name, target.parent_schema)
+            show_column_info(conn, target.db or db, target.parent_table, target.column_name, target.parent_schema)
             return
           end
         end
@@ -355,11 +348,11 @@ function M.show_table_ddl()
         local target = context_resolver.resolve_detected_target(parsed, cword, db)
         if target then
           if target.kind == "list_tables" and target.db then
-            list_tables_in_db(binary, conn, target.db)
+            list_tables_in_db(conn, target.db)
             return
           end
           if target.kind == "column" and target.parent_table and target.parent_table:lower() ~= target.column_name:lower() then
-            show_column_info(binary, conn, target.db or db, file, target.parent_table, target.column_name, target.parent_schema)
+            show_column_info(conn, target.db or db, target.parent_table, target.column_name, target.parent_schema)
             return
           end
           if target.kind == "ddl" and target.table_name then
@@ -379,7 +372,7 @@ function M.show_table_ddl()
     return
   end
 
-  local args = { binary, "introspect", "--connection-url", url, "--type", "ddl", "--table", cword }
+  local args = { "introspect", "--connection-url", url, "--type", "ddl", "--table", cword }
   if db and db ~= vim.NIL and db ~= "" then
     table.insert(args, "--database"); table.insert(args, db)
   end
