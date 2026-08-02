@@ -75,4 +75,29 @@ describe("buffer_nav_cell", function()
     assert.equals(2, count)
     assert.equals("status", col_name)
   end)
+
+  it("applies or clears cell highlights", function()
+    local highlights = package.loaded["poste-sql.highlights"]
+    local saved_highlight = highlights.highlight_cell
+    local saved_clear = highlights.clear_cell_highlight
+    local calls = {}
+
+    highlights.highlight_cell = function(...)
+      calls[#calls + 1] = { fn = "highlight", args = { ... } }
+    end
+    highlights.clear_cell_highlight = function(...)
+      calls[#calls + 1] = { fn = "clear", args = { ... } }
+    end
+
+    cell.apply_cell_highlight(true, "buf", 3, 4, { kind = "meta" }, { 1, 2 })
+    cell.apply_cell_highlight(false, "buf", 3, 4, { kind = "meta" }, { 1, 2 })
+
+    highlights.highlight_cell = saved_highlight
+    highlights.clear_cell_highlight = saved_clear
+
+    assert.same({
+      { fn = "highlight", args = { "buf", 3, 4, { kind = "meta" }, nil, { 1, 2 } } },
+      { fn = "clear", args = { "buf" } },
+    }, calls)
+  end)
 end)

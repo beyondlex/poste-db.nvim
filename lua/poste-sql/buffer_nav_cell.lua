@@ -1,4 +1,5 @@
 local C = require("poste-sql.constants")
+local sql_highlights = require("poste-sql.highlights")
 
 local M = {}
 
@@ -122,6 +123,14 @@ function M.build_column_yank_text(tab, col)
   local values, col_name = M.collect_column_values(tab, col)
   if not values then return nil end
   return table.concat(values, ", "), #values, col_name
+end
+
+function M.apply_cell_highlight(enabled, dataset_buffer, row, col, meta, col_starts)
+  if enabled then
+    sql_highlights.highlight_cell(dataset_buffer, row, col, meta, nil, col_starts)
+  else
+    sql_highlights.clear_cell_highlight(dataset_buffer)
+  end
 end
 
 return M

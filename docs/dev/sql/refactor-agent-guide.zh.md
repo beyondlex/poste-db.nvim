@@ -27,6 +27,7 @@
   - `buffer_nav_raw.lua`
   - `buffer_nav_sort.lua`
   - `buffer_nav_cell.lua` 已补 column yank 收集 helper
+  - `buffer_nav_cell.lua` 也接管了 cell highlight 的应用动作
 - Phase 4: `nav.lua` 的分支路由已拆出 `nav_route.lua`，执行逻辑仍在 `nav_handlers.lua`。
 - Phase 5: `introspect.lua` 的 job / context 路由已拆出：
   - `introspect_job.lua`
