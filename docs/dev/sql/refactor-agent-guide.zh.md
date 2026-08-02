@@ -40,6 +40,7 @@
   - `introspect_ui.lua`
   - `introspect_column.lua`
   - `introspect_table.lua`
+  - `introspect_detect.lua`
   - 文本构造仍在 `introspect_helpers.lua`。
 - Phase 6: `init.lua` 的 SQL 执行路径已完成拆分：
   - `sql_runner.lua`
@@ -56,7 +57,7 @@
   - `build_status_winbar()` 仍负责合并状态条左右半边。
 - Phase 5 还没做完：
   - `introspect.lua` 仍然承担 `show_table_ddl()` 的入口路由。
-  - 还可以继续把入口检测逻辑拆成更细的 job/view helper。
+  - `show_table_ddl()` 的 block/offset 计算已拆到 `introspect_detect.lua`，后面还可以继续把更细的目标选择逻辑拆出去。
 - Phase 6 已完成：
   - `highlights.lua` 现在只保留对外入口和主题加载。
 

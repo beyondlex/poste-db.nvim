@@ -9,6 +9,7 @@ local util = require("poste.util")
 local float_window = require("poste-sql.float_window")
 local helpers = require("poste-sql.introspect_helpers")
 local route = require("poste-sql.introspect_route")
+local detect = require("poste-sql.introspect_detect")
 local context_resolver = require("poste-sql.introspect_context")
 local ui = require("poste-sql.introspect_ui")
 local column = require("poste-sql.introspect_column")
@@ -138,6 +139,31 @@ function M.show_table_ddl()
     if ch:match("[%w_]") then end_col = end_col + 1 else break end
   end
 
+  local function detect_target_at(slice_end_col, resolve_after_dot_col)
+    local payload = detect.build_detect_payload(all_lines, line_num, slice_end_col)
+    if not payload then
+      return nil
+    end
+
+    local dial = ""
+    local cc = require("poste-sql.connections").get_connection_config(conn)
+    if cc and cc.dialect then dial = " --dialect " .. cc.dialect end
+
+    local cmd = string.format("%s context detect %d%s", vim.fn.shellescape(binary), payload.offset, dial)
+    local out = vim.fn.system(cmd, payload.sql_text)
+    if vim.v.shell_error ~= 0 or not out or out == "" then
+      return nil
+    end
+
+    local ok, parsed = pcall(vim.json.decode, out)
+    if not ok or not parsed then
+      return nil
+    end
+
+    util.clean_nil(parsed)
+    return context_resolver.resolve_detected_target(parsed, cword, db, resolve_after_dot_col)
+  end
+
   -- Check for .column suffix (alias.column → column part)
   local after_dot_col = nil
   local nxt = line_text:sub(end_col + 1, end_col + 1)
@@ -148,108 +174,27 @@ function M.show_table_ddl()
 
   if after_dot_col then
     -- alias.column pattern: resolve alias via context detection
-    local block_start = 1
-    if line_num > 1 then
-      for i = line_num - 1, 1, -1 do
-        if all_lines[i] and all_lines[i]:match("^###") then block_start = i + 1; break end
-      end
-    end
-    local block_end = #all_lines
-    for i = line_num + 1, #all_lines do
-      if all_lines[i] and all_lines[i]:match("^###") then block_end = i - 1; break end
-    end
-    if block_start <= line_num and line_num <= block_end then
-      local before_parts = {}
-      for i = block_start, line_num - 1 do
-        table.insert(before_parts, all_lines[i] or "")
-      end
-      -- Include alias.column for context: extend end_col past .column
-      local xtra = end_col + 1 + #after_dot_col
-      table.insert(before_parts, line_text:sub(1, xtra))
-      local offset = #table.concat(before_parts, "\n")
-      if offset > 0 then
-        offset = offset - 1
-      end
-      local block_parts = {}
-      for i = block_start, block_end do table.insert(block_parts, all_lines[i] or "") end
-      local sql_text = table.concat(block_parts, "\n")
-      local dial = ""
-      local cc = require("poste-sql.connections").get_connection_config(conn)
-      if cc and cc.dialect then dial = " --dialect " .. cc.dialect end
-      local cmd = string.format("%s context detect %d%s", vim.fn.shellescape(binary), offset, dial)
-      local out = vim.fn.system(cmd, sql_text)
-      if vim.v.shell_error == 0 and out and out ~= "" then
-        local ok, parsed = pcall(vim.json.decode, out)
-        if ok and parsed then
-          util.clean_nil(parsed)
-          local target = context_resolver.resolve_detected_target(parsed, cword, db, after_dot_col)
-          if target and target.kind == "column" and target.parent_table then
-            column.show_column_info(conn, target.db or db, target.parent_table, target.column_name, target.parent_schema, M.show_float)
-            return
-          end
-        end
-      end
+    local target = detect_target_at(end_col + 1 + #after_dot_col, after_dot_col)
+    if target and target.kind == "column" and target.parent_table then
+      column.show_column_info(conn, target.db or db, target.parent_table, target.column_name, target.parent_schema, M.show_float)
+      return
     end
   end
 
   -- Check if cword is a column name (not a table) via context detection
-  local block_start = 1
-  if line_num > 1 then
-    for i = line_num - 1, 1, -1 do
-      if all_lines[i] and all_lines[i]:match("^###") then block_start = i + 1; break end
+  local target = detect_target_at(end_col, nil)
+  if target then
+    if target.kind == "list_tables" and target.db then
+      table_helper.show_database_tables(conn, target.db, M.show_float)
+      return
     end
-  end
-  local block_end = #all_lines
-  for i = line_num + 1, #all_lines do
-    if all_lines[i] and all_lines[i]:match("^###") then block_end = i - 1; break end
-  end
-
-  if block_start <= line_num and line_num <= block_end then
-    local before_parts = {}
-    for i = block_start, line_num - 1 do
-      table.insert(before_parts, all_lines[i] or "")
+    if target.kind == "column" and target.parent_table and target.parent_table:lower() ~= target.column_name:lower() then
+      column.show_column_info(conn, target.db or db, target.parent_table, target.column_name, target.parent_schema, M.show_float)
+      return
     end
-    table.insert(before_parts, line_text:sub(1, end_col))
-    local offset = #table.concat(before_parts, "\n")
-    -- Adjust offset to point to the last character of the word, not the
-    -- character after it (e.g., for "authors;" the offset should be on
-    -- "s" not on ";"). This ensures the Rust binary detects the correct
-    -- context type (e.g., schema_table for schema-qualified table refs).
-    if offset > 0 then
-      offset = offset - 1
-    end
-
-    local block_parts = {}
-    for i = block_start, block_end do table.insert(block_parts, all_lines[i] or "") end
-    local sql_text = table.concat(block_parts, "\n")
-
-    local dial = ""
-    local cc = require("poste-sql.connections").get_connection_config(conn)
-    if cc and cc.dialect then dial = " --dialect " .. cc.dialect end
-
-    local cmd = string.format("%s context detect %d%s",
-      vim.fn.shellescape(binary), offset, dial)
-    local out = vim.fn.system(cmd, sql_text)
-    if vim.v.shell_error == 0 and out and out ~= "" then
-      local ok, parsed = pcall(vim.json.decode, out)
-      if ok and parsed then
-        util.clean_nil(parsed)
-        local target = context_resolver.resolve_detected_target(parsed, cword, db)
-        if target then
-          if target.kind == "list_tables" and target.db then
-            table_helper.show_database_tables(conn, target.db, M.show_float)
-            return
-          end
-          if target.kind == "column" and target.parent_table and target.parent_table:lower() ~= target.column_name:lower() then
-            column.show_column_info(conn, target.db or db, target.parent_table, target.column_name, target.parent_schema, M.show_float)
-            return
-          end
-          if target.kind == "ddl" and target.table_name then
-            db = target.db or db
-            cword = target.table_name
-          end
-        end
-      end
+    if target.kind == "ddl" and target.table_name then
+      db = target.db or db
+      cword = target.table_name
     end
   end
 
