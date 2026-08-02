@@ -19,6 +19,19 @@ local function get_col_starts(tab, row)
   return tab.buffer_col_starts[line_idx]
 end
 
+local function focus_cell(tab, row, col, update_header)
+  T_mark("position_cursor")
+  state.sql.cell.row = row
+  state.sql.cell.col = col
+  local line = M.position_cursor(row, col)
+  T_mark("highlight_cell")
+  sql_highlights.highlight_cell(D.dataset_buffer, row, col, tab.meta, line, get_col_starts(tab, row))
+  if update_header then
+    T_mark("update_header_float")
+    M.update_header_float()
+  end
+end
+
 ------------------------------------------------------------------------------
 -- Trace helpers (opt-in via state.sql._trace)
 ------------------------------------------------------------------------------
@@ -271,13 +284,7 @@ function M.move_cell(drow, dcol)
   row = math.max(1, math.min(row, tab.meta.row_count or 0))
   col = math.max(1, math.min(col, tab.meta.col_count or 0))
 
-  state.sql.cell.row = row
-  state.sql.cell.col = col
-
-  T_mark("position_cursor")
-  local line = M.position_cursor(row, col)
-  T_mark("highlight_cell")
-  sql_highlights.highlight_cell(D.dataset_buffer, row, col, tab.meta, line, get_col_starts(tab, row))
+  focus_cell(tab, row, col, false)
   T_mark("update_header_float")
   if dcol ~= 0 then
     M.update_header_float()
@@ -289,37 +296,27 @@ end
 function M.goto_first_col()
   local tab = D.T()
   if not tab or not tab.meta then return end
-  state.sql.cell.col = 1
-  local line = M.position_cursor(state.sql.cell.row, 1)
-  sql_highlights.highlight_cell(D.dataset_buffer, state.sql.cell.row, 1, tab.meta, line, get_col_starts(tab, state.sql.cell.row))
-  M.update_header_float()
+  focus_cell(tab, state.sql.cell.row, 1, true)
 end
 
 function M.goto_last_col()
   local tab = D.T()
   if not tab or not tab.meta then return end
   local last = tab.meta.col_count or 1
-  state.sql.cell.col = last
-  local line = M.position_cursor(state.sql.cell.row, last)
-  sql_highlights.highlight_cell(D.dataset_buffer, state.sql.cell.row, last, tab.meta, line, get_col_starts(tab, state.sql.cell.row))
-  M.update_header_float()
+  focus_cell(tab, state.sql.cell.row, last, true)
 end
 
 function M.goto_first_row()
   local tab = D.T()
   if not tab or not tab.meta then return end
-  state.sql.cell.row = 1
-  local line = M.position_cursor(1, state.sql.cell.col)
-  sql_highlights.highlight_cell(D.dataset_buffer, 1, state.sql.cell.col, tab.meta, line, get_col_starts(tab, 1))
+  focus_cell(tab, 1, state.sql.cell.col, false)
 end
 
 function M.goto_last_row()
   local tab = D.T()
   if not tab or not tab.meta then return end
   local last = tab.meta.row_count or 1
-  state.sql.cell.row = last
-  local line = M.position_cursor(last, state.sql.cell.col)
-  sql_highlights.highlight_cell(D.dataset_buffer, last, state.sql.cell.col, tab.meta, line, get_col_starts(tab, last))
+  focus_cell(tab, last, state.sql.cell.col, false)
 end
 
 function M.position_cursor(row, col)

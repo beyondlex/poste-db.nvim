@@ -59,6 +59,7 @@
 - Phase 3 还有收尾空间：
   - `buffer_nav.lua` 里已基本只剩状态调度，重复的 tab/window guard 也已抽到 `buffer_nav_state.lua`。
   - `buffer_nav.lua` 不再承载 winbar wrapper，winbar 直接由 `buffer_nav_ui.lua` 提供。
+  - `buffer_nav.lua` 的 `move_cell()` / `goto_*` 入口已收敛到同一个 `focus_cell()` helper。
 - Phase 5 还没做完：
   - `introspect.lua` 仍然承担 `show_table_ddl()` 的入口路由。
   - `show_table_ddl()` 的 block/offset 计算已拆到 `introspect_detect.lua`，后面还可以继续把更细的目标选择逻辑拆出去。
