@@ -1,0 +1,101 @@
+local saved_connections = package.loaded["poste-sql.connections"]
+local saved_exec = package.loaded["poste-sql.introspect_exec"]
+local saved_ui = package.loaded["poste-sql.introspect_ui"]
+
+local connections_stub = {}
+local exec_stub = {}
+local ui_stub = {}
+
+package.loaded["poste-sql.connections"] = connections_stub
+package.loaded["poste-sql.introspect_exec"] = exec_stub
+package.loaded["poste-sql.introspect_ui"] = ui_stub
+
+local helper = require("poste-sql.introspect_table")
+
+describe("introspect table helper", function()
+  local saved_notify = vim.notify
+
+  before_each(function()
+    package.loaded["poste-sql.connections"] = connections_stub
+    package.loaded["poste-sql.introspect_exec"] = exec_stub
+    package.loaded["poste-sql.introspect_ui"] = ui_stub
+  end)
+
+  after_each(function()
+    vim.notify = saved_notify
+    package.loaded["poste-sql.connections"] = saved_connections
+    package.loaded["poste-sql.introspect_exec"] = saved_exec
+    package.loaded["poste-sql.introspect_ui"] = saved_ui
+  end)
+
+  it("lists tables for a database", function()
+    local captured = nil
+    local seen = nil
+    connections_stub.resolve_connection_url = function(conn)
+      assert.equals("primary", conn)
+      return "postgres://user@localhost/blog", nil
+    end
+    exec_stub.run_json_items_job = function(args, opts)
+      captured = { args = args, opts = opts }
+      opts.on_items({ { name = "authors", type = "table" } })
+    end
+    ui_stub.show_table_list = function(items, db_name, show_float)
+      seen = { items = items, db_name = db_name, show_float = show_float }
+    end
+
+    local show_float = function() end
+    helper.show_database_tables("primary", "blog", show_float)
+
+    assert.same({
+      "introspect",
+      "--connection-url",
+      "postgres://user@localhost/blog",
+      "--type",
+      "tables",
+      "--database",
+      "blog",
+    }, captured.args)
+    assert.equals("Table listing", captured.opts.exit_kind)
+    assert.same({
+      items = { { name = "authors", type = "table" } },
+      db_name = "blog",
+      show_float = show_float,
+    }, seen)
+  end)
+
+  it("shows ddl for a table", function()
+    local captured = nil
+    local seen = nil
+    connections_stub.resolve_connection_url = function()
+      return "postgres://user@localhost/blog", nil
+    end
+    exec_stub.run_json_items_job = function(args, opts)
+      captured = { args = args, opts = opts }
+      opts.on_items({ { ddl = "CREATE TABLE authors (...);" } })
+    end
+    ui_stub.show_ddl = function(items, cword, show_float)
+      seen = { items = items, cword = cword, show_float = show_float }
+    end
+
+    local show_float = function() end
+    helper.show_table_ddl("primary", "blog", "authors", show_float)
+
+    assert.same({
+      "introspect",
+      "--connection-url",
+      "postgres://user@localhost/blog",
+      "--type",
+      "ddl",
+      "--table",
+      "authors",
+      "--database",
+      "blog",
+    }, captured.args)
+    assert.equals("DDL introspection", captured.opts.exit_kind)
+    assert.same({
+      items = { { ddl = "CREATE TABLE authors (...);" } },
+      cword = "authors",
+      show_float = show_float,
+    }, seen)
+  end)
+end)

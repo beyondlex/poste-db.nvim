@@ -9,10 +9,10 @@ local util = require("poste.util")
 local float_window = require("poste-sql.float_window")
 local helpers = require("poste-sql.introspect_helpers")
 local route = require("poste-sql.introspect_route")
-local exec = require("poste-sql.introspect_exec")
 local context_resolver = require("poste-sql.introspect_context")
 local ui = require("poste-sql.introspect_ui")
 local column = require("poste-sql.introspect_column")
+local table_helper = require("poste-sql.introspect_table")
 local const = require("poste-sql.constants")
 
 local M = {}
@@ -66,29 +66,6 @@ end
 -- Table DDL
 ---------------------------------------------------------------------------
 
---- List all tables in a database and show them in a float window.
---- @param conn string
---- @param db_name string
-local function list_tables_in_db(conn, db_name)
-  local connections = require("poste-sql.connections")
-  local url, url_err = connections.resolve_connection_url(conn)
-  if not url then
-    vim.notify("Table listing: " .. (url_err or "unknown error"), vim.log.levels.ERROR, { title = const.PLUGIN_TITLE })
-    return
-  end
-  local args = { "introspect", "--connection-url", url, "--type", "tables", "--database", db_name }
-  exec.run_json_items_job(args, {
-    title = const.PLUGIN_TITLE,
-    failure_message = "Failed to list tables",
-    empty_message = "No tables found in database '" .. db_name .. "'",
-    stderr_prefix = "introspect stderr: ",
-    exit_kind = "Table listing",
-    on_items = function(items)
-      ui.show_table_list(items, db_name, M.show_float)
-    end,
-  })
-end
-
 --- Show DDL for the table under the cursor in a floating window.
 function M.show_table_ddl()
   local binary = state.find_poste_binary()
@@ -111,23 +88,7 @@ function M.show_table_ddl()
       vim.notify("No connection context for database '" .. db_name .. "'", vim.log.levels.WARN, { title = const.PLUGIN_TITLE })
       return
     end
-    local connections = require("poste-sql.connections")
-    local url, url_err = connections.resolve_connection_url(conn)
-    if not url then
-      vim.notify("Table listing: " .. (url_err or "unknown error"), vim.log.levels.ERROR, { title = const.PLUGIN_TITLE })
-      return
-    end
-    local cmd = { "introspect", "--connection-url", url, "--type", "tables", "--database", db_name }
-    exec.run_json_items_job(cmd, {
-      title = const.PLUGIN_TITLE,
-      failure_message = "Failed to list tables",
-      empty_message = "No tables found in database '" .. db_name .. "'",
-      stderr_prefix = "introspect stderr: ",
-      exit_kind = "Table listing",
-      on_items = function(items)
-        ui.show_table_list(items, db_name, M.show_float)
-      end,
-    })
+    table_helper.show_database_tables(conn, db_name, M.show_float)
     return
   end
 
@@ -276,7 +237,7 @@ function M.show_table_ddl()
         local target = context_resolver.resolve_detected_target(parsed, cword, db)
         if target then
           if target.kind == "list_tables" and target.db then
-            list_tables_in_db(conn, target.db)
+            table_helper.show_database_tables(conn, target.db, M.show_float)
             return
           end
           if target.kind == "column" and target.parent_table and target.parent_table:lower() ~= target.column_name:lower() then
@@ -293,30 +254,7 @@ function M.show_table_ddl()
   end
 
   -- Fallback: show DDL (table mode)
-  local connections = require("poste-sql.connections")
-  local url, url_err = connections.resolve_connection_url(conn)
-  if not url then
-    vim.notify("DDL: " .. (url_err or "unknown error"), vim.log.levels.ERROR, { title = const.PLUGIN_TITLE })
-    return
-  end
-
-  local args = { "introspect", "--connection-url", url, "--type", "ddl", "--table", cword }
-  if db and db ~= vim.NIL and db ~= "" then
-    table.insert(args, "--database"); table.insert(args, db)
-  end
-
-  state.log("INFO", "DDL args: " .. vim.inspect(args))
-
-  exec.run_json_items_job(args, {
-    title = const.PLUGIN_TITLE,
-    failure_message = "Failed to parse DDL response",
-    empty_message = "No DDL found for table '" .. cword .. "'",
-    stderr_prefix = "DDL stderr: ",
-    exit_kind = "DDL introspection",
-    on_items = function(items)
-      ui.show_ddl(items, cword, M.show_float)
-    end,
-  })
+  table_helper.show_table_ddl(conn, db, cword, M.show_float)
 end
 
 return M

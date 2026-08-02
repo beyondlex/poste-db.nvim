@@ -39,6 +39,7 @@
   - `introspect_context.lua`
   - `introspect_ui.lua`
   - `introspect_column.lua`
+  - `introspect_table.lua`
   - 文本构造仍在 `introspect_helpers.lua`。
 
 ### 仍未完成
@@ -47,8 +48,8 @@
   - `buffer_nav.lua` 里已基本只剩状态调度。
   - `build_status_winbar()` 仍负责合并状态条左右半边。
 - Phase 5 还没做完：
-  - `introspect.lua` 仍然承担 `show_table_ddl()` 的入口路由与一部分参数组装。
-  - 还可以继续把 `show_table_ddl()` 的入口分支拆成更细的 job/view helper。
+  - `introspect.lua` 仍然承担 `show_table_ddl()` 的入口路由。
+  - 还可以继续把入口检测逻辑拆成更细的 job/view helper。
 - Phase 6 还未开始。
 
 ### 已写入的测试
@@ -65,6 +66,7 @@
 - `tests/sql/sql_introspect_context_spec.lua`
 - `tests/sql/sql_introspect_ui_spec.lua`
 - `tests/sql/sql_introspect_column_spec.lua`
+- `tests/sql/sql_introspect_table_spec.lua`
 
 ## 1. 总目标
 
