@@ -28,6 +28,7 @@
   - `buffer_nav_sort.lua`
   - `buffer_nav_cell.lua` 已补 column yank 收集 helper
   - `buffer_nav_cell.lua` 也接管了 cell highlight 的应用动作
+  - `buffer_nav_cell.lua` 也接管了 cell yank 文本准备
 - Phase 4: `nav.lua` 的分支路由已拆出 `nav_route.lua`，执行逻辑仍在 `nav_handlers.lua`。
 - Phase 5: `introspect.lua` 的 job / context 路由已拆出：
   - `introspect_job.lua`
@@ -40,7 +41,7 @@
 ### 仍未完成
 
 - Phase 3 还有收尾空间：
-  - `buffer_nav.lua` 里仍保留 `yank_cell()`、`toggle_cell_highlight()` 等直接 UI 操作。
+  - `buffer_nav.lua` 里仍保留 `toggle_cell_highlight()` 等直接 UI 操作。
   - `build_status_winbar()` 仍是 `buffer_nav_ui.lua` 的一体化输出。
 - Phase 5 还没做完：
   - `introspect.lua` 仍然承担 `show_table_ddl()` 的入口路由与一部分参数组装。

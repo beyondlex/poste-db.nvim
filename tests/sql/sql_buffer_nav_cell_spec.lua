@@ -76,6 +76,24 @@ describe("buffer_nav_cell", function()
     assert.equals("status", col_name)
   end)
 
+  it("builds cell yank text", function()
+    local text, preview = cell.build_cell_yank_text({
+      data = {
+        results = {
+          {
+            rows = {
+              { "a", { nested = true } },
+            },
+          },
+        },
+      },
+      meta = { type = "resultset" },
+    }, 1, 2)
+
+    assert.truthy(text:find('"nested"', 1, true))
+    assert.equals(text:sub(1, 50), preview)
+  end)
+
   it("applies or clears cell highlights", function()
     local highlights = package.loaded["poste-sql.highlights"]
     local saved_highlight = highlights.highlight_cell

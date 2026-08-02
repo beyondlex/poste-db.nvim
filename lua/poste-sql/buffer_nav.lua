@@ -434,11 +434,10 @@ function M.yank_cell()
   if not tab or not tab.data or not tab.meta or tab.meta.type ~= "resultset" then return end
   local row = state.sql.cell.row
   local col = state.sql.cell.col
-  local _, val = cell.get_resultset_cell(tab, row, col)
-  val = cell.clipboard_text(val)
-  vim.fn.setreg('"', val)
-  vim.fn.setreg('+', val)
-  vim.notify(string.format('Yanked to clipboard: %s', cell.yank_preview_text(val)), vim.log.levels.INFO, { title = C.TITLE })
+  local text, preview_text = cell.build_cell_yank_text(tab, row, col)
+  vim.fn.setreg('"', text)
+  vim.fn.setreg('+', text)
+  vim.notify(string.format('Yanked to clipboard: %s', preview_text), vim.log.levels.INFO, { title = C.TITLE })
 end
 
 function M.yank_column()

@@ -125,6 +125,12 @@ function M.build_column_yank_text(tab, col)
   return table.concat(values, ", "), #values, col_name
 end
 
+function M.build_cell_yank_text(tab, row, col)
+  local _, val = M.get_resultset_cell(tab, row, col)
+  val = M.clipboard_text(val)
+  return val, M.yank_preview_text(val)
+end
+
 function M.apply_cell_highlight(enabled, dataset_buffer, row, col, meta, col_starts)
   if enabled then
     sql_highlights.highlight_cell(dataset_buffer, row, col, meta, nil, col_starts)
