@@ -32,6 +32,7 @@
   - `introspect_exec.lua`
   - `introspect_route.lua`
   - `introspect_context.lua`
+  - `introspect_ui.lua`
   - 文本构造仍在 `introspect_helpers.lua`。
 
 ### 仍未完成
@@ -41,8 +42,8 @@
   - `build_status_winbar()` 仍是 `buffer_nav_ui.lua` 的一体化输出。
 - Phase 5 还没做完：
   - `introspect.lua` 仍然承担 `show_table_ddl()` 的入口路由与一部分参数组装。
-  - 列表 / DDL / column info 的 UI 展示仍然耦合在同一模块里。
-  - 还可以继续抽 `introspect_ui.lua` 或更细的 job/view helper。
+  - `show_column_info()` 仍保留在 `introspect.lua`，还有继续下沉到 helper 的空间。
+  - 还可以继续把 `show_table_ddl()` 的入口分支拆成更细的 job/view helper。
 - Phase 6 还未开始。
 
 ### 已写入的测试
@@ -57,6 +58,7 @@
 - `tests/sql/sql_introspect_exec_spec.lua`
 - `tests/sql/sql_introspect_route_spec.lua`
 - `tests/sql/sql_introspect_context_spec.lua`
+- `tests/sql/sql_introspect_ui_spec.lua`
 
 ## 1. 总目标
 

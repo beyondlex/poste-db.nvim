@@ -11,6 +11,7 @@ local helpers = require("poste-sql.introspect_helpers")
 local route = require("poste-sql.introspect_route")
 local exec = require("poste-sql.introspect_exec")
 local context_resolver = require("poste-sql.introspect_context")
+local ui = require("poste-sql.introspect_ui")
 local const = require("poste-sql.constants")
 
 local M = {}
@@ -121,15 +122,7 @@ local function show_column_info(conn, db, table_name, col_name, schema)
     stderr_prefix = "Column info stderr: ",
     exit_kind = "Column introspection",
     on_items = function(items)
-      local col = nil
-      for _, c in ipairs(items) do
-        if c.name == col_name then col = c; break end
-      end
-      if not col then
-        vim.notify("Column '" .. col_name .. "' not found in table '" .. table_name .. "'", vim.log.levels.WARN, { title = const.PLUGIN_TITLE })
-        return
-      end
-      M.show_float(helpers.build_column_info_lines(table_name, col), "Column: " .. col_name, "sql")
+      ui.show_column_info(items, table_name, col_name, M.show_float)
     end,
   })
 end
@@ -156,7 +149,7 @@ local function list_tables_in_db(conn, db_name)
     stderr_prefix = "introspect stderr: ",
     exit_kind = "Table listing",
     on_items = function(items)
-      M.show_float(helpers.build_table_lines(items), "Tables: " .. db_name)
+      ui.show_table_list(items, db_name, M.show_float)
     end,
   })
 end
@@ -197,7 +190,7 @@ function M.show_table_ddl()
       stderr_prefix = "introspect stderr: ",
       exit_kind = "Table listing",
       on_items = function(items)
-        M.show_float(helpers.build_table_lines(items), "Tables: " .. db_name)
+        ui.show_table_list(items, db_name, M.show_float)
       end,
     })
     return
@@ -210,7 +203,7 @@ function M.show_table_ddl()
       vim.notify("Connection '" .. conn_name .. "' not found in connections.toml", vim.log.levels.WARN, { title = const.PLUGIN_TITLE })
       return
     end
-    M.show_float(helpers.build_connection_lines(config), "Connection: " .. conn_name)
+    ui.show_connection(config, conn_name, M.show_float)
     return
   end
 
@@ -386,14 +379,7 @@ function M.show_table_ddl()
     stderr_prefix = "DDL stderr: ",
     exit_kind = "DDL introspection",
     on_items = function(items)
-      local ddl_text = items[1].ddl
-      if not ddl_text or ddl_text == "" then
-        vim.notify("No DDL found for table '" .. cword .. "'", vim.log.levels.WARN, { title = const.PLUGIN_TITLE })
-        return
-      end
-
-      local lines = vim.split(ddl_text, "\n", { plain = true })
-      M.show_float(lines, "DDL: " .. cword, "sql")
+      ui.show_ddl(items, cword, M.show_float)
     end,
   })
 end

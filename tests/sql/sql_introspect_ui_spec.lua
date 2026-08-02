@@ -1,0 +1,67 @@
+local ui = require("poste-sql.introspect_ui")
+
+describe("introspect ui helpers", function()
+  local saved_notify = vim.notify
+
+  after_each(function()
+    vim.notify = saved_notify
+  end)
+
+  it("renders tables and connection info through show_float", function()
+    local seen = {}
+    local function show_float(lines, title, ft)
+      seen[#seen + 1] = { lines = lines, title = title, ft = ft }
+    end
+
+    ui.show_connection({
+      dialect = "postgres",
+      host = "localhost",
+    }, "primary", show_float)
+    ui.show_table_list({ { name = "authors", type = "table" } }, "blog", show_float)
+
+    assert.same({
+      { lines = {
+          "     Dialect  postgres",
+          "        Host  localhost",
+        }, title = "Connection: primary", ft = nil },
+      { lines = { "  authors  (table)" }, title = "Tables: blog", ft = nil },
+    }, seen)
+  end)
+
+  it("renders column info and ddl content", function()
+    local seen = {}
+    local function show_float(lines, title, ft)
+      seen[#seen + 1] = { lines = lines, title = title, ft = ft }
+    end
+
+    local notified = nil
+    vim.notify = function(msg, level, opts)
+      notified = { msg = msg, level = level, opts = opts }
+    end
+
+    assert.is_true(ui.show_column_info({
+      { name = "id", type = "int", nullable = false },
+    }, "authors", "id", show_float))
+    assert.is_false(ui.show_column_info({}, "authors", "missing", show_float))
+    assert.is_true(ui.show_ddl({ { ddl = "CREATE TABLE authors (\n  id int\n);" } }, "authors", show_float))
+
+    assert.same({
+      { lines = {
+          "  Table:    authors",
+          "  Type:     int",
+          "  Nullable: NO",
+          "  Default:  (null)",
+        }, title = "Column: id", ft = "sql" },
+      { lines = {
+          "CREATE TABLE authors (",
+          "  id int",
+          ");",
+        }, title = "DDL: authors", ft = "sql" },
+    }, seen)
+    assert.same({
+      msg = "Column 'missing' not found in table 'authors'",
+      level = vim.log.levels.WARN,
+      opts = { title = "Poste SQL" },
+    }, notified)
+  end)
+end)
