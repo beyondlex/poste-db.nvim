@@ -1,6 +1,7 @@
 local cli = require("poste.cli")
 local util = require("poste.util")
 local job = require("poste-sql.introspect_job")
+local const = require("poste-sql.constants")
 
 local M = {}
 
@@ -20,7 +21,7 @@ function M.run_json_items_job(args, opts)
         local items = parsed.items
         if not items or #items == 0 then
           if opts.empty_message then
-            vim.notify(opts.empty_message, vim.log.levels.WARN, { title = opts.title or "Poste SQL" })
+            vim.notify(opts.empty_message, vim.log.levels.WARN, { title = opts.title or const.PLUGIN_TITLE })
           end
           return
         end
@@ -36,7 +37,7 @@ function M.run_json_items_job(args, opts)
     on_exit = function(code)
       if code ~= 0 then
         vim.schedule(function()
-          job.notify_exit_error(opts.exit_kind or "Introspection", code, stderr_lines, opts.title or "Poste SQL")
+          job.notify_exit_error(opts.exit_kind or "Introspection", code, stderr_lines, opts.title or const.PLUGIN_TITLE)
         end)
       end
     end,

@@ -1,9 +1,11 @@
+local const = require("poste-sql.constants")
+
 local M = {}
 
 function M.decode_json_table(output, failure_message)
   local ok, parsed = pcall(vim.json.decode, output)
   if not ok or type(parsed) ~= "table" then
-    vim.notify(failure_message, vim.log.levels.ERROR, { title = "Poste SQL" })
+    vim.notify(failure_message, vim.log.levels.ERROR, { title = const.PLUGIN_TITLE })
     return nil
   end
   return parsed
@@ -27,7 +29,7 @@ function M.notify_exit_error(kind, code, stderr_lines, title)
   if stderr_lines and #stderr_lines > 0 then
     msg = msg .. "\n" .. table.concat(stderr_lines, "\n")
   end
-  vim.notify(msg, vim.log.levels.ERROR, { title = title or "Poste SQL" })
+  vim.notify(msg, vim.log.levels.ERROR, { title = title or const.PLUGIN_TITLE })
 end
 
 return M

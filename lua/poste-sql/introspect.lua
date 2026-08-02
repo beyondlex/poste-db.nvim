@@ -25,7 +25,7 @@ local M = {}
 --- @param ft string|nil  filetype (default "sql")
 function M.show_float(lines, title, ft)
   if not lines or #lines == 0 then
-    vim.notify("No content to display", vim.log.levels.WARN, { title = "Poste SQL" })
+    vim.notify("No content to display", vim.log.levels.WARN, { title = const.PLUGIN_TITLE })
     return
   end
   local float_buf, win = float_window.open_centered(lines, {
@@ -77,7 +77,7 @@ local function show_column_info(conn, db, table_name, col_name, schema)
   col_name = col_name:gsub("^`", ""):gsub("`$", ""):gsub('^"', ''):gsub('"$', '')
   if not table_name or table_name == "" then
     vim.schedule(function()
-      vim.notify("Cannot introspect column: empty table name", vim.log.levels.ERROR, { title = "Poste SQL" })
+      vim.notify("Cannot introspect column: empty table name", vim.log.levels.ERROR, { title = const.PLUGIN_TITLE })
     end)
     return
   end
@@ -86,7 +86,7 @@ local function show_column_info(conn, db, table_name, col_name, schema)
   local url, url_err = connections.resolve_connection_url(conn)
   if not url then
     vim.schedule(function()
-      vim.notify("Column info: " .. (url_err or "unknown error"), vim.log.levels.ERROR, { title = "Poste SQL" })
+      vim.notify("Column info: " .. (url_err or "unknown error"), vim.log.levels.ERROR, { title = const.PLUGIN_TITLE })
     end)
     return
   end
@@ -115,7 +115,7 @@ local function show_column_info(conn, db, table_name, col_name, schema)
   state.log("INFO", "Column info args: " .. vim.inspect(args))
 
   exec.run_json_items_job(args, {
-    title = "Poste SQL",
+    title = const.PLUGIN_TITLE,
     failure_message = "Failed to parse introspection response",
     empty_message = "No columns found for table '" .. table_name .. "'",
     stderr_prefix = "Column info stderr: ",
@@ -126,7 +126,7 @@ local function show_column_info(conn, db, table_name, col_name, schema)
         if c.name == col_name then col = c; break end
       end
       if not col then
-        vim.notify("Column '" .. col_name .. "' not found in table '" .. table_name .. "'", vim.log.levels.WARN, { title = "Poste SQL" })
+        vim.notify("Column '" .. col_name .. "' not found in table '" .. table_name .. "'", vim.log.levels.WARN, { title = const.PLUGIN_TITLE })
         return
       end
       M.show_float(helpers.build_column_info_lines(table_name, col), "Column: " .. col_name, "sql")
@@ -145,12 +145,12 @@ local function list_tables_in_db(conn, db_name)
   local connections = require("poste-sql.connections")
   local url, url_err = connections.resolve_connection_url(conn)
   if not url then
-    vim.notify("Table listing: " .. (url_err or "unknown error"), vim.log.levels.ERROR, { title = "Poste SQL" })
+    vim.notify("Table listing: " .. (url_err or "unknown error"), vim.log.levels.ERROR, { title = const.PLUGIN_TITLE })
     return
   end
   local args = { "introspect", "--connection-url", url, "--type", "tables", "--database", db_name }
   exec.run_json_items_job(args, {
-    title = "Poste SQL",
+    title = const.PLUGIN_TITLE,
     failure_message = "Failed to list tables",
     empty_message = "No tables found in database '" .. db_name .. "'",
     stderr_prefix = "introspect stderr: ",
@@ -165,7 +165,7 @@ end
 function M.show_table_ddl()
   local binary = state.find_poste_binary()
   if not binary then
-    vim.notify("Poste binary not found.", vim.log.levels.ERROR, { title = "Poste SQL" })
+    vim.notify("Poste binary not found.", vim.log.levels.ERROR, { title = const.PLUGIN_TITLE })
     return
   end
 
@@ -180,18 +180,18 @@ function M.show_table_ddl()
     local ctx = require("poste-sql.context").resolve_full_context(buf, line_num)
     local conn = ctx.connection
     if not conn then
-      vim.notify("No connection context for database '" .. db_name .. "'", vim.log.levels.WARN, { title = "Poste SQL" })
+      vim.notify("No connection context for database '" .. db_name .. "'", vim.log.levels.WARN, { title = const.PLUGIN_TITLE })
       return
     end
     local connections = require("poste-sql.connections")
     local url, url_err = connections.resolve_connection_url(conn)
     if not url then
-      vim.notify("Table listing: " .. (url_err or "unknown error"), vim.log.levels.ERROR, { title = "Poste SQL" })
+      vim.notify("Table listing: " .. (url_err or "unknown error"), vim.log.levels.ERROR, { title = const.PLUGIN_TITLE })
       return
     end
     local cmd = { "introspect", "--connection-url", url, "--type", "tables", "--database", db_name }
     exec.run_json_items_job(cmd, {
-      title = "Poste SQL",
+      title = const.PLUGIN_TITLE,
       failure_message = "Failed to list tables",
       empty_message = "No tables found in database '" .. db_name .. "'",
       stderr_prefix = "introspect stderr: ",
@@ -207,7 +207,7 @@ function M.show_table_ddl()
     local conn_name = entry.conn_name
     local config = require("poste-sql.connections").get_connection_config(conn_name)
     if not config then
-      vim.notify("Connection '" .. conn_name .. "' not found in connections.toml", vim.log.levels.WARN, { title = "Poste SQL" })
+      vim.notify("Connection '" .. conn_name .. "' not found in connections.toml", vim.log.levels.WARN, { title = const.PLUGIN_TITLE })
       return
     end
     M.show_float(helpers.build_connection_lines(config), "Connection: " .. conn_name)
@@ -216,11 +216,11 @@ function M.show_table_ddl()
 
   local cword = vim.fn.expand("<cword>")
   if not cword or cword == "" then
-    vim.notify("No word under cursor", vim.log.levels.WARN, { title = "Poste SQL" })
+    vim.notify("No word under cursor", vim.log.levels.WARN, { title = const.PLUGIN_TITLE })
     return
   end
   if route.is_sql_keyword(cword) then
-    vim.notify("'" .. cword .. "' is a SQL keyword", vim.log.levels.INFO, { title = "Poste SQL" })
+    vim.notify("'" .. cword .. "' is a SQL keyword", vim.log.levels.INFO, { title = const.PLUGIN_TITLE })
     return
   end
 
@@ -229,7 +229,7 @@ function M.show_table_ddl()
   local ctx = sql_context.resolve_full_context(buf)
   local conn = ctx.connection
   if not conn or conn == "" then
-    vim.notify("No SQL connection context. Add -- @connection <name> to the file header.", vim.log.levels.ERROR, { title = "Poste SQL" })
+    vim.notify("No SQL connection context. Add -- @connection <name> to the file header.", vim.log.levels.ERROR, { title = const.PLUGIN_TITLE })
     return
   end
 
@@ -368,7 +368,7 @@ function M.show_table_ddl()
   local connections = require("poste-sql.connections")
   local url, url_err = connections.resolve_connection_url(conn)
   if not url then
-    vim.notify("DDL: " .. (url_err or "unknown error"), vim.log.levels.ERROR, { title = "Poste SQL" })
+    vim.notify("DDL: " .. (url_err or "unknown error"), vim.log.levels.ERROR, { title = const.PLUGIN_TITLE })
     return
   end
 
@@ -380,7 +380,7 @@ function M.show_table_ddl()
   state.log("INFO", "DDL args: " .. vim.inspect(args))
 
   exec.run_json_items_job(args, {
-    title = "Poste SQL",
+    title = const.PLUGIN_TITLE,
     failure_message = "Failed to parse DDL response",
     empty_message = "No DDL found for table '" .. cword .. "'",
     stderr_prefix = "DDL stderr: ",
@@ -388,7 +388,7 @@ function M.show_table_ddl()
     on_items = function(items)
       local ddl_text = items[1].ddl
       if not ddl_text or ddl_text == "" then
-        vim.notify("No DDL found for table '" .. cword .. "'", vim.log.levels.WARN, { title = "Poste SQL" })
+        vim.notify("No DDL found for table '" .. cword .. "'", vim.log.levels.WARN, { title = const.PLUGIN_TITLE })
         return
       end
 
