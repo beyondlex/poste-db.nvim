@@ -11,6 +11,7 @@ local dialog = require("poste.dialog")
 local float_window = require("poste-sql.float_window")
 local helpers = require("poste-sql.introspect_helpers")
 local job = require("poste-sql.introspect_job")
+local route = require("poste-sql.introspect_route")
 local const = require("poste-sql.constants")
 
 local M = {}
@@ -218,9 +219,9 @@ function M.show_table_ddl()
   local cursor = vim.api.nvim_win_get_cursor(0)
   local line_num = cursor[1]
   local line_text = vim.api.nvim_buf_get_lines(buf, line_num - 1, line_num, false)[1] or ""
-  local db_match = line_text:match("^%s*--%s*@database%s+(.+)")
-  if db_match then
-    local db_name = vim.trim(db_match)
+  local entry = route.resolve_table_ddl_entry(line_text)
+  if entry and entry.kind == "database" then
+    local db_name = entry.db_name
     local ctx = require("poste-sql.context").resolve_full_context(buf, line_num)
     local conn = ctx.connection
     if not conn then
@@ -240,8 +241,8 @@ function M.show_table_ddl()
       on_stdout = function(data)
         data = util.ensure_job_data(data)
         if #data == 0 then return end
-      local output = table.concat(data, "\n")
-      vim.schedule(function()
+        local output = table.concat(data, "\n")
+        vim.schedule(function()
           local parsed = job.decode_json_table(output, "Failed to list tables")
           if not parsed then return end
           local items = parsed.items
@@ -266,10 +267,8 @@ function M.show_table_ddl()
     return
   end
 
-  -- Check if cursor is on a -- @connection <name> line → show config
-  local conn_match = line_text:match("^%s*--%s*@connection%s+(.+)")
-  if conn_match then
-    local conn_name = vim.trim(conn_match)
+  if entry and entry.kind == "connection" then
+    local conn_name = entry.conn_name
     local config = require("poste-sql.connections").get_connection_config(conn_name)
     if not config then
       vim.notify("Connection '" .. conn_name .. "' not found in connections.toml", vim.log.levels.WARN, { title = "Poste SQL" })
@@ -284,22 +283,7 @@ function M.show_table_ddl()
     vim.notify("No word under cursor", vim.log.levels.WARN, { title = "Poste SQL" })
     return
   end
-  local keywords = {}
-  local kw_list = { "select","from","where","join","on",
-                     "and","or","set","insert","into",
-                     "values","update","delete","create","modify",
-                     "table","index","drop","alter","add",
-                     "column","primary","key","foreign",
-                     "references","not","null","default",
-                     "unique","check","constraint","as",
-                     "left","right","inner","outer","cross",
-                     "full","order","by","group","having",
-                     "limit","offset","union","all","distinct",
-                     "exists","in","like","between","case",
-                     "when","then","else","end","count",
-                     "sum","avg","min","max","true","false" }
-  for _, kw in ipairs(kw_list) do keywords[kw] = true end
-  if keywords[cword:lower()] then
+  if route.is_sql_keyword(cword) then
     vim.notify("'" .. cword .. "' is a SQL keyword", vim.log.levels.INFO, { title = "Poste SQL" })
     return
   end
