@@ -473,9 +473,8 @@ end
 
 function M.toggle_cell_highlight()
   local tab = D.T()
-  state.sql.highlight_cell = not state.sql.highlight_cell
-  cell.apply_cell_highlight(state.sql.highlight_cell, D.dataset_buffer, state.sql.cell.row, state.sql.cell.col, tab and tab.meta, get_col_starts(tab, state.sql.cell.row))
-  vim.notify(string.format("Cell highlight: %s", state.sql.highlight_cell and "ON" or "OFF"),
+  local enabled = cell.toggle_cell_highlight(D.dataset_buffer, state.sql.cell.row, state.sql.cell.col, tab and tab.meta, get_col_starts(tab, state.sql.cell.row))
+  vim.notify(string.format("Cell highlight: %s", enabled and "ON" or "OFF"),
     vim.log.levels.INFO, { title = C.TITLE })
 end
 

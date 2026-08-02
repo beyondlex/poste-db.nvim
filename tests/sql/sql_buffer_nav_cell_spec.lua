@@ -1,6 +1,17 @@
 local cell = require("poste-sql.buffer_nav_cell")
+local state = require("poste.state")
 
 describe("buffer_nav_cell", function()
+  local saved_highlight_cell = state.sql.highlight_cell
+
+  before_each(function()
+    state.sql.highlight_cell = false
+  end)
+
+  after_each(function()
+    state.sql.highlight_cell = saved_highlight_cell
+  end)
+
   it("extracts the first resultset cell", function()
     local res, value = cell.get_resultset_cell({
       data = {
@@ -117,5 +128,33 @@ describe("buffer_nav_cell", function()
       { fn = "highlight", args = { "buf", 3, 4, { kind = "meta" }, nil, { 1, 2 } } },
       { fn = "clear", args = { "buf" } },
     }, calls)
+  end)
+
+  it("toggles cell highlight state and applies it", function()
+    local highlights = package.loaded["poste-sql.highlights"]
+    local saved_highlight = highlights.highlight_cell
+    local saved_clear = highlights.clear_cell_highlight
+    local calls = {}
+
+    highlights.highlight_cell = function(...)
+      calls[#calls + 1] = { fn = "highlight", args = { ... } }
+    end
+    highlights.clear_cell_highlight = function(...)
+      calls[#calls + 1] = { fn = "clear", args = { ... } }
+    end
+
+    local enabled = cell.toggle_cell_highlight("buf", 3, 4, { kind = "meta" }, { 1, 2 })
+    local disabled = cell.toggle_cell_highlight("buf", 3, 4, { kind = "meta" }, { 1, 2 })
+
+    highlights.highlight_cell = saved_highlight
+    highlights.clear_cell_highlight = saved_clear
+
+    assert.is_true(enabled)
+    assert.is_false(disabled)
+    assert.same({
+      { fn = "highlight", args = { "buf", 3, 4, { kind = "meta" }, nil, { 1, 2 } } },
+      { fn = "clear", args = { "buf" } },
+    }, calls)
+    assert.is_false(state.sql.highlight_cell)
   end)
 end)

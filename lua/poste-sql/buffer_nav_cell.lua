@@ -1,4 +1,5 @@
 local C = require("poste-sql.constants")
+local state = require("poste.state")
 local sql_highlights = require("poste-sql.highlights")
 
 local M = {}
@@ -137,6 +138,12 @@ function M.apply_cell_highlight(enabled, dataset_buffer, row, col, meta, col_sta
   else
     sql_highlights.clear_cell_highlight(dataset_buffer)
   end
+end
+
+function M.toggle_cell_highlight(dataset_buffer, row, col, meta, col_starts)
+  state.sql.highlight_cell = not state.sql.highlight_cell
+  M.apply_cell_highlight(state.sql.highlight_cell, dataset_buffer, row, col, meta, col_starts)
+  return state.sql.highlight_cell
 end
 
 return M
