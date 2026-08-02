@@ -19,19 +19,6 @@ local function get_col_starts(tab, row)
   return tab.buffer_col_starts[line_idx]
 end
 
-local function focus_cell(tab, row, col, update_header)
-  T_mark("position_cursor")
-  state.sql.cell.row = row
-  state.sql.cell.col = col
-  local line = M.position_cursor(row, col)
-  T_mark("highlight_cell")
-  sql_highlights.highlight_cell(D.dataset_buffer, row, col, tab.meta, line, get_col_starts(tab, row))
-  if update_header then
-    T_mark("update_header_float")
-    M.update_header_float()
-  end
-end
-
 ------------------------------------------------------------------------------
 -- Trace helpers (opt-in via state.sql._trace)
 ------------------------------------------------------------------------------
@@ -55,6 +42,19 @@ local function T_report()
   local msg = table.concat(lines, "\n")
   T_clear()
   state.log("TRACE", "move_cell trace:\n" .. msg)
+end
+
+local function focus_cell(tab, row, col, update_header)
+  T_mark("position_cursor")
+  state.sql.cell.row = row
+  state.sql.cell.col = col
+  local line = M.position_cursor(row, col)
+  T_mark("highlight_cell")
+  sql_highlights.highlight_cell(D.dataset_buffer, row, col, tab.meta, line, get_col_starts(tab, row))
+  if update_header then
+    T_mark("update_header_float")
+    M.update_header_float()
+  end
 end
 
 --- Truncate a string to fit within a given display width, preserving UTF-8 validity.
@@ -498,6 +498,11 @@ end
 
 function M.restore_from_raw_mode()
   raw_mode.exit()
+end
+
+--- Delegates to buffer_nav_ui.build_status_winbar with current dataset context.
+function M.build_status_winbar(meta)
+  return require("poste-sql.buffer_nav_ui").build_status_winbar(meta, D.T(), #D.tabs, D.active_tab_idx)
 end
 
 M.toggle_raw_mode = raw_mode.toggle

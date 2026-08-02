@@ -63,12 +63,12 @@ local DEFAULT_SNIPPETS = {
   cola = {
     trigger = "cola",
     label = "alter table add column",
-    snippet = "ALTER TABLE ${1:table_name} ADD COLUMN ${2:column_name} ${3:INTEGER} ${4:NOT NULL} DEFAULT ${5:0} COMMENT '${5}';",
+    snippet = "ALTER TABLE ${1:table_name} ADD COLUMN ${2:column_name} ${3:INTEGER} ${4:NOT NULL} DEFAULT ${5:0} COMMENT '${6}';",
   },
   colu = {
     trigger = "colu",
     label = "alter table modify column",
-    snippet = "ALTER TABLE ${1:table_name} MODIFY COLUMN ${2:column_name} ${3:INTEGER} ${4:NOT NULL} DEFAULT ${5:0} COMMENT '${5}';",
+    snippet = "ALTER TABLE ${1:table_name} MODIFY COLUMN ${2:column_name} ${3:INTEGER} ${4:NOT NULL} DEFAULT ${5:0} COMMENT '${6}';",
   },
   uni = {
     trigger = "uni",

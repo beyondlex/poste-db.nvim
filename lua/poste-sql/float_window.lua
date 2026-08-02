@@ -5,6 +5,7 @@ function M.centered_dimensions(lines, opts)
   opts = opts or {}
   local width_ratio = opts.width_ratio or const.FLOAT_WIDTH_RATIO
   local max_width = opts.max_width or const.FLOAT_MAX_WIDTH
+  local min_width = opts.min_width or 10
   local width_padding = opts.width_padding or 2
   local height_ratio = opts.height_ratio or const.FLOAT_HEIGHT_RATIO
   local min_height = opts.min_height or 3
@@ -14,7 +15,7 @@ function M.centered_dimensions(lines, opts)
   for _, line in ipairs(lines or {}) do
     width = math.max(width, vim.fn.strdisplaywidth(line))
   end
-  width = math.min(width + width_padding, math.min(math.floor(vim.o.columns * width_ratio), max_width))
+  width = math.max(min_width, math.min(width + width_padding, math.min(math.floor(vim.o.columns * width_ratio), max_width)))
 
   local height = math.floor(vim.o.lines * height_ratio)
   height = math.max(min_height, math.min((lines and #lines or 0) + extra_height, height))

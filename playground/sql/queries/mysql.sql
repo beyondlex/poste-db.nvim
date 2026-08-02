@@ -1,6 +1,7 @@
 -- @connection my-blog
 -- @database inventory
 
+ALTER TABLE table_name ADD COLUMN column_name INTEGER NOT NULL DEFAULT 0 COMMENT '';
 
 select * from poste_test_metrics ;
 select * from poste_test_events;
@@ -25,6 +26,8 @@ select id, slug FROM blog.posts ;
 -- @database blog
 select * from poste_test_metrics; 
 select * from poste_test_events;;
+
+select id, slug FROM blog.posts ;
 
 drop table poste_test_events;
 drop table poste_test_metrics;
