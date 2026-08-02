@@ -16,7 +16,7 @@ describe("buffer_nav_ui", function()
   end)
 
   it("builds the status winbar text", function()
-    local text = ui.build_status_winbar({
+    local text = ui.build_status_winbar_text({
       type = "resultset",
       total_rows = 12,
       total_execution_time_ms = 7,
@@ -44,6 +44,21 @@ describe("buffer_nav_ui", function()
     assert.truthy(text:find("filter: status=open", 1, true))
     assert.truthy(text:find("search: needle (2/2)", 1, true))
     assert.truthy(text:find("localhost:5432/blog", 1, true))
+  end)
+
+  it("builds pending changes text only when dirty", function()
+    local dirty = ui.build_pending_changes_text({
+      edit_state = {
+        dirty = true,
+        modified_cells = { ["1:2"] = true },
+        deleted_rows = { [3] = true },
+        added_rows = { { row_idx = 4 } },
+      },
+    })
+    local clean = ui.build_pending_changes_text({ edit_state = { dirty = false } })
+
+    assert.truthy(dirty)
+    assert.is_nil(clean)
   end)
 
   it("builds status winbar halves", function()

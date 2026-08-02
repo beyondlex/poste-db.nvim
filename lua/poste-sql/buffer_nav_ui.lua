@@ -85,17 +85,28 @@ function M.build_status_right(meta, total_tabs, active_idx, pending)
   return right
 end
 
-function M.build_status_winbar(meta, tab, total_tabs, active_idx)
+function M.build_pending_changes_text(tab)
+  if not tab or not tab.edit_state or not tab.edit_state.dirty then
+    return nil
+  end
+  return require("poste-sql.editor").pending_changes_text(tab.edit_state)
+end
+
+function M.build_status_winbar_text(meta, tab, total_tabs, active_idx, pending)
   if not meta or meta.type ~= "resultset" then return nil end
 
   local left = M.build_status_left(meta, tab)
-  local current_tab = D.T()
-  local pending = current_tab and current_tab.edit_state and current_tab.edit_state.dirty
-    and require("poste-sql.editor").pending_changes_text(current_tab.edit_state)
   local right = M.build_status_right(meta, total_tabs, active_idx, pending)
+  if not left or not right then return nil end
 
   local text = left .. "%=" .. right
   return "%#PosteSqlMeta#" .. text
+end
+
+function M.build_status_winbar(meta, tab, total_tabs, active_idx)
+  local current_tab = D.T()
+  local pending = M.build_pending_changes_text(current_tab)
+  return M.build_status_winbar_text(meta, tab, total_tabs, active_idx, pending)
 end
 
 return M
