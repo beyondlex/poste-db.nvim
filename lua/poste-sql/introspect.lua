@@ -12,6 +12,7 @@ local route = require("poste-sql.introspect_route")
 local exec = require("poste-sql.introspect_exec")
 local context_resolver = require("poste-sql.introspect_context")
 local ui = require("poste-sql.introspect_ui")
+local column = require("poste-sql.introspect_column")
 local const = require("poste-sql.constants")
 
 local M = {}
@@ -62,72 +63,6 @@ function M.show_float(lines, title, ft)
   if ck then vim.keymap.set("n", ck, close_fn, sopts) end
 end
 
----------------------------------------------------------------------------
--- Column info
----------------------------------------------------------------------------
-
---- Show column info in a float window.
---- @param conn string
---- @param db string|nil
---- @param table_name string Parent table
---- @param col_name string Column name under cursor
---- @param schema string|nil Schema name (for PG)
-local function show_column_info(conn, db, table_name, col_name, schema)
-  -- Strip backtick/quote quoting from names (from RENAME/CHANGE COLUMN SQL)
-  table_name = table_name:gsub("^`", ""):gsub("`$", ""):gsub('^"', ''):gsub('"$', '')
-  col_name = col_name:gsub("^`", ""):gsub("`$", ""):gsub('^"', ''):gsub('"$', '')
-  if not table_name or table_name == "" then
-    vim.schedule(function()
-      vim.notify("Cannot introspect column: empty table name", vim.log.levels.ERROR, { title = const.PLUGIN_TITLE })
-    end)
-    return
-  end
-
-  local connections = require("poste-sql.connections")
-  local url, url_err = connections.resolve_connection_url(conn)
-  if not url then
-    vim.schedule(function()
-      vim.notify("Column info: " .. (url_err or "unknown error"), vim.log.levels.ERROR, { title = const.PLUGIN_TITLE })
-    end)
-    return
-  end
-
-  local args = { "introspect", "--connection-url", url,
-    "--type", "columns", "--table", table_name }
-
-  -- For MySQL, schema = database, so use schema as the database override
-  -- For PG, keep db as the database and pass schema as --schema
-  local cc = require("poste-sql.connections").get_connection_config(conn)
-  local dialect = cc and cc.dialect or ""
-  if dialect == "mysql" and schema and schema ~= "" then
-    db = schema
-    schema = nil
-  end
-
-  if schema and schema ~= "" then
-    table.insert(args, "--schema")
-    table.insert(args, schema)
-  end
-  if db and db ~= vim.NIL and db ~= "" then
-    table.insert(args, "--database")
-    table.insert(args, db)
-  end
-
-  state.log("INFO", "Column info args: " .. vim.inspect(args))
-
-  exec.run_json_items_job(args, {
-    title = const.PLUGIN_TITLE,
-    failure_message = "Failed to parse introspection response",
-    empty_message = "No columns found for table '" .. table_name .. "'",
-    stderr_prefix = "Column info stderr: ",
-    exit_kind = "Column introspection",
-    on_items = function(items)
-      ui.show_column_info(items, table_name, col_name, M.show_float)
-    end,
-  })
-end
-
----------------------------------------------------------------------------
 -- Table DDL
 ---------------------------------------------------------------------------
 
@@ -288,7 +223,7 @@ function M.show_table_ddl()
           util.clean_nil(parsed)
           local target = context_resolver.resolve_detected_target(parsed, cword, db, after_dot_col)
           if target and target.kind == "column" and target.parent_table then
-            show_column_info(conn, target.db or db, target.parent_table, target.column_name, target.parent_schema)
+            column.show_column_info(conn, target.db or db, target.parent_table, target.column_name, target.parent_schema, M.show_float)
             return
           end
         end
@@ -345,7 +280,7 @@ function M.show_table_ddl()
             return
           end
           if target.kind == "column" and target.parent_table and target.parent_table:lower() ~= target.column_name:lower() then
-            show_column_info(conn, target.db or db, target.parent_table, target.column_name, target.parent_schema)
+            column.show_column_info(conn, target.db or db, target.parent_table, target.column_name, target.parent_schema, M.show_float)
             return
           end
           if target.kind == "ddl" and target.table_name then
