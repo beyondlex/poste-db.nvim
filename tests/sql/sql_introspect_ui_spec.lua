@@ -1,4 +1,4 @@
-local ui = require("poste-sql.introspect_ui")
+local ui = require("poste-sql.introspect.ui")
 
 describe("introspect ui helpers", function()
   local saved_notify = vim.notify

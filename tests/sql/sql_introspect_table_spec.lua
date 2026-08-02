@@ -1,31 +1,31 @@
 local saved_connections = package.loaded["poste-sql.connections"]
-local saved_exec = package.loaded["poste-sql.introspect_exec"]
-local saved_ui = package.loaded["poste-sql.introspect_ui"]
+local saved_exec = package.loaded["poste-sql.introspect.exec"]
+local saved_ui = package.loaded["poste-sql.introspect.ui"]
 
 local connections_stub = {}
 local exec_stub = {}
 local ui_stub = {}
 
 package.loaded["poste-sql.connections"] = connections_stub
-package.loaded["poste-sql.introspect_exec"] = exec_stub
-package.loaded["poste-sql.introspect_ui"] = ui_stub
+package.loaded["poste-sql.introspect.exec"] = exec_stub
+package.loaded["poste-sql.introspect.ui"] = ui_stub
 
-local helper = require("poste-sql.introspect_table")
+local helper = require("poste-sql.introspect.table")
 
 describe("introspect table helper", function()
   local saved_notify = vim.notify
 
   before_each(function()
     package.loaded["poste-sql.connections"] = connections_stub
-    package.loaded["poste-sql.introspect_exec"] = exec_stub
-    package.loaded["poste-sql.introspect_ui"] = ui_stub
+    package.loaded["poste-sql.introspect.exec"] = exec_stub
+    package.loaded["poste-sql.introspect.ui"] = ui_stub
   end)
 
   after_each(function()
     vim.notify = saved_notify
     package.loaded["poste-sql.connections"] = saved_connections
-    package.loaded["poste-sql.introspect_exec"] = saved_exec
-    package.loaded["poste-sql.introspect_ui"] = saved_ui
+    package.loaded["poste-sql.introspect.exec"] = saved_exec
+    package.loaded["poste-sql.introspect.ui"] = saved_ui
   end)
 
   it("lists tables for a database", function()

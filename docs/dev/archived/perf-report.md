@@ -8,7 +8,7 @@ Evidence level: code-path review only. No runtime profile was collected in this 
 
 ### P0: `WinScrolled` autocmds accumulate on every render
 
-Location: `lua/poste/sql/buffer.lua:317`, `lua/poste/sql/buffer.lua:327`
+Location: `lua/poste/sql/buffer/init.lua:317`, `lua/poste/sql/buffer/init.lua:327`
 
 `render_dataset()` deletes `D.resize_autocmd_id` before creating a new `WinResized` autocmd, but it does not delete the previous `D.scroll_autocmd_id` before creating a new `WinScrolled` autocmd. Re-running queries or re-rendering tabs can accumulate multiple scroll callbacks for the same dataset buffer. Every scroll then calls `buffer_nav.update_header_float()` multiple times.
 
@@ -20,7 +20,7 @@ Recommendation: in `render_dataset()`, mirror the resize cleanup for `D.scroll_a
 
 ### P0: initial render still formats and stores the full dataset before pagination
 
-Location: `lua/poste/sql/format.lua:331`, `lua/poste/sql/format.lua:336`, `lua/poste/sql/format.lua:371`, `lua/poste/sql/buffer.lua:249`, `lua/poste/sql/buffer.lua:252`
+Location: `lua/poste/sql/format.lua:331`, `lua/poste/sql/format.lua:336`, `lua/poste/sql/format.lua:371`, `lua/poste/sql/buffer/init.lua:249`, `lua/poste/sql/buffer/init.lua:252`
 
 `format_resultset()` calculates widths, numeric-column flags, and rendered lines across all rows before `render_dataset()` slices the visible page. For a 100K-row result, pagination reduces only the final buffer write, not the expensive format phase or full `padded_full` storage.
 
@@ -32,7 +32,7 @@ Recommendation: split formatting into reusable phases: column metadata/width pla
 
 ### P1: header float rebuild is too expensive for horizontal movement and scroll
 
-Location: `lua/poste/sql/buffer_nav.lua:68`, `lua/poste/sql/buffer_nav.lua:84`, `lua/poste/sql/dataset.lua:49`, `lua/poste/sql/buffer.lua:327`
+Location: `lua/poste/sql/buffer/nav.lua:68`, `lua/poste/sql/buffer/nav.lua:84`, `lua/poste/sql/dataset.lua:49`, `lua/poste/sql/buffer/init.lua:327`
 
 `update_header_float()` closes the current header float, creates a new buffer, writes one line, and opens a new window every time it runs. `close_header_float()` also scans every tabpage window looking for relative windows anchored to the dataset window. Horizontal movement calls this directly, and `WinScrolled` calls it during scroll.
 
@@ -44,7 +44,7 @@ Recommendation: reuse `D.float_buf` and `D.float_win` when valid. Only recreate 
 
 ### P1: search highlight replay scans all matches on every page/search jump
 
-Location: `lua/poste/sql/buffer_search.lua:10`, `lua/poste/sql/buffer_search.lua:21`, `lua/poste/sql/buffer_search.lua:62`, `lua/poste/sql/buffer_search.lua:73`
+Location: `lua/poste/sql/buffer/search.lua:10`, `lua/poste/sql/buffer/search.lua:21`, `lua/poste/sql/buffer/search.lua:62`, `lua/poste/sql/buffer/search.lua:73`
 
 `apply_search_highlights()` clears the search namespace and iterates over every match, even when pagination means only one page can be visible. With a common search term in a large table, `n`/`N`, page refresh, and tab switch pay O(total_matches) just to rediscover visible matches.
 
@@ -56,7 +56,7 @@ Recommendation: store `tab.search_matches_by_page[page]` or store start/end offs
 
 ### P1: sort and filter duplicate large datasets and reformat all rows
 
-Location: `lua/poste/sql/buffer_nav.lua:438`, `lua/poste/sql/buffer_nav.lua:446`, `lua/poste/sql/buffer_nav.lua:463`, `lua/poste/sql/buffer_search.lua:179`, `lua/poste/sql/buffer_search.lua:184`, `lua/poste/sql/buffer_search.lua:193`, `lua/poste/sql/buffer_search.lua:207`
+Location: `lua/poste/sql/buffer/nav.lua:438`, `lua/poste/sql/buffer/nav.lua:446`, `lua/poste/sql/buffer/nav.lua:463`, `lua/poste/sql/buffer/search.lua:179`, `lua/poste/sql/buffer/search.lua:184`, `lua/poste/sql/buffer/search.lua:193`, `lua/poste/sql/buffer/search.lua:207`
 
 Sorting mutates `res.rows`, then deep-copies the full dataset before formatting. Filtering deep-copies the original data, builds filtered rows, and formats the full filtered result. Clearing a filter deep-copies and formats the full original data again.
 
@@ -68,7 +68,7 @@ Recommendation: separate immutable source rows from view rows. Store row index l
 
 ### P2: cell navigation repeats line parsing and display-width work
 
-Location: `lua/poste/sql/buffer_nav.lua:168`, `lua/poste/sql/buffer_nav.lua:169`, `lua/poste/sql/buffer_nav.lua:171`, `lua/poste/sql/buffer_nav.lua:186`, `lua/poste/sql/highlights.lua:317`
+Location: `lua/poste/sql/buffer/nav.lua:168`, `lua/poste/sql/buffer/nav.lua:169`, `lua/poste/sql/buffer/nav.lua:171`, `lua/poste/sql/buffer/nav.lua:186`, `lua/poste/sql/highlights/init.lua:317`
 
 `position_cursor()` reads the row line, finds the target cell range, computes display width up to the target, then finds the last-column range and computes display width again. `highlight_cell()` can reuse the passed line, so the extra buffer read is already avoided for movement calls, but the current row is still parsed multiple times.
 
@@ -80,7 +80,7 @@ Recommendation: cache separator positions by rendered line or by `{ tab, page, r
 
 ### P2: dataset highlights are page-bounded only while pagination stays enabled
 
-Location: `lua/poste/sql/buffer.lua:252`, `lua/poste/sql/buffer.lua:281`, `lua/poste/sql/buffer_page.lua:45`, `lua/poste/sql/buffer_page.lua:59`, `lua/poste/sql/highlights.lua:185`, `lua/poste/sql/highlights.lua:197`
+Location: `lua/poste/sql/buffer/init.lua:252`, `lua/poste/sql/buffer/init.lua:281`, `lua/poste/sql/buffer/page.lua:45`, `lua/poste/sql/buffer/page.lua:59`, `lua/poste/sql/highlights/init.lua:185`, `lua/poste/sql/highlights/init.lua:197`
 
 `apply_dataset_highlights()` scans `lines` and data rows passed to it. During normal paginated render, it receives the sliced page, so it is not scanning all 100K rows. When pagination is disabled, or when `tab.padded = tab.padded_full`, it scans every displayed row.
 
@@ -116,7 +116,7 @@ Recommendation: benchmark stable user actions first, and collect function-level 
 
 1. `find_cell_range()` cache reasoning is partly wrong.
 
-`perf-plan.md` says `nvim_buf_get_lines()` returns a newly allocated string and therefore `==` cache comparison fails. In Lua, string equality is by content. The code comment in `highlights.lua:265` explicitly relies on this. The remaining issue is not that the cache cannot hit; it is that only one line is cached, and navigation still asks for target and last-column ranges separately.
+`perf-plan.md` says `nvim_buf_get_lines()` returns a newly allocated string and therefore `==` cache comparison fails. In Lua, string equality is by content. The code comment in `highlights/init.lua:265` explicitly relies on this. The remaining issue is not that the cache cannot hit; it is that only one line is cached, and navigation still asks for target and last-column ranges separately.
 
 2. Page-level formatting may change visible layout.
 

@@ -1,4 +1,4 @@
-local ctx = require("poste-sql.introspect_context")
+local ctx = require("poste-sql.introspect.context")
 
 describe("introspect context", function()
   it("resolves dot_column targets as columns", function()

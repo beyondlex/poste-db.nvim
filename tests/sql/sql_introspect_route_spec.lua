@@ -1,4 +1,4 @@
-local route = require("poste-sql.introspect_route")
+local route = require("poste-sql.introspect.route")
 
 describe("introspect route", function()
   it("recognizes table ddl directives", function()

@@ -50,7 +50,7 @@
 | D2 | `in_string`/`in_comment` 歧义 | 保持现状 / 选项 2 / 选项 3 | |
 | D3 | `SchemaTable` 的 `ctx_schema` | P2 添加 / 保持现状 | |
 | D4 | `version` 粒度 | 单个 int / `{protocol, data}` | |
-| D5 | Lua `completion_ctx.lua` 未来 | 无限期保留 / P4 后弃用 | |
+| D5 | Lua `completion/ctx.lua` 未来 | 无限期保留 / P4 后弃用 | |
 | D6 | Rust 了解 `###`？ | 否 / 是（未来 LSP） | |
 | D7 | `BUG` 测试更新时间 | P1 立即 / 等到 P2 | |
 | D8 | 指令归属 | Lua 拥有 / 两者都保留 | |

@@ -99,7 +99,7 @@ SELECT * FROM page_views;             ← 仍使用 my-analytics
 |----|----------|------|
 | Rust `context.rs` | 分号 + 2+ 空行 | `find_statement_token_range()`，P3 后移除空行逻辑 |
 | Rust `statements.rs` | 仅分号 | `find_statement_span()`（用于执行） |
-| Lua `completion.lua` | 剥离所有指令行 | 将文件完整 SQL 正文传给 Rust |
+| Lua `completion/init.lua` | 剥离所有指令行 | 将文件完整 SQL 正文传给 Rust |
 | Lua `statement.lua` | 仅分号 | `extract_stmt_at_cursor()`（执行层） |
 
 ### 3.5 结论
@@ -165,7 +165,7 @@ SELECT * FROM page_views;             ← 仍使用 my-analytics
 
 ### 4.3 Null/NIL 处理
 
-- JSON `null` → `vim.NIL` → 在 Lua 中规范化为 `nil`（已在 `completion.lua:deep_clean()` 中处理）。
+- JSON `null` → `vim.NIL` → 在 Lua 中规范化为 `nil`（已在 `completion/init.lua:deep_clean()` 中处理）。
 - 空 prefix：`""`。
 - 空 tables：`[]`。
 
@@ -248,8 +248,8 @@ SELECT * FROM page_views;             ← 仍使用 my-analytics
 
 | 结构 | 处理器 | 层 | 说明 |
 |------|--------|----|------|
-| `-- @connection` 指令 | `completion.lua:get_items()` | 补全层 | 从连接名补全 |
-| `-- @database` 指令 | `completion.lua:get_items()` | 补全层 | 从数据库名补全 |
+| `-- @connection` 指令 | `completion/init.lua:get_items()` | 补全层 | 从连接名补全 |
+| `-- @database` 指令 | `completion/init.lua:get_items()` | 补全层 | 从数据库名补全 |
 | 指令上下文追踪 | `context.lua:resolve_context()` | 执行层 | 按语句前向最近指令解析有效连接/数据库 |
 | `USE database` 语句 | `context.lua:resolve_context()` | 执行层 | 数据库上下文切换 |
 
@@ -269,7 +269,7 @@ SELECT * FROM page_views;             ← 仍使用 my-analytics
 
 - Rust **不得**解析 `-- @connection` 名称（无权访问 `connections.json`）。
 - 补全管道中，Lua 负责剥离指令行，将完整 SQL 正文传给 Rust。
-- 除非 Rust 二进制不可用，否则 Lua **不得**在 `completion_ctx.lua` 中尝试超出 Rust 提供的启发式 SQL 语法分析。
+- 除非 Rust 二进制不可用，否则 Lua **不得**在 `completion/ctx.lua` 中尝试超出 Rust 提供的启发式 SQL 语法分析。
 - `-- @` 是 Poste 文件语法，不是 SQL 语法。
 
 ---

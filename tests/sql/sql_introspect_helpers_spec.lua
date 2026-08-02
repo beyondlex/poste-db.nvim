@@ -1,4 +1,4 @@
-local helpers = require("poste-sql.introspect_helpers")
+local helpers = require("poste-sql.introspect.helpers")
 
 describe("introspect helpers", function()
   it("build_connection_lines formats populated fields", function()

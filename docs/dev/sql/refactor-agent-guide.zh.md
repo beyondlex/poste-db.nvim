@@ -9,8 +9,8 @@
 - 过大的模块
 - 重复代码
 - magic constants / magic strings
-- `nav.lua` 的深层嵌套分支
-- `buffer.lua` / `buffer_nav.lua` / `introspect.lua` 的 UI 耦合
+- `nav/init.lua` 的深层嵌套分支
+- `buffer/init.lua` / `buffer/nav.lua` / `introspect/init.lua` 的 UI 耦合
 
 ## 0.1 当前进度
 
@@ -20,46 +20,46 @@
 
 - Phase 0: 关键回归测试护栏已补齐，相关 helper / behavior spec 都已落地。
 - Phase 1: 常量与小 helper 已抽出，`constants.lua`、`util.lua` 已在用。
-- Phase 2: `buffer.lua` 的渲染路径已经拆成 helper，`buffer_render.lua` 已落地并有测试。
-- Phase 3: `buffer_nav.lua` 的 UI 耦合已拆出大块：
-  - `buffer_nav_ui.lua`
-  - `buffer_nav_preview.lua`
-  - `buffer_nav_raw.lua`
-  - `buffer_nav_sort.lua`
-  - `buffer_nav_state.lua`
-  - `buffer_nav_cell.lua` 已补 column yank 收集 helper
-  - `buffer_nav_cell.lua` 也接管了 cell highlight 的应用动作
-  - `buffer_nav_cell.lua` 也接管了 cell yank 文本准备
-  - `buffer_nav_cell.lua` 也接管了 cell highlight toggle
-  - `buffer_nav_ui.lua` 已拆出 status winbar 左右半边 helper
-  - `buffer_nav_ui.lua` 已拆出 pending changes 文案 helper 和纯 winbar 拼接 helper
-  - `buffer_page.lua` / `buffer_search.lua` 已直接调用 `buffer_nav_ui.lua`
-  - `buffer_nav.lua` 已不再转发 `format_conn_short()`，只保留导航动作本身
-- Phase 4: `nav.lua` 的分支路由已拆出 `nav_route.lua`，执行逻辑仍在 `nav_handlers.lua`。
-- Phase 5: `introspect.lua` 的 job / context 路由已拆出：
-  - `introspect_job.lua`
-  - `introspect_exec.lua`
-  - `introspect_route.lua`
-  - `introspect_context.lua`
-  - `introspect_ui.lua`
-  - `introspect_column.lua`
-  - `introspect_table.lua`
-  - `introspect_detect.lua`
-  - `introspect_target.lua`
-  - 文本构造仍在 `introspect_helpers.lua`。
+- Phase 2: `buffer/init.lua` 的渲染路径已经拆成 helper，`buffer/render.lua` 已落地并有测试。
+- Phase 3: `buffer/nav.lua` 的 UI 耦合已拆出大块：
+  - `buffer/nav_ui.lua`
+  - `buffer/nav_preview.lua`
+  - `buffer/nav_raw.lua`
+  - `buffer/nav_sort.lua`
+  - `buffer/nav_state.lua`
+  - `buffer/nav_cell.lua` 已补 column yank 收集 helper
+  - `buffer/nav_cell.lua` 也接管了 cell highlight 的应用动作
+  - `buffer/nav_cell.lua` 也接管了 cell yank 文本准备
+  - `buffer/nav_cell.lua` 也接管了 cell highlight toggle
+  - `buffer/nav_ui.lua` 已拆出 status winbar 左右半边 helper
+  - `buffer/nav_ui.lua` 已拆出 pending changes 文案 helper 和纯 winbar 拼接 helper
+  - `buffer/page.lua` / `buffer/search.lua` 已直接调用 `buffer/nav_ui.lua`
+  - `buffer/nav.lua` 已不再转发 `format_conn_short()`，只保留导航动作本身
+- Phase 4: `nav/init.lua` 的分支路由已拆出 `nav/route.lua`，执行逻辑仍在 `nav/handlers.lua`。
+- Phase 5: `introspect/init.lua` 的 job / context 路由已拆出：
+  - `introspect/job.lua`
+  - `introspect/exec.lua`
+  - `introspect/route.lua`
+  - `introspect/context.lua`
+  - `introspect/ui.lua`
+  - `introspect/column.lua`
+  - `introspect/table.lua`
+  - `introspect/detect.lua`
+  - `introspect/target.lua`
+  - 文本构造仍在 `introspect/helpers.lua`。
 - Phase 6: `init.lua` 的 SQL 执行路径已完成拆分：
   - `sql_runner.lua`
   - `init.lua` 现在只保留 setup / 兼容转发
-  - `completion_handlers.lua`
+  - `completion/handlers.lua`
   - `dml.lua`
-  - `highlights_theme.lua`
-  - `highlights_render.lua`
+  - `highlights/theme.lua`
+  - `highlights/render.lua`
 
 ### 仍未完成
 
 - Phase 5 还有收尾空间：
-  - `introspect.lua` 仍然承担 `show_table_ddl()` 的入口路由。
-  - `introspect_detect.lua` / `introspect_target.lua` 已拆出检测与目标映射。
+  - `introspect/init.lua` 仍然承担 `show_table_ddl()` 的入口路由。
+  - `introspect/detect.lua` / `introspect/target.lua` 已拆出检测与目标映射。
   - 后面还可以继续把 shell 组装、动作分发、fallback 执行再切细。
 
 ### 已写入的测试
@@ -134,10 +134,10 @@ AI agent 在改动任何高风险逻辑前，必须先补最小化回归测试�
 
 | 目标 | 建议测试文件 | 重点 |
 |------|--------------|------|
-| `buffer.lua` 渲染 | `tests/sql/sql_buffer_spec.lua` | header 提取、分页、raw mode |
-| `buffer_nav.lua` 行为 | `tests/sql/sql_buffer_nav_spec.lua` | sort / yank / winbar / dirty guard |
-| `nav.lua` 导航 | `tests/sql/sql_nav_spec.lua` | `@connection`、`@database`、table / alias 分支 |
-| `introspect.lua` helper | `tests/sql/sql_introspect_spec.lua` | 文本格式化、列表构造 |
+| `buffer/init.lua` 渲染 | `tests/sql/sql_buffer_spec.lua` | header 提取、分页、raw mode |
+| `buffer/nav.lua` 行为 | `tests/sql/sql_buffer_nav_spec.lua` | sort / yank / winbar / dirty guard |
+| `nav/init.lua` 导航 | `tests/sql/sql_nav_spec.lua` | `@connection`、`@database`、table / alias 分支 |
+| `introspect/init.lua` helper | `tests/sql/sql_introspect_spec.lua` | 文本格式化、列表构造 |
 | 新 helper | `tests/sql/sql_util_spec.lua` | separator 扫描、UTF-8 截断 |
 
 测试策略：
@@ -166,7 +166,7 @@ AI agent 在改动任何高风险逻辑前，必须先补最小化回归测试�
 - 常量只放“跨模块共享”的值
 - 不要把局部语义很强但只用一次的值强行抽走
 
-### Phase 2: `buffer.lua` 拆渲染路径
+### Phase 2: `buffer/init.lua` 拆渲染路径
 
 目标：
 
@@ -185,7 +185,7 @@ AI agent 在改动任何高风险逻辑前，必须先补最小化回归测试�
 - 分页切换不改变状态语义
 - header float / winbar 仍然能更新
 
-### Phase 3: `buffer_nav.lua` 去 UI 耦合
+### Phase 3: `buffer/nav.lua` 去 UI 耦合
 
 目标：
 
@@ -204,7 +204,7 @@ AI agent 在改动任何高风险逻辑前，必须先补最小化回归测试�
 - `toggle_raw_mode()` 可恢复
 - `show_search()` 与 `preview_cell()` 仍能正常关闭
 
-### Phase 4: `nav.lua` 拆分导航分支
+### Phase 4: `nav/init.lua` 拆分导航分支
 
 目标：
 
@@ -223,7 +223,7 @@ AI agent 在改动任何高风险逻辑前，必须先补最小化回归测试�
 - 连接指令、数据库指令、表引用、列引用都能跳转
 - 分支逻辑从“单函数深嵌套”变成“路由 + handler”
 
-### Phase 5: `introspect.lua` 与 job 包装
+### Phase 5: `introspect/init.lua` 与 job 包装
 
 目标：
 
@@ -232,7 +232,7 @@ AI agent 在改动任何高风险逻辑前，必须先补最小化回归测试�
 
 建议动作：
 
-- 抽 `introspect_ui.lua`
+- 抽 `introspect/ui.lua`
 - 抽通用 float helper
 - 统一 stderr 收集与错误展示
 
@@ -246,9 +246,9 @@ AI agent 在改动任何高风险逻辑前，必须先补最小化回归测试�
 如果后面还要继续拆，可以从这些方向再看：
 
 - `init.lua` → `sql_runner.lua`
-- `edit_commit.lua` → `dml.lua`
-- `completion.lua` → `completion_handlers.lua`
-- `highlights.lua` 的色彩与渲染职责分离
+- `edit_commit/init.lua` → `dml.lua`
+- `completion/init.lua` → `completion/handlers.lua`
+- `highlights/init.lua` 的色彩与渲染职责分离
 
 ## 5. 具体执行规则
 
@@ -310,12 +310,12 @@ AI agent 在动手前应该先回答这三个问题：
 
 高风险优先级从高到低：
 
-1. `lua/poste-sql/nav.lua`
-2. `lua/poste-sql/buffer.lua`
-3. `lua/poste-sql/buffer_nav.lua`
-4. `lua/poste-sql/introspect.lua`
-5. `lua/poste-sql/edit_commit.lua`
-6. `lua/poste-sql/completion.lua`
+1. `lua/poste-sql/nav/init.lua`
+2. `lua/poste-sql/buffer/init.lua`
+3. `lua/poste-sql/buffer/nav.lua`
+4. `lua/poste-sql/introspect/init.lua`
+5. `lua/poste-sql/edit_commit/init.lua`
+6. `lua/poste-sql/completion/init.lua`
 
 ## 9. 推荐的执行命令
 

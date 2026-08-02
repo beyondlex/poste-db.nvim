@@ -1,4 +1,4 @@
-local state = require("poste-sql.buffer_nav_state")
+local state = require("poste-sql.buffer.nav_state")
 local D = require("poste-sql.dataset")
 
 describe("buffer_nav_state", function()

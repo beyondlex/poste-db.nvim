@@ -8,30 +8,30 @@
 ## 根本原因分析
 
 ### 1. 🔴 **主罪魁：`highlight_cell()` 中的高频 `find_cell_range()` 调用**
-**位置**：`lua/poste/sql/buffer_nav.lua` 第 170-196 行 + `highlights.lua` 第 354-358 行
+**位置**：`lua/poste/sql/buffer/nav.lua` 第 170-196 行 + `highlights/init.lua` 第 354-358 行
 
 **问题流程**：
 ```
 按下 h/l 键
     ↓
-move_cell(0, ±1) [buffer_nav.lua:170]
+move_cell(0, ±1) [buffer/nav.lua:170]
     ↓
-position_cursor(row, col) [buffer_nav.lua:234]
+position_cursor(row, col) [buffer/nav.lua:234]
     ↓
-find_cell_ranges(line, col + 1, last_col + 1) [buffer_nav.lua:246]  ← 第 1 次扫描│分隔符
+find_cell_ranges(line, col + 1, last_col + 1) [buffer/nav.lua:246]  ← 第 1 次扫描│分隔符
     ↓
-highlight_cell() [buffer_nav.lua:189]
+highlight_cell() [buffer/nav.lua:189]
     ↓
-find_cell_range(line, col + 1) [highlights.lua:385]  ← 第 2 次扫描│分隔符
+find_cell_range(line, col + 1) [highlights/init.lua:385]  ← 第 2 次扫描│分隔符
     ↓
-update_header_float() [buffer_nav.lua:192]
+update_header_float() [buffer/nav.lua:192]
     ↓
-slice_header_to_win() 中的索引迭代 [buffer_nav.lua:68-92]
+slice_header_to_win() 中的索引迭代 [buffer/nav.lua:68-92]
 ```
 
 ### 2. 🔴 **关键性能瓶颈**
 
-#### **2.1 `compute_seps()` 被调用两次** (highlights.lua:304-315)
+#### **2.1 `compute_seps()` 被调用两次** (highlights/init.lua:304-315)
 每次 `h`/`l` 都会扫描整条**完整行**来查找所有 `│` 分隔符：
 - **第 1 次**：`position_cursor()` → `find_cell_ranges()`
 - **第 2 次**：`highlight_cell()` → `find_cell_range()` 
@@ -60,7 +60,7 @@ end
 - 每次扫描：**O(n_bytes × line_length)** 取决于 Lua 字符串查找算法
 - 每 h/l 键按下：2 次调用但第 2 次命中缓存 → 实际 **1 次有效扫描**
 
-#### **2.2 `slice_header_to_win()` 中的索引遍历** (buffer_nav.lua:68-92)
+#### **2.2 `slice_header_to_win()` 中的索引遍历** (buffer/nav.lua:68-92)
 ```lua
 for _, c in ipairs(index) do
   if c.de <= leftcol then goto continue end
@@ -77,8 +77,8 @@ end
 - 每条 h/l 都重新迭代整个索引
 
 #### **2.3 `vim.fn.strdisplaywidth()` 的高频调用**
-- `buffer_nav.lua:250` - `position_cursor()` 中调用
-- `buffer_nav.lua:266` - `position_cursor()` 中计算 last_col
+- `buffer/nav.lua:250` - `position_cursor()` 中调用
+- `buffer/nav.lua:266` - `position_cursor()` 中计算 last_col
 - `format.lua:21,33,55` - 格式化时多次调用
 
 每次 `strdisplaywidth()` 都是 **Neovim C → Lua 的跨语言调用**，成本较高。
@@ -103,7 +103,7 @@ end
 
 **方案 1A**：合并 `position_cursor()` 和 `highlight_cell()` 中的 `find_cell_range()` 调用
 
-**修改**：`lua/poste/sql/buffer_nav.lua` 第 234-297 行
+**修改**：`lua/poste/sql/buffer/nav.lua` 第 234-297 行
 
 ```lua
 function M.position_cursor(row, col)
@@ -146,7 +146,7 @@ end
 
 **方案 2A**：缓存 `build_header_index()` 结果（**尚未实现**）
 
-当前 `buffer.lua:282-303` 每次都无条件重建 `tab.header_index`。应加缓存：
+当前 `buffer/init.lua:282-303` 每次都无条件重建 `tab.header_index`。应加缓存：
 
 ```lua
 -- 当 header_text 变化时，才重新建立索引
@@ -164,7 +164,7 @@ if has_header then
 end
 ```
 
-> **注意**：消费端 `update_header_float()`（`buffer_nav.lua:110-118`）已有自身的 float 缓存（`_float_cache_leftcol/_float_cache_width/_float_cache_header`），避免视口未变时重复计算。但重建 `header_index` 的开销仍在。
+> **注意**：消费端 `update_header_float()`（`buffer/nav.lua:110-118`）已有自身的 float 缓存（`_float_cache_leftcol/_float_cache_width/_float_cache_header`），避免视口未变时重复计算。但重建 `header_index` 的开销仍在。
 >
 > 同时 `update_header_float()` 中 `slice_header_to_win()` 的索引迭代也**已缓存**——只要 `tab.header_index` 不变就不重做。所以 Priority 2 的收益主要在于减少**渲染页面时的 `build_header_index()` 调用**，对 h/l 滚动的影响比最初估计小。
 
@@ -178,7 +178,7 @@ end
 
 **方案 3A**：扩展分隔符缓存，支持多行缓存
 
-**修改**：`lua/poste/sql/highlights.lua` 第 301-317 行
+**修改**：`lua/poste/sql/highlights/init.lua` 第 301-317 行
 
 ```lua
 -- 从单行缓存改为 N 行缓存（LRU）
@@ -211,7 +211,7 @@ end
 ### ✅ **优先级 4：长期优化**
 
 #### **4.1 使用 `vim.notify()` 追踪性能**
-在 `buffer_nav.lua` 的 T_mark/T_report 中启用追踪：
+在 `buffer/nav.lua` 的 T_mark/T_report 中启用追踪：
 
 ```lua
 -- 启用追踪（用户可设置）
@@ -228,7 +228,7 @@ state.sql._trace = true
 ```
 
 #### **4.2 考虑 UI 更新优化**
-- `update_header_float()` 已有 float 窗口缓存（`buffer_nav.lua:110-118`）：`_float_cache_leftcol`、`_float_cache_width`、`_float_cache_header`，视口未变时跳过重绘
+- `update_header_float()` 已有 float 窗口缓存（`buffer/nav.lua:110-118`）：`_float_cache_leftcol`、`_float_cache_width`、`_float_cache_header`，视口未变时跳过重绘
 - 可进一步精细化：考虑 `sidescrolloff=0` 时减少 header 更新频率
 
 ---
@@ -237,7 +237,7 @@ state.sql._trace = true
 
 ### 🚀 **快速修复（推荐先做）**
 
-编辑 `lua/poste/sql/buffer_nav.lua`，修改 `move_cell()` 函数：
+编辑 `lua/poste/sql/buffer/nav.lua`，修改 `move_cell()` 函数：
 
 ```lua
 function M.move_cell(drow, dcol)

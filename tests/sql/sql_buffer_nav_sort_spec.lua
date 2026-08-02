@@ -1,4 +1,4 @@
-local sort = require("poste-sql.buffer_nav_sort")
+local sort = require("poste-sql.buffer.nav_sort")
 local D = require("poste-sql.dataset")
 
 describe("buffer_nav_sort", function()

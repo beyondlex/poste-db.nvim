@@ -1,4 +1,4 @@
-local ui = require("poste-sql.buffer_nav_ui")
+local ui = require("poste-sql.buffer.nav_ui")
 
 describe("buffer_nav_ui", function()
   it("builds preview float opts from shared defaults", function()

@@ -69,7 +69,7 @@ This closes any float window anchored to `dataset_window`, regardless of `float_
 
 ## Affected Files
 
-- `lua/poste/sql/buffer.lua` — `M.clear_panel()`, `close_header_float()`
+- `lua/poste/sql/buffer/init.lua` — `M.clear_panel()`, `close_header_float()`
 
 ## Prevention
 

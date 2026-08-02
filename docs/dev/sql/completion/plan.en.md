@@ -30,13 +30,13 @@
 
 ### Lua Side (`lua/poste/sql/`)
 
-- [x] **P1e. Detection wrapper** — Add `detect_context_for_completion(bufnr, line_before, cursor_line)` in `completion.lua`:
+- [x] **P1e. Detection wrapper** — Add `detect_context_for_completion(bufnr, line_before, cursor_line)` in `completion/init.lua`:
   - Keep Lua directive fast paths (`-- @connection`, `-- @database`)
   - For SQL body, call `try_rust_context()` first (send full body, no block pre-extraction)
   - Only fall back to `completion_ctx.detect_context()` when Rust unavailable
   - Wire `get_items()` → new wrapper
 
-- [x] **P1f. Legacy switch** — In `completion.lua`:
+- [x] **P1f. Legacy switch** — In `completion/init.lua`:
   - `vim.g.poste_sql_legacy_completion = true` → Lua-only fallback
   - `vim.g.poste_sql_legacy_completion = "rust"` → Rust-only, no fallback
   - Default `nil` → Rust first, Lua never overrides
@@ -46,7 +46,7 @@
   - Add `_test.detect_context_for_completion` for integration path
   - Update all references in `tests/sql_completion_spec.lua`, `tests/sql_completion_edge_spec.lua`, `tests/diag_sql.lua`
 
-- [x] **P1h. `completion_ctx.lua` deprecation** — Header comment: `@deprecated` + "fallback only when Rust unavailable". No new SQL grammar features added.
+- [x] **P1h. `completion/ctx.lua` deprecation** — Header comment: `@deprecated` + "fallback only when Rust unavailable". No new SQL grammar features added.
 
 ### P1 Verification
 
@@ -102,7 +102,7 @@ tests/run.sh  # 80/80 + 89/89 + all others (367 total)
 
 ## P3 — Scope Resolver
 
-**Goal**: Explicit scope model for CTE/subquery/alias/derived tables. Remove blank-line boundary + `completion_ctx.lua`.
+**Goal**: Explicit scope model for CTE/subquery/alias/derived tables. Remove blank-line boundary + `completion/ctx.lua`.
 
 - [x] **P3a. New `scope.rs` module** — In `crates/poste-core/src/sql_context/scope.rs`:
   - `QueryScope { tables, ctes, aliases }`, `CteRef`, `AliasRef`
@@ -117,7 +117,7 @@ tests/run.sh  # 80/80 + 89/89 + all others (367 total)
 
 - [x] **P3d. Remove blank-line boundary** — Remove `is_blank_line_separator()` from `context.rs`. `find_statement_token_range()` relies only on `;`.
 
-- [x] **P3e. Remove `completion_ctx.lua` heuristic** — Delete Lua SQL heuristic logic (non-directive paths).
+- [x] **P3e. Remove `completion/ctx.lua` heuristic** — Delete Lua SQL heuristic logic (non-directive paths).
 
 ### P3 Verification
 
@@ -167,5 +167,5 @@ tests/run.sh
 - [ ] `cargo test -p poste-core sql_context` passes
 - [ ] `cargo clippy -p poste-core -p poste-cli -p poste-exec -- -D warnings` clean
 - [ ] `tests/run.sh` passes (or note skipped SQL integration tests)
-- [ ] No changes to `lua/poste/http/*`, `lua/poste/completion.lua`, `lua/poste/sql/buffer.lua`
+- [ ] No changes to `lua/poste/http/*`, `lua/poste/completion.lua`, `lua/poste/sql/buffer/init.lua`
 - [ ] No changes to SQL execution behavior

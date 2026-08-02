@@ -126,7 +126,7 @@ local function apply_cell_edit(row_idx, col_idx, new_val)
 
   -- Update winbar
   if tab.edit_state.dirty then
-    local winbar_base = require("poste-sql.buffer_nav").build_status_winbar(tab.meta)
+    local winbar_base = require("poste-sql.buffer.nav").build_status_winbar(tab.meta)
     if get_dataset().dataset_window and vim.api.nvim_win_is_valid(get_dataset().dataset_window) then
       pcall(vim.api.nvim_set_option_value, "winbar", winbar_base or "", { win = get_dataset().dataset_window })
     end
@@ -308,7 +308,7 @@ function M.delete_row()
   end
 
   -- Update winbar
-  local winbar_base = require("poste-sql.buffer_nav").build_status_winbar(tab.meta)
+  local winbar_base = require("poste-sql.buffer.nav").build_status_winbar(tab.meta)
   if get_dataset().dataset_window and vim.api.nvim_win_is_valid(get_dataset().dataset_window) then
     pcall(vim.api.nvim_set_option_value, "winbar", winbar_base or "", { win = get_dataset().dataset_window })
   end
@@ -357,7 +357,7 @@ function M.insert_row()
   end
 
   -- Update winbar
-  local winbar_base = require("poste-sql.buffer_nav").build_status_winbar(tab.meta)
+  local winbar_base = require("poste-sql.buffer.nav").build_status_winbar(tab.meta)
   if get_dataset().dataset_window and vim.api.nvim_win_is_valid(get_dataset().dataset_window) then
     pcall(vim.api.nvim_set_option_value, "winbar", winbar_base or "", { win = get_dataset().dataset_window })
   end

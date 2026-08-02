@@ -14,9 +14,9 @@ Core principles:
 
 Relevant files:
 
-- `lua/poste/sql/completion.lua`: completion orchestrator. It currently combines Lua heuristic detection, Rust context detection, and item dispatch.
-- `lua/poste/sql/completion_ctx.lua`: Lua fallback. It contains regex-based `detect_context()` and `extract_from_tables()`, which are the source of many boundary bugs.
-- `lua/poste/sql/completion_data.lua`: keywords, functions, table/column cache, binary lookup, and metadata fetch.
+- `lua/poste/sql/completion/init.lua`: completion orchestrator. It currently combines Lua heuristic detection, Rust context detection, and item dispatch.
+- `lua/poste/sql/completion/ctx.lua`: Lua fallback. It contains regex-based `detect_context()` and `extract_from_tables()`, which are the source of many boundary bugs.
+- `lua/poste/sql/completion/data.lua`: keywords, functions, table/column cache, binary lookup, and metadata fetch.
 - `lua/poste/sql/statement.lua`: SQL statement extraction. It already calls `poste context stmt`, but still has Lua fallback and SQL-file-specific patches.
 - `crates/poste-core/src/sql_context/`: Rust tokenizer/context detector/table extraction/statement span.
 - `crates/poste-cli/src/main.rs`: already has `poste context detect <offset> --dialect <dialect>` and `poste context stmt <cursor_line>`.
@@ -93,14 +93,14 @@ Goal: remove Lua/Rust double truth. Lua should handle UI, metadata, and degraded
 
 Current issues:
 
-- `get_items()` in `lua/poste/sql/completion.lua` calls `ctx.detect_context(line_before)` before trying Rust.
-- `completion_ctx.lua` fallback does not have complete string/comment/subquery/CTE awareness.
+- `get_items()` in `lua/poste/sql/completion/init.lua` calls `ctx.detect_context(line_before)` before trying Rust.
+- `completion/ctx.lua` fallback does not have complete string/comment/subquery/CTE awareness.
 - `tests/sql_completion_edge_spec.lua` still directly tests many Lua heuristic behaviors.
 
 Implementation steps:
 
 1. Add a thin wrapper
-   - File: `lua/poste/sql/completion.lua`
+   - File: `lua/poste/sql/completion/init.lua`
    - Suggested name: `detect_context_for_completion(bufnr, line_before, cursor_line)`
    - Default flow:
      1. Keep directive fast paths in Lua, because they are Poste file syntax, not SQL grammar.
@@ -122,12 +122,12 @@ Implementation steps:
    - Do not keep an ambiguous `_test.detect_context` name pointing to Lua heuristic.
 
 4. Keep Lua fallback, but demote its authority
-   - Do not delete `completion_ctx.lua`.
+   - Do not delete `completion/ctx.lua`.
    - Update its header comment: fallback-only when Rust binary is unavailable.
    - Add new context features to Rust first. Add to Lua fallback only when no-binary mode truly needs them.
 
 5. Keep completion item dispatch in Lua
-   - Table, column, dot-column, and related item building can stay in `completion.lua`.
+   - Table, column, dot-column, and related item building can stay in `completion/init.lua`.
    - This is the right layering: Rust decides context; Lua combines Neovim state and metadata cache into items.
 
 Testing strategy:
@@ -325,7 +325,7 @@ Acceptance criteria:
 
 - Existing flat table tests still pass.
 - New CTE/subquery golden fixtures pass.
-- `completion.lua` does not need to understand CTE/subquery details; it only consumes the Rust result.
+- `completion/init.lua` does not need to understand CTE/subquery details; it only consumes the Rust result.
 
 ## P4: Add Persistent Context Service
 
@@ -333,7 +333,7 @@ Goal: avoid spawning `poste context detect` through `vim.fn.system()` on every c
 
 Current issue:
 
-- `try_rust_context()` in `completion.lua` currently executes:
+- `try_rust_context()` in `completion/init.lua` currently executes:
 
 ```lua
 vim.fn.system("<poste> context detect <offset> --dialect ...", sql_text)
@@ -425,7 +425,7 @@ stop()
 5. Non-goals
    - Do not implement LSP initialize/textDocument/didChange.
    - Do not build a cross-editor protocol.
-   - Do not let this server access the DB. Metadata remains in the existing `completion_data.lua` CLI introspection/cache flow.
+   - Do not let this server access the DB. Metadata remains in the existing `completion/data.lua` CLI introspection/cache flow.
 
 Testing strategy:
 
@@ -433,7 +433,7 @@ Testing strategy:
   - `poste context serve` accepts one detect request line and outputs correct JSON.
   - Invalid JSON outputs `ok=false` and the server continues for the next line.
 - Lua:
-  - Mock `context_client.detect()` and verify `completion.lua` fallback paths.
+  - Mock `context_client.detect()` and verify `completion/init.lua` fallback paths.
   - Do not require regular `tests/run.sh` to start a real long-running job, to avoid flaky timing.
 
 Acceptance criteria:
@@ -485,7 +485,7 @@ When changing tests, explain why the old test no longer represented correct beha
   - Guardrail: keep JSON backward-compatible. Add fields; do not remove fields.
 
 - Risk: deleting Lua fallback too early breaks no-binary setups.
-  - Guardrail: keep `completion_ctx.lua`, but mark it fallback-only.
+  - Guardrail: keep `completion/ctx.lua`, but mark it fallback-only.
 
 - Risk: scope resolver becomes too large.
   - Guardrail: P3 stage one only handles table/alias/CTE visibility. Do not infer derived columns yet.

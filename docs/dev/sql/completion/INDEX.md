@@ -61,7 +61,7 @@ cargo clippy -p poste-core -p poste-cli -p poste-exec -- -D warnings
 |-------------|--------|
 | `lua/poste/http/*` | HTTP completion isolation |
 | `lua/poste/http/completion.lua` | HTTP completion entry (not SQL) |
-| `lua/poste/sql/buffer.lua` | SQL result rendering |
+| `lua/poste/sql/buffer/init.lua` | SQL result rendering |
 | SQL executor behavior | Unless phase explicitly needs metadata/cache support |
 
 ### 2.4 Progress Tracking

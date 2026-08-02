@@ -2,24 +2,24 @@
 
 ## Change Summary
 
-### Sort (`buffer_nav.lua`)
+### Sort (`buffer/nav.lua`)
 - No `vim.deepcopy(data)`. No mutation of `res.rows`.
 - `tab.sort` → `compute_view_indices(tab)` → `render_view(layout, view_indices, ...)`
 - Sort is index manipulation only: O(n_rows) for sort comparison, O(page_size) for render.
 
-### Filter (`buffer_search.lua`)
+### Filter (`buffer/search.lua`)
 - No `vim.deepcopy(data)`. No `original_data` backup.
 - Scan `tab.rows_source`, build `tab.filtered_indices`, recompute `view_indices`.
 - `row_number_mode = "view"` so filtered rows show 1-based position.
 - Render via `render_view` from existing layout.
 
-### Search (`buffer_search.lua`)
+### Search (`buffer/search.lua`)
 - `tab.search_matches_by_page[page]` — matches partitioned by page at build time.
 - `apply_search_highlights()` iterates only current page matches: O(page_matches) vs O(total_matches).
 - `jump_to_search_match()` uses `match.row` as view position (compatible with filtered/sorted views).
 - Search scans `tab.view_indices` (or identity over `rows_source`) instead of `res.rows`.
 
-### Page navigation (`buffer_page.lua`)
+### Page navigation (`buffer/page.lua`)
 - `refresh_page()` now uses `#tab.view_indices` for `total_rows` when filter is active.
 - `render_view` / `render_page` dispatch based on `tab.view_indices` presence.
 
@@ -57,9 +57,9 @@
 | File | Change |
 |---|---|
 | `lua/poste/sql/dataset.lua` | +`compute_view_indices(tab)`; +`filtered_indices`, `search_matches_by_page`, `search_total_matches` |
-| `lua/poste/sql/buffer_nav.lua` | `sort_by_current_col` → index-based (no deepcopy, no `original_rows`, uses `render_view`) |
-| `lua/poste/sql/buffer_search.lua` | `filter_by_current_cell` → index scan + `render_view`; `clear_filter_search` resets `view_indices` + calls `refresh_page`; `show_search` builds `search_matches_by_page`; `apply_search_highlights` O(page_matches); `jump_to_search_match` uses view positions |
-| `lua/poste/sql/buffer_page.lua` | `refresh_page` uses `#tab.view_indices` for `total_rows` when view is active |
+| `lua/poste/sql/buffer/nav.lua` | `sort_by_current_col` → index-based (no deepcopy, no `original_rows`, uses `render_view`) |
+| `lua/poste/sql/buffer/search.lua` | `filter_by_current_cell` → index scan + `render_view`; `clear_filter_search` resets `view_indices` + calls `refresh_page`; `show_search` builds `search_matches_by_page`; `apply_search_highlights` O(page_matches); `jump_to_search_match` uses view positions |
+| `lua/poste/sql/buffer/page.lua` | `refresh_page` uses `#tab.view_indices` for `total_rows` when view is active |
 
 ## Verification
 

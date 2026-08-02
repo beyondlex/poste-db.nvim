@@ -200,7 +200,7 @@ Agent A 补充："如果未来需要拆分，Lua 可以将 `version: 1` 解释�
 
 ---
 
-### D5：Lua `completion_ctx.lua` 未来
+### D5：Lua `completion/ctx.lua` 未来
 
 | Agent | 原始立场 | 理由 |
 |-------|----------|------|
@@ -224,7 +224,7 @@ Agent C 折中："P4 后提取到独立文件，不默认加载。"
 | 依赖"不破坏用户"？ | **是**。Agent A 的"降级路径对真实用户重要"是核心论据 |
 | 无 `###` + 无用户下的最优选择 | **加速移除**。既然没有用户依赖它（当前只有开发者在用），在黄金测试（P2）验证 Rust 处理后正确性后，即可移除。但保留到 P2 有实用价值——开发调试时可以对比 Rust 和 Lua 的结果。 |
 
-**修正决策**：✅ **P1 标记 `@deprecated` 并作为开发调试辅助工具保留。P2 golden fixtures 验证通过后，在 P3 开始时彻底移除 `completion_ctx.lua` 中的 SQL 启发式逻辑。如果开发者需要对比调试，可设置 `vim.g.poste_sql_legacy_completion = true` 临时启用。终极目标是 P3 后不再有任何 SQL 上下文补全的 Lua 启发式路径。**
+**修正决策**：✅ **P1 标记 `@deprecated` 并作为开发调试辅助工具保留。P2 golden fixtures 验证通过后，在 P3 开始时彻底移除 `completion/ctx.lua` 中的 SQL 启发式逻辑。如果开发者需要对比调试，可设置 `vim.g.poste_sql_legacy_completion = true` 临时启用。终极目标是 P3 后不再有任何 SQL 上下文补全的 Lua 启发式路径。**
 
 ---
 
@@ -325,11 +325,11 @@ Agent C 调和："保留在 Rust 让方言和函数列表保持在一起，架�
 | **P0** | 添加 `ctx_schema` for `SchemaTable` | Rust | 极小 | D3 | — |
 | **P1** | 选项 3：添加 `ContextType::String/Comment` | Rust | 中 | D2 | 这是升级（原为选项 2） |
 | **P1** | 更新 BUG/BEFORE FIX 测试 | Lua | 中 | D7 | — |
-| **P1** | 标记 `completion_ctx.lua` 为 `@deprecated` | Lua | 极小 | D5 | 加速标记 |
+| **P1** | 标记 `completion/ctx.lua` 为 `@deprecated` | Lua | 极小 | D5 | 加速标记 |
 | **P2** | 剥离 `-- @` 指令行 + 降级 `try_directive()` | Lua + Rust | 小 | D8 | — |
 | **P2** | Golden fixture 完整套件 | Rust | 大 | — | 确认 Rust 行为 |
 | **P3** | ScopeResolver（CTE/子查询/别名作用域）| Rust | 大 | D1 | 替代并移除空行边界 |
-| **P3** | 移除 `completion_ctx.lua` 启发式逻辑 | Lua | 中 | D5 | Golden fixtures 验证通过后移除 |
+| **P3** | 移除 `completion/ctx.lua` 启发式逻辑 | Lua | 中 | D5 | Golden fixtures 验证通过后移除 |
 
 **核心架构变更**：补全管线中移除 `###` 块预提取。Lua 只剥离指令行，将文件完整 SQL 正文传给 Rust。Rust 内部自行处理所有边界检测（`;` + 2+ 空行）。`###` 仅作为执行层（非补全层）的视觉分隔符。
 
@@ -348,12 +348,12 @@ Agent C 调和："保留在 Rust 让方言和函数列表保持在一起，架�
 
 | 模块 | 实现者 | 验证方法 |
 |------|--------|----------|
-| Rust 上下文优先路由（**不再预提取 `###` 块**） | Lua (`completion.lua`) | `tests/run.sh` 通过 |
+| Rust 上下文优先路由（**不再预提取 `###` 块**） | Lua (`completion/init.lua`) | `tests/run.sh` 通过 |
 | `version` + `ctx_schema` 字段 | Rust (`detect.rs`) | `cargo test -p poste-core sql_context` |
 | `ContextType::String/Comment` 选项 3 实现 | Rust (`detect.rs`, `scanner.rs`) | `cargo test -p poste-core sql_context` |
 | BUG 测试更新 | Lua (`sql_completion_edge_spec.lua`) | `tests/run.sh` 通过 |
 | 指令剥离 + `try_directive()` 降级 | Lua + Rust | `cargo test && tests/run.sh` |
-| 标记 `completion_ctx.lua` 为 `@deprecated` | Lua | review |
+| 标记 `completion/ctx.lua` 为 `@deprecated` | Lua | review |
 
 ### Golden Fixture 格式评审
 
@@ -385,7 +385,7 @@ Agent C 调和："保留在 Rust 让方言和函数列表保持在一起，架�
 | D2 | `in_string`/`in_comment` | **选项 3**：显式 `ContextType::String/Comment` | P1 | 原 A/C → 修正为 B | ✅ |
 | D3 | `SchemaTable` 的 `ctx_schema` | P1 立即添加（无变化）| P1 | B/C | ❌ |
 | D4 | `version` 粒度 | 单个 int，从 1 开始（无变化）| P1 | A/C | ❌ |
-| D5 | Lua `completion_ctx.lua` | **P1 标记废弃，P3 golden 验证后移除** | P1/P3 | 原 C → 修正为 B 方向 | ✅ |
+| D5 | Lua `completion/ctx.lua` | **P1 标记废弃，P3 golden 验证后移除** | P1/P3 | 原 C → 修正为 B 方向 | ✅ |
 | D6 | Rust 感知 `###` | Rust 不需了解 `###`（`###` 不是补全概念）| — | 三方一致 | ✅ |
 | D7 | BUG 测试更新时间 | P1 立即更新（无变化）| P1 | 三方一致 | ❌ |
 | D8 | 指令归属 | Lua 拥有，Rust 安全网返回 `None`（无变化）| P1 | C | ❌ |

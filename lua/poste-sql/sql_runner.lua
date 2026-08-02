@@ -300,10 +300,10 @@ function M.run_sql_request()
           state.last_response = parsed
 
           -- Clear completion cache to pick up schema changes from DDL
-          require("poste-sql.completion_data").clear_cache()
+          require("poste-sql.completion.data").clear_cache()
 
           -- If raw mode was active, restore dataset buffer before rendering new results
-          require("poste-sql.buffer_nav").restore_from_raw_mode()
+          require("poste-sql.buffer.nav").restore_from_raw_mode()
 
           sql_context.handle_use_statement(parsed)
 

@@ -53,12 +53,12 @@ For SQL completion specific work, also load `.opencode/skills/sql-completion/SKI
 
 | File | Role |
 |------|------|
-| `buffer.lua` | Main dataset panel: render, tabs, pagination, filter |
-| `buffer_nav.lua` | Cell navigation, raw mode |
-| `buffer_page.lua` | Page-level buffer management |
-| `buffer_search.lua` | Search within results |
+| `buffer/init.lua` | Main dataset panel: render, tabs, pagination, filter |
+| `buffer/nav.lua` | Cell navigation, raw mode |
+| `buffer/page.lua` | Page-level buffer management |
+| `buffer/search.lua` | Search within results |
 | `format.lua` | Result formatting: table layout, error rendering, row display |
-| `highlights.lua` | Extmark highlights for dataset cells |
+| `highlights/init.lua` | Extmark highlights for dataset cells |
 | `syntax.lua` | SQL syntax highlighting for source buffers |
 | `dataset.lua` | Dataset data model |
 | `pagination.lua` | Pagination state management |
@@ -68,7 +68,7 @@ For SQL completion specific work, also load `.opencode/skills/sql-completion/SKI
 | File | Role |
 |------|------|
 | `editor.lua` | Inline cell editing (commit changes back to database) |
-| `edit_commit.lua` | Edit commit logging and execution |
+| `edit_commit/init.lua` | Edit commit logging and execution |
 | `table_ops.lua` | Table operations UI (insert row, duplicate, delete) |
 | `insert_hint.lua` | INSERT INTO value-to-column hint |
 
@@ -101,17 +101,17 @@ For SQL completion specific work, also load `.opencode/skills/sql-completion/SKI
 
 | File | Role |
 |------|------|
-| `completion.lua` | Completion orchestrator (blink.cmp source) |
-| `completion_ctx.lua` | Legacy Lua regex fallback (deprecated) |
-| `completion_data.lua` | Async introspection, cache, fallback lists |
-| `completion_debug.lua` | Debug floating window for completion |
+| `completion/init.lua` | Completion orchestrator (blink.cmp source) |
+| `completion/ctx.lua` | Legacy Lua regex fallback (deprecated) |
+| `completion/data.lua` | Async introspection, cache, fallback lists |
+| `completion/debug.lua` | Debug floating window for completion |
 
 #### Other
 
 | File | Role |
 |------|------|
 | `source_format.lua` | SQL source formatting (sqlfluff/sqlfmt/pg_format) |
-| `introspect.lua` | `show_table_ddl()`, schema introspection |
+| `introspect/init.lua` | `show_table_ddl()`, schema introspection |
 | `log_viewer.lua` | SQL execution log viewer |
 | `prototype.lua` | Prototype/experimental code |
 
@@ -146,7 +146,7 @@ These files are HTTP-only. Skip them entirely:
 source buffer → sql/init.lua → extract statement at cursor
   → resolve context (connection + database)
   → pipe to `poste run --stdin` → Rust sql_parser → sql_executor
-  → JSON response → sql/format.lua → sql/buffer.lua (dataset)
+  → JSON response → sql/format.lua → sql/buffer/init.lua (dataset)
 ```
 
 ### State Namespace
@@ -196,10 +196,10 @@ cargo run -- run tests/sql/queries/postgres.sql --line 4 --env dev
 | Task | Entry file | Key functions |
 |------|-----------|---------------|
 | New SQL execution feature | `sql_executor.rs` + `sql/init.lua` | `execute_sql()`, `run_sql_request()` |
-| New dataset UI feature | `sql/buffer.lua` + `sql/format.lua` | `render_dataset()`, `format_resultset()` |
+| New dataset UI feature | `sql/buffer/init.lua` + `sql/format.lua` | `render_dataset()`, `format_resultset()` |
 | Connection management | `connections.lua` + `sql_connection.rs` | `show_menu()`, `resolve()` |
-| Inline cell editing | `editor.lua` + `edit_commit.lua` | Edit, validate, commit |
+| Inline cell editing | `editor.lua` + `edit_commit/init.lua` | Edit, validate, commit |
 | DB browser | `db_browser/init.lua` | `toggle()` |
 | Export/Import | `export.lua` + `import.lua` | `run()`, format-specific |
-| Completion | `completion.lua` + sql-completion skill | See `.opencode/skills/sql-completion/` |
+| Completion | `completion/init.lua` + sql-completion skill | See `.opencode/skills/sql-completion/` |
 | Source formatting | `source_format.lua` | `format_buffer()`, `format()` |

@@ -3,7 +3,7 @@
 
 local M = {}
 
-local adapter = require("poste-sql.completion_adapter")
+local adapter = require("poste-sql.completion.adapter")
 
 
 --- Dialect-specific type lists

@@ -56,9 +56,9 @@
 
 **支持**：一致性。Lua 代码可以使用统一的 `ctx_schema` 而不需要检查 `ctx_type`。
 
-**反对**：如果任何 Lua 代码依赖于 `SchemaTable` 的 `ctx_schema` 为 `null`，这是破坏性变更。但抽查显示 Lua `completion.lua` 并没有为 `schema_table` 检查 `ctx_schema`——它直接使用 `ctx_data`。
+**反对**：如果任何 Lua 代码依赖于 `SchemaTable` 的 `ctx_schema` 为 `null`，这是破坏性变更。但抽查显示 Lua `completion/init.lua` 并没有为 `schema_table` 检查 `ctx_schema`——它直接使用 `ctx_data`。
 
-**建议**：**在 P2 中为 `SchemaTable` 添加 `ctx_schema`**（与 golden fixtures 一起）。Lua `completion.lua` 暂时可以继续使用 `ctx_data`；无需紧急变更。
+**建议**：**在 P2 中为 `SchemaTable` 添加 `ctx_schema`**（与 golden fixtures 一起）。Lua `completion/init.lua` 暂时可以继续使用 `ctx_data`；无需紧急变更。
 
 ---
 
@@ -75,9 +75,9 @@
 
 ---
 
-## 决策 5：Lua `completion_ctx.lua` — 保留还是弃用？
+## 决策 5：Lua `completion/ctx.lua` — 保留还是弃用？
 
-**当前状态**：`completion_ctx.lua` 提供 `detect_context()`（正则启发式回退）、`extract_from_tables()`、`get_tables_and_alias()`。它是许多边界 bug 的来源。
+**当前状态**：`completion/ctx.lua` 提供 `detect_context()`（正则启发式回退）、`extract_from_tables()`、`get_tables_and_alias()`。它是许多边界 bug 的来源。
 
 **P1 计划**：降级为仅回退。P1 后 Lua 回退不添加新功能。
 
@@ -122,7 +122,7 @@
 ## 决策 8：`@connection` / `@database` — 在 Rust 还是 Lua 中解析？
 
 **当前状态**：两者都处理：
-- Lua：`completion.lua` 第 146-196 行（调用 Rust 前的快速路径）
+- Lua：`completion/init.lua` 第 146-196 行（调用 Rust 前的快速路径）
 - Rust：`detectors.rs` `try_directive()`（处理 SQL 正文内的标记）
 
 **问题**：双重处理可能产生不一致。

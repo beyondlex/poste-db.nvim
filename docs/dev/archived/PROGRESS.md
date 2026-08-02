@@ -68,14 +68,14 @@
 - New: `lua/poste/sql/format.lua`
 - Features: unicode tables, auto column width, CJK width, NULL display
 
-[x] **Step 10: sql/highlights.lua — extmark highlights**
+[x] **Step 10: sql/highlights/init.lua — extmark highlights**
 - Deps: Step 9
-- New: `lua/poste/sql/highlights.lua`
+- New: `lua/poste/sql/highlights/init.lua`
 - Groups: Header/Null/CellSelected/Meta/Modified/Deleted/Added
 
-[x] **Step 11: sql/buffer.lua — bottom hsplit + cell nav**
+[x] **Step 11: sql/buffer/init.lua — bottom hsplit + cell nav**
 - Deps: Step 9, 10
-- New: `lua/poste/sql/buffer.lua`
+- New: `lua/poste/sql/buffer/init.lua`
 - Keys: h/l left/right, j/k up/down, 0/$ first/last col, H header, K preview, yy copy, q close
 
 [x] **Step 12: sql/context.lua + sql/init.lua — exec entry**
@@ -164,9 +164,9 @@
 - New: `lua/poste/sql/table_ops.lua`
 - Keys: ma(add col)/mr(rename)/md(drop)/mt(change type) → gen DDL
 
-[x] **Step 26: sql/completion.lua — SQL completion**
+[x] **Step 26: sql/completion/init.lua — SQL completion**
 - Deps: Step 7, 20
-- New: `lua/poste/sql/completion.lua`
+- New: `lua/poste/sql/completion/init.lua`
 - Completions: SQL keywords, connection names, tables, columns, data types
 
 [x] **Step 27: Phase 4 integration tests**
@@ -283,14 +283,14 @@ Phase 6:   11→32→33,34,35,36    5→37    12→38
 | File | Step |
 |------|------|
 | `lua/poste/sql/init.lua` | 12 |
-| `lua/poste/sql/buffer.lua` | 11 |
+| `lua/poste/sql/buffer/init.lua` | 11 |
 | `lua/poste/sql/format.lua` | 9 |
-| `lua/poste/sql/highlights.lua` | 10 |
+| `lua/poste/sql/highlights/init.lua` | 10 |
 | `lua/poste/sql/connections.lua` | 18 |
 | `lua/poste/sql/context.lua` | 19 |
 | `lua/poste/sql/db_browser.lua` | 22,23 |
 | `lua/poste/sql/table_ops.lua` | 25 |
-| `lua/poste/sql/completion.lua` | 26 |
+| `lua/poste/sql/completion/init.lua` | 26 |
 | `lua/poste/indicators.lua` | 27 |
 
 ### New — VimScript (3)
@@ -344,9 +344,9 @@ The `poste` CLI binary must be distributed alongside the Neovim plugin. Current 
 | Priority | Source | Example |
 |----------|--------|---------|
 | 1 | `vim.g.poste_binary` (user override) | `set g:poste_binary = "/custom/path/poste"` |
-| 2 | `completion_data.lua` plugin-relative | `<plugin_root>/target/debug/poste` |
-| 3 | `completion_data.lua` plugin-relative | `<plugin_root>/target/release/poste` |
-| 4 | `completion_data.lua` plugin-relative | `<plugin_root>/bin/poste` |
+| 2 | `completion/data.lua` plugin-relative | `<plugin_root>/target/debug/poste` |
+| 3 | `completion/data.lua` plugin-relative | `<plugin_root>/target/release/poste` |
+| 4 | `completion/data.lua` plugin-relative | `<plugin_root>/bin/poste` |
 | 5 | CWD-relative (in-repo dev) | `./target/debug/poste` |
 | 6 | `vim.fn.exepath("poste")` | Needs `poste` in PATH |
 

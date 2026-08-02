@@ -1,4 +1,4 @@
-local render = require("poste-sql.buffer_render")
+local render = require("poste-sql.buffer.render")
 
 describe("buffer_render", function()
   it("normalizes a resultset page with header", function()

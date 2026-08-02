@@ -19,8 +19,8 @@ Current default mode runs Rust first, then lets Lua override when Rust returns `
 That makes completion behavior depend on two independent parsers.
 
 **Observed code:**
-- `completion.lua:146-164` documents default hybrid mode and performs the override.
-- `completion_ctx.lua:84-134` is regex-based and does not have Rust's string/comment/paren awareness.
+- `completion/init.lua:146-164` documents default hybrid mode and performs the override.
+- `completion/ctx.lua:84-134` is regex-based and does not have Rust's string/comment/paren awareness.
 
 **Action:**
 1. Audit known cases where Lua currently returns a better result than Rust.
@@ -29,7 +29,7 @@ That makes completion behavior depend on two independent parsers.
 4. Keep Lua context detection only for binary-missing legacy mode.
 5. Add debug logging when Lua fallback is used outside explicit legacy mode.
 
-**File(s):** `lua/poste/sql/completion.lua`, `lua/poste/sql/completion_ctx.lua`, `crates/poste-core/src/sql_context/mod.rs`
+**File(s):** `lua/poste/sql/completion/init.lua`, `lua/poste/sql/completion/ctx.lua`, `crates/poste-core/src/sql_context/mod.rs`
 
 ### [x] P0-2: Preserve schema through Rust → CLI → Lua → introspection
 
@@ -52,7 +52,7 @@ This makes `public.users` and `auth.users` collide and can fetch the wrong colum
 6. Pass `--schema` for PostgreSQL column introspection when schema is known.
 7. Add tests for `public.users u WHERE u.` and `auth.users WHERE users.` style cases.
 
-**File(s):** `crates/poste-cli/src/main.rs`, `crates/poste-core/src/sql_context/mod.rs`, `lua/poste/sql/completion_ctx.lua`, `lua/poste/sql/completion.lua`, `lua/poste/sql/completion_data.lua`
+**File(s):** `crates/poste-cli/src/main.rs`, `crates/poste-core/src/sql_context/mod.rs`, `lua/poste/sql/completion/ctx.lua`, `lua/poste/sql/completion/init.lua`, `lua/poste/sql/completion/data.lua`
 
 ### [x] P0-3: Fix schema-qualified alias extraction in Rust
 
@@ -85,7 +85,7 @@ The Rust and Lua function lists are currently very similar, but still duplicated
    - Lua display keywords: completion snippets, allowed to include compound snippets like `ORDER BY`.
 5. Add a drift check that every single-word Lua keyword/snippet part that should be classified is known by Rust.
 
-**File(s):** `crates/poste-core/src/sql_context/functions.rs`, `crates/poste-core/src/sql_context/tokenizer.rs`, `lua/poste/sql/completion_data.lua`, `tests/`
+**File(s):** `crates/poste-core/src/sql_context/functions.rs`, `crates/poste-core/src/sql_context/tokenizer.rs`, `lua/poste/sql/completion/data.lua`, `tests/`
 
 ### [x] P0-5: Add integration coverage for all completion modes
 
@@ -169,7 +169,7 @@ Example: PostgreSQL users see MySQL-only functions such as `GET_LOCK` and `BENCH
 4. Filter functions when dialect is known; keep current all-functions behavior when dialect is unknown.
 5. Add tests for at least PostgreSQL and MySQL.
 
-**File(s):** `crates/poste-core/src/sql_context/functions.rs`, `crates/poste-core/src/sql_context/mod.rs`, `crates/poste-cli/src/main.rs`, `lua/poste/sql/completion.lua`
+**File(s):** `crates/poste-core/src/sql_context/functions.rs`, `crates/poste-core/src/sql_context/mod.rs`, `crates/poste-cli/src/main.rs`, `lua/poste/sql/completion/init.lua`
 
 ---
 
@@ -185,7 +185,7 @@ The remaining question is product behavior: should `OVER (` suggest window keywo
 2. If added, expose dedicated items for `PARTITION BY`, `ORDER BY`, frame clauses, and window functions.
 3. Keep `PARTITION BY` column completion.
 
-**File(s):** `crates/poste-core/src/sql_context/mod.rs`, `lua/poste/sql/completion.lua`, `lua/poste/sql/completion_data.lua`
+**File(s):** `crates/poste-core/src/sql_context/mod.rs`, `lua/poste/sql/completion/init.lua`, `lua/poste/sql/completion/data.lua`
 
 ### [x] P2-2: Verify `SET` behavior in UPDATE vs session settings
 
@@ -205,7 +205,7 @@ Each completion request spawns `poste context detect`.
 2. Add debounce/cache if needed.
 3. Consider a persistent Neovim job/RPC process only if measurements justify it.
 
-**File(s):** `lua/poste/sql/completion.lua`
+**File(s):** `lua/poste/sql/completion/init.lua`
 
 ### [ ] P2-4: Keep statement-boundary fallback minimal
 

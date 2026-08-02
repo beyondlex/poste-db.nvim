@@ -2,7 +2,7 @@ local saved_cli = package.loaded["poste.cli"]
 local cli_stub = {}
 package.loaded["poste.cli"] = cli_stub
 
-local exec = require("poste-sql.introspect_exec")
+local exec = require("poste-sql.introspect.exec")
 
 describe("introspect exec helpers", function()
   local saved_schedule = vim.schedule

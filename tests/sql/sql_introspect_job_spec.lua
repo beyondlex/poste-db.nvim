@@ -1,4 +1,4 @@
-local job = require("poste-sql.introspect_job")
+local job = require("poste-sql.introspect.job")
 
 describe("introspect job helpers", function()
   it("decodes json tables", function()

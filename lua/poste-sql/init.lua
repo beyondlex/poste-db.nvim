@@ -35,7 +35,7 @@ M._test = statement._test
 local buffer_setup = require("poste.buffer_setup")
 
 local function register_sql_completion()
-  local adapter = require("poste-sql.completion_adapter")
+  local adapter = require("poste-sql.completion.adapter")
   if not adapter.is_available() then return end
 
   adapter.register_source({
@@ -159,8 +159,8 @@ function M.setup(opts)
     local instance = sql_comp.new()
     table.insert(status, "  Enabled: " .. tostring(instance:enabled()))
 
-    table.insert(status, "  blink.cmp loaded: " .. tostring(require("poste-sql.completion_adapter").is_available()))
-    local adapter = require("poste-sql.completion_adapter")
+    table.insert(status, "  blink.cmp loaded: " .. tostring(require("poste-sql.completion.adapter").is_available()))
+    local adapter = require("poste-sql.completion.adapter")
     if adapter.is_available() then
       local has_sql = adapter.has_provider("poste_sql")
       table.insert(status, "  poste_sql provider registered: " .. tostring(has_sql))
@@ -211,7 +211,7 @@ function M.setup(opts)
                lw == "set" or lw == "on" or lw == "having" or
                lw == "by" or lw == "and" or lw == "or" then
               vim.schedule(function()
-                pcall(function() require("poste-sql.completion_adapter").show() end)
+                pcall(function() require("poste-sql.completion.adapter").show() end)
               end)
             end
           end
@@ -224,7 +224,7 @@ function M.setup(opts)
   vim.api.nvim_create_user_command("PosteSQLCmpReload", function()
     package.loaded["poste-sql.completion"] = nil
     require("poste-sql.completion")
-    local adapter = require("poste-sql.completion_adapter")
+    local adapter = require("poste-sql.completion.adapter")
 
     if not adapter.is_available() then
       vim.notify("blink.cmp not loaded, cannot re-register", vim.log.levels.WARN)
@@ -256,8 +256,8 @@ function M.setup(opts)
     local tbls, alias_map = sql_comp._test.extract_from_tables(buf, cursor_lnum)
     local conn = sql_comp._test.conn_key()
 
-    local blink_src = require("poste-sql.completion_adapter").get_source_lib()
-    local blink_config = require("poste-sql.completion_adapter").get_config()
+    local blink_src = require("poste-sql.completion.adapter").get_source_lib()
+    local blink_config = require("poste-sql.completion.adapter").get_config()
     local active_providers = blink_src.get_enabled_provider_ids("insert")
     local per_ft = "(unavailable)"
     if blink_config.sources and blink_config.sources.per_filetype then
@@ -294,7 +294,7 @@ function M.setup(opts)
     local before = line:sub(1, col)
     local last_word = before:match("(%w+)%s*$")
 
-    local adapter = require("poste-sql.completion_adapter")
+    local adapter = require("poste-sql.completion.adapter")
 
     local msg = {
       "PosteSQLDebugSpace:",
@@ -360,7 +360,7 @@ function M.setup(opts)
   end, { desc = "Test SQL completion at cursor" })
 
   vim.api.nvim_create_user_command("PosteSQLCmpDebug", function()
-    require("poste-sql.completion_debug").toggle()
+    require("poste-sql.completion.debug").toggle()
   end, { desc = "Toggle SQL completion debug floating window" })
 
   vim.api.nvim_create_user_command("PosteConnection", function()
@@ -445,7 +445,7 @@ function M.setup(opts)
       local k = state.get_keymap("sql_source", "trigger_completion", "<C-Space>")
       if k then
         vim.keymap.set("i", k, function()
-          pcall(function() require("poste-sql.completion_adapter").show() end)
+          pcall(function() require("poste-sql.completion.adapter").show() end)
         end, { buffer = 0, noremap = true, silent = true, desc = "Trigger completion" })
       end
 
@@ -462,7 +462,7 @@ function M.setup(opts)
           if col < 1 or line:sub(col, col) ~= " " then return end
           local last_word = line:sub(1, col - 1):match("(%w+)%s*$")
           if last_word and sql_keywords[last_word:lower()] then
-            local adapter = require("poste-sql.completion_adapter")
+            local adapter = require("poste-sql.completion.adapter")
             adapter.show({ force = true, trigger_kind = "manual" })
           end
         end,
@@ -478,7 +478,7 @@ function M.setup(opts)
           local prefix = before:match("[%w_]*$") or ""
           if #prefix > 0 then
             vim.schedule(function()
-              local adapter = require("poste-sql.completion_adapter")
+              local adapter = require("poste-sql.completion.adapter")
               adapter.show({ force = true, trigger_kind = "manual" })
             end)
           end

@@ -1,6 +1,6 @@
 local D = require("poste-sql.dataset")
 local state = require("poste.state")
-local raw = require("poste-sql.buffer_nav_raw")
+local raw = require("poste-sql.buffer.nav_raw")
 
 describe("buffer_nav_raw", function()
   local saved_T = nil
@@ -14,7 +14,7 @@ describe("buffer_nav_raw", function()
     saved_win_is_valid = vim.api.nvim_win_is_valid
     saved_enter = raw.enter
     saved_exit = raw.exit
-    saved_buffer_page = package.loaded["poste-sql.buffer_page"]
+    saved_buffer_page = package.loaded["poste-sql.buffer.page"]
     D.dataset_buffer = 11
     D.dataset_window = 22
     state.sql._raw_mode = false
@@ -26,7 +26,7 @@ describe("buffer_nav_raw", function()
     vim.api.nvim_win_is_valid = saved_win_is_valid
     raw.enter = saved_enter
     raw.exit = saved_exit
-    package.loaded["poste-sql.buffer_page"] = saved_buffer_page
+    package.loaded["poste-sql.buffer.page"] = saved_buffer_page
   end)
 
   it("builds raw lines from the formatter", function()
@@ -150,7 +150,7 @@ describe("buffer_nav_raw", function()
     local enter_calls = 0
     local exit_calls = 0
 
-    package.loaded["poste-sql.buffer_page"] = {
+    package.loaded["poste-sql.buffer.page"] = {
       refresh_page = function()
         refresh_calls = refresh_calls + 1
       end,

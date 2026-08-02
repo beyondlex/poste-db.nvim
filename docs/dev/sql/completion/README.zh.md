@@ -14,9 +14,9 @@
 
 相关文件：
 
-- `lua/poste/sql/completion.lua`：completion orchestrator。当前会先用 Lua heuristic 判定，再尝试 Rust context，并按 context 分发候选项。
-- `lua/poste/sql/completion_ctx.lua`：Lua fallback。包含正则式 `detect_context()` 和 `extract_from_tables()`，这是多数边界 bug 的来源。
-- `lua/poste/sql/completion_data.lua`：关键字、函数、表/列 cache、binary 查找、metadata fetch。
+- `lua/poste/sql/completion/init.lua`：completion orchestrator。当前会先用 Lua heuristic 判定，再尝试 Rust context，并按 context 分发候选项。
+- `lua/poste/sql/completion/ctx.lua`：Lua fallback。包含正则式 `detect_context()` 和 `extract_from_tables()`，这是多数边界 bug 的来源。
+- `lua/poste/sql/completion/data.lua`：关键字、函数、表/列 cache、binary 查找、metadata fetch。
 - `lua/poste/sql/statement.lua`：SQL statement 提取。已能调用 `poste context stmt`，但仍有 Lua fallback 和 SQL-file-specific 补丁。
 - `crates/poste-core/src/sql_context/`：Rust tokenizer/context detector/table extraction/statement span。
 - `crates/poste-cli/src/main.rs`：已有 `poste context detect <offset> --dialect <dialect>` 和 `poste context stmt <cursor_line>`。
@@ -93,14 +93,14 @@
 
 当前问题：
 
-- `lua/poste/sql/completion.lua` 中 `get_items()` 会先调用 `ctx.detect_context(line_before)`，再尝试 Rust。
-- `completion_ctx.lua` 的 fallback 没有完整 string/comment/subquery/CTE awareness。
+- `lua/poste/sql/completion/init.lua` 中 `get_items()` 会先调用 `ctx.detect_context(line_before)`，再尝试 Rust。
+- `completion/ctx.lua` 的 fallback 没有完整 string/comment/subquery/CTE awareness。
 - `tests/sql_completion_edge_spec.lua` 仍大量直接测 Lua heuristic 的当前行为。
 
 实施步骤：
 
 1. 新增一个薄包装函数
-   - 文件：`lua/poste/sql/completion.lua`
+   - 文件：`lua/poste/sql/completion/init.lua`
    - 建议命名：`detect_context_for_completion(bufnr, line_before, cursor_line)`
    - 默认流程：
      1. directive fast path 可以保留在 Lua，因为这是 Poste 文件语法，不是 SQL grammar。
@@ -122,12 +122,12 @@
    - 不要继续让 `_test.detect_context` 名字模糊地指向 Lua heuristic。
 
 4. 保留 Lua fallback，但降低权威性
-   - `completion_ctx.lua` 不要删除。
+   - `completion/ctx.lua` 不要删除。
    - 文件头注释更新为：fallback-only when Rust binary unavailable.
    - 任何新 context feature 优先加到 Rust，不加到 Lua fallback，除非无 binary 场景必须支持。
 
 5. completion item 分发仍留在 Lua
-   - `table`、`column`、`dot_column` 等 item building 可继续在 `completion.lua`。
+   - `table`、`column`、`dot_column` 等 item building 可继续在 `completion/init.lua`。
    - 这是合理分层：Rust 判定 context，Lua 结合 Neovim 和 cache 生成 items。
 
 测试策略：
@@ -326,7 +326,7 @@ AND █
 
 - 原有 flat table tests 通过。
 - 新 CTE/subquery golden fixtures 通过。
-- `completion.lua` 的 column gathering 不需要了解 CTE/subquery 细节，只消费 Rust result。
+- `completion/init.lua` 的 column gathering 不需要了解 CTE/subquery 细节，只消费 Rust result。
 
 ## P4：实现 persistent context service，降低 completion 延迟
 
@@ -334,7 +334,7 @@ AND █
 
 当前问题：
 
-- `completion.lua` 的 `try_rust_context()` 每次 cache miss 会执行：
+- `completion/init.lua` 的 `try_rust_context()` 每次 cache miss 会执行：
 
 ```lua
 vim.fn.system("<poste> context detect <offset> --dialect ...", sql_text)
@@ -426,7 +426,7 @@ stop()
 5. 不做事项
    - 不实现 LSP initialize/textDocument/didChange。
    - 不做跨编辑器协议。
-   - 不让 server 访问 DB；metadata 仍由现有 `completion_data.lua` CLI introspect/cache 流程处理。
+   - 不让 server 访问 DB；metadata 仍由现有 `completion/data.lua` CLI introspect/cache 流程处理。
 
 测试策略：
 
@@ -434,7 +434,7 @@ stop()
   - `poste context serve` 输入一行 detect request，输出正确 JSON。
   - 输入非法 JSON，输出 `ok=false` 并继续服务下一行。
 - Lua：
-  - 可 mock `context_client.detect()`，验证 `completion.lua` fallback 路径。
+  - 可 mock `context_client.detect()`，验证 `completion/init.lua` fallback 路径。
   - 不强制在普通 `tests/run.sh` 中启动真实 long-running job，避免 flaky。
 
 验收标准：
@@ -486,7 +486,7 @@ tests/run.sh
   - 防护：保持 JSON 字段向后兼容，只增字段，不删字段。
 
 - 风险：Lua fallback 删除过早导致无 binary 环境不可用。
-  - 防护：保留 `completion_ctx.lua`，但标记 fallback-only。
+  - 防护：保留 `completion/ctx.lua`，但标记 fallback-only。
 
 - 风险：scope resolver 一次做太大。
   - 防护：P3 第一阶段只处理 table/alias/CTE visibility，不推导 derived columns。

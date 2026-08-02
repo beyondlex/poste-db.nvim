@@ -3,7 +3,7 @@
 ## Problem
 
 Current SQL completion uses Lua-side heuristic regex matching (`detect_context` in
-`completion.lua`). It has fundamental limitations:
+`completion/init.lua`). It has fundamental limitations:
 
 1. No tokenizer → can't tell strings/comments from SQL → triggers wrong context
 2. No paren tracking → subquery tables leak to outer scope
@@ -21,7 +21,7 @@ Current SQL completion uses Lua-side heuristic regex matching (`detect_context` 
 ```
 ┌───────────────────────────────────────────────┐
 │  Lua Completion Layer  (thin client)           │
-│  - completion.lua (cache mgmt, item building)  │
+│  - completion/init.lua (cache mgmt, item building)  │
 │  - init.lua (statement extraction → Rust)      │
 │  - Falls back to existing Lua logic if         │
 │    Rust binary not available                   │
@@ -127,7 +127,7 @@ strings, comments, and escaped quotes. The fix for indicator placement is:
 
 1. Add `sql_context.rs` with full implementation
 2. Add `poste context` CLI subcommand
-3. Update `completion.lua` to call Rust for context detection (fallback to Lua)
+3. Update `completion/init.lua` to call Rust for context detection (fallback to Lua)
 4. Update `init.lua` statement extraction to use Rust statement boundaries
 5. Run existing test suite — all pass
 6. Remove deprecated Lua code once stable

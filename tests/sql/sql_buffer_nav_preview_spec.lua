@@ -1,4 +1,4 @@
-local preview = require("poste-sql.buffer_nav_preview")
+local preview = require("poste-sql.buffer.nav_preview")
 
 describe("buffer_nav_preview", function()
   it("splits preview text into lines", function()

@@ -1,6 +1,6 @@
 local D = require("poste-sql.dataset")
-local nav = require("poste-sql.buffer_nav")
-local ui = require("poste-sql.buffer_nav_ui")
+local nav = require("poste-sql.buffer.nav")
+local ui = require("poste-sql.buffer.nav_ui")
 
 describe("buffer_nav helpers", function()
   before_each(function()

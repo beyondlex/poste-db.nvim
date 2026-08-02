@@ -1,4 +1,4 @@
-local target = require("poste-sql.introspect_target")
+local target = require("poste-sql.introspect.target")
 
 describe("introspect target resolver", function()
   it("resolves directive actions", function()

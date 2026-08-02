@@ -56,9 +56,9 @@ For discussion before proceeding to P1-P4.
 
 **Pro**: Consistency. Lua code could use `ctx_schema` uniformly instead of checking `ctx_type`.
 
-**Con**: Breaking change if any Lua code relies on `ctx_schema` being `null` for `SchemaTable`. But a spot check shows Lua `completion.lua` does NOT check `ctx_schema` for `schema_table` — it uses `ctx_data` directly.
+**Con**: Breaking change if any Lua code relies on `ctx_schema` being `null` for `SchemaTable`. But a spot check shows Lua `completion/init.lua` does NOT check `ctx_schema` for `schema_table` — it uses `ctx_data` directly.
 
-**Recommendation**: **Add `ctx_schema` for `SchemaTable`** in P2 (alongside golden fixtures). Lua `completion.lua` can continue using `ctx_data` for now; no urgent change needed.
+**Recommendation**: **Add `ctx_schema` for `SchemaTable`** in P2 (alongside golden fixtures). Lua `completion/init.lua` can continue using `ctx_data` for now; no urgent change needed.
 
 ---
 
@@ -75,9 +75,9 @@ For discussion before proceeding to P1-P4.
 
 ---
 
-## Decision 5: Lua `completion_ctx.lua` — Keep or Deprecate?
+## Decision 5: Lua `completion/ctx.lua` — Keep or Deprecate?
 
-**Current**: `completion_ctx.lua` provides `detect_context()` (regex heuristic fallback), `extract_from_tables()`, `get_tables_and_alias()`. It is the source of many boundary bugs.
+**Current**: `completion/ctx.lua` provides `detect_context()` (regex heuristic fallback), `extract_from_tables()`, `get_tables_and_alias()`. It is the source of many boundary bugs.
 
 **P1 plan**: Demote to fallback-only. No new features in Lua fallback after P1.
 
@@ -122,7 +122,7 @@ For discussion before proceeding to P1-P4.
 ## Decision 8: `@connection` / `@database` — Parse in Rust or Lua?
 
 **Current**: Handled in both:
-- Lua: `completion.lua` lines 146-196 (fast paths before Rust)
+- Lua: `completion/init.lua` lines 146-196 (fast paths before Rust)
 - Rust: `detectors.rs` `try_directive()` (handles tokens within SQL body)
 
 **Problem**: Double-handling creates potential for inconsistency.

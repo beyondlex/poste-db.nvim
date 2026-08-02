@@ -99,7 +99,7 @@ When `-- @database` is absent after `-- @connection`, the completion for `@datab
 |-------|-------------------|-------|
 | Rust `context.rs` | Semicolons + 2+ blank lines | `find_statement_token_range()`, blank line logic removed after P3 |
 | Rust `statements.rs` | Semicolons only | `find_statement_span()` for execution |
-| Lua `completion.lua` | Strips all directive lines | Sends full SQL body to Rust |
+| Lua `completion/init.lua` | Strips all directive lines | Sends full SQL body to Rust |
 | Lua `statement.lua` | Semicolons only | `extract_stmt_at_cursor()` (execution layer) |
 
 ### 3.5 Conclusion
@@ -165,7 +165,7 @@ When `-- @database` is absent after `-- @connection`, the completion for `@datab
 
 ### 4.3 Null/NIL Handling
 
-- JSON `null` in Rust → `null` in JSON → `vim.NIL` in Neovim → normalize to `nil` in Lua (already handled in `completion.lua:deep_clean()`).
+- JSON `null` in Rust → `null` in JSON → `vim.NIL` in Neovim → normalize to `nil` in Lua (already handled in `completion/init.lua:deep_clean()`).
 - Empty prefix: `""`.
 - Empty tables: `[]`.
 
@@ -248,8 +248,8 @@ The following rules define where Poste file format ends and SQL grammar begins:
 
 | Construct | Handler | Layer | Notes |
 |-----------|---------|-------|-------|
-| `-- @connection` directive | `completion.lua:get_items()` | Completion | Complete from connection names |
-| `-- @database` directive | `completion.lua:get_items()` | Completion | Complete from database names |
+| `-- @connection` directive | `completion/init.lua:get_items()` | Completion | Complete from connection names |
+| `-- @database` directive | `completion/init.lua:get_items()` | Completion | Complete from database names |
 | Directive context tracking | `context.lua:resolve_context()` | Execution | Resolves effective connection/database from nearest preceding directive |
 | `USE database` statement | `context.lua:resolve_context()` | Execution | Database context switching |
 
@@ -269,7 +269,7 @@ The following rules define where Poste file format ends and SQL grammar begins:
 
 - Rust MUST NOT resolve `-- @connection` names (no access to `connections.json`).
 - In the completion pipeline, Lua strips directive lines and sends the full SQL body to Rust.
-- Lua MUST NOT attempt heuristic SQL grammar analysis in `completion_ctx.lua` beyond what Rust provides, unless Rust binary is unavailable.
+- Lua MUST NOT attempt heuristic SQL grammar analysis in `completion/ctx.lua` beyond what Rust provides, unless Rust binary is unavailable.
 - `-- @` is Poste file syntax, not SQL syntax.
 
 ---

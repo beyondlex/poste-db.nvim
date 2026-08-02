@@ -18,9 +18,9 @@ Use this when introspection code is drifting into a monolith.
 ## Rules
 
 - Split entry into route, detect payload, target mapping, and action/UI.
-- Keep `introspect_route.lua`, `introspect_detect.lua`, and
-  `introspect_target.lua` pure where possible.
-- Keep jobs in `introspect_exec.lua` and rendering in `introspect_ui.lua`.
+- Keep `introspect/route.lua`, `introspect/detect.lua`, and
+  `introspect/target.lua` pure where possible.
+- Keep jobs in `introspect/exec.lua` and rendering in `introspect/ui.lua`.
 - Do not mix shell construction, JSON parsing, and float rendering in one
   function unless the file is already a thin wrapper.
 - Add tests for each layer before touching `show_table_ddl()`.

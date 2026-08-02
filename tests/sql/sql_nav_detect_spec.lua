@@ -1,4 +1,4 @@
-local detect = require("poste-sql.nav_detect")
+local detect = require("poste-sql.nav.detect")
 
 describe("nav_detect", function()
   it("builds a context detect command with optional dialect", function()

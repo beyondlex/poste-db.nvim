@@ -50,7 +50,7 @@ Walk through `design-decisions.en.md`, decide each:
 | D2 | `in_string`/`in_comment` ambiguity | Keep / Option 2 / Option 3 | |
 | D3 | `ctx_schema` for `SchemaTable` | Add in P2 / Leave as-is | |
 | D4 | `version` granularity | Single int / `{protocol, data}` | |
-| D5 | Lua `completion_ctx.lua` future | Keep indefinitely / Deprecate after P4 | |
+| D5 | Lua `completion/ctx.lua` future | Keep indefinitely / Deprecate after P4 | |
 | D6 | Rust knows `###`? | No / Yes (future LSP) | |
 | D7 | `BUG` tests update timing | Immediately in P1 / Wait until P2 | |
 | D8 | Directive ownership | Lua owns / Both keep | |

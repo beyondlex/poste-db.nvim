@@ -151,9 +151,9 @@ Scenario             Action               Baseline  Optimized    Speedup
 ...
 ```
 
-### P0 Fix: `buffer.lua` — autocmd leak
+### P0 Fix: `buffer/init.lua` — autocmd leak
 
-**Location**: `lua/poste/sql/buffer.lua:327`
+**Location**: `lua/poste/sql/buffer/init.lua:327`
 
 **Change**: delete old `D.scroll_autocmd_id` before creating new `WinScrolled`, mirroring existing `resize_autocmd_id` cleanup.
 
@@ -176,7 +176,7 @@ Scenario             Action               Baseline  Optimized    Speedup
 
 ## Step 1 (P1): Split Formatting into Planning + Page Rendering
 
-### Files: `lua/poste/sql/format.lua`, `lua/poste/sql/buffer.lua`
+### Files: `lua/poste/sql/format.lua`, `lua/poste/sql/buffer/init.lua`
 
 ### Current problem
 
@@ -248,7 +248,7 @@ Important integration rule: after this step, `buffer.render_dataset()` should no
 
 ### 2a: Header Float Reuse
 
-**File**: `lua/poste/sql/buffer_nav.lua`
+**File**: `lua/poste/sql/buffer/nav.lua`
 
 **Current**: `update_header_float()` closes float, creates new buf, writes one line, opens new window on every horizontal move + scroll.
 
@@ -313,7 +313,7 @@ When creating a new float buffer, set `buftype=nofile`, `bufhidden=wipe`, `swapf
 
 ### 2b: find_cell_ranges — Multi-range from one parse
 
-**File**: `lua/poste/sql/highlights.lua`
+**File**: `lua/poste/sql/highlights/init.lua`
 
 **Current**: `position_cursor()` calls `find_cell_range()` for target column (line 169) and last column (line 186). The second call can reuse the one-entry separator cache because Lua strings compare by content, but `position_cursor()` still does two range lookups and two display-width calculations.
 
@@ -359,7 +359,7 @@ Do not key the cache only by row number. A row line can change when sorting, fil
 
 ## Step 3 (P3): View-Based Search/Filter/Sort
 
-### Files: `lua/poste/sql/buffer_search.lua`, `lua/poste/sql/buffer_nav.lua`, `lua/poste/sql/dataset.lua`
+### Files: `lua/poste/sql/buffer/search.lua`, `lua/poste/sql/buffer/nav.lua`, `lua/poste/sql/dataset.lua`
 
 ### Current problem
 
@@ -515,7 +515,7 @@ Search must run over the active view, not always over raw `res.rows`, otherwise 
 
 ## Step 4 (P4): Tighten Highlight Behavior
 
-### Files: `lua/poste/sql/highlights.lua`
+### Files: `lua/poste/sql/highlights/init.lua`
 
 ### Current
 
@@ -535,11 +535,11 @@ Search must run over the active view, not always over raw `res.rows`, otherwise 
 | Order | What | Files | Verification |
 |-------|------|-------|-------------|
 | 0a | Benchmark harness (driver + runner + compare) | `tests/bench_dataset_driver.lua`, `tests/bench_dataset.lua`, `tests/bench_run.sh` | Run on main, get baseline JSON |
-| 0b | P0 autocmd leak fix | `lua/poste/sql/buffer.lua` | `render_twice_repeated` action shows same header_float_calls before/after |
-| 1 | P1: split formatting | `lua/poste/sql/format.lua`, `lua/poste/sql/buffer.lua`, `lua/poste/sql/dataset.lua` | `page_next`/`page_prev` 10x+ faster; column widths stable |
-| 2 | P2: reuse header float + cache cell ranges | `lua/poste/sql/buffer_nav.lua`, `lua/poste/sql/highlights.lua` | `move_right_50` avoids float recreation and skips unchanged header writes; find_cell_ranges parses once |
-| 3 | P3: view-based sort/filter/search | `lua/poste/sql/buffer_nav.lua`, `lua/poste/sql/buffer_search.lua`, `lua/poste/sql/dataset.lua` | `sort_current_col` no deepcopy; `apply_search_highlights` O(page_matches) |
-| 4 | P4: highlight tightening | `lua/poste/sql/highlights.lua` | Validate with assertions, manual visual check |
+| 0b | P0 autocmd leak fix | `lua/poste/sql/buffer/init.lua` | `render_twice_repeated` action shows same header_float_calls before/after |
+| 1 | P1: split formatting | `lua/poste/sql/format.lua`, `lua/poste/sql/buffer/init.lua`, `lua/poste/sql/dataset.lua` | `page_next`/`page_prev` 10x+ faster; column widths stable |
+| 2 | P2: reuse header float + cache cell ranges | `lua/poste/sql/buffer/nav.lua`, `lua/poste/sql/highlights/init.lua` | `move_right_50` avoids float recreation and skips unchanged header writes; find_cell_ranges parses once |
+| 3 | P3: view-based sort/filter/search | `lua/poste/sql/buffer/nav.lua`, `lua/poste/sql/buffer/search.lua`, `lua/poste/sql/dataset.lua` | `sort_current_col` no deepcopy; `apply_search_highlights` O(page_matches) |
+| 4 | P4: highlight tightening | `lua/poste/sql/highlights/init.lua` | Validate with assertions, manual visual check |
 
 ---
 

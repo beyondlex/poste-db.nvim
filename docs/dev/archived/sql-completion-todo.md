@@ -182,7 +182,7 @@ SELECT COUNT(*) FROM posts WHERE ▊
 
 ## 三、Lua `detect_context` — 回退路径缺陷
 
-> 文件：`lua/poste/sql/completion.lua`，`detect_context()` 函数
+> 文件：`lua/poste/sql/completion/init.lua`，`detect_context()` 函数
 
 仅在 `vim.g.poste_sql_legacy_completion = true`（纯 Lua 模式）或 Rust 返回 Keyword、Lua fallback 触发时生效。
 
@@ -228,7 +228,7 @@ SELECT * FROM public.users WHERE ▊
 
 ## 四、Lua `toggle_legacy` 三个模式的行为一致性
 
-> 文件：`lua/poste/sql/completion.lua`
+> 文件：`lua/poste/sql/completion/init.lua`
 
 | 模式 | 别名解析 | WHERE 列 | 表名称提示 |
 |------|---------|---------|-----------|

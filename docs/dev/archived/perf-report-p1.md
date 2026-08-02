@@ -30,11 +30,11 @@ Eliminated `padded_full` deepcopy. Page switches call `render_page` instead of s
 |---|---|
 | `lua/poste/sql/format.lua` | +`plan_resultset_layout`, `render_page`, `render_view`; `format_dataset` returns 3rd value `layout` |
 | `lua/poste/sql/dataset.lua` | +`tab.layout`, `rows_source`, `view_indices`, `row_number_mode` |
-| `lua/poste/sql/buffer.lua` | +`apply_rendered_page` helper; layout-aware path skips `padded_full`/`deepcopy` |
-| `lua/poste/sql/buffer_page.lua` | `refresh_page` uses `render_page` from layout |
+| `lua/poste/sql/buffer/init.lua` | +`apply_rendered_page` helper; layout-aware path skips `padded_full`/`deepcopy` |
+| `lua/poste/sql/buffer/page.lua` | `refresh_page` uses `render_page` from layout |
 | `lua/poste/sql/init.lua` | Threads `layout` through to `render_dataset` |
-| `lua/poste/sql/buffer_search.lua` | Pagination check recognizes `tab.layout` |
-| `lua/poste/sql/buffer_nav.lua` | Pagination check recognizes `tab.layout` |
+| `lua/poste/sql/buffer/search.lua` | Pagination check recognizes `tab.layout` |
+| `lua/poste/sql/buffer/nav.lua` | Pagination check recognizes `tab.layout` |
 | `tests/bench_dataset_driver.lua` | `render_dataset` uses layout path |
 
 ## Verification

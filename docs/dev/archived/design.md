@@ -24,7 +24,7 @@ SQL 功能与 HTTP/Redis 功能尽量隔离，避免互相影响。只在真正�
 | `crates/poste-cli/src/main.rs` | 添加 `connection` / `introspect` 子命令 | CLI 入口是所有协议共享的调度器 |
 | `lua/poste/init.lua` | `run_request()` 中按 filetype 分流 | 检测 `poste_sql` → 调用 `sql.run_sql_request()`，HTTP/Redis 流程完全不变 |
 | `lua/poste/state.lua` | 添加 `M.sql = {}` 命名空间 | SQL 专属状态（当前连接、分页等）放在 `state.sql` 下，不污染 HTTP 状态 |
-| `lua/poste/buffer.lua` | **不改** | HTTP 专用右侧垂直 split — SQL 有自己的 `sql/buffer.lua`（底部水平 split） |
+| `lua/poste/buffer.lua` | **不改** | HTTP 专用右侧垂直 split — SQL 有自己的 `sql/buffer/init.lua`（底部水平 split） |
 | `lua/poste/select.lua` | **不改** | Picker UI 是通用组件 |
 | `lua/poste/indicators.lua` | **不改** | 通用组件：spinner/✓/✘ 对 SQL 同样适用 |
 | `ftdetect/poste.vim` | 添加 2 行 autocmd | `*.sql` → `poste_sql`，`*.sqlite` → `poste_sqlite` |
@@ -46,12 +46,12 @@ SQL 功能与 HTTP/Redis 功能尽量隔离，避免互相影响。只在真正�
 | 文件 | 说明 |
 |------|------|
 | `lua/poste/sql/init.lua` | SQL 执行入口 `run_sql_request()`，对应 HTTP 的 `init.lua` 中的 `run_request()` |
-| `lua/poste/sql/buffer.lua` | SQL 结果面板窗口管理（**底部水平 split**，单元格导航键位，编辑模式） |
+| `lua/poste/sql/buffer/init.lua` | SQL 结果面板窗口管理（**底部水平 split**，单元格导航键位，编辑模式） |
 | `lua/poste/sql/format.lua` | SQL 结果表格渲染（conceal 隐藏分隔符、Virtual Text） |
 | `lua/poste/sql/verbose.lua` | SQL Verbose 视图格式化 |
-| `lua/poste/sql/highlights.lua` | SQL 结果面板 extmark 高亮 + 变更追踪着色 |
+| `lua/poste/sql/highlights/init.lua` | SQL 结果面板 extmark 高亮 + 变更追踪着色 |
 | `lua/poste/sql/context.lua` | SQL 执行上下文管理（connection → database → schema 层级） |
-| `lua/poste/sql/completion.lua` | SQL 补全源（关键字、表名、列名） |
+| `lua/poste/sql/completion/init.lua` | SQL 补全源（关键字、表名、列名） |
 | `lua/poste/sql/connections.lua` | 连接管理 UI（CRUD、测试、选择器） |
 | `lua/poste/sql/db_browser.lua` | 数据库树形浏览器 |
 | `lua/poste/sql/table_ops.lua` | 表操作 UI |
@@ -299,7 +299,7 @@ SELECT * FROM other_db.orders;         -- 可以跨多个数据库
 **关键区别**：
 - HTTP 结果在**右侧垂直 split**（80 列）— 适合 JSON/文本响应
 - SQL 结果在**底部水平 split**（占屏幕 40% 高度）— 适合宽表格（多列）
-- 因此 SQL 需要自己的 `sql/buffer.lua`，不复用 HTTP 的 `buffer.lua`
+- 因此 SQL 需要自己的 `sql/buffer/init.lua`，不复用 HTTP 的 `buffer/init.lua`
 
 #### 6.2 Dataset Buffer 属性
 - **Filetype:** `poste_dataset`
@@ -321,7 +321,7 @@ SELECT * FROM other_db.orders;         -- 可以跨多个数据库
 | `ctrl-f` / `ctrl-b` | 翻页 | 翻页 |
 | `/` | 结果集内搜索（高亮匹配格子） | 原生搜索 |
 
-**实现方式**：在 `sql/buffer.lua` 中设置自定义键位映射，通过 extmark 追踪单元格的列边界，`h`/`l` 跳转到相邻列的起始位置。
+**实现方式**：在 `sql/buffer/init.lua` 中设置自定义键位映射，通过 extmark 追踪单元格的列边界，`h`/`l` 跳转到相邻列的起始位置。
 
 #### 6.4 查看长文本 / JSON（`K` 悬浮预览）
 
@@ -439,7 +439,7 @@ pub async fn execute_sql(request: &Request) -> Result<Response> {
 ### Lua 端实现
 
 #### 1.7 SQL Dataset 面板 — 底部水平分屏
-**新建**: `lua/poste/sql/buffer.lua`
+**新建**: `lua/poste/sql/buffer/init.lua`
 
 SQL 结果面板与 HTTP 完全不同（不复用 `lua/poste/buffer.lua`）：
 
@@ -457,8 +457,8 @@ SQL 结果面板与 HTTP 完全不同（不复用 `lua/poste/buffer.lua`）：
 +-------------------------------------------------------------+
 ```
 
-**与 HTTP buffer.lua 的关键区别**：
-| | HTTP `buffer.lua` | SQL `sql/buffer.lua` |
+**与 HTTP buffer/init.lua 的关键区别**：
+| | HTTP `buffer/init.lua` | SQL `sql/buffer/init.lua` |
 |---|---|---|
 | 分屏方向 | 右侧垂直 split | **底部水平 split** |
 | 默认尺寸 | 80 列宽 | 屏幕高度 40% |
@@ -499,7 +499,7 @@ Dataset 渲染（参考 `dataset-ui-design.md`）：
 - 用户看到的是整齐对齐的列数据，视觉上接近 DataGrip 的 Grid
 
 #### 1.9 单元格导航系统
-**在 `sql/buffer.lua` 中实现**：
+**在 `sql/buffer/init.lua` 中实现**：
 
 用 extmark 追踪每个单元格的列边界位置：
 ```lua
@@ -519,7 +519,7 @@ local cell_boundaries = {}
 | `/` | 结果集内搜索，匹配单元格高亮 |
 
 #### 1.10 长文本悬浮预览（`K`）
-**在 `sql/buffer.lua` 中实现**：
+**在 `sql/buffer/init.lua` 中实现**：
 
 - `K` — 检测当前单元格内容，弹出 Floating Window 显示完整值
 - 自动检测内容类型并设置 filetype（JSON → `json`，XML → `xml`）
@@ -527,7 +527,7 @@ local cell_boundaries = {}
 - 浮动窗大小：最大 80×24，自适应内容
 
 #### 1.11 SQL extmark 高亮
-**新建**: `lua/poste/sql/highlights.lua`
+**新建**: `lua/poste/sql/highlights/init.lua`
 - 表头行用 `PosteSqlHeader` 高亮（加粗 + 下划线）
 - NULL 值用 `PosteSqlNull` 高亮（灰色斜体）
 - 数字列右对齐显示
@@ -598,7 +598,7 @@ end
 - **上下文解析**：执行前调用 `sql/context.lua` 获取当前 connection + database
 - 调用 Rust CLI 执行查询，传递上下文参数
 - **USE 语句处理**：检测到 `USE dbname;` 执行成功后，更新 `state.sql.context.database`
-- 调用 `sql/buffer.lua` 在底部水平 split 中渲染 Dataset
+- 调用 `sql/buffer/init.lua` 在底部水平 split 中渲染 Dataset
 - 复用 `indicators.lua` 在源文件中显示 spinner/✓/✘
 - 调用 `sql/format.lua` 渲染表格、调用 `sql/verbose.lua` 渲染 verbose
 
@@ -837,7 +837,7 @@ pub trait DdlGenerator {
 - 操作生成 DDL SQL 并插入到当前文件，用户审查后手动执行
 
 ### 4.3 SQL 补全增强
-**新建**: `lua/poste/sql/completion.lua`（独立于 HTTP 的 `lua/poste/completion.lua`）
+**新建**: `lua/poste/sql/completion/init.lua`（独立于 HTTP 的 `lua/poste/completion.lua`）
 
 为 SQL 文件添加上下文感知的补全：
 - SQL 关键字（SELECT, FROM, WHERE, JOIN, GROUP BY, ORDER BY, HAVING, INSERT, UPDATE, DELETE, CREATE, ALTER, DROP）
@@ -880,7 +880,7 @@ pub trait DdlGenerator {
 - 导入进度显示
 
 ### 5.3 结果面板增强 — 分页
-**新建**: `lua/poste/sql/pagination.lua`（分页状态管理，不修改 `buffer.lua`）
+**新建**: `lua/poste/sql/pagination.lua`（分页状态管理，不修改 `buffer/init.lua`）
 **修改**: `lua/poste/sql/format.lua`（在表格底部添加分页信息和键位提示）
 
 大数据集分页：
@@ -931,7 +931,7 @@ Page 1/20 · 50/1000 rows · 12ms · dev-pg
 - `R` 或 `:e!` — Refresh：放弃所有修改，重新拉取数据
 - 利用 Vim 原生 Undo Tree 追踪编辑历史
 
-**实现位置**：`lua/poste/sql/buffer.lua`（编辑模式切换）+ 新增 `lua/poste/sql/editor.lua`（差异计算 + DML 生成）
+**实现位置**：`lua/poste/sql/buffer/init.lua`（编辑模式切换）+ 新增 `lua/poste/sql/editor.lua`（差异计算 + DML 生成）
 
 ### 6.2 字段过滤与排序（参考 dataset-ui-design.md §4.1）
 
@@ -1000,15 +1000,15 @@ COMMIT;
 | 文件 | 阶段 | 说明 |
 |------|------|------|
 | `lua/poste/sql/init.lua` | 1 | SQL 执行入口（对应 HTTP 的 `init.lua`） |
-| `lua/poste/sql/buffer.lua` | 1 | Dataset 面板窗口管理（底部水平 split + 单元格导航 + `K` 预览） |
+| `lua/poste/sql/buffer/init.lua` | 1 | Dataset 面板窗口管理（底部水平 split + 单元格导航 + `K` 预览） |
 | `lua/poste/sql/format.lua` | 1 | Dataset 表格渲染（conceal 分隔符、Virtual Text NULL） |
 | `lua/poste/sql/verbose.lua` | 1 | SQL Verbose 视图格式化 |
-| `lua/poste/sql/highlights.lua` | 1 | Dataset extmark 高亮 + 变更追踪着色 |
+| `lua/poste/sql/highlights/init.lua` | 1 | Dataset extmark 高亮 + 变更追踪着色 |
 | `lua/poste/sql/context.lua` | 1,2 | SQL 执行上下文管理（connection → database → USE 处理） |
 | `lua/poste/sql/connections.lua` | 2 | 连接管理 UI（CRUD、测试、选择器） |
 | `lua/poste/sql/db_browser.lua` | 3 | 数据库树形浏览器 |
 | `lua/poste/sql/table_ops.lua` | 4 | 表操作 UI |
-| `lua/poste/sql/completion.lua` | 4 | SQL 智能补全 |
+| `lua/poste/sql/completion/init.lua` | 4 | SQL 智能补全 |
 | `lua/poste/sql/export.lua` | 5 | 导出功能 |
 | `lua/poste/sql/import.lua` | 5 | 导入功能 |
 | `lua/poste/sql/pagination.lua` | 5 | 结果分页状态管理 |
@@ -1039,9 +1039,9 @@ COMMIT;
 | 文件 | 说明 |
 |------|------|
 | `lua/poste/format.lua` | HTTP/Redis 格式化 — SQL 有自己的 `sql/format.lua` |
-| `lua/poste/highlights.lua` | HTTP/Redis 高亮 — SQL 有自己的 `sql/highlights.lua` |
-| `lua/poste/completion.lua` | HTTP 补全 — SQL 有自己的 `sql/completion.lua` |
-| `lua/poste/buffer.lua` | HTTP 右侧垂直 split — SQL 有自己的 `sql/buffer.lua`（底部水平 split） |
+| `lua/poste/highlights.lua` | HTTP/Redis 高亮 — SQL 有自己的 `sql/highlights/init.lua` |
+| `lua/poste/completion.lua` | HTTP 补全 — SQL 有自己的 `sql/completion/init.lua` |
+| `lua/poste/buffer.lua` | HTTP 右侧垂直 split — SQL 有自己的 `sql/buffer/init.lua`（底部水平 split） |
 | `lua/poste/assertions.lua` | HTTP 断言 — SQL 不涉及 |
 | `lua/poste/scripts.lua` | HTTP 脚本 — SQL 不涉及 |
 | `lua/poste/curl.lua` | HTTP curl 导入 — SQL 不涉及 |

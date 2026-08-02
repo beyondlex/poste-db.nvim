@@ -1,4 +1,4 @@
-local exec = require("poste-sql.edit_commit_exec")
+local exec = require("poste-sql.edit_commit.exec")
 
 describe("edit_commit_exec", function()
   it("decodes poste json responses", function()

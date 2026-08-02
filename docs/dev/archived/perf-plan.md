@@ -52,13 +52,13 @@
 
 #### P0 - 页级格式化（最大收益）
 
-**问题**: `format_resultset()` 始终格式化所有行，即使只显示一页。分页切片在 `render_dataset()` 中才发生 (buffer.lua:252-268)。
+**问题**: `format_resultset()` 始终格式化所有行，即使只显示一页。分页切片在 `render_dataset()` 中才发生 (buffer/init.lua:252-268)。
 
 **方案**: 让 `format_resultset()` 支持 `page/page_size` 参数，只格式化当前页所需行。核心涉及：
 1. `format.lua:calc_column_widths()` — 只需扫描当前页行 → column widths 足够
 2. `format.lua:format_resultset()` — 接受 `page/page_size` 参数，只渲染目标页的行
-3. `buffer.lua:render_dataset()` — 调用时传递分页参数，消除后续 `padded_full` 的 `vim.deepcopy` 和切片逻辑
-4. `buffer_search.lua:show_search()` — 搜索仍需全表扫描，不在此限
+3. `buffer/init.lua:render_dataset()` — 调用时传递分页参数，消除后续 `padded_full` 的 `vim.deepcopy` 和切片逻辑
+4. `buffer/search.lua:show_search()` — 搜索仍需全表扫描，不在此限
 
 **预期**: 100K 行 × 10 列场景，渲染时间从 **O(100K)** 降至 **O(page_size)**（通常 50）。
 

@@ -34,26 +34,26 @@ Keep full rendered rows in Lua (`tab._full_lines`), but only write the visible w
 #### `format.lua`
 - No changes needed — `plan_resultset_layout` + `render_page`/`render_view` already produce correct output
 
-#### `buffer.lua` — `apply_rendered_page()`
+#### `buffer/init.lua` — `apply_rendered_page()`
 - After computing `padded` (full lines with header removed), save full data rows to `tab._full_lines`
 - Create `visible` slice by truncating each data row: for each line in `padded`, keep columns from `leftcol` to `leftcol + win_width` (byte positions derived from `│` separators or using the existing `find_cell_ranges` approach)
 - Write `visible` to buffer instead of `padded`
 - Extmarks still need to work on truncated lines; adjust highlight positions accordingly
 
-#### `buffer_nav.lua` — `position_cursor()`
+#### `buffer/nav.lua` — `position_cursor()`
 - Read the full line from `tab._full_lines[row]` instead of `nvim_buf_get_lines(buf, ...)` — avoids buffer roundtrip and ensures `find_cell_ranges` sees the complete line
 - Cursor column positioning unchanged (uses `find_cell_ranges` on the full line)
 
-#### `buffer_nav.lua` — `update_header_float()`
+#### `buffer/nav.lua` — `update_header_float()`
 - No change needed — already computes `slice_header_to_win` from `tab.header_text` + `index`
 - But: when leftcol changes, `WinScrolled` autocmd fires, which calls this. If we also truncate buffer lines during scroll, we need to avoid double-triggering.
 
-#### `buffer_nav.lua` — new `truncate_lines(leftcol, win_width)` or integrate into `update_header_float`
+#### `buffer/nav.lua` — new `truncate_lines(leftcol, win_width)` or integrate into `update_header_float`
 - On `WinScrolled` (or any leftcol change), recompute the visible slice from `tab._full_lines`
 - `nvim_buf_set_lines` only for the data region (preserve header/border lines, footer)
 - Reapply extmarks for the visible slice
 
-#### `highlights.lua` — `apply_dataset_highlights()`
+#### `highlights/init.lua` — `apply_dataset_highlights()`
 - Must work on truncated lines — row number columns are at the start of each line regardless of truncation, NULL values need scanning over the truncated portion
 - Border and header lines are unaffected (always fully visible)
 
@@ -78,8 +78,8 @@ format → render_page → lines (full width)
 ### Implementation Order
 
 1. Add `tab._full_lines` storage in `dataset.lua`
-2. Modify `apply_rendered_page` in `buffer.lua` to save full lines and write truncated
-3. Modify `position_cursor` in `buffer_nav.lua` to read from `tab._full_lines`
+2. Modify `apply_rendered_page` in `buffer/init.lua` to save full lines and write truncated
+3. Modify `position_cursor` in `buffer/nav.lua` to read from `tab._full_lines`
 4. Add truncation on `WinScrolled` + `update_header_float`
 5. Adjust `apply_dataset_highlights` for truncated lines
 

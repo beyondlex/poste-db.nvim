@@ -47,7 +47,7 @@ SELECT * FROM events WHERE [提示 analytics.events 的列名]
 - 重构 `resolve_context()` 为两阶段扫描
 - 全局默认 + 块级覆盖
 
-### lua/poste/sql/completion.lua
+### lua/poste/sql/completion/init.lua
 - `get_items()` 新增 `cursor_line` 参数
 - `extract_from_tables()` 使用传入的 cursor_line
 - 更新 blink.cmp 和 nvim-cmp sources

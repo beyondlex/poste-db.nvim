@@ -10,7 +10,7 @@ allowed-tools:
   - Bash
   - AskUserQuestion
 metadata:
-  trigger: sql completion|context detect|tokenizer|sql_context|completion.lua|keyword|table extraction|alias|schema
+  trigger: sql completion|context detect|tokenizer|sql_context|completion/init.lua|keyword|table extraction|alias|schema
 ---
 
 # SQL Completion — Agent Skill
@@ -88,9 +88,9 @@ Do not treat `public.users` and `auth.users` as the same table.
 | Table/schema/alias extraction | `tables.rs` |
 | SQL function completion | `functions.rs` |
 | CLI response shape | `crates/poste-cli/src/main.rs` |
-| Completion dispatch/UI | `completion.lua` |
-| Async introspection or cache | `completion_data.lua` |
-| Legacy fallback behavior | `completion_ctx.lua` |
+| Completion dispatch/UI | `completion/init.lua` |
+| Async introspection or cache | `completion/data.lua` |
+| Legacy fallback behavior | `completion/ctx.lua` |
 | Connection/database resolution | `context.lua` |
 
 ### Step 2: Establish Baseline
@@ -118,7 +118,7 @@ Update Lua only when:
 - Async introspection needs new arguments such as `--schema`.
 - Legacy fallback needs a small compatibility update.
 
-Avoid expanding `completion_ctx.lua` unless the task is explicitly about legacy fallback.
+Avoid expanding `completion/ctx.lua` unless the task is explicitly about legacy fallback.
 
 ### Step 5: Add Tests
 
@@ -201,8 +201,8 @@ Tokenizer changes must preserve:
 | `crates/poste-core/src/sql_context/tables.rs` | Table/schema/alias extraction |
 | `crates/poste-core/src/sql_context/functions.rs` | SQL function list |
 | `crates/poste-cli/src/main.rs` | `poste context detect` JSON shape |
-| `lua/poste-sql/completion.lua` | Completion orchestrator |
-| `lua/poste-sql/completion_ctx.lua` | Legacy Lua regex fallback (deprecated) |
-| `lua/poste-sql/completion_data.lua` | Async introspection, cache, fallback lists |
+| `lua/poste-sql/completion/init.lua` | Completion orchestrator |
+| `lua/poste-sql/completion/ctx.lua` | Legacy Lua regex fallback (deprecated) |
+| `lua/poste-sql/completion/data.lua` | Async introspection, cache, fallback lists |
 | `lua/poste-sql/context.lua` | Connection/database resolution |
 | `crates/poste-exec/src/sql_dialect.rs` | Runtime dialect behavior for introspection/execution |

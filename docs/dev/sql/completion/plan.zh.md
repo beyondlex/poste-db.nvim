@@ -30,13 +30,13 @@
 
 ### Lua 侧 (`lua/poste/sql/`)
 
-- [x] **P1e. 检测包装器** — 在 `completion.lua` 添加 `detect_context_for_completion(bufnr, line_before, cursor_line)`:
+- [x] **P1e. 检测包装器** — 在 `completion/init.lua` 添加 `detect_context_for_completion(bufnr, line_before, cursor_line)`:
   - 保留 Lua 指令快速路径（`-- @connection`, `-- @database`）
   - SQL 正文优先调用 `try_rust_context()`（传完整正文，不预提取块）
   - 仅在 Rust 不可用时回退到 `completion_ctx.detect_context()`
   - `get_items()` 接入此新函数
 
-- [x] **P1f. 旧版开关** — 在 `completion.lua`:
+- [x] **P1f. 旧版开关** — 在 `completion/init.lua`:
   - `vim.g.poste_sql_legacy_completion = true` → 仅 Lua 回退
   - `vim.g.poste_sql_legacy_completion = "rust"` → 仅 Rust，不回退
   - 默认 `nil` → Rust 优先，Lua 不覆盖
@@ -47,7 +47,7 @@
   - 添加 `_test.detect_context_for_completion`
   - 更新 `tests/sql_completion_spec.lua` 和 `tests/sql_completion_edge_spec.lua` 中的所有引用
 
-- [x] **P1h. `completion_ctx.lua` 标记废弃** — 添加头注释 `@deprecated` + "仅当 Rust 不可用时回退"。不再添加新 SQL 语法特性。
+- [x] **P1h. `completion/ctx.lua` 标记废弃** — 添加头注释 `@deprecated` + "仅当 Rust 不可用时回退"。不再添加新 SQL 语法特性。
 
 ### P1 验收
 
@@ -98,7 +98,7 @@ tests/run.sh
 
 ## P3 — ScopeResolver
 
-**目标**: CTE/子查询/别名/派生表的显式作用域模型。移除空行边界 + `completion_ctx.lua`。
+**目标**: CTE/子查询/别名/派生表的显式作用域模型。移除空行边界 + `completion/ctx.lua`。
 
 - [x] **P3a. 新 `scope.rs` 模块** — 在 `crates/poste-core/src/sql_context/scope.rs`:
   - `QueryScope { tables, ctes, aliases }`, `CteRef`, `AliasRef`
@@ -113,7 +113,7 @@ tests/run.sh
 
 - [x] **P3d. 移除空行边界** — 从 `context.rs` 移除 `is_blank_line_separator()` 逻辑。`find_statement_token_range()` 只依赖 `;`。
 
-- [x] **P3e. 移除 `completion_ctx.lua` 启发式** — 删除 Lua SQL 启发式逻辑（非指令路径）。
+- [x] **P3e. 移除 `completion/ctx.lua` 启发式** — 删除 Lua SQL 启发式逻辑（非指令路径）。
 
 ### P3 验收
 
@@ -163,5 +163,5 @@ tests/run.sh
 - [ ] `cargo test -p poste-core sql_context` 通过
 - [ ] `cargo clippy -p poste-core -p poste-cli -p poste-exec -- -D warnings` 无警告
 - [ ] `tests/run.sh` 通过（或注明跳过 SQL 集成测试）
-- [ ] 未修改 `lua/poste/http/*`, `lua/poste/completion.lua`, `lua/poste/sql/buffer.lua`
+- [ ] 未修改 `lua/poste/http/*`, `lua/poste/completion.lua`, `lua/poste/sql/buffer/init.lua`
 - [ ] 未修改 SQL 执行行为

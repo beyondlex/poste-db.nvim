@@ -53,7 +53,7 @@ end
 
 ### Completion 触发
 
-`lua/poste/sql/completion.lua`:
+`lua/poste/sql/completion/init.lua`:
 
 1. **Context 检测** (`detect_context`):
    - 检测到 `from`/`join`/`update` 等关键字后 → `"table"` 上下文

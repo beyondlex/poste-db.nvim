@@ -10,36 +10,36 @@ Now I have a thorough understanding of the codebase and the design doc. Let me p
 
 The doc says `tab._full_lines` is to be "added in `dataset.lua`" and implies all rendered rows are already stored. But the code has **two rendering paths**:
 
-- **Layout-aware path** (`buffer.lua:266-281`): Calls `apply_rendered_page(tab, lines, meta)`. This path does NOT store `tab.padded_full` — it only stores `tab.padded` (current page, already header-stripped and padded). The "full lines" to cache here must be the **page's data rows at full width**, which `tab.padded` already is. But the doc's naming `_full_lines` is ambiguous: does "full" mean "all rows in the dataset" or "full-width (untruncated)"? This needs to be unambiguous.
+- **Layout-aware path** (`buffer/init.lua:266-281`): Calls `apply_rendered_page(tab, lines, meta)`. This path does NOT store `tab.padded_full` — it only stores `tab.padded` (current page, already header-stripped and padded). The "full lines" to cache here must be the **page's data rows at full width**, which `tab.padded` already is. But the doc's naming `_full_lines` is ambiguous: does "full" mean "all rows in the dataset" or "full-width (untruncated)"? This needs to be unambiguous.
 
-- **Legacy path** (`buffer.lua:283-380`): Stores `tab.padded_full` (all pages, full dataset). For paginated views, `tab.padded` is a page slice of `padded_full`.
+- **Legacy path** (`buffer/init.lua:283-380`): Stores `tab.padded_full` (all pages, full dataset). For paginated views, `tab.padded` is a page slice of `padded_full`.
 
 **Fix for the doc**: Define `tab._full_width_lines` explicitly: a Lua table of the **currently visible page's data rows at full rendered width** (NOT all dataset rows). For the layout-aware path, this is exactly `tab.padded`'s data slice. For the legacy path, it's the page slice from `padded_full`.
 
 #### 🔴 P0 — `highlight_cell` reads from buffer in multiple call sites
 
-The doc only mentions `position_cursor` reading from `tab._full_lines`. But `highlight_cell` at `highlights.lua:347` also reads the buffer:
+The doc only mentions `position_cursor` reading from `tab._full_lines`. But `highlight_cell` at `highlights/init.lua:347` also reads the buffer:
 
 ```lua
 line = line or vim.api.nvim_buf_get_lines(buf, line_idx - 1, line_idx, false)[1] or ""
 ```
 
 The following callers do NOT pass the `line` parameter and will break with truncated buffer lines:
-- `buffer.lua:112` — tab switch highlight
-- `buffer.lua:440` — initial render highlight  
-- `buffer_nav.lua:195` — `goto_first_col`
-- `buffer_nav.lua:205` — `goto_last_col`
-- `buffer_nav.lua:214` — `goto_first_row`
-- `buffer_nav.lua:223` — `goto_last_row`
-- `buffer_nav.lua:548` — `toggle_row_numbers` (calls `highlight_cell` after render)
-- `buffer_search.lua:64` — search match jump
-- `buffer_search.lua:287` — `find_column` jump
+- `buffer/init.lua:112` — tab switch highlight
+- `buffer/init.lua:440` — initial render highlight  
+- `buffer/nav.lua:195` — `goto_first_col`
+- `buffer/nav.lua:205` — `goto_last_col`
+- `buffer/nav.lua:214` — `goto_first_row`
+- `buffer/nav.lua:223` — `goto_last_row`
+- `buffer/nav.lua:548` — `toggle_row_numbers` (calls `highlight_cell` after render)
+- `buffer/search.lua:64` — search match jump
+- `buffer/search.lua:287` — `find_column` jump
 
 Every one of these must either pass a pre-fetched full-width line or `highlight_cell` itself must read from `tab._full_width_lines`.
 
 #### 🔴 P0 — Search highlights broken on truncated lines
 
-`buffer_search.lua:26` reads the buffer line for `find_cell_range`:
+`buffer/search.lua:26` reads the buffer line for `find_cell_range`:
 
 ```lua
 local line = vim.api.nvim_buf_get_lines(D.dataset_buffer, buf_line - 1, buf_line, false)[1]
@@ -81,11 +81,11 @@ The doc should explicitly choose one.
 
 #### 🟡 P1 — `WinResized` not addressed for truncation
 
-The doc mentions `WinScrolled` for truncation but not `WinResized`. When the window resizes horizontally, `win_width` changes → the truncation width changes → every data line needs re-truncation. The `WinResized` autocmd already exists at `buffer.lua:422` (for `update_header_float`). Truncation must also respond to it.
+The doc mentions `WinScrolled` for truncation but not `WinResized`. When the window resizes horizontally, `win_width` changes → the truncation width changes → every data line needs re-truncation. The `WinResized` autocmd already exists at `buffer/init.lua:422` (for `update_header_float`). Truncation must also respond to it.
 
 #### 🟡 P1 — No truncation algorithm specification
 
-The doc says "byte positions derived from `│` separators" but doesn't specify the algorithm. The header already has a proven approach in `buffer_nav.lua:67-91` (`slice_header_to_win` + `build_header_index`):
+The doc says "byte positions derived from `│` separators" but doesn't specify the algorithm. The header already has a proven approach in `buffer/nav.lua:67-91` (`slice_header_to_win` + `build_header_index`):
 
 1. Build a character index: `{byte_start, byte_end, display_start, display_end, is_sep}`
 2. Walk the index, keeping characters whose `display_end > leftcol AND display_start < leftcol + win_width`
@@ -97,7 +97,7 @@ For data lines, building a full index per line on every scroll would be expensiv
 
 #### 🟢 P2 — Extmark reapply cost on every scroll
 
-The doc says "Reapply extmarks for the visible slice" on every `WinScrolled`. The NULL highlight scan (`highlights.lua:222-232`) iterates ALL visible data lines doing `line:find("%(NULL%)")` — this is O(visible_rows × line_length) per scroll. For 100 visible rows, that's ~100 regex scans per h/l keystroke. Combined with the extmark `nvim_buf_set_extmark` calls, this could become a new bottleneck.
+The doc says "Reapply extmarks for the visible slice" on every `WinScrolled`. The NULL highlight scan (`highlights/init.lua:222-232`) iterates ALL visible data lines doing `line:find("%(NULL%)")` — this is O(visible_rows × line_length) per scroll. For 100 visible rows, that's ~100 regex scans per h/l keystroke. Combined with the extmark `nvim_buf_set_extmark` calls, this could become a new bottleneck.
 
 **Mitigation**: Either:
 - Cache NULL positions per line (compute once on render, reuse on scroll), or
@@ -108,7 +108,7 @@ The doc says "Reapply extmarks for the visible slice" on every `WinScrolled`. Th
 The SKILL.md explicitly says: **"Do not use 'seems faster' as evidence."** The doc has no:
 - Baseline measurement (ms per h/l keystroke at 50 columns)
 - Target metric (<16ms? <8ms?)
-- Measurement method (the `_trace` instrumentation in `buffer_nav.lua:11-31` already exists and works!)
+- Measurement method (the `_trace` instrumentation in `buffer/nav.lua:11-31` already exists and works!)
 
 The doc should include a section like:
 
@@ -136,7 +136,7 @@ The border lines (`┌─┬─┐`, `├─┼─┤`, `└─┴─┘`) at `f
 
 #### 🟢 P2 — `buffer_page.refresh_page` not integrated into plan
 
-The doc's implementation order doesn't mention `buffer_page.lua`. Both `refresh_page` paths (layout-aware at line 17-61, legacy at line 65-117) write full lines to the buffer via `nvim_buf_set_lines(buf, 0, -1, false, ...)`. After truncation is added, these must also write truncated lines (or call the shared truncation function).
+The doc's implementation order doesn't mention `buffer/page.lua`. Both `refresh_page` paths (layout-aware at line 17-61, legacy at line 65-117) write full lines to the buffer via `nvim_buf_set_lines(buf, 0, -1, false, ...)`. After truncation is added, these must also write truncated lines (or call the shared truncation function).
 
 #### 🟢 P3 — No alternative approaches considered
 
@@ -148,13 +148,13 @@ The SKILL.md says to "propose measured optimizations." The doc presents only one
 
 #### 🟢 P3 — Missing interaction with `toggle_row_numbers`
 
-When `toggle_row_numbers` fires (`buffer_nav.lua:567-575`), it calls `apply_dataset_highlights(buf, tab.padded, tab.meta)` — passing `tab.padded` (full-width lines), not truncated lines. After truncation is implemented, `tab.padded` will still be full-width while the buffer holds truncated lines. The highlight positions computed from `tab.padded` won't match the buffer. This needs to either use `_full_width_lines` explicitly or have `apply_dataset_highlights` become aware of truncation.
+When `toggle_row_numbers` fires (`buffer/nav.lua:567-575`), it calls `apply_dataset_highlights(buf, tab.padded, tab.meta)` — passing `tab.padded` (full-width lines), not truncated lines. After truncation is implemented, `tab.padded` will still be full-width while the buffer holds truncated lines. The highlight positions computed from `tab.padded` won't match the buffer. This needs to either use `_full_width_lines` explicitly or have `apply_dataset_highlights` become aware of truncation.
 
 ---
 
 ### 2. Evidence
 
-- **Trace data**: The `_trace` instrumentation at `buffer_nav.lua:11-31` confirms Lua processing is ~0.1ms. The lag is Neovim's redraw, verified by testing 5 vs 50 columns.
+- **Trace data**: The `_trace` instrumentation at `buffer/nav.lua:11-31` confirms Lua processing is ~0.1ms. The lag is Neovim's redraw, verified by testing 5 vs 50 columns.
 - **Code-path inference**: With 50 columns at ~20 chars/col, each data line is ~1000+ chars. Neovim's TUI output, syntax engine, and extmark renderer all process the full line per redraw. This is a known Neovim limitation (see `:help ui-screen-line`).
 - **Suspected**: The exact contribution of extmarks vs syntax vs TUI output to the redraw cost is not isolated.
 
@@ -174,7 +174,7 @@ When `toggle_row_numbers` fires (`buffer_nav.lua:567-575`), it calls `apply_data
 
 1. **Add `tab._full_width_lines`**: In `apply_rendered_page`, after computing `padded`, extract `padded[data_start..data_end]` into `tab._full_width_lines`. This is the set of *currently visible* data rows at full rendered width. Don't store header/border/footer lines — they're static and can be read from `tab.padded`.
 
-2. **Add `M.truncate_lines(tab, leftcol, win_width)` in a shared module** (probably `buffer_nav.lua` or a new `buffer_truncate.lua`):
+2. **Add `M.truncate_lines(tab, leftcol, win_width)` in a shared module** (probably `buffer/nav.lua` or a new `buffer_truncate.lua`):
    - Walk each line in `tab._full_width_lines`
    - Find `│` separator positions
    - Compute display width to each separator
@@ -248,17 +248,17 @@ Manual checks:
 | --- | -------------------------------------------------------------------------------- | ------------------------------------------ |
 | 1   | Clarify `_full_lines` → `_full_width_lines` (page-scoped, not dataset-scoped)    | Solution → `dataset.lua`                   |
 | 2   | Add "Two rendering paths" analysis (layout-aware vs legacy)                      | New section before Solution                |
-| 3   | List ALL buffer readers that need updating (not just `position_cursor`)          | Solution → `highlights.lua`                |
+| 3   | List ALL buffer readers that need updating (not just `position_cursor`)          | Solution → `highlights/init.lua`                |
 | 4   | Add search highlight interaction (`apply_search_highlights` reads buffer)        | Solution → new subsection                  |
-| 5   | Specify extmark adjustment algorithm (Approach A: compute on full lines, offset) | Solution → `highlights.lua`                |
-| 6   | Fix incorrect claim about row number column always visible                       | Solution → `highlights.lua`                |
+| 5   | Specify extmark adjustment algorithm (Approach A: compute on full lines, offset) | Solution → `highlights/init.lua`                |
+| 6   | Fix incorrect claim about row number column always visible                       | Solution → `highlights/init.lua`                |
 | 7   | Add truncation algorithm pseudocode                                              | Solution → new `truncate_lines` subsection |
-| 8   | Add `WinResized` to the autocmd list                                             | Solution → `buffer_nav.lua`                |
+| 8   | Add `WinResized` to the autocmd list                                             | Solution → `buffer/nav.lua`                |
 | 9   | Add `buffer_page.refresh_page` to implementation order                           | Implementation Order                       |
 | 10  | Add baseline metrics section with `_trace` usage                                 | New section before Solution                |
 | 11  | Add CJK/multi-byte note to truncation algorithm                                  | Solution → `truncate_lines`                |
 | 12  | Note border lines as intentionally not truncated                                 | Trade-offs                                 |
 | 13  | Add alternative approaches considered                                            | New section after Solution                 |
-| 14  | Add `toggle_row_numbers` interaction                                             | Solution → `highlights.lua`                |
+| 14  | Add `toggle_row_numbers` interaction                                             | Solution → `highlights/init.lua`                |
 | 15  | Add memory bound analysis                                                        | Trade-offs                                 |
 | 16  | Add validation checklist                                                         | New section at end                         |

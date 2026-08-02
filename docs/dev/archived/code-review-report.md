@@ -8,15 +8,15 @@
 
 ## Executive Summary
 
-The codebase is **well-structured at the module level** — clear separation of concerns (completion, format, buffer, editor, db_browser, etc.) and good use of shared infrastructure from `poste.nvim`. However, individual modules have grown too large, contain significant duplicated code, and mix multiple responsibilities. The most critical issues are: (1) ~200 lines of identical header extraction code in `buffer.lua`, (2) duplicated UTF-8 character walking across 3 modules, (3) many magic numbers and string literals that should be centralized, and (4) deeply nested control flow in `nav.lua`.
+The codebase is **well-structured at the module level** — clear separation of concerns (completion, format, buffer, editor, db_browser, etc.) and good use of shared infrastructure from `poste.nvim`. However, individual modules have grown too large, contain significant duplicated code, and mix multiple responsibilities. The most critical issues are: (1) ~200 lines of identical header extraction code in `buffer/init.lua`, (2) duplicated UTF-8 character walking across 3 modules, (3) many magic numbers and string literals that should be centralized, and (4) deeply nested control flow in `nav/init.lua`.
 
 ---
 
 ## 1. Duplicate Code (Critical)
 
-### 1.1 Header Extraction Duplication (`buffer.lua:286-318` vs `buffer.lua:509-541`)
+### 1.1 Header Extraction Duplication (`buffer/init.lua:286-318` vs `buffer/init.lua:509-541`)
 
-**Locations**: `buffer.lua` — `apply_rendered_page()` lines 286-318 and `render_dataset()` legacy path lines 509-541
+**Locations**: `buffer/init.lua` — `apply_rendered_page()` lines 286-318 and `render_dataset()` legacy path lines 509-541
 
 **Problem**: Two almost identical blocks that:
 - Extract header line from `clean` array
@@ -29,13 +29,13 @@ The codebase is **well-structured at the module level** — clear separation of 
 
 **Fix**: Extract into a shared function like `extract_and_pad_header(clean, meta, tab)`.
 
-### 1.2 UTF-8 Character Walking (`highlights.lua`, `buffer_nav.lua`, `format.lua`)
+### 1.2 UTF-8 Character Walking (`highlights/init.lua`, `buffer/nav.lua`, `format.lua`)
 
 **Locations**:
-- `highlights.lua:382-396` — `find_cell_range_scan()` scans │ separators
-- `highlights.lua:433-454` — `find_cell_ranges_fallback()` scans │ separators (same logic, returns target+last)
-- `buffer_nav.lua:58-88` — `build_header_index()` walks UTF-8 bytes
-- `buffer_nav.lua:43-56` — `trunc_disp()` walks UTF-8 bytes
+- `highlights/init.lua:382-396` — `find_cell_range_scan()` scans │ separators
+- `highlights/init.lua:433-454` — `find_cell_ranges_fallback()` scans │ separators (same logic, returns target+last)
+- `buffer/nav.lua:58-88` — `build_header_index()` walks UTF-8 bytes
+- `buffer/nav.lua:43-56` — `trunc_disp()` walks UTF-8 bytes
 - `format.lua:39-52` — `truncate_to_displaywidth()` walks UTF-8 bytes
 
 **Problem**: The │ separator scanning logic in `find_cell_range_scan` and `find_cell_ranges_fallback` is nearly identical. The UTF-8 byte-length calculation (`b < 128 and 1 or b < 224 and 2 or ...`) is repeated in at least 3 modules.
@@ -47,24 +47,24 @@ The codebase is **well-structured at the module level** — clear separation of 
 
 ### 1.3 Error Message String Duplication
 
-**Locations**: `buffer.lua:208`, `buffer_page.lua:133`, `buffer_search.lua:181`, `buffer_nav.lua:617`
+**Locations**: `buffer/init.lua:208`, `buffer/page.lua:133`, `buffer/search.lua:181`, `buffer/nav.lua:617`
 
 **Pattern**: `"Unsaved changes, commit (<leader>w) or revert (R) first"`
 
 **Fix**: Define as a constant `EDIT_CONFLICT_MSG` in a shared location.
 
-### 1.4 Float Window Creation (`buffer_nav.lua`, `introspect.lua`, `buffer_search.lua`)
+### 1.4 Float Window Creation (`buffer/nav.lua`, `introspect/init.lua`, `buffer/search.lua`)
 
 **Locations**:
-- `buffer_nav.lua:479-556` — `preview_cell()` creates float window
-- `introspect.lua:22-75` — `show_float()` creates float window
-- `buffer_search.lua:75-160` — `show_search()` creates float window
+- `buffer/nav.lua:479-556` — `preview_cell()` creates float window
+- `introspect/init.lua:22-75` — `show_float()` creates float window
+- `buffer/search.lua:75-160` — `show_search()` creates float window
 
 **Problem**: All three create float windows with similar patterns: create buffer, set lines, set filetype, set modifiable=false, open window with `relative="editor"`, style "minimal", border "rounded", setup keymaps, etc.
 
-**Fix**: Extract a shared `poste.dialog` utility (already partially exists via `require("poste.dialog")` in `introspect.lua`). Enhance it to handle the common float window creation pattern.
+**Fix**: Extract a shared `poste.dialog` utility (already partially exists via `require("poste.dialog")` in `introspect/init.lua`). Enhance it to handle the common float window creation pattern.
 
-### 1.5 Job Execution Pattern (`init.lua`, `edit_commit.lua`, `source_format.lua`, `introspect.lua`)
+### 1.5 Job Execution Pattern (`init.lua`, `edit_commit/init.lua`, `source_format.lua`, `introspect/init.lua`)
 
 **Locations**: Multiple files use the same pattern:
 ```lua
@@ -80,13 +80,13 @@ local job_id = vim.fn.jobstart(cmd, {
 
 **Problem**: This pattern appears in ~8 places with minor variations. The stderr collection pattern (`local stderr_buf = {}`) is also repeated.
 
-**Fix**: `poste.cli` already has `run_async()` and `run_json()`. Use these consistently. `introspect.lua` uses raw `vim.fn.jobstart` in several places where `cli.run_async` would work.
+**Fix**: `poste.cli` already has `run_async()` and `run_json()`. Use these consistently. `introspect/init.lua` uses raw `vim.fn.jobstart` in several places where `cli.run_async` would work.
 
-### 1.6 `update_winbar` Duplication (`buffer_search.lua` vs `buffer_page.lua`)
+### 1.6 `update_winbar` Duplication (`buffer/search.lua` vs `buffer/page.lua`)
 
 **Locations**:
-- `buffer_search.lua:299-307` — `update_winbar()`
-- `buffer_page.lua:187-193` — `M.update_winbar()`
+- `buffer/search.lua:299-307` — `update_winbar()`
+- `buffer/page.lua:187-193` — `M.update_winbar()`
 
 **Problem**: Identical functions. Both check `D.dataset_window`, get `meta`, call `build_status_winbar`, set winbar.
 
@@ -105,7 +105,7 @@ local job_id = vim.fn.jobstart(cmd, {
 **Locations**:
 - `format.lua:9-15` — `short_connection()`
 - `format.lua:85-112` — `parse_connection_short()` (unused, marked with `luacheck: ignore 211`)
-- `buffer_nav.lua:769-774` — `format_conn_short()`
+- `buffer/nav.lua:769-774` — `format_conn_short()`
 
 **Problem**: Three functions that do the same thing (extract host:port/db from connection URL). `parse_connection_short` is dead code.
 
@@ -139,30 +139,30 @@ local job_id = vim.fn.jobstart(cmd, {
 
 | Value | File:Line | Context |
 |-------|-----------|---------|
-| `2` | `buffer.lua:344`, `dataset.lua:9`, multiple | `LEFT_PADDING` |
-| `3` | `format.lua:302`, `highlights.lua` | │ separator byte length (U+2502 = 3 bytes) |
+| `2` | `buffer/init.lua:344`, `dataset.lua:9`, multiple | `LEFT_PADDING` |
+| `3` | `format.lua:302`, `highlights/init.lua` | │ separator byte length (U+2502 = 3 bytes) |
 | `200` | `format.lua:490` | `calc_column_widths(columns, rows, 200)` — max table width |
 | `78` | `format.lua:781` | Error wrap width |
 | `40` | `format.lua:406` | Minimum footnote width |
 | `25` | `format.lua:252` | Max protected date/time column width |
 | `4` | `format.lua:239` | Minimum column width after scaling |
-| `100` | `introspect.lua:28` | Max float width |
-| `120` | `buffer_nav.lua:504` | Max preview width |
-| `0.4` | `buffer.lua:605` | Split ratio `floor(vim.o.lines * 0.4)` |
-| `0.6` / `0.7` | `buffer_nav.lua:511, 504` | Preview float proportions |
-| `5` | `buffer.lua:698` | sidescrolloff |
-| `1000` | `highlights.lua:309` | Max rows for immediate row numbering |
+| `100` | `introspect/init.lua:28` | Max float width |
+| `120` | `buffer/nav.lua:504` | Max preview width |
+| `0.4` | `buffer/init.lua:605` | Split ratio `floor(vim.o.lines * 0.4)` |
+| `0.6` / `0.7` | `buffer/nav.lua:511, 504` | Preview float proportions |
+| `5` | `buffer/init.lua:698` | sidescrolloff |
+| `1000` | `highlights/init.lua:309` | Max rows for immediate row numbering |
 | `5000` | `editor/nav.lua:26` | Max rows for editing |
 | `10` | `source_format.lua:300` | Jobwait timeout (seconds) |
-| `10` | `edit_commit.lua:317` | Log trim frequency (every 10th write) |
-| `1000` | `edit_commit.lua:302` | `MAX_LOG_ENTRIES` |
+| `10` | `edit_commit/init.lua:317` | Log trim frequency (every 10th write) |
+| `1000` | `edit_commit/init.lua:302` | `MAX_LOG_ENTRIES` |
 | `200` / `300` / `500` | Various | stderr/error truncation limits |
 
 **Fix**: Define named constants. Use `vim.o.columns` and `vim.o.lines` for dynamic sizing instead of hardcoded proportions where possible.
 
 ### 2.4 Highlight Color Values
 
-`highlights.lua:33-205` — ~30 inline hex color values (e.g., `0x001e00`, `0xc6efc6`, etc.). These are hard to maintain and tune.
+`highlights/init.lua:33-205` — ~30 inline hex color values (e.g., `0x001e00`, `0xc6efc6`, etc.). These are hard to maintain and tune.
 
 **Fix**: Consider extracting to a config table or grouping by semantic purpose with comments. The current approach of computing dark/light variants inline is reasonable but could be consolidated.
 
@@ -194,23 +194,23 @@ local job_id = vim.fn.jobstart(cmd, {
 | Module | Lines | Issue |
 |--------|-------|-------|
 | `init.lua` | 963 | Mixes: keymap setup, SQL execution, completion registration, user commands, autocmds |
-| `buffer_nav.lua` | 839 | Mixes: cell navigation, header float, preview, yank, sort, raw mode, winbar |
-| `buffer.lua` | 802 | Mixes: buffer creation, keymaps, tab switching, rendering (2 paths), close |
+| `buffer/nav.lua` | 839 | Mixes: cell navigation, header float, preview, yank, sort, raw mode, winbar |
+| `buffer/init.lua` | 802 | Mixes: buffer creation, keymaps, tab switching, rendering (2 paths), close |
 | `format.lua` | 792 | Mixes: type normalization, column width calc, table rendering, error formatting, connection parsing |
-| `completion.lua` | 757 | Mixes: context detection, item generation, blink.cmp interface, nvim-cmp interface |
-| `edit_commit.lua` | 710 | Mixes: DML generation, SQL logging, commit execution, dataset refresh |
-| `introspect.lua` | 672 | Mixes: float window, column info, DDL, table listing |
-| `highlights.lua` | 629 | Mixes: color setup, dataset highlights, cell highlight, edit highlights |
+| `completion/init.lua` | 757 | Mixes: context detection, item generation, blink.cmp interface, nvim-cmp interface |
+| `edit_commit/init.lua` | 710 | Mixes: DML generation, SQL logging, commit execution, dataset refresh |
+| `introspect/init.lua` | 672 | Mixes: float window, column info, DDL, table listing |
+| `highlights/init.lua` | 629 | Mixes: color setup, dataset highlights, cell highlight, edit highlights |
 
 **Recommendation**: Split modules >600 lines. Priority targets:
 - `init.lua` → extract `sql_runner.lua` for `run_sql_request()`, keep setup/commands in `init.lua`
-- `buffer.lua` → extract rendering into `buffer_render.lua`, keep buffer/keymap/tab logic
-- `edit_commit.lua` → extract `dml.lua` for DML generation, keep commit/refresh in `edit_commit.lua`
-- `introspect.lua` → extract `introspect_ui.lua` for float window, keep DDL/column logic
+- `buffer/init.lua` → extract rendering into `buffer/render.lua`, keep buffer/keymap/tab logic
+- `edit_commit/init.lua` → extract `dml.lua` for DML generation, keep commit/refresh in `edit_commit/init.lua`
+- `introspect/init.lua` → extract `introspect/ui.lua` for float window, keep DDL/column logic
 
-### 3.2 God Function: `nav.lua:goto_definition()` (300+ lines)
+### 3.2 God Function: `nav/init.lua:goto_definition()` (300+ lines)
 
-**Location**: `nav.lua:5-302`
+**Location**: `nav/init.lua:5-302`
 
 **Problem**: One function with ~10 levels of nesting, handling:
 - `@connection` directive goto → connections.toml
@@ -227,7 +227,7 @@ local function handle_dot_column(rust_ctx, line_text, end_col) ... end
 -- etc.
 ```
 
-### 3.3 `render_dataset` Dual Path (`buffer.lua:403-700`)
+### 3.3 `render_dataset` Dual Path (`buffer/init.lua:403-700`)
 
 **Problem**: `render_dataset()` has two completely different code paths (layout-aware vs legacy). The function is 300 lines with `if opts.layout` at line 449 branching into entirely different rendering logic.
 
@@ -239,28 +239,28 @@ local function handle_dot_column(rust_ctx, line_text, end_col) ... end
 
 ### 4.1 Inconsistent API Usage
 
-- `introspect.lua:625` uses raw `vim.fn.jobstart`, while `introspect.lua:294` uses `cli.run_async` — inconsistent within the same module
+- `introspect/init.lua:625` uses raw `vim.fn.jobstart`, while `introspect/init.lua:294` uses `cli.run_async` — inconsistent within the same module
 - `source_format.lua:271` uses `vim.fn.jobstart` synchronously (blocking with `jobwait`), while other modules use async job patterns
 - `context_client.lua` uses `vim.fn.jobstart` directly (acceptable for a persistent subprocess)
 
 ### 4.2 Dead Code
 
 - `format.lua:85-112` — `parse_connection_short()` is defined but never called (marked `luacheck: ignore 211`)
-- `highlights.lua:456-457` — `invalidate_sep_cache()` is now a stub `function M.invalidate_sep_cache() end` — kept for backward compatibility
+- `highlights/init.lua:456-457` — `invalidate_sep_cache()` is now a stub `function M.invalidate_sep_cache() end` — kept for backward compatibility
 
 ### 4.3 Fragile Patterns
 
-- `highlights.lua:297` — `line:sub(1, 3) == "┌"` — compared UTF-8 border characters by byte prefix. This works because all U+250x box-drawing chars share the same 3-byte UTF-8 prefix `\xe2\x94`, but the first distinguishing byte is the 4th byte. The comment at line 295 explains this, but it remains fragile. The safer approach would be `line:match("^[\xe2\x94\x80-\xbc]")` or checking the first UTF-8 codepoint.
+- `highlights/init.lua:297` — `line:sub(1, 3) == "┌"` — compared UTF-8 border characters by byte prefix. This works because all U+250x box-drawing chars share the same 3-byte UTF-8 prefix `\xe2\x94`, but the first distinguishing byte is the 4th byte. The comment at line 295 explains this, but it remains fragile. The safer approach would be `line:match("^[\xe2\x94\x80-\xbc]")` or checking the first UTF-8 codepoint.
 - `connections.lua:64` — `if conn.dialect == "mariadb" then conn.dialect = "mysql"` — mutates the cached config. The `vim.deepcopy(conn)` at line 65 mitigates this, but it's a side-effect in a seemingly pure accessor.
 
 ### 4.4 Nested Callback Hell
 
-- `completion.lua:250-524` — `detect_context_async` callback contains deeply nested `if ctx_type == ...` branches that each call `data.ensure_X()` with callbacks. This is difficult to read and test.
-- `edit_commit.lua:591-700` — `commit_edits()` has a 100-line `on_stdout` callback with nested conditionals.
+- `completion/init.lua:250-524` — `detect_context_async` callback contains deeply nested `if ctx_type == ...` branches that each call `data.ensure_X()` with callbacks. This is difficult to read and test.
+- `edit_commit/init.lua:591-700` — `commit_edits()` has a 100-line `on_stdout` callback with nested conditionals.
 
 ### 4.5 Module Init Side Effects
 
-- `highlights.lua:227-229` — calls `M.setup()` at module load time and registers autocmds. This is acceptable for a highlight module but should be documented.
+- `highlights/init.lua:227-229` — calls `M.setup()` at module load time and registers autocmds. This is acceptable for a highlight module but should be documented.
 
 ---
 
@@ -268,8 +268,8 @@ local function handle_dot_column(rust_ctx, line_text, end_col) ... end
 
 ### P0 — Immediate (1-2 days)
 
-1. **Unify header extraction** in `buffer.lua` — extract `extract_and_pad_header()` function, removing ~30 lines of duplication
-2. **Fix `update_winbar` duplication** — `buffer_search.lua` should call `buffer_page.update_winbar()` instead of duplicating
+1. **Unify header extraction** in `buffer/init.lua` — extract `extract_and_pad_header()` function, removing ~30 lines of duplication
+2. **Fix `update_winbar` duplication** — `buffer/search.lua` should call `buffer_page.update_winbar()` instead of duplicating
 3. **Remove dead code** — `parse_connection_short()` in `format.lua`
 4. **Define magic number and string constants** — page size (50), port defaults (5432/3306), LEFT_PADDING (2), stderr truncation limits, repeated UI copy
 
@@ -279,21 +279,21 @@ local function handle_dot_column(rust_ctx, line_text, end_col) ... end
    - `util.find_separators(line, sep)` — │ scanning
    - `util.utf8_char_bytes(byte)` — byte length calculator
    - `util.truncate_displaywidth(s, max_dw)` — unified truncation
-6. **Refactor `nav.lua:goto_definition()`** — split into handler functions by context type
-7. **Unify job execution pattern** — use `cli.run_async()` consistently in `introspect.lua` and `source_format.lua`
+6. **Refactor `nav/init.lua:goto_definition()`** — split into handler functions by context type
+7. **Unify job execution pattern** — use `cli.run_async()` consistently in `introspect/init.lua` and `source_format.lua`
 
 ### P2 — Medium-term (2-3 weeks)
 
 8. **Split `init.lua`** — extract `sql_runner.lua` for `run_sql_request()`
-9. **Split `buffer.lua` render paths** — extract `render_dataset_layout()` and `render_dataset_legacy()`
+9. **Split `buffer/init.lua` render paths** — extract `render_dataset_layout()` and `render_dataset_legacy()`
 10. **Extract float window utility** — enhance `poste.dialog` to handle common float creation patterns
-11. **Refactor `edit_commit.lua`** — extract `dml.lua` for DML generation, keep commit logic
+11. **Refactor `edit_commit/init.lua`** — extract `dml.lua` for DML generation, keep commit logic
 
 ### P3 — Long-term (1 month)
 
-12. **Split `completion.lua`** — extract `completion_handlers.lua` for per-context-type item generation
+12. **Split `completion/init.lua`** — extract `completion/handlers.lua` for per-context-type item generation
 13. **Unify dialect icon tables** — define once in `state.lua`
-14. **Refactor `introspect.lua`** — extract `introspect_ui.lua`, use `cli.run_async` consistently
+14. **Refactor `introspect/init.lua`** — extract `introspect/ui.lua`, use `cli.run_async` consistently
 15. **Eliminate callback nesting** — use `vim.schedule_wrap` patterns or create a simple async flow control utility
 
 ---
@@ -302,11 +302,11 @@ local function handle_dot_column(rust_ctx, line_text, end_col) ... end
 
 | Area | Current Coverage | Risk |
 |------|-----------------|------|
-| `nav.lua:goto_definition()` | None (300-line function, hard to test) | High |
-| `introspect.lua` | None (all async job-based) | High |
-| `buffer.lua:render_dataset()` | Partial | Medium |
+| `nav/init.lua:goto_definition()` | None (300-line function, hard to test) | High |
+| `introspect/init.lua` | None (all async job-based) | High |
+| `buffer/init.lua:render_dataset()` | Partial | Medium |
 | `source_format.lua` | None | Medium |
-| `edit_commit.lua` | None | Medium |
+| `edit_commit/init.lua` | None | Medium |
 
 **Recommendation**: Add tests for the extracted utility functions first (P0-P1), then add integration tests for the async job-based modules.
 

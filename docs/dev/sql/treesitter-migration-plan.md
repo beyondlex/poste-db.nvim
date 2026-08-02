@@ -194,7 +194,7 @@ M.update_diagnostics(buf)
 
 **Keep**: `highlight_directive_comments()` autocmd — still fires on `FileType` and `CursorMoved`.
 
-### 8. `highlights.lua` (dataset) — Insert-field pair highlighting
+### 8. `highlights/init.lua` (dataset) — Insert-field pair highlighting
 
 **Current**: Achieved via `PosteInsertHint` extmark group, likely using cursor-moved logic.
 

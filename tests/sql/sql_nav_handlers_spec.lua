@@ -1,4 +1,4 @@
-local handlers = require("poste-sql.nav_handlers")
+local handlers = require("poste-sql.nav.handlers")
 
 describe("nav_handlers", function()
   it("finds the matching connection line", function()

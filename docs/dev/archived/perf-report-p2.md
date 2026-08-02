@@ -2,14 +2,14 @@
 
 ## Change Summary
 
-### 2a: Header Float Reuse (`buffer_nav.lua` + `dataset.lua`)
+### 2a: Header Float Reuse (`buffer/nav.lua` + `dataset.lua`)
 
 `update_header_float()` previously closed + recreated float buf/win on every call. Now:
 - Early return when `leftcol`, `win_width`, `header_text` unchanged — **zero cost** when nothing moved
 - Reuse existing `float_buf`/`float_win` (update content in-place, resize win) on subsequent calls
 - Fall through to create fresh only on first call or after manual close
 
-### 2b + 2c: find_cell_ranges (`highlights.lua` + `buffer_nav.lua`)
+### 2b + 2c: find_cell_ranges (`highlights/init.lua` + `buffer/nav.lua`)
 
 `position_cursor()` did two `find_cell_range()` calls (two separator scans, two `strdisplaywidth` lookups). Now one `find_cell_ranges()` call returns both target and last-col ranges from a single scan.
 
@@ -49,8 +49,8 @@
 | File | Change |
 |---|---|
 | `lua/poste/sql/dataset.lua` | +`_float_cache_leftcol/width/header`; reset in `close_header_float` |
-| `lua/poste/sql/buffer_nav.lua` | Header float reuse (early return + buf/win reuse); `position_cursor` single `find_cell_ranges` call |
-| `lua/poste/sql/highlights.lua` | +`find_cell_ranges(line, target, last)` returns `{target, last?}` from one sep scan |
+| `lua/poste/sql/buffer/nav.lua` | Header float reuse (early return + buf/win reuse); `position_cursor` single `find_cell_ranges` call |
+| `lua/poste/sql/highlights/init.lua` | +`find_cell_ranges(line, target, last)` returns `{target, last?}` from one sep scan |
 | `tests/bench_dataset_driver.lua` | Fix phase highlights: write lines to buffer before applying (layout path buffer shorter than full format) |
 
 ## Verification

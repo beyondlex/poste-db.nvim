@@ -1,4 +1,4 @@
-local detect = require("poste-sql.introspect_detect")
+local detect = require("poste-sql.introspect.detect")
 
 describe("introspect detect helpers", function()
   it("finds the statement block around the current line", function()

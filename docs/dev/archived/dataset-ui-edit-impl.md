@@ -162,7 +162,7 @@ JSON 对象 "{"a":1}"            → vim.json.decode(input)
 
 ---
 
-### 2. `lua/poste/sql/edit_commit.lua` — 提交/回滚
+### 2. `lua/poste/sql/edit_commit/init.lua` — 提交/回滚
 
 #### 核心函数
 
@@ -210,7 +210,7 @@ DELETE FROM "public"."users" WHERE "id" = 1;
 
 ## 三、需要修改的文件
 
-### 1. `lua/poste/sql/buffer.lua`
+### 1. `lua/poste/sql/buffer/init.lua`
 
 新增 keymaps：
 
@@ -258,7 +258,7 @@ sql_dataset = {
 }
 ```
 
-### 3. `lua/poste/sql/highlights.lua`
+### 3. `lua/poste/sql/highlights/init.lua`
 
 `PosteSqlModified` / `PosteSqlDeleted` / `PosteSqlAdded` 已定义。新增：
 
@@ -346,7 +346,7 @@ end
 
 | 来源 | 文件 | 捕获时机 |
 |------|------|---------|
-| 数据集编辑提交 | `edit_commit.lua` → `commit_edits()` | DML 执行后，写日志（成功/失败均记录） |
+| 数据集编辑提交 | `edit_commit/init.lua` → `commit_edits()` | DML 执行后，写日志（成功/失败均记录） |
 | 手动 SQL 执行 | `sql/init.lua` → `on_stdout`/`on_exit` | 收到执行结果后，写日志 |
 
 **不记录**：
@@ -502,7 +502,7 @@ end
 | `test_editor_value.lua` — 值转换/类型拦截/可编辑字段测试 | 测试文件 | — |
 | `editor.lua` — `parse_value()` / `validate_value()` / `is_editable_field()` | `editor.lua` | ✅ |
 | `dataset.lua` — tab edit_state 字段 | `dataset.lua` | — |
-| `highlights.lua` — `PosteSqlError` + `apply_edit_highlights()` | `highlights.lua` | — |
+| `highlights/init.lua` — `PosteSqlError` + `apply_edit_highlights()` | `highlights/init.lua` | — |
 
 ### Phase 2: 编辑交互 (Step 32b)
 
@@ -512,7 +512,7 @@ end
 | `editor.lua` — `edit_cell()` / `delete_row()` / `insert_row()` | `editor.lua` | ✅ |
 | `editor.lua` — boolean/enum 选择器 | `editor.lua` | — |
 | `editor.lua` — JSON 格式化编辑 | `editor.lua` | ✅ |
-| `buffer.lua` — keymap 绑定 + BufWriteCmd | `buffer.lua` | — |
+| `buffer/init.lua` — keymap 绑定 + BufWriteCmd | `buffer/init.lua` | — |
 | `state.lua` — keymap 定义 | `state.lua` | — |
 | 翻页/排序/过滤 dirty 阻止 | 各 buffer_*.lua | — |
 
@@ -520,11 +520,11 @@ end
 
 | 子任务 | 产出 | 测试先行 |
 |--------|------|---------|
-| `test_edit_commit.lua` — DML 生成 + SQL 日志测试 | 测试文件 | — |
-| `edit_commit.lua` — `generate_dml()` / `commit_edits()` / `rollback_edits()` | `edit_commit.lua` | ✅ |
-| `edit_commit.lua` — 提交后写 sql_log.jsonl | `edit_commit.lua` | — |
+| `test_edit_commit/init.lua` — DML 生成 + SQL 日志测试 | 测试文件 | — |
+| `edit_commit/init.lua` — `generate_dml()` / `commit_edits()` / `rollback_edits()` | `edit_commit/init.lua` | ✅ |
+| `edit_commit/init.lua` — 提交后写 sql_log.jsonl | `edit_commit/init.lua` | — |
 | `sql/init.lua` — 手动 SQL 执行后写 sql_log.jsonl | `init.lua` | — |
-| `buffer.lua` — commit/rollback 集成 | `buffer.lua` | — |
+| `buffer/init.lua` — commit/rollback 集成 | `buffer/init.lua` | — |
 
 ### Phase 4: 撤消 (P2)
 
@@ -532,7 +532,7 @@ end
 |--------|------|---------|
 | `test_editor_undo.lua` — 撤消逻辑测试 | 测试文件 | — |
 | `editor.lua` — `undo_last_edit()` | `editor.lua` | ✅ |
-| `buffer.lua` — `u` keymap | `buffer.lua` | — |
+| `buffer/init.lua` — `u` keymap | `buffer/init.lua` | — |
 
 ---
 

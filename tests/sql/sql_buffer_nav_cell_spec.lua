@@ -1,4 +1,4 @@
-local cell = require("poste-sql.buffer_nav_cell")
+local cell = require("poste-sql.buffer.nav_cell")
 local state = require("poste.state")
 
 describe("buffer_nav_cell", function()

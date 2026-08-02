@@ -17,9 +17,9 @@ Use when navigation code mixes state, UI, and buffer logic.
 
 ## Rules
 
-- `buffer_nav_state.lua` owns `D.T()` / window / resultset guards.
-- `buffer_nav_ui.lua` owns winbar / label assembly.
-- `buffer_nav_raw.lua` owns raw mode lifecycle.
+- `buffer/nav_state.lua` owns `D.T()` / window / resultset guards.
+- `buffer/nav_ui.lua` owns winbar / label assembly.
+- `buffer/nav_raw.lua` owns raw mode lifecycle.
 - Keep `focus_cell()` small and shared.
 - Prefer one guard helper over repeated `if not tab ...`.
 - Formatting helpers should not touch global state.
@@ -29,4 +29,4 @@ Use when navigation code mixes state, UI, and buffer logic.
 - `focus_cell()` for `move_cell()` and `goto_*`.
 - `get_resultset_data_tab()` for preview / yank / sort.
 - `build_status_winbar_text()` for winbar assembly.
-- `toggle()` in raw mode module, with `buffer_nav.lua` forwarding.
+- `toggle()` in raw mode module, with `buffer/nav.lua` forwarding.
