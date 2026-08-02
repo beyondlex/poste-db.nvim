@@ -404,8 +404,8 @@ function M.preview_cell()
     return
   end
 
-  local tab = nav_state.get_resultset_tab()
-  if not tab or not nav_state.has_data(tab) then return end
+  local tab = nav_state.get_resultset_data_tab()
+  if not tab then return end
   local row = state.sql.cell.row
   local col = state.sql.cell.col
 
@@ -427,8 +427,8 @@ function M.preview_cell()
 end
 
 function M.yank_cell()
-  local tab = nav_state.get_resultset_tab()
-  if not tab or not nav_state.has_data(tab) then return end
+  local tab = nav_state.get_resultset_data_tab()
+  if not tab then return end
   local row = state.sql.cell.row
   local col = state.sql.cell.col
   local text, preview_text = cell.build_cell_yank_text(tab, row, col)
@@ -438,7 +438,7 @@ function M.yank_cell()
 end
 
 function M.yank_column()
-  local tab = nav_state.get_resultset_tab()
+  local tab = nav_state.get_resultset_data_tab()
   local col = state.sql.cell.col
   local result, count, col_name = cell.build_column_yank_text(tab, col)
   if not result then return end
@@ -448,8 +448,8 @@ function M.yank_column()
 end
 
 function M.sort_by_current_col()
-  local tab = nav_state.get_resultset_tab()
-  if not tab or not nav_state.has_data(tab) then return end
+  local tab = nav_state.get_resultset_data_tab()
+  if not tab then return end
   if nav_state.is_dirty(tab) then
     vim.notify(C.EDIT_CONFLICT_MSG, vim.log.levels.WARN, { title = C.TITLE })
     return

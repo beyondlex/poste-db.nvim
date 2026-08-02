@@ -14,6 +14,14 @@ function M.get_resultset_tab()
   return tab
 end
 
+function M.get_resultset_data_tab()
+  local tab = M.get_resultset_tab()
+  if not M.has_data(tab) then
+    return nil
+  end
+  return tab
+end
+
 function M.get_dataset_window()
   if not D.dataset_window or not vim.api.nvim_win_is_valid(D.dataset_window) then
     return nil
