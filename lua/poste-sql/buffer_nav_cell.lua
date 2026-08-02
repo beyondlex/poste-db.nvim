@@ -93,4 +93,35 @@ function M.yank_preview_text(val)
   return text:sub(1, C.YANK_PREVIEW_CHARS)
 end
 
+function M.collect_column_values(tab, col)
+  if not tab or not tab.data or not tab.meta or tab.meta.type ~= "resultset" then return nil end
+  local data = tab.data
+  if not data or not data.results or #data.results == 0 then return nil end
+
+  local res = data.results[1]
+  if not res.rows or #res.rows == 0 then return nil end
+
+  local values = {}
+  for _, row in ipairs(res.rows) do
+    local v = row[col]
+    if v == nil or v == vim.NIL then
+      values[#values + 1] = "NULL"
+    elseif type(v) == "table" then
+      local ok, encoded = pcall(vim.json.encode, v)
+      values[#values + 1] = ok and encoded or vim.inspect(v)
+    else
+      values[#values + 1] = tostring(v)
+    end
+  end
+
+  local col_name = res.columns and res.columns[col] and res.columns[col].name or tostring(col)
+  return values, col_name
+end
+
+function M.build_column_yank_text(tab, col)
+  local values, col_name = M.collect_column_values(tab, col)
+  if not values then return nil end
+  return table.concat(values, ", "), #values, col_name
+end
+
 return M

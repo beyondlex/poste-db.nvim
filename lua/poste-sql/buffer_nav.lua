@@ -443,32 +443,12 @@ end
 
 function M.yank_column()
   local tab = D.T()
-  if not tab or not tab.data or not tab.meta or tab.meta.type ~= "resultset" then return end
-  local data = tab.data
-  if not data or not data.results or #data.results == 0 then return end
-
-  local res = data.results[1]
   local col = state.sql.cell.col
-  if not res.rows or #res.rows == 0 then return end
-
-  local values = {}
-  for _, row in ipairs(res.rows) do
-    local v = row[col]
-    if v == nil or v == vim.NIL then
-      values[#values + 1] = "NULL"
-    elseif type(v) == "table" then
-      local ok, encoded = pcall(vim.json.encode, v)
-      values[#values + 1] = ok and encoded or vim.inspect(v)
-    else
-      values[#values + 1] = tostring(v)
-    end
-  end
-
-  local result = table.concat(values, ", ")
+  local result, count, col_name = cell.build_column_yank_text(tab, col)
+  if not result then return end
   vim.fn.setreg('"', result)
   vim.fn.setreg('+', result)
-  local col_name = res.columns and res.columns[col] and res.columns[col].name or tostring(col)
-  vim.notify(string.format('Yanked %d values from "%s"', #values, col_name), vim.log.levels.INFO, { title = C.TITLE })
+  vim.notify(string.format('Yanked %d values from "%s"', count, col_name), vim.log.levels.INFO, { title = C.TITLE })
 end
 
 function M.sort_by_current_col()

@@ -30,4 +30,49 @@ describe("buffer_nav_cell", function()
   it("truncates yank preview text", function()
     assert.equals("abcdefghijklmnopqrstuvwxyz", cell.yank_preview_text("abcdefghijklmnopqrstuvwxyz"))
   end)
+
+  it("collects column yank values from resultsets", function()
+    local values, col_name = cell.collect_column_values({
+      data = {
+        results = {
+          {
+            rows = {
+              { "a", vim.NIL },
+              { { b = 2 }, 3 },
+            },
+            columns = {
+              [2] = { name = "status" },
+            },
+          },
+        },
+      },
+      meta = { type = "resultset" },
+    }, 2)
+
+    assert.same({ "NULL", "3" }, values)
+    assert.equals("status", col_name)
+  end)
+
+  it("builds column yank text", function()
+    local text, count, col_name = cell.build_column_yank_text({
+      data = {
+        results = {
+          {
+            rows = {
+              { "a", "x" },
+              { "b", "y" },
+            },
+            columns = {
+              [2] = { name = "status" },
+            },
+          },
+        },
+      },
+      meta = { type = "resultset" },
+    }, 2)
+
+    assert.equals("x, y", text)
+    assert.equals(2, count)
+    assert.equals("status", col_name)
+  end)
 end)
