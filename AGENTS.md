@@ -10,6 +10,12 @@ Independent SQL plugin for Poste. Depends on [poste.nvim](https://github.com/bey
 - `ftdetect/poste_sql.vim` sets filetypes for `.sql` and `.sqlite`
 - Uses same `poste` Rust binary from poste.nvim
 - `.opencode/skills/sql/` and `.opencode/skills/sql-completion/` for agent context
+- Harness order:
+  1. `.opencode/skills/sql-preflight-harness/SKILL.md`
+  2. one specialized harness if needed
+  3. `sql-test-harness` when adding or hardening tests
+  4. `sql-architecture-harness` when the code shape is the problem
+  5. `sql-refactor-harness`, `sql-nav-harness`, or `sql-introspect-harness` when the task matches that area
 
 ## File Index
 
@@ -49,8 +55,9 @@ rule — `local` bindings are not hoisted.
 
 | Want | Go to |
 |------|-------|
-| **Shared infra (state, cli, select, indicators, buffer_setup, help, etc.)** | `../poste.nvim/lua/poste/` — edit there |
-| **Rust CLI (crates, build system)** | `../poste.nvim/crates/` — edit there |
+| **Shared infra (state, cli, select, indicators, buffer_setup, help, etc.)** | `../poste.nvim/lua/poste/` |
+| **Rust CLI (crates, build system)** | `../poste.nvim/crates/` |
+| **Preflight / test / architecture / refactor / nav / introspect harnesses** | `.opencode/skills/` |
 | Completion rules | `.opencode/skills/sql-completion/SKILL.md` |
 | Build & test | `tests/run.sh` |
 | Agent learnings | `LEARNINGS.md` |
