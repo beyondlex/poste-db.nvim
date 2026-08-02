@@ -1,5 +1,6 @@
 local D = require("poste-sql.dataset")
 local nav = require("poste-sql.buffer_nav")
+local ui = require("poste-sql.buffer_nav_ui")
 
 describe("buffer_nav helpers", function()
   before_each(function()
@@ -56,7 +57,7 @@ describe("buffer_nav helpers", function()
     }
     tab.meta = meta
 
-    local text = nav._test.build_status_winbar(meta)
+    local text = ui.build_status_winbar(meta, tab, #D.tabs, D.active_tab_idx)
 
     assert.truthy(text:find("12 rows", 1, true))
     assert.truthy(text:find("title ↓", 1, true))

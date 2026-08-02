@@ -2,6 +2,7 @@ local D = require("poste-sql.dataset")
 local C = require("poste-sql.constants")
 local state = require("poste.state")
 local sql_highlights = require("poste-sql.highlights")
+local nav_ui = require("poste-sql.buffer_nav_ui")
 local M = {}
 
 function M.goto_header()
@@ -116,7 +117,7 @@ function M.refresh_page()
 
   sql_highlights.apply_dataset_highlights(buf, tab.padded, meta)
 
-  local winbar_text = require("poste-sql.buffer_nav").build_status_winbar(meta)
+  local winbar_text = nav_ui.build_status_winbar(meta, D.T(), #D.tabs, D.active_tab_idx)
   if D.dataset_window and vim.api.nvim_win_is_valid(D.dataset_window) then
     pcall(vim.api.nvim_set_option_value, "winbar", winbar_text or "", { win = D.dataset_window })
   end
@@ -189,7 +190,7 @@ function M.update_winbar()
   if not D.dataset_window or not vim.api.nvim_win_is_valid(D.dataset_window) then return end
   local meta = D.T() and D.T().meta
   if not meta then return end
-  local text = require("poste-sql.buffer_nav").build_status_winbar(meta)
+  local text = nav_ui.build_status_winbar(meta, D.T(), #D.tabs, D.active_tab_idx)
   pcall(vim.api.nvim_set_option_value, "winbar", text or "", { win = D.dataset_window })
 end
 

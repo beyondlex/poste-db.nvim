@@ -532,16 +532,9 @@ end
 function M.goto_header()
   M.goto_first_row()
 end
-
-local function build_status_winbar(meta)
-  return ui.build_status_winbar(meta, nav_state.get_tab(), #D.tabs, D.active_tab_idx)
-end
-
-M.build_status_winbar = build_status_winbar
 M._test = {
   build_header_index = build_header_index,
   format_conn_short = ui.format_conn_short,
-  build_status_winbar = build_status_winbar,
 }
 
 return M

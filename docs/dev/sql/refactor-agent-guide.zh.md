@@ -33,6 +33,7 @@
   - `buffer_nav_cell.lua` 也接管了 cell highlight toggle
   - `buffer_nav_ui.lua` 已拆出 status winbar 左右半边 helper
   - `buffer_nav_ui.lua` 已拆出 pending changes 文案 helper 和纯 winbar 拼接 helper
+  - `buffer_page.lua` / `buffer_search.lua` 已直接调用 `buffer_nav_ui.lua`
 - Phase 4: `nav.lua` 的分支路由已拆出 `nav_route.lua`，执行逻辑仍在 `nav_handlers.lua`。
 - Phase 5: `introspect.lua` 的 job / context 路由已拆出：
   - `introspect_job.lua`
@@ -56,7 +57,7 @@
 
 - Phase 3 还有收尾空间：
   - `buffer_nav.lua` 里已基本只剩状态调度，重复的 tab/window guard 也已抽到 `buffer_nav_state.lua`。
-  - `build_status_winbar()` 仍保留 wrapper 入口，但真正的 winbar 文本组装已移到 `buffer_nav_ui.lua`。
+  - `buffer_nav.lua` 不再承载 winbar wrapper，winbar 直接由 `buffer_nav_ui.lua` 提供。
 - Phase 5 还没做完：
   - `introspect.lua` 仍然承担 `show_table_ddl()` 的入口路由。
   - `show_table_ddl()` 的 block/offset 计算已拆到 `introspect_detect.lua`，后面还可以继续把更细的目标选择逻辑拆出去。
