@@ -10,6 +10,7 @@ local float_window = require("poste-sql.float_window")
 local helpers = require("poste-sql.introspect_helpers")
 local route = require("poste-sql.introspect_route")
 local detect = require("poste-sql.introspect_detect")
+local target_resolver = require("poste-sql.introspect_target")
 local context_resolver = require("poste-sql.introspect_context")
 local ui = require("poste-sql.introspect_ui")
 local column = require("poste-sql.introspect_column")
@@ -81,8 +82,9 @@ function M.show_table_ddl()
   local line_num = cursor[1]
   local line_text = vim.api.nvim_buf_get_lines(buf, line_num - 1, line_num, false)[1] or ""
   local entry = route.resolve_table_ddl_entry(line_text)
-  if entry and entry.kind == "database" then
-    local db_name = entry.db_name
+  local directive_action = target_resolver.resolve_directive_action(entry)
+  if directive_action and directive_action.kind == "database" then
+    local db_name = directive_action.db_name
     local ctx = require("poste-sql.context").resolve_full_context(buf, line_num)
     local conn = ctx.connection
     if not conn then
@@ -93,8 +95,8 @@ function M.show_table_ddl()
     return
   end
 
-  if entry and entry.kind == "connection" then
-    local conn_name = entry.conn_name
+  if directive_action and directive_action.kind == "connection" then
+    local conn_name = directive_action.conn_name
     local config = require("poste-sql.connections").get_connection_config(conn_name)
     if not config then
       vim.notify("Connection '" .. conn_name .. "' not found in connections.toml", vim.log.levels.WARN, { title = const.PLUGIN_TITLE })
@@ -174,27 +176,29 @@ function M.show_table_ddl()
 
   if after_dot_col then
     -- alias.column pattern: resolve alias via context detection
-    local target = detect_target_at(end_col + 1 + #after_dot_col, after_dot_col)
-    if target and target.kind == "column" and target.parent_table then
-      column.show_column_info(conn, target.db or db, target.parent_table, target.column_name, target.parent_schema, M.show_float)
+    local detected_target = detect_target_at(end_col + 1 + #after_dot_col, after_dot_col)
+    local action = target_resolver.resolve_detected_action(detected_target, db, cword)
+    if action and action.kind == "column" and action.parent_table then
+      column.show_column_info(conn, action.db or db, action.parent_table, action.column_name, action.parent_schema, M.show_float)
       return
     end
   end
 
   -- Check if cword is a column name (not a table) via context detection
-  local target = detect_target_at(end_col, nil)
-  if target then
-    if target.kind == "list_tables" and target.db then
-      table_helper.show_database_tables(conn, target.db, M.show_float)
+  local detected_target = detect_target_at(end_col, nil)
+  local action = target_resolver.resolve_detected_action(detected_target, db, cword)
+  if action then
+    if action.kind == "list_tables" and action.db then
+      table_helper.show_database_tables(conn, action.db, M.show_float)
       return
     end
-    if target.kind == "column" and target.parent_table and target.parent_table:lower() ~= target.column_name:lower() then
-      column.show_column_info(conn, target.db or db, target.parent_table, target.column_name, target.parent_schema, M.show_float)
+    if action.kind == "column" and action.parent_table then
+      column.show_column_info(conn, action.db or db, action.parent_table, action.column_name, action.parent_schema, M.show_float)
       return
     end
-    if target.kind == "ddl" and target.table_name then
-      db = target.db or db
-      cword = target.table_name
+    if action.kind == "ddl" and action.table_name then
+      db = action.db or db
+      cword = action.table_name
     end
   end
 

@@ -45,6 +45,7 @@
   - `introspect_column.lua`
   - `introspect_table.lua`
   - `introspect_detect.lua`
+  - `introspect_target.lua`
   - 文本构造仍在 `introspect_helpers.lua`。
 - Phase 6: `init.lua` 的 SQL 执行路径已完成拆分：
   - `sql_runner.lua`
@@ -62,7 +63,7 @@
   - `buffer_nav.lua` 的 `move_cell()` / `goto_*` 入口已收敛到同一个 `focus_cell()` helper。
 - Phase 5 还没做完：
   - `introspect.lua` 仍然承担 `show_table_ddl()` 的入口路由。
-  - `show_table_ddl()` 的 block/offset 计算已拆到 `introspect_detect.lua`，后面还可以继续把更细的目标选择逻辑拆出去。
+  - `show_table_ddl()` 的 block/offset 计算已拆到 `introspect_detect.lua`，目标映射已拆到 `introspect_target.lua`，后面还可以继续把更细的执行动作拆出去。
 - Phase 6 已完成：
   - `highlights.lua` 现在只保留对外入口和主题加载。
 
