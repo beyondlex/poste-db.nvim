@@ -60,4 +60,30 @@ function M.exit()
   state.sql._hide_header_float = saved_hide_header_float
 end
 
+function M.toggle()
+  if M.is_active() then
+    M.exit()
+    require("poste-sql.buffer_page").refresh_page()
+    return
+  end
+
+  local nav_state = require("poste-sql.buffer_nav_state")
+  local tab = nav_state.get_tab()
+  local win = nav_state.get_dataset_window()
+
+  if not tab or not nav_state.has_layout(tab) then
+    vim.notify("No dataset to display in raw mode", vim.log.levels.WARN, { title = C.TITLE })
+    return
+  end
+  if not win then
+    vim.notify("No dataset window", vim.log.levels.WARN, { title = C.TITLE })
+    return
+  end
+
+  local raw_buffer = M.enter(tab, win)
+  if not raw_buffer then return end
+
+  vim.notify("Raw mode: ON (browse table)", vim.log.levels.INFO, { title = C.TITLE })
+end
+
 return M

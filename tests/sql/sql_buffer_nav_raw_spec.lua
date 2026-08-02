@@ -3,11 +3,30 @@ local state = require("poste.state")
 local raw = require("poste-sql.buffer_nav_raw")
 
 describe("buffer_nav_raw", function()
+  local saved_T = nil
+  local saved_win_is_valid = nil
+  local saved_enter = nil
+  local saved_exit = nil
+  local saved_buffer_page = nil
+
   before_each(function()
+    saved_T = D.T
+    saved_win_is_valid = vim.api.nvim_win_is_valid
+    saved_enter = raw.enter
+    saved_exit = raw.exit
+    saved_buffer_page = package.loaded["poste-sql.buffer_page"]
     D.dataset_buffer = 11
     D.dataset_window = 22
     state.sql._raw_mode = false
     state.sql._hide_header_float = false
+  end)
+
+  after_each(function()
+    D.T = saved_T
+    vim.api.nvim_win_is_valid = saved_win_is_valid
+    raw.enter = saved_enter
+    raw.exit = saved_exit
+    package.loaded["poste-sql.buffer_page"] = saved_buffer_page
   end)
 
   it("builds raw lines from the formatter", function()
@@ -124,5 +143,46 @@ describe("buffer_nav_raw", function()
     end
     assert.is_true(saw_keymap)
     assert.same({ buf = 77, opts = { force = true } }, deleted_buf)
+  end)
+
+  it("toggles raw mode on and off", function()
+    local refresh_calls = 0
+    local enter_calls = 0
+    local exit_calls = 0
+
+    package.loaded["poste-sql.buffer_page"] = {
+      refresh_page = function()
+        refresh_calls = refresh_calls + 1
+      end,
+    }
+    raw.enter = function(tab, win)
+      enter_calls = enter_calls + 1
+      assert.truthy(tab)
+      assert.equals(22, win)
+      state.sql._raw_mode = true
+      return 77
+    end
+    raw.exit = function()
+      exit_calls = exit_calls + 1
+      state.sql._raw_mode = false
+    end
+    D.T = function()
+      return { layout = { rows = { 1 } } }
+    end
+    vim.api.nvim_win_is_valid = function(win)
+      return win == 22
+    end
+
+    raw.toggle()
+    assert.equals(1, enter_calls)
+    assert.equals(0, exit_calls)
+    assert.equals(0, refresh_calls)
+    assert.is_true(state.sql._raw_mode)
+
+    raw.toggle()
+    assert.equals(1, enter_calls)
+    assert.equals(1, exit_calls)
+    assert.equals(1, refresh_calls)
+    assert.is_false(state.sql._raw_mode)
   end)
 end)

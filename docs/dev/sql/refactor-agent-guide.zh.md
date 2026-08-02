@@ -62,6 +62,7 @@
   - `buffer_nav.lua` 不再承载 winbar wrapper，winbar 直接由 `buffer_nav_ui.lua` 提供。
   - `buffer_nav.lua` 的 `move_cell()` / `goto_*` 入口已收敛到同一个 `focus_cell()` helper。
   - `buffer_nav_state.lua` 已再补 `get_resultset_data_tab()`，让 preview / yank / sort 共用同一个 resultset guard。
+  - `buffer_nav_raw.lua` 已接管 `toggle_raw_mode()` 的实际流程，`buffer_nav.lua` 只保留转发。
 - Phase 5 还没做完：
   - `introspect.lua` 仍然承担 `show_table_ddl()` 的入口路由。
   - `show_table_ddl()` 的 block/offset 计算已拆到 `introspect_detect.lua`，目标映射已拆到 `introspect_target.lua`，后面还可以继续把更细的执行动作拆出去。

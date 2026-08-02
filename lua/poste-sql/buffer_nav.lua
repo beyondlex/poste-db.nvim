@@ -500,30 +500,7 @@ function M.restore_from_raw_mode()
   raw_mode.exit()
 end
 
-function M.toggle_raw_mode()
-  if raw_mode.is_active() then
-    raw_mode.exit()
-    require("poste-sql.buffer_page").refresh_page()
-    return
-  end
-
-  local tab = nav_state.get_tab()
-  local win = nav_state.get_dataset_window()
-
-  if not tab or not nav_state.has_layout(tab) then
-    vim.notify("No dataset to display in raw mode", vim.log.levels.WARN, { title = C.TITLE })
-    return
-  end
-  if not win then
-    vim.notify("No dataset window", vim.log.levels.WARN, { title = C.TITLE })
-    return
-  end
-
-  local raw_buffer = raw_mode.enter(tab, win)
-  if not raw_buffer then return end
-
-  vim.notify("Raw mode: ON (browse table)", vim.log.levels.INFO, { title = C.TITLE })
-end
+M.toggle_raw_mode = raw_mode.toggle
 
 function M.goto_header()
   M.goto_first_row()
