@@ -26,6 +26,7 @@
   - `buffer_nav_preview.lua`
   - `buffer_nav_raw.lua`
   - `buffer_nav_sort.lua`
+  - `buffer_nav_state.lua`
   - `buffer_nav_cell.lua` 已补 column yank 收集 helper
   - `buffer_nav_cell.lua` 也接管了 cell highlight 的应用动作
   - `buffer_nav_cell.lua` 也接管了 cell yank 文本准备
@@ -54,7 +55,7 @@
 ### 仍未完成
 
 - Phase 3 还有收尾空间：
-  - `buffer_nav.lua` 里已基本只剩状态调度。
+  - `buffer_nav.lua` 里已基本只剩状态调度，重复的 tab/window guard 也已抽到 `buffer_nav_state.lua`。
   - `build_status_winbar()` 仍保留 wrapper 入口，但真正的 winbar 文本组装已移到 `buffer_nav_ui.lua`。
 - Phase 5 还没做完：
   - `introspect.lua` 仍然承担 `show_table_ddl()` 的入口路由。

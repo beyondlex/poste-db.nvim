@@ -4,6 +4,7 @@ local state = require("poste.state")
 local sql_highlights = require("poste-sql.highlights")
 local util = require("poste-sql.util")
 local ui = require("poste-sql.buffer_nav_ui")
+local nav_state = require("poste-sql.buffer_nav_state")
 local cell = require("poste-sql.buffer_nav_cell")
 local preview = require("poste-sql.buffer_nav_preview")
 local raw_mode = require("poste-sql.buffer_nav_raw")
@@ -407,8 +408,8 @@ function M.preview_cell()
     return
   end
 
-  local tab = D.T()
-  if not tab or not tab.data or not tab.meta or tab.meta.type ~= "resultset" then return end
+  local tab = nav_state.get_resultset_tab()
+  if not tab or not nav_state.has_data(tab) then return end
   local row = state.sql.cell.row
   local col = state.sql.cell.col
 
@@ -430,8 +431,8 @@ function M.preview_cell()
 end
 
 function M.yank_cell()
-  local tab = D.T()
-  if not tab or not tab.data or not tab.meta or tab.meta.type ~= "resultset" then return end
+  local tab = nav_state.get_resultset_tab()
+  if not tab or not nav_state.has_data(tab) then return end
   local row = state.sql.cell.row
   local col = state.sql.cell.col
   local text, preview_text = cell.build_cell_yank_text(tab, row, col)
@@ -441,7 +442,7 @@ function M.yank_cell()
 end
 
 function M.yank_column()
-  local tab = D.T()
+  local tab = nav_state.get_resultset_tab()
   local col = state.sql.cell.col
   local result, count, col_name = cell.build_column_yank_text(tab, col)
   if not result then return end
@@ -451,9 +452,9 @@ function M.yank_column()
 end
 
 function M.sort_by_current_col()
-  local tab = D.T()
-  if not tab or not tab.data or not tab.meta or tab.meta.type ~= "resultset" then return end
-  if tab.edit_state and tab.edit_state.dirty then
+  local tab = nav_state.get_resultset_tab()
+  if not tab or not nav_state.has_data(tab) then return end
+  if nav_state.is_dirty(tab) then
     vim.notify(C.EDIT_CONFLICT_MSG, vim.log.levels.WARN, { title = C.TITLE })
     return
   end
@@ -472,7 +473,7 @@ function M.sort_by_current_col()
 end
 
 function M.toggle_cell_highlight()
-  local tab = D.T()
+  local tab = nav_state.get_tab()
   local enabled = cell.toggle_cell_highlight(D.dataset_buffer, state.sql.cell.row, state.sql.cell.col, tab and tab.meta, get_col_starts(tab, state.sql.cell.row))
   vim.notify(string.format("Cell highlight: %s", enabled and "ON" or "OFF"),
     vim.log.levels.INFO, { title = C.TITLE })
@@ -491,7 +492,7 @@ end
 
 function M.toggle_row_numbers()
   state.sql._hide_row_numbers = not state.sql._hide_row_numbers
-  local tab = D.T()
+  local tab = nav_state.get_resultset_tab()
   if tab and tab.padded and tab.meta then
     sql_highlights.apply_dataset_highlights(D.dataset_buffer, tab.padded, tab.meta)
   end
@@ -510,10 +511,10 @@ function M.toggle_raw_mode()
     return
   end
 
-  local tab = D.T()
-  local win = D.dataset_window and vim.api.nvim_win_is_valid(D.dataset_window) and D.dataset_window
+  local tab = nav_state.get_tab()
+  local win = nav_state.get_dataset_window()
 
-  if not tab or not tab.layout then
+  if not tab or not nav_state.has_layout(tab) then
     vim.notify("No dataset to display in raw mode", vim.log.levels.WARN, { title = C.TITLE })
     return
   end
@@ -533,7 +534,7 @@ function M.goto_header()
 end
 
 local function build_status_winbar(meta)
-  return ui.build_status_winbar(meta, D.T(), #D.tabs, D.active_tab_idx)
+  return ui.build_status_winbar(meta, nav_state.get_tab(), #D.tabs, D.active_tab_idx)
 end
 
 M.build_status_winbar = build_status_winbar
