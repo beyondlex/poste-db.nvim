@@ -10,6 +10,7 @@ local float_window = require("poste-sql.float_window")
 local helpers = require("poste-sql.introspect_helpers")
 local route = require("poste-sql.introspect_route")
 local exec = require("poste-sql.introspect_exec")
+local context_resolver = require("poste-sql.introspect_context")
 local const = require("poste-sql.constants")
 
 local M = {}
@@ -299,16 +300,9 @@ function M.show_table_ddl()
         local ok, parsed = pcall(vim.json.decode, out)
         if ok and parsed then
           util.clean_nil(parsed)
-          local pt = nil
-          local ps = nil
-          local prefix = parsed.ctx_data or cword
-          if parsed.tables then
-            for _, t in ipairs(parsed.tables) do
-              if t.alias and t.alias:lower() == prefix:lower() then pt = t.name; ps = t.schema; break end
-            end
-          end
-          if pt then
-            show_column_info(binary, conn, db, file, pt, after_dot_col, ps)
+          local target = context_resolver.resolve_detected_target(parsed, cword, db, after_dot_col)
+          if target and target.kind == "column" and target.parent_table then
+            show_column_info(binary, conn, target.db or db, file, target.parent_table, target.column_name, target.parent_schema)
             return
           end
         end
@@ -358,92 +352,20 @@ function M.show_table_ddl()
       local ok, parsed = pcall(vim.json.decode, out)
       if ok and parsed then
         util.clean_nil(parsed)
-
-        local ct = parsed.ctx_type
-        local tables = parsed.tables
-        local function strip_q(s)
-          if not s then return "" end
-          return s:gsub("^`", ""):gsub("`$", ""):gsub('^"', ''):gsub('"$', '')
-        end
-
-        -- Resolve column: check if cword is a known column (not table name)
-        local is_column = false
-        local parent_table = nil
-        local parent_schema = nil
-        if ct == "dot_column" and parsed.ctx_data then
-          -- alias.column: resolve alias
-          local prefix = parsed.ctx_data
-          if tables then
-            for _, t in ipairs(tables) do
-              if t.alias and t.alias:lower() == prefix:lower() then
-                parent_table = strip_q(t.name); parent_schema = t.schema; break
-              end
-            end
-          end
-          is_column = parent_table ~= nil
-        elseif ct == "schema_table" and parsed.ctx_data then
-          -- Schema-qualified table reference: schema.table (e.g., blog.authors)
-          -- ctx_data is the schema name (e.g., "blog").
-          -- The cursor is on the table name (e.g., "authors").
-          local schema = parsed.ctx_data or ""
-          if schema ~= "" then
-            db = schema
-          end
-          -- cword is already the table name; fall through to DDL below
-        elseif ct == "table" and tables and #tables > 0 then
-          -- Cursor is on a table reference: could be a table name, alias,
-          -- or schema/database qualifier (e.g., "blog" in "blog.authors").
-          local schema_match = nil
-          local alias_match = nil
-          for _, t in ipairs(tables) do
-            local tn = strip_q(t.name):lower()
-            local ta = strip_q(t.alias):lower()
-            local ts = t.schema and t.schema:lower() or ""
-            if tn == cword:lower() then
-              alias_match = t
-              if ts ~= "" then
-                db = ts
-              end
-              break
-            end
-            if ta == cword:lower() then alias_match = t; break end
-            if ts == cword:lower() then schema_match = t end
-          end
-          if schema_match then
-            -- cword is a schema/database qualifier: list all tables in this database
-            db = cword
-            list_tables_in_db(binary, conn, db)
+        local target = context_resolver.resolve_detected_target(parsed, cword, db)
+        if target then
+          if target.kind == "list_tables" and target.db then
+            list_tables_in_db(binary, conn, target.db)
             return
-          elseif alias_match then
-            cword = alias_match.name
           end
-          -- fall through to DDL below
-        elseif (ct == "column" or ct == "keyword") and tables and #tables > 0 then
-          -- Check if cword is NOT a table name → it's a column
-          local is_table = false
-          local schema_match = nil
-          for _, t in ipairs(tables) do
-            local tn = strip_q(t.name):lower()
-            local ta = strip_q(t.alias):lower()
-            local ts = t.schema and t.schema:lower() or ""
-            if tn == cword:lower() or ta == cword:lower() then is_table = true; break end
-            if ts == cword:lower() then schema_match = t end
+          if target.kind == "column" and target.parent_table and target.parent_table:lower() ~= target.column_name:lower() then
+            show_column_info(binary, conn, target.db or db, file, target.parent_table, target.column_name, target.parent_schema)
+            return
           end
-          if schema_match then
-            -- cword is a schema/database qualifier (e.g., "blog" in "blog.authors")
-            db = cword
-            cword = schema_match.name
-          elseif not is_table then
-            -- Not a table name: use first table as parent, cword is column
-            parent_table = strip_q(tables[1].name or tables[1].alias)
-            parent_schema = tables[1].schema
-            is_column = parent_table ~= nil
+          if target.kind == "ddl" and target.table_name then
+            db = target.db or db
+            cword = target.table_name
           end
-        end
-
-        if is_column and parent_table and parent_table:lower() ~= cword:lower() then
-          show_column_info(binary, conn, db, file, parent_table, cword, parent_schema)
-          return
         end
       end
     end
