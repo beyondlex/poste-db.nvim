@@ -9,7 +9,15 @@ local M = {}
 --- @return boolean
 function M.check_parser()
   local ok, lang = pcall(vim.treesitter.language.get_lang, "sql")
-  return ok and lang ~= nil
+  if not (ok and lang ~= nil) then
+    return false
+  end
+
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "SELECT 1;" })
+  local parser_ok, parser = pcall(vim.treesitter.get_parser, buf, "sql")
+  pcall(vim.api.nvim_buf_delete, buf, { force = true })
+  return parser_ok and parser ~= nil
 end
 
 --- Get a Tree-sitter parser for the given buffer, or nil.

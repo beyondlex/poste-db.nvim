@@ -6,6 +6,7 @@
 
 local init = require("poste-sql.init")
 local t = init._test
+local has_sql_parser = require("poste-sql.ts_stmt").check_parser()
 
 local function make_buf(lines)
   local buf = vim.api.nvim_create_buf(false, true)
@@ -331,6 +332,13 @@ describe("extract_stmt_at_cursor — edge cases", function()
 end)
 
 describe("try_ts_stmt_span", function()
+  if not has_sql_parser then
+    it("is skipped when the SQL parser is unavailable", function()
+      pending("Tree-sitter SQL parser unavailable in this Neovim environment")
+    end)
+    return
+  end
+
   it("handles semicolon in string — no longer a bug with Tree-sitter", function()
     local buf = make_buf({ "SELECT 'hello;world' as greeting;", "SELECT * FROM users;", "SELECT * FROM orders;" })
     local span = t.try_ts_stmt_span(buf, 2)
@@ -359,6 +367,13 @@ describe("try_ts_stmt_span", function()
 end)
 
 describe("try_ts_stmt_ranges", function()
+  if not has_sql_parser then
+    it("is skipped when the SQL parser is unavailable", function()
+      pending("Tree-sitter SQL parser unavailable in this Neovim environment")
+    end)
+    return
+  end
+
   it("returns all statement start lines", function()
     local buf = make_buf({ "SELECT 1;", "SELECT 2;", "SELECT 3;" })
     local lines = t.try_ts_stmt_ranges(buf, 1, 3)

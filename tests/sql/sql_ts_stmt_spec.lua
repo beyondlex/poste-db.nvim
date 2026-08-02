@@ -1,5 +1,6 @@
 --- Tests for ts_stmt.lua — Tree-sitter-based statement boundary detection.
 
+local has_sql_parser = require("poste-sql.ts_stmt").check_parser()
 local ts_stmt = require("poste-sql.ts_stmt")
 
 local function make_buf(lines)
@@ -12,6 +13,15 @@ local function make_buf(lines)
     return ok and p ~= nil
   end)
   return buf
+end
+
+if not has_sql_parser then
+  describe("Tree-sitter SQL parser availability", function()
+    it("is skipped when the parser is unavailable", function()
+      pending("Tree-sitter SQL parser unavailable in this Neovim environment")
+    end)
+  end)
+  return
 end
 
 describe("find_stmt_span", function()
