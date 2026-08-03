@@ -102,7 +102,7 @@ describe("nav.goto_definition", function()
         return { connection = "conn", database = "blog" }
       end,
     })
-    stub_module("poste-sql.completion_data", {
+    stub_module("poste-sql.completion.data", {
       find_binary = function()
         return nil
       end,
