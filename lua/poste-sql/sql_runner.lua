@@ -322,6 +322,7 @@ function M.run_sql_request()
                 local err_line = stmt_lines[i] or first_line
                 local next_start = stmt_lines[i + 1]
                 local end_nr = next_start and (next_start - 1) or visual_sel_end or #buf_lines
+                while end_nr > err_line and (buf_lines[end_nr] or ""):match("^%s*$") do end_nr = end_nr - 1 end
                 indicators.set_indicator(src_buf, end_nr - 1, "error")
                 local err_text = type(result.error) == "string" and result.error or vim.inspect(result.error)
                 local lines = sql_format.format_error(err_text, data.connection or "")
@@ -359,9 +360,9 @@ function M.run_sql_request()
                 })
 
                 local line_nr = stmt_lines[i] or first_line
-                -- Compute end line: next stmt start - 1, or visual sel end, or buffer end
                 local next_start = stmt_lines[i + 1]
                 local end_nr = next_start and (next_start - 1) or visual_sel_end or #buf_lines
+                while end_nr > line_nr and (buf_lines[end_nr] or ""):match("^%s*$") do end_nr = end_nr - 1 end
                 indicators.set_indicator(src_buf, end_nr - 1, "success", result.execution_time_ms)
               end
             end

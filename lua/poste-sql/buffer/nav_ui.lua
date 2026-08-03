@@ -1,6 +1,7 @@
 --- Dataset winbar UI --- status line fragments for the dataset window.
 local D = require("poste-sql.dataset")
 local C = require("poste-sql.constants")
+local state = require("poste.state")
 
 local M = {}
 
@@ -77,7 +78,9 @@ function M.build_status_right(meta, total_tabs, active_idx, pending)
   end
   if total_tabs > 1 then
     local label = meta.table_name or ("result " .. active_idx)
-    right = right .. string.format("[%d/%d: %s] ", active_idx, total_tabs, label)
+    local next_k = state.get_keymap("sql_dataset", "next_tab", "<Tab>")
+    local prev_k = state.get_keymap("sql_dataset", "prev_tab", "<S-Tab>")
+    right = right .. string.format("[%d/%d: %s] (%s/%s) ", active_idx, total_tabs, label, prev_k, next_k)
   elseif meta.table_name then
     right = right .. string.format("[%s] ", meta.table_name)
   end
