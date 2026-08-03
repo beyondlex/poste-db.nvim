@@ -7,6 +7,14 @@ function M.utf8_char_bytes(byte)
   return 4
 end
 
+function M.is_dark_color(color)
+  if not color then return true end
+  local r = math.floor(color / 0x10000) % 0x100 / 255
+  local g = math.floor(color / 0x100) % 0x100 / 255
+  local b = color % 0x100 / 255
+  return (0.299 * r + 0.587 * g + 0.114 * b) < 0.5
+end
+
 function M.truncate_displaywidth(s, max_dw)
   if not s or s == "" then return s or "" end
   local dw = 0

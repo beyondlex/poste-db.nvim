@@ -26,10 +26,15 @@ syn match PosteDbDatasetHeader '^\s*│[^│]*│[^│]*│.*$' contained
 syn match PosteDbDatasetCellText '\(│\)\@<=[^│]\+\(│\)\@=' contains=PosteDbDatasetNull,PosteDbDatasetNumber,PosteDbDatasetBool
 
 " ─── NULL values (contained within cell text) ───────
-syn match PosteDbDatasetNull '(NULL)' contained
+syn match PosteDbDatasetNull '<null>' contained
 
-" ─── Numbers (right-aligned in cells, contained) ────
-syn match PosteDbDatasetNumber '-\?\d\+\%(\.\d\+\)\?' contained
+" ─── Numbers (whole-cell, contained) ─────────────────
+" A cell is only a number when its entire content is numeric (numbers are
+" right-aligned, so leading spaces are allowed). Lookbehind is a fixed-width
+" `│`; the `\s*` padding lives in the match body, and the lookahead requires a
+" `│` after optional trailing spaces. This avoids matching digit runs inside
+" string values like `abc123`.
+syn match PosteDbDatasetNumber '│\@<=\s*-\?\d\+\%(\.\d\+\)\?\s*│\@=' contained
 
 " ─── Boolean values (contained within cell text) ────
 syn match PosteDbDatasetBool '\%(true\|false\)' contained

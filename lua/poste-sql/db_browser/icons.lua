@@ -1,4 +1,5 @@
 local state = require("poste.state")
+local util = require("poste-sql.util")
 
 local ICONS = {
   connection = "\239\136\179",
@@ -43,15 +44,7 @@ local function setup_highlights()
   end
 
   local normal = resolve_hl("Normal")
-  local is_dark = true
-  if normal and normal.bg then
-    local bg = normal.bg
-    local r = math.floor(bg / 65536) % 256
-    local g = math.floor(bg / 256) % 256
-    local b = bg % 256
-    local luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
-    is_dark = luminance < 0.5
-  end
+  local is_dark = util.is_dark_color(normal and normal.bg)
 
   if is_dark then
     vim.api.nvim_set_hl(0, "PosteDbBrowserHeader", { fg = "#7aa2f7", bold = true })
