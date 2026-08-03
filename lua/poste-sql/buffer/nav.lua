@@ -394,6 +394,34 @@ function M.position_cursor(row, col)
     end
   end
 
+  -- Right-align the last column when:
+  -- 1. Cursor is on the last column (prevents sidescrolloff from pushing it left)
+  -- 2. Moving right off-screen and remaining columns (target..last) fit in the window
+  if last_col > 0 then
+    local last_right
+    if col_starts then
+      local lc = col_starts[last_col + 1]
+      if lc then
+        last_right = lc.disp_end + 1
+      end
+    elseif ranges and ranges.last then
+      last_right = vim.fn.strdisplaywidth(line:sub(1, ranges.last.ext_end + 3))
+    end
+    if last_right then
+      local remaining_width = last_right - target_disp
+      local should_right_align = col == last_col
+        or (not target_on_screen and target_disp >= saved_leftcol and remaining_width <= win_width)
+      if should_right_align then
+        local v = vim.fn.winsaveview()
+        local new_leftcol = math.max(0, last_right - win_width)
+        if new_leftcol ~= v.leftcol then
+          v.leftcol = new_leftcol
+          vim.fn.winrestview(v)
+        end
+      end
+    end
+  end
+
   T_mark("  pos:done")
   return line or ""
 end
