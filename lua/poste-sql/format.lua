@@ -149,9 +149,8 @@ local function cell_to_string(val, col)
     return tostring(val)
   end
   if type(val) == "number" then
-    -- Avoid scientific notation for large numbers
-    if val == math.floor(val) and math.abs(val) < 1e15 then
-      return tostring(math.floor(val))
+    if val == math.floor(val) then
+      return string.format("%.0f", val)
     end
     return tostring(val)
   end

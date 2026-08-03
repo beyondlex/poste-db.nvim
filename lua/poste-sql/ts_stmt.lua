@@ -158,16 +158,27 @@ function M.find_error_nodes(buf)
       goto continue
     end
 
+    -- Filter table option continuations (e.g. `= InnoDB` after `ENGINE`)
+    if text:match("^%s*=") then
+      goto continue
+    end
+
     -- Filter known non-standard statements
     local stmt_kw = upper:match("^(%w+)%s") or upper:match("^(%w+);")
-    if stmt_kw then
-      local known_false_positives = {
+    local known_false_positives = {
         USE = true, SET = true, DESC = true, DESCRIBE = true,
         ANALYZE = true, KILL = true, FLUSH = true, CALL = true,
         LOAD = true, REPAIR = true, CHECK = true,
         ON = true, FOR = true, NOTIFY = true, TABLE = true,
         BEGIN = true, SETS = true, PERCENTILE_CONT = true,
+        COMMENT = true, ENGINE = true, CHARSET = true,
+        CHARACTER = true,
       }
+    -- Filter single-word false positives (e.g. `engine` alone as an ERROR node)
+    if not stmt_kw then
+      stmt_kw = upper:match("^(%w+)$")
+    end
+    if stmt_kw then
       if known_false_positives[stmt_kw] then
         goto continue
       end

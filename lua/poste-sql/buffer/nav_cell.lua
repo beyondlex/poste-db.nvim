@@ -39,6 +39,9 @@ function M.json_pretty(val, indent)
   elseif type(val) == "boolean" then
     return tostring(val)
   elseif type(val) == "number" then
+    if val == math.floor(val) then
+      return string.format("%.0f", val)
+    end
     return tostring(val)
   else
     local ok, encoded = pcall(vim.json.encode, val)
@@ -67,6 +70,12 @@ function M.pretty_print(val)
   if type(val) == "table" then
     return M.json_pretty(val), "json"
   end
+  if type(val) == "number" then
+    if val == math.floor(val) then
+      return string.format("%.0f", val), "text"
+    end
+    return tostring(val), "text"
+  end
   local s = tostring(val)
   if type(val) == "string" then
     local pretty = M.try_pretty_json(s)
@@ -86,6 +95,11 @@ function M.clipboard_text(val)
   elseif type(val) == "table" then
     local ok, encoded = pcall(vim.json.encode, val)
     return ok and encoded or vim.inspect(val)
+  elseif type(val) == "number" then
+    if val == math.floor(val) then
+      return string.format("%.0f", val)
+    end
+    return tostring(val)
   else
     return tostring(val)
   end
@@ -112,6 +126,12 @@ function M.collect_column_values(tab, col)
     elseif type(v) == "table" then
       local ok, encoded = pcall(vim.json.encode, v)
       values[#values + 1] = ok and encoded or vim.inspect(v)
+    elseif type(v) == "number" then
+      if v == math.floor(v) then
+        values[#values + 1] = string.format("%.0f", v)
+      else
+        values[#values + 1] = tostring(v)
+      end
     else
       values[#values + 1] = tostring(v)
     end
