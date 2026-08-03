@@ -278,7 +278,8 @@ local function finalize_rendered_page(tab, padded, meta)
   tab.meta = meta
   render.build_column_start_maps(tab, meta)
 
-  local buf = M.get_dataset_buffer()
+  local is_err = meta and meta.type == "error"
+  local buf = is_err and M.get_error_buffer() or M.get_dataset_buffer()
   vim.api.nvim_set_option_value("modifiable", true, { buf = buf })
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, padded)
   vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
@@ -360,7 +361,7 @@ end
 function M.render_dataset(lines, meta, opts)
   opts = opts or {}
   local tab_idx = opts.tab_index or 1
-  local is_error = meta and meta.type ~= "resultset"
+  local is_error = meta and meta.type == "error"
 
   if tab_idx == 1 and not opts.keep_tabs then
     D.tabs = {}
