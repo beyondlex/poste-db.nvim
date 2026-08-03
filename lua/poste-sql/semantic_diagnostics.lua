@@ -61,6 +61,8 @@ local function extract_references_from_node(stmt_node, buf)
   end
 
   local function add_table(name, node, db_prefix)
+    name = name:gsub("^[`\"'\\[]+", ""):gsub("[]`\"'\\]+$", "")
+    if name == "" then return end
     local key = name:lower() .. ":" .. node:start() .. ":" .. node:end_()
     if seen_tables[key] then return end
     seen_tables[key] = true
@@ -69,6 +71,8 @@ local function extract_references_from_node(stmt_node, buf)
   end
 
   local function add_column(name, tbl, node)
+    name = name:gsub("^[`\"'\\[]+", ""):gsub("[]`\"'\\]+$", "")
+    if name == "" then return end
     local key = (tbl or "") .. "." .. name:lower() .. ":" .. node:start() .. ":" .. node:end_()
     if seen_cols[key] then return end
     seen_cols[key] = true
@@ -127,24 +131,26 @@ local function extract_references_from_node(stmt_node, buf)
             children[#children + 1] = { type = gc:type(), text = vim.treesitter.get_node_text(gc, buf), node = gc }
           end
           if #children == 3 and children[1].type == "identifier" and children[2].type == "." and children[3].type == "identifier" then
-            db_prefix = children[1].text
-            tbl_name = children[3].text
-            tbl_node = children[3].node
+            db_prefix = children[1].text:gsub("^[`\"'\\[]+", ""):gsub("[]`\"'\\]+$", "")
+            if db_prefix == "" then db_prefix = nil end
+            tbl_name = children[3].text:gsub("^[`\"'\\[]+", ""):gsub("[]`\"'\\]+$", "")
+            if tbl_name ~= "" then tbl_node = children[3].node else tbl_name = nil end
           elseif #children == 1 and children[1].type == "identifier" then
-            tbl_name = children[1].text
-            tbl_node = children[1].node
+            tbl_name = children[1].text:gsub("^[`\"'\\[]+", ""):gsub("[]`\"'\\]+$", "")
+            if tbl_name ~= "" then tbl_node = children[1].node else tbl_name = nil end
           else
-            tbl_name = vim.treesitter.get_node_text(c, buf)
-            tbl_node = c
+            tbl_name = vim.treesitter.get_node_text(c, buf):gsub("^[`\"'\\[]+", ""):gsub("[]`\"'\\]+$", "")
+            if tbl_name ~= "" then tbl_node = c else tbl_name = nil end
           end
         elseif c:type() == "identifier" and tbl_name then
-          alias = vim.treesitter.get_node_text(c, buf)
+          alias = vim.treesitter.get_node_text(c, buf):gsub("^[`\"'\\[]+", ""):gsub("[]`\"'\\]+$", "")
+          if alias == "" then alias = nil end
         end
       end
       if tbl_name and tbl_node then
         local is_from_or_join = false
         for _, ctx in ipairs(context_stack) do
-          if ctx == "from" or ctx == "join" or ctx == "update" or ctx == "delete" then
+          if ctx == "from" or ctx == "join" or ctx == "update" or ctx == "delete" or ctx == "insert" then
             is_from_or_join = true
             break
           end
@@ -164,19 +170,32 @@ local function extract_references_from_node(stmt_node, buf)
         if ctx == "insert" then is_in_insert = true; break end
       end
       if is_in_insert then
+        local parent = node:parent()
+        if parent and parent:type() == "invocation" then return end
         local children = {}
         for gc in node:iter_children() do
           children[#children + 1] = { type = gc:type(), text = vim.treesitter.get_node_text(gc, buf), node = gc }
         end
         if #children == 3 and children[1].type == "identifier" and children[2].type == "." and children[3].type == "identifier" then
-          add_table(children[3].text, children[3].node, children[1].text)
-          table.insert(from_tables, children[3].text)
+          local db = children[1].text:gsub("^[`\"'\\[]+", ""):gsub("[]`\"'\\]+$", "")
+          if db == "" then db = nil end
+          local tn = children[3].text:gsub("^[`\"'\\[]+", ""):gsub("[]`\"'\\]+$", "")
+          if tn ~= "" then
+            add_table(tn, children[3].node, db)
+            table.insert(from_tables, tn)
+          end
         elseif #children == 1 and children[1].type == "identifier" then
-          add_table(children[1].text, children[1].node)
-          table.insert(from_tables, children[1].text)
+          local tn = children[1].text:gsub("^[`\"'\\[]+", ""):gsub("[]`\"'\\]+$", "")
+          if tn ~= "" then
+            add_table(tn, children[1].node)
+            table.insert(from_tables, tn)
+          end
         else
-          add_table(vim.treesitter.get_node_text(node, buf), node)
-          table.insert(from_tables, vim.treesitter.get_node_text(node, buf))
+          local tn = vim.treesitter.get_node_text(node, buf):gsub("^[`\"'\\[]+", ""):gsub("[]`\"'\\]+$", "")
+          if tn ~= "" then
+            add_table(tn, node)
+            table.insert(from_tables, tn)
+          end
         end
         return
       end
@@ -188,7 +207,7 @@ local function extract_references_from_node(stmt_node, buf)
         parts[#parts + 1] = { type = c:type(), text = vim.treesitter.get_node_text(c, buf), node = c }
       end
       if #parts == 3 and parts[1].type == "object_reference" and parts[2].type == "." and parts[3].type == "identifier" then
-        local qualifier = parts[1].text
+        local qualifier = parts[1].text:gsub("^[`\"'\\[]+", ""):gsub("[]`\"'\\]+$", "")
         local col_name = parts[3].text
         local actual_table = alias_map[qualifier] or qualifier
         add_column(col_name, actual_table, parts[3].node)
