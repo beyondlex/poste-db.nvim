@@ -394,6 +394,16 @@ function M.position_cursor(row, col)
     end
   end
 
+  -- Left-align to the buffer start when at the first data column so the
+  -- row-number column (left padding + `#` cell) scrolls back into view.
+  if col == 1 then
+    local v = vim.fn.winsaveview()
+    if v.leftcol ~= 0 then
+      v.leftcol = 0
+      vim.fn.winrestview(v)
+    end
+  end
+
   -- Right-align the last column when:
   -- 1. Cursor is on the last column (prevents sidescrolloff from pushing it left)
   -- 2. Moving right off-screen and remaining columns (target..last) fit in the window
