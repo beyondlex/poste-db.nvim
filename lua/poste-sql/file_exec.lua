@@ -90,12 +90,12 @@ local function build_content()
   local succeeded_start = stats_text:find("Succeeded:", 1, true)
   if succeeded_start then
     local num_end = stats_text:find("   ", succeeded_start + 11, true) or #stats_text + 1
-    table.insert(highlights, { line = #lines - 1, col_start = succeeded_start - 1, col_end = num_end - 1, hl_group = "PosteSqlSucceeded" })
+    table.insert(highlights, { line = #lines - 1, col_start = succeeded_start - 1, col_end = num_end - 1, hl_group = "PosteDbDatasetSucceeded" })
   end
   local failed_start = stats_text:find("Failed:", 1, true)
   if failed_start then
     local num_end = stats_text:find("   ", failed_start + 8, true) or #stats_text + 1
-    table.insert(highlights, { line = #lines - 1, col_start = failed_start - 1, col_end = num_end - 1, hl_group = "PosteSqlFailed" })
+    table.insert(highlights, { line = #lines - 1, col_start = failed_start - 1, col_end = num_end - 1, hl_group = "PosteDbDatasetFailed" })
   end
 
   table.insert(lines, "")
@@ -122,11 +122,11 @@ local function build_content()
   local bar = layout.progress(S.n_succeeded + S.n_failed, S.total, { bar_width = 20 })[1]
   local elapsed = "Elapsed: " .. fmt_elapsed()
   table.insert(lines, layout.space_between(bar, elapsed, { width = cw })[1])
-  table.insert(highlights, { line = #lines - 1, col_start = 0, col_end = cw, hl_group = "PosteProgressBar" })
+  table.insert(highlights, { line = #lines - 1, col_start = 0, col_end = cw, hl_group = "PosteCoreProgressBar" })
 
   local elapsed_start = (#lines[#lines] or 0) > 0 and lines[#lines]:find("Elapsed:", 1, true)
   if elapsed_start then
-    table.insert(highlights, { line = #lines - 1, col_start = elapsed_start - 1, col_end = #lines[#lines], hl_group = "PosteSqlConstant" })
+    table.insert(highlights, { line = #lines - 1, col_start = elapsed_start - 1, col_end = #lines[#lines], hl_group = "PosteDbDatasetConstant" })
   end
 
   table.insert(lines, layout.dynamic_line({
@@ -136,7 +136,7 @@ local function build_content()
   }))
   local file_line = #lines
   local file_label_end = ("File: "):len()
-  table.insert(highlights, { line = file_line - 1, col_start = file_label_end, col_end = cw, hl_group = "PosteSqlFilepath" })
+  table.insert(highlights, { line = file_line - 1, col_start = file_label_end, col_end = cw, hl_group = "PosteDbDatasetFilepath" })
 
   table.insert(lines, layout.separator({ width = cw })[1])
 
@@ -157,13 +157,13 @@ local function build_content()
     local sql_display = fmt_sql(r.sql, max_sql_dw)
     local line = prefix .. sql_display .. suffix
     table.insert(lines, layout.cell(line, cw))
-    local hl = r.status == "ok" and "PosteLogSuccess" or "PosteLogError"
+    local hl = r.status == "ok" and "PosteDbHistorySuccess" or "PosteDbHistoryError"
     local prefix_bytes = #prefix
     table.insert(highlights, { line = #lines - 1, col_start = 0, col_end = prefix_bytes, hl_group = hl })
     local sql_start = prefix_bytes
     local sql_end = prefix_bytes + #sql_display
     if sql_end > sql_start then
-      table.insert(highlights, { line = #lines - 1, col_start = prefix_bytes, col_end = sql_end, hl_group = "PosteLogSQL" })
+      table.insert(highlights, { line = #lines - 1, col_start = prefix_bytes, col_end = sql_end, hl_group = "PosteDbHistorySQL" })
     end
   end
 

@@ -126,7 +126,7 @@ function M.setup(opts)
 
   require("poste-sql.statusline").setup()
 
-  vim.api.nvim_set_hl(0, "SqlDirectiveComment", { link = "Special" })
+  vim.api.nvim_set_hl(0, "PosteDbSqlDirectiveComment", { link = "Special" })
 
   vim.api.nvim_create_autocmd("FileType", {
     pattern = { "sql", "poste_sql", "poste_sqlite" },

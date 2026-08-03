@@ -82,11 +82,11 @@ local ns_menu_hl = vim.api.nvim_create_namespace("poste_db_context_menu_hl")
 
 -- Context menu highlight groups — applied at load and on ColorScheme change
 local function setup_menu_hl()
-  vim.api.nvim_set_hl(0, "PosteMenuBorder",    { fg = 0x7aa2f7, bold = true })
-  vim.api.nvim_set_hl(0, "PosteMenuTitle",     { fg = 0xe0af68, bold = true })
-  vim.api.nvim_set_hl(0, "PosteMenuShortcut",  { fg = 0x98c379, bold = true })
+  vim.api.nvim_set_hl(0, "PosteDbMenuBorder",    { fg = 0x7aa2f7, bold = true })
+  vim.api.nvim_set_hl(0, "PosteDbMenuTitle",     { fg = 0xe0af68, bold = true })
+  vim.api.nvim_set_hl(0, "PosteDbMenuShortcut",  { fg = 0x98c379, bold = true })
   state.apply_highlight_overrides({
-    "PosteMenuBorder", "PosteMenuTitle", "PosteMenuShortcut",
+    "PosteDbMenuBorder", "PosteDbMenuTitle", "PosteDbMenuShortcut",
   })
 end
 setup_menu_hl()
@@ -185,11 +185,11 @@ function M.open(node, context)
   vim.wo[menu_win].winhl = "Normal:NormalFloat"
 
   -- Highlight border lines (top + bottom)
-  vim.api.nvim_buf_add_highlight(menu_buf, ns_menu_hl, "PosteMenuBorder", 0, 0, -1)
-  vim.api.nvim_buf_add_highlight(menu_buf, ns_menu_hl, "PosteMenuBorder", #lines - 1, 0, -1)
+  vim.api.nvim_buf_add_highlight(menu_buf, ns_menu_hl, "PosteDbMenuBorder", 0, 0, -1)
+  vim.api.nvim_buf_add_highlight(menu_buf, ns_menu_hl, "PosteDbMenuBorder", #lines - 1, 0, -1)
   -- Highlight title in top border
   local title_start = #("┌ ")  -- byte offset of title after box + space
-  vim.api.nvim_buf_add_highlight(menu_buf, ns_menu_hl, "PosteMenuTitle", 0, title_start, title_start + #menu_title)
+  vim.api.nvim_buf_add_highlight(menu_buf, ns_menu_hl, "PosteDbMenuTitle", 0, title_start, title_start + #menu_title)
 
   -- Highlight group labels
   for i, line in ipairs(lines) do
@@ -208,7 +208,7 @@ function M.open(node, context)
       local letter = item_map[i].letter
       local byte_offset = vim.fn.strdisplaywidth("  ")  -- 2 spaces = 2 display width, 2 bytes
       local bracket_len = vim.fn.strdisplaywidth("[" .. letter .. "]")
-      vim.api.nvim_buf_add_highlight(menu_buf, ns_menu_hl, "PosteMenuShortcut", i - 1, byte_offset, byte_offset + bracket_len)
+      vim.api.nvim_buf_add_highlight(menu_buf, ns_menu_hl, "PosteDbMenuShortcut", i - 1, byte_offset, byte_offset + bracket_len)
     end
   end
 

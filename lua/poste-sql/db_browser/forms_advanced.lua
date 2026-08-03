@@ -7,10 +7,10 @@ local M = {}
 local ns = vim.api.nvim_create_namespace("poste_db_adv_form")
 
 local function setup_hl()
-  vim.api.nvim_set_hl(0, "PosteAdvFormShortcut", { fg = 0x98c379, bold = true })
-  vim.api.nvim_set_hl(0, "PosteAdvFormDim",      { fg = 0x5c6370 })
+  vim.api.nvim_set_hl(0, "PosteDbFormShortcut", { fg = 0x98c379, bold = true })
+  vim.api.nvim_set_hl(0, "PosteDbFormDim",      { fg = 0x5c6370 })
   state.apply_highlight_overrides({
-    "PosteAdvFormShortcut", "PosteAdvFormDim",
+    "PosteDbFormShortcut", "PosteDbFormDim",
   })
 end
 setup_hl()
@@ -147,8 +147,8 @@ local function render(rows, title, width, sql_lines)
       { key = "Enter", label = "edit" },
       { key = "Space", label = "toggle" },
     },
-    key_hl = "PosteAdvFormShortcut",
-    value_hl = "PosteAdvFormDim",
+    key_hl = "PosteDbFormShortcut",
+    value_hl = "PosteDbFormDim",
     indent = 2,
   }))
 

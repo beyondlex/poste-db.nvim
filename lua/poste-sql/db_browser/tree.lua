@@ -216,18 +216,18 @@ local function calc_icon_position(text)
 end
 
 local icon_hl = {
-  connection  = "PosteSqlBrowserIconConn",
-  database    = "PosteSqlBrowserIconDb",
-  schema      = "PosteSqlBrowserIconSchema",
-  table       = "PosteSqlBrowserIconTable",
-  column      = "PosteSqlBrowserIconCol",
-  index       = "PosteSqlBrowserCount",
-  key_group   = "PosteSqlBrowserIconPk",
-  fk_group    = "PosteSqlBrowserIconFk",
-  index_group = "PosteSqlBrowserCount",
-  key_item    = "PosteSqlBrowserCount",
-  fk_item     = "PosteSqlBrowserIconFk",
-  index_item  = "PosteSqlBrowserCount",
+  connection  = "PosteDbBrowserIconConn",
+  database    = "PosteDbBrowserIconDb",
+  schema      = "PosteDbBrowserIconSchema",
+  table       = "PosteDbBrowserIconTable",
+  column      = "PosteDbBrowserIconCol",
+  index       = "PosteDbBrowserCount",
+  key_group   = "PosteDbBrowserIconPk",
+  fk_group    = "PosteDbBrowserIconFk",
+  index_group = "PosteDbBrowserCount",
+  key_item    = "PosteDbBrowserCount",
+  fk_item     = "PosteDbBrowserIconFk",
+  index_item  = "PosteDbBrowserCount",
 }
 
 function M.apply_highlights(buf, line_count, count_ranges, line_to_node, multi_select)
@@ -235,7 +235,7 @@ function M.apply_highlights(buf, line_count, count_ranges, line_to_node, multi_s
 
   for _, cr in ipairs(count_ranges or {}) do
     local lnum, col_start, col_end = cr[1], cr[2], cr[3]
-    vim.api.nvim_buf_add_highlight(buf, hl_ns, "PosteSqlBrowserCount",
+    vim.api.nvim_buf_add_highlight(buf, hl_ns, "PosteDbBrowserCount",
       lnum + HEADER_LINES - 1, col_start, col_end)
   end
 
@@ -257,7 +257,7 @@ function M.apply_highlights(buf, line_count, count_ranges, line_to_node, multi_s
     if first_3 == MARKER_EXPANDED or first_3 == MARKER_COLLAPSED or first_3 == MARKER_LOADING
         or first_3 == MARKER_SELECTED or first_3 == MARKER_UNSELECTED then
       icon_byte_start = first_content + 3
-      vim.api.nvim_buf_add_highlight(buf, hl_ns, "PosteSqlBrowserMarker",
+      vim.api.nvim_buf_add_highlight(buf, hl_ns, "PosteDbBrowserMarker",
         i - 1, first_content - 1, first_content + 2)
     else
       icon_byte_start = first_content - 1
@@ -267,25 +267,25 @@ function M.apply_highlights(buf, line_count, count_ranges, line_to_node, multi_s
 
     if node.node_type == "table" and multi_select and multi_select.active
         and multi_select.selected and multi_select.selected[node] then
-      vim.api.nvim_buf_add_highlight(buf, hl_ns, "PosteSqlBrowserSelected",
+      vim.api.nvim_buf_add_highlight(buf, hl_ns, "PosteDbBrowserSelected",
         i - 1, 0, -1)
     end
 
     if node.node_type == "column" and node.meta then
       if node.meta.is_pk then
-        icon_hl_group = "PosteSqlBrowserIconPk"
+        icon_hl_group = "PosteDbBrowserIconPk"
       elseif node.meta.icon == ICONS.column_fk then
-        icon_hl_group = "PosteSqlBrowserIconFk"
+        icon_hl_group = "PosteDbBrowserIconFk"
       end
     end
     if node.node_type == "key_item" and node.meta and node.meta.is_pk then
-      icon_hl_group = "PosteSqlBrowserIconPk"
+      icon_hl_group = "PosteDbBrowserIconPk"
     end
     if node.node_type == "fk_item" then
-      icon_hl_group = "PosteSqlBrowserIconFk"
+      icon_hl_group = "PosteDbBrowserIconFk"
     end
     if node.node_type == "index_item" and node.meta then
-      icon_hl_group = node.meta.is_pk and "PosteSqlBrowserIconPk" or "PosteSqlBrowserCount"
+      icon_hl_group = node.meta.is_pk and "PosteDbBrowserIconPk" or "PosteDbBrowserCount"
     end
 
     local icon_char = text:sub(icon_byte_start + 1)
@@ -302,7 +302,7 @@ function M.apply_highlights(buf, line_count, count_ranges, line_to_node, multi_s
         or node.node_type == "key_item" or node.node_type == "fk_item" then
       local text_start = icon_byte_start + icon_len
       if text_start < #text then
-        vim.api.nvim_buf_add_highlight(buf, hl_ns, "PosteSqlBrowserCount",
+        vim.api.nvim_buf_add_highlight(buf, hl_ns, "PosteDbBrowserCount",
           i - 1, text_start, -1)
       end
     end
@@ -321,7 +321,7 @@ function M.apply_highlights(buf, line_count, count_ranges, line_to_node, multi_s
           if remaining:find("^ auto_increment") then
             type_end = type_end + 15
           end
-          vim.api.nvim_buf_add_highlight(buf, hl_ns, "PosteSqlBrowserType",
+          vim.api.nvim_buf_add_highlight(buf, hl_ns, "PosteDbBrowserType",
             i - 1, name_end, type_end)
         end
       end
@@ -352,7 +352,7 @@ function M.render_tree(browser_buf, line_to_node, root_nodes, conn_label, multi_
       count = count + 1
     end
     if count > 0 then
-      winbar = winbar .. "%#PosteSqlBrowserSelected#  [" .. count .. " selected]%*"
+      winbar = winbar .. "%#PosteDbBrowserSelected#  [" .. count .. " selected]%*"
     end
   end
   local browser_win

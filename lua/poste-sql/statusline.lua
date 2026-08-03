@@ -13,7 +13,7 @@ local function get_ctx_color(conn_name)
   local bg = config.bg
   if not color and not link then return nil end
 
-  local hl_name = "PosteSQLCtx" .. conn_name:gsub("[^%w_]", "_")
+  local hl_name = "PosteDbSqlCtx" .. conn_name:gsub("[^%w_]", "_")
 
   if link then
     pcall(vim.api.nvim_set_hl, 0, hl_name, { link = link })

@@ -6,9 +6,9 @@ local dialog = require("poste.dialog")
 local M = {}
 
 local function setup_highlights()
-  vim.api.nvim_set_hl(0, "PosteCopySuccess", { fg = "#9ece6a" })
-  vim.api.nvim_set_hl(0, "PosteCopyError", { fg = "#f7768e" })
-  vim.api.nvim_set_hl(0, "PosteCopyProgress", { fg = "#565f89" })
+  vim.api.nvim_set_hl(0, "PosteDbCopySuccess", { fg = "#9ece6a" })
+  vim.api.nvim_set_hl(0, "PosteDbCopyError", { fg = "#f7768e" })
+  vim.api.nvim_set_hl(0, "PosteDbCopyProgress", { fg = "#565f89" })
 end
 
 setup_highlights()
@@ -656,7 +656,7 @@ local function show_progress_dialog(source, target, table_names, on_close)
     table.insert(lines, "")
     local bar_line = "  " .. bar .. "  " .. done .. "/" .. total .. " (" .. pct .. "%)"
     table.insert(lines, bar_line)
-    table.insert(highlights, { line = #lines - 1, col_start = 0, col_end = #bar_line, hl_group = "PosteCopyProgress" })
+    table.insert(highlights, { line = #lines - 1, col_start = 0, col_end = #bar_line, hl_group = "PosteDbCopyProgress" })
     table.insert(lines, "")
 
     for _, name in ipairs(table_names) do
@@ -664,13 +664,13 @@ local function show_progress_dialog(source, target, table_names, on_close)
       if r.status == "done" then
         local line = "  ✓ " .. name .. "  (" .. r.row_count .. " rows, " .. r.elapsed .. ")"
         table.insert(lines, line)
-        table.insert(highlights, { line = #lines - 1, col_start = 0, col_end = #line, hl_group = "PosteCopySuccess" })
+        table.insert(highlights, { line = #lines - 1, col_start = 0, col_end = #line, hl_group = "PosteDbCopySuccess" })
       elseif r.status == "copying" then
         table.insert(lines, "  ⟳ " .. name .. "  (copying...)")
       elseif r.status == "error" then
         local line = "  ✘ " .. name
         table.insert(lines, line)
-        table.insert(highlights, { line = #lines - 1, col_start = 0, col_end = #line, hl_group = "PosteCopyError" })
+        table.insert(highlights, { line = #lines - 1, col_start = 0, col_end = #line, hl_group = "PosteDbCopyError" })
       else
         table.insert(lines, "  ◻ " .. name .. "  (pending)")
       end
@@ -683,7 +683,7 @@ local function show_progress_dialog(source, target, table_names, on_close)
       local succeeded_str = tostring(completed) .. " succeeded"
       local succeeded_start = done_line:find(succeeded_str, 1, true) - 1
       if succeeded_start and completed > 0 then
-        table.insert(highlights, { line = #lines - 1, col_start = succeeded_start, col_end = succeeded_start + #succeeded_str, hl_group = "PosteCopySuccess" })
+        table.insert(highlights, { line = #lines - 1, col_start = succeeded_start, col_end = succeeded_start + #succeeded_str, hl_group = "PosteDbCopySuccess" })
       end
       if failed > 0 then
         table.insert(lines, "  Press [q] to see errors")

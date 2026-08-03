@@ -1,8 +1,8 @@
 ; poste_sql Tree-sitter highlights
 ; Mirrors the highlight groups from lua/poste/sql/syntax.lua:
 ;   sqlComment, sqlString, sqlNumber, sqlStatement, sqlKeyword,
-;   sqlType, sqlFunction, sqlSpecial, sqlDirective, sqlDirectiveValue,
-;   sqlDirectiveComment
+;   sqlType, sqlFunction, sqlSpecial, PosteDbSqlDirective, PosteDbSqlDirectiveValue,
+;   PosteDbSqlDirectiveComment
 
 ; Comments
 (comment) @sqlComment @spell
@@ -449,6 +449,6 @@
 
 ; Directive comment overrides for poste
 (
-  (comment) @sqlDirectiveComment
-  (#match? @sqlDirectiveComment "^--%s*@(connection|database|protocol)")
+  (comment) @PosteDbSqlDirectiveComment
+  (#match? @PosteDbSqlDirectiveComment "^--%s*@(connection|database|protocol)")
 )

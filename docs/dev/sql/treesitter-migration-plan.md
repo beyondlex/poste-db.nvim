@@ -60,8 +60,8 @@ Replace `lua/poste/sql/syntax.lua`'s regex + keyword map with Tree-sitter captur
 
 ; Override comment highlighting for -- @connection / @database / @protocol
 (
-  (comment) @sqlDirectiveComment
-  (#match? @sqlDirectiveComment "^--%s*@(connection|database|protocol)")
+  (comment) @PosteDbSqlDirectiveComment
+  (#match? @PosteDbSqlDirectiveComment "^--%s*@(connection|database|protocol)")
 )
 
 ; Statement keywords
@@ -73,7 +73,7 @@ Replace `lua/poste/sql/syntax.lua`'s regex + keyword map with Tree-sitter captur
 **Note**: The `@sql*` highlight groups are already defined in `syntax.lua`:
 - `sqlComment`, `sqlString`, `sqlNumber` — standard groups
 - `sqlStatement`, `sqlKeyword`, `sqlType`, `sqlFunction`, `sqlSpecial` — keyword groups
-- `sqlDirective`, `sqlDirectiveValue`, `sqlDirectiveComment` — directive groups
+- `sqlDirective`, `sqlDirectiveValue`, `sqlDirectiveComment` → `PosteDbSqlDirective`, `PosteDbSqlDirectiveValue`, `PosteDbSqlDirectiveComment` — directive groups
 
 These groups are referenced by Tree-sitter queries via `@` captures. Tree-sitter resolves them to the underlying `:highlight` groups defined in `syntax.lua`.
 
@@ -196,7 +196,7 @@ M.update_diagnostics(buf)
 
 ### 8. `highlights/init.lua` (dataset) — Insert-field pair highlighting
 
-**Current**: Achieved via `PosteInsertHint` extmark group, likely using cursor-moved logic.
+**Current**: Achieved via `PosteDbDatasetInsertHint` extmark group, likely using cursor-moved logic.
 
 **Change**: Tree-sitter can make this more reliable by parsing the `INSERT INTO t (col1, col2) VALUES (v1, v2)` to find the column index at cursor position in `VALUES`, then highlighting the matching column name.
 

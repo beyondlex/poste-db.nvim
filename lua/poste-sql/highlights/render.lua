@@ -93,7 +93,7 @@ function M.apply_dataset_highlights(buf, lines, meta)
           vim.api.nvim_buf_set_extmark(buf, ns, i - 1, 0, {
             end_row = i - 1,
             end_col = #line,
-            hl_group = "PosteSqlError",
+            hl_group = "PosteDbDatasetError",
           })
         end
       end
@@ -104,7 +104,7 @@ function M.apply_dataset_highlights(buf, lines, meta)
         vim.api.nvim_buf_set_extmark(buf, ns, i - 1, 0, {
           end_row = i - 1,
           end_col = #line,
-          hl_group = "PosteSqlMeta",
+          hl_group = "PosteDbDatasetMeta",
         })
       end
       local ok_start, ok_end = line:find("OK")
@@ -112,7 +112,7 @@ function M.apply_dataset_highlights(buf, lines, meta)
         vim.api.nvim_buf_set_extmark(buf, ns, i - 1, ok_start - 1, {
           end_row = i - 1,
           end_col = ok_end,
-          hl_group = "PosteSqlSucceeded",
+          hl_group = "PosteDbDatasetSucceeded",
         })
       end
       local ms_start, ms_end = line:find("%d+ms")
@@ -120,7 +120,7 @@ function M.apply_dataset_highlights(buf, lines, meta)
         vim.api.nvim_buf_set_extmark(buf, ns, i - 1, ms_start - 1, {
           end_row = i - 1,
           end_col = ms_end,
-          hl_group = "PosteSqlConstant",
+          hl_group = "PosteDbDatasetConstant",
         })
       end
     end
@@ -132,7 +132,7 @@ function M.apply_dataset_highlights(buf, lines, meta)
     vim.api.nvim_buf_set_extmark(buf, ns, meta.header_line - 1, 0, {
       end_row = meta.header_line - 1,
       end_col = #hline,
-      hl_group = "PosteSqlHeader",
+      hl_group = "PosteDbDatasetHeader",
     })
   end
 
@@ -141,7 +141,7 @@ function M.apply_dataset_highlights(buf, lines, meta)
       vim.api.nvim_buf_set_extmark(buf, ns, i - 1, 0, {
         end_row = i - 1,
         end_col = #line,
-        hl_group = "PosteSqlBorder",
+        hl_group = "PosteDbDatasetBorder",
       })
     end
   end
@@ -159,7 +159,7 @@ function M.apply_dataset_highlights(buf, lines, meta)
           vim.api.nvim_buf_set_extmark(buf, ns, row_idx - 1, row_range.ext_start, {
             end_row = row_idx - 1,
             end_col = math.min(row_range.ext_end, #line),
-            hl_group = "PosteSqlRowNum",
+            hl_group = "PosteDbDatasetRowNum",
             priority = 100,
           })
         end
@@ -172,7 +172,7 @@ function M.apply_dataset_highlights(buf, lines, meta)
         vim.api.nvim_buf_set_extmark(buf, ns, row_idx - 1, start - 1, {
           end_row = row_idx - 1,
           end_col = stop,
-          hl_group = "PosteSqlNull",
+          hl_group = "PosteDbDatasetNull",
         })
         col = stop
       end
@@ -189,7 +189,7 @@ function M.apply_dataset_highlights(buf, lines, meta)
             pcall(vim.api.nvim_buf_set_extmark, buf, ns, row_idx - 1, row_range.ext_start, {
               end_row = row_idx - 1,
               end_col = math.min(row_range.ext_end, #line),
-              hl_group = "PosteSqlRowNum",
+              hl_group = "PosteDbDatasetRowNum",
               priority = 100,
             })
           end
@@ -218,7 +218,7 @@ function M.highlight_cell(buf, row, col, meta, line, col_starts)
           vim.api.nvim_buf_set_extmark(buf, ns_cursorline, line_idx - 1, range.ext_start, {
             end_row = line_idx - 1,
             end_col = range.ext_end,
-            hl_group = "PosteSqlCursorLine",
+            hl_group = "PosteDbDatasetCursorLine",
             hl_mode = "combine",
             priority = 150,
           })
@@ -240,7 +240,7 @@ function M.highlight_cell(buf, row, col, meta, line, col_starts)
   vim.api.nvim_buf_set_extmark(buf, ns_cell, line_idx - 1, range.ext_start, {
     end_row = line_idx - 1,
     end_col = range.ext_end,
-    hl_group = "PosteSqlCellSelected",
+    hl_group = "PosteDbDatasetCellSelected",
     priority = 200,
   })
 end
@@ -266,7 +266,7 @@ function M.apply_edit_highlights(buf, tab)
       vim.api.nvim_buf_set_extmark(buf, ns_edit, line_idx - 1, 0, {
         end_row = line_idx - 1,
         end_col = #line,
-        hl_group = "PosteSqlDeleted",
+        hl_group = "PosteDbDatasetDeleted",
         hl_mode = "combine",
         priority = 300,
       })
@@ -282,7 +282,7 @@ function M.apply_edit_highlights(buf, tab)
         vim.api.nvim_buf_set_extmark(buf, ns_edit, line_idx - 1, 0, {
           end_row = line_idx - 1,
           end_col = #line,
-          hl_group = "PosteSqlAdded",
+          hl_group = "PosteDbDatasetAdded",
           hl_mode = "combine",
           priority = 300,
         })
@@ -304,7 +304,7 @@ function M.apply_edit_highlights(buf, tab)
             vim.api.nvim_buf_set_extmark(buf, ns_edit, line_idx - 1, ext_start, {
               end_row = line_idx - 1,
               end_col = ext_end,
-              hl_group = "PosteSqlModified",
+              hl_group = "PosteDbDatasetModified",
               hl_mode = "combine",
               priority = 250,
             })
@@ -329,7 +329,7 @@ function M.apply_edit_highlights(buf, tab)
             vim.api.nvim_buf_set_extmark(buf, ns_edit, line_idx - 1, ext_start, {
               end_row = line_idx - 1,
               end_col = ext_end,
-              hl_group = "PosteSqlError",
+              hl_group = "PosteDbDatasetError",
               hl_mode = "combine",
               priority = 350,
             })

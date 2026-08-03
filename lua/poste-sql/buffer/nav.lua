@@ -268,7 +268,7 @@ function M.update_header_float()
     focusable = false,
     zindex = 40,
   })
-  vim.wo[D.float_win].winhighlight = "Normal:PosteSqlHeader"
+  vim.wo[D.float_win].winhighlight = "Normal:PosteDbDatasetHeader"
   T_mark("  hdr:done")
 end
 

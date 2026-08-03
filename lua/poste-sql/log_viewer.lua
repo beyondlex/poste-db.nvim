@@ -198,25 +198,25 @@ local function apply_highlights(line_idx, entry, _)
   -- Error row: red for entire line (low priority so element colors show through)
   if entry.status == "error" and line_len > 0 then
     vim.api.nvim_buf_set_extmark(buf, ns, line_idx - 1, 0, {
-      end_col = line_len, hl_group = "PosteLogError", priority = 100, hl_mode = "combine",
+      end_col = line_len, hl_group = "PosteDbHistoryError", priority = 100, hl_mode = "combine",
     })
   end
 
   -- Timestamp cols 2-17 (gray)
   vim.api.nvim_buf_set_extmark(buf, ns, line_idx - 1, 2, {
-    end_col = 17, hl_group = "PosteSqlMetaDim", priority = 150,
+    end_col = 17, hl_group = "PosteDbDatasetMetaDim", priority = 150,
   })
   -- Table name cols 19 to 19+TBL_W
   vim.api.nvim_buf_set_extmark(buf, ns, line_idx - 1, 18, {
-    end_col = 18 + TBL_W, hl_group = "PosteSqlMeta", priority = 150,
+    end_col = 18 + TBL_W, hl_group = "PosteDbDatasetMeta", priority = 150,
   })
   -- Duration cols 21+TBL_W to 26+TBL_W (yellow)
   vim.api.nvim_buf_set_extmark(buf, ns, line_idx - 1, 20 + TBL_W, {
-    end_col = 25 + TBL_W, hl_group = "PosteWinbarModified", priority = 150,
+    end_col = 25 + TBL_W, hl_group = "PosteDbDatasetWinbarModified", priority = 150,
   })
   -- Source tag cols 28+TBL_W to 34+TBL_W (gray)
   vim.api.nvim_buf_set_extmark(buf, ns, line_idx - 1, 27 + TBL_W, {
-    end_col = 33 + TBL_W, hl_group = "PosteSqlMetaDim", priority = 150,
+    end_col = 33 + TBL_W, hl_group = "PosteDbDatasetMetaDim", priority = 150,
   })
 
   -- Filter word highlight
@@ -229,7 +229,7 @@ local function apply_highlights(line_idx, entry, _)
       if not start then break end
       vim.api.nvim_buf_set_extmark(buf, ns, line_idx - 1, start - 1, {
         end_col = start - 1 + #filter_text,
-        hl_group = "PosteSearchActive",
+        hl_group = "PosteDbDatasetSearchActive",
         priority = 180,
         hl_mode = "combine",
       })
@@ -270,7 +270,7 @@ local function apply_detail_highlights(line_idx, entry, detail_idx)
   -- Green bg for all non-blank detail lines
   if line_len > 0 then
     vim.api.nvim_buf_set_extmark(buf, ns, line_idx - 1, 0, {
-      end_col = line_len, hl_group = "PosteLogDetailBg", priority = 80, hl_mode = "combine",
+      end_col = line_len, hl_group = "PosteDbHistoryDetailBg", priority = 80, hl_mode = "combine",
     })
   end
   if line_len == 0 then return end
@@ -280,11 +280,11 @@ local function apply_detail_highlights(line_idx, entry, detail_idx)
   if pos <= n_sql then
     -- SQL line: vertical bar + > marker + keyword highlights
     vim.api.nvim_buf_set_extmark(buf, ns, line_idx - 1, 2, {
-      virt_text = {{"│", "PosteSqlMetaDim"}}, virt_text_pos = "overlay",
+      virt_text = {{"│", "PosteDbDatasetMetaDim"}}, virt_text_pos = "overlay",
       priority = 90,
     })
     vim.api.nvim_buf_set_extmark(buf, ns, line_idx - 1, 3, {
-      virt_text = {{"> ", "PosteLogSQL"}}, virt_text_pos = "overlay",
+      virt_text = {{"> ", "PosteDbHistorySQL"}}, virt_text_pos = "overlay",
       priority = 170,
     })
     -- Full SQL syntax highlighting
@@ -294,24 +294,24 @@ local function apply_detail_highlights(line_idx, entry, detail_idx)
   elseif pos <= n_sql + n_err then
     -- Error line: vertical bar + red fg + < marker
     vim.api.nvim_buf_set_extmark(buf, ns, line_idx - 1, 0, {
-      end_col = line_len, hl_group = "PosteLogError", priority = 160,
+      end_col = line_len, hl_group = "PosteDbHistoryError", priority = 160,
     })
     vim.api.nvim_buf_set_extmark(buf, ns, line_idx - 1, 2, {
-      virt_text = {{"│", "PosteSqlMetaDim"}}, virt_text_pos = "overlay",
+      virt_text = {{"│", "PosteDbDatasetMetaDim"}}, virt_text_pos = "overlay",
       priority = 90,
     })
     vim.api.nvim_buf_set_extmark(buf, ns, line_idx - 1, 3, {
-      virt_text = {{"< ", "PosteLogError"}}, virt_text_pos = "overlay",
+      virt_text = {{"< ", "PosteDbHistoryError"}}, virt_text_pos = "overlay",
       priority = 170,
     })
   else
     -- Meta/edit line: gray, bar, no marker
     vim.api.nvim_buf_set_extmark(buf, ns, line_idx - 1, 2, {
-      virt_text = {{"│", "PosteSqlMetaDim"}}, virt_text_pos = "overlay",
+      virt_text = {{"│", "PosteDbDatasetMetaDim"}}, virt_text_pos = "overlay",
       priority = 90,
     })
     vim.api.nvim_buf_set_extmark(buf, ns, line_idx - 1, 0, {
-      end_col = line_len, hl_group = "PosteSqlMetaDim", priority = 160,
+      end_col = line_len, hl_group = "PosteDbDatasetMetaDim", priority = 160,
     })
   end
 
@@ -325,7 +325,7 @@ local function apply_detail_highlights(line_idx, entry, detail_idx)
       if not start then break end
       vim.api.nvim_buf_set_extmark(buf, ns, line_idx - 1, start - 1, {
         end_col = start - 1 + #filter_text,
-        hl_group = "PosteSearchActive",
+        hl_group = "PosteDbDatasetSearchActive",
         priority = 180,
         hl_mode = "combine",
       })
@@ -341,15 +341,15 @@ local function update_winbar()
   for _ in ipairs(entries) do
     if filter_matches(entries[_]) then count = count + 1 end
   end
-  local parts = { "%#PosteSqlMeta# SQL Log" }
+  local parts = { "%#PosteDbDatasetMeta# SQL Log" }
   if filter_text ~= "" then
-    table.insert(parts, string.format(" %%#PosteLogFilter#filter: %s%%#PosteSqlMeta#", filter_text))
+    table.insert(parts, string.format(" %%#PosteDbHistoryFilter#filter: %s%%#PosteDbDatasetMeta#", filter_text))
   end
   table.insert(parts, string.format("  [%d/%d]", count, total))
   if count < total then
-    table.insert(parts, "  %#PosteSqlMetaDim#filtered%#PosteSqlMeta#")
+    table.insert(parts, "  %#PosteDbDatasetMetaDim#filtered%#PosteDbDatasetMeta#")
   end
-  table.insert(parts, "  %#PosteSqlMetaDim#│  q=close  f=filter  F=clear  C=delete-all  ↵=expand%#PosteSqlMeta#")
+  table.insert(parts, "  %#PosteDbDatasetMetaDim#│  q=close  f=filter  F=clear  C=delete-all  ↵=expand%#PosteDbDatasetMeta#")
   pcall(vim.api.nvim_set_option_value, "winbar", table.concat(parts), { win = win })
 end
 
@@ -429,7 +429,7 @@ local function render()
     local line_len = #(lines[1] or "")
     if line_len > 0 then
       vim.api.nvim_buf_set_extmark(buf, ns, 0, 0, {
-        end_col = line_len, hl_group = "PosteSqlMetaDim", priority = 150,
+        end_col = line_len, hl_group = "PosteDbDatasetMetaDim", priority = 150,
       })
     end
     return

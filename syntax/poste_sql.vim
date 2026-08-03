@@ -9,34 +9,34 @@ endif
 syn case ignore
 
 " ─── Request separator + name ────────────────────────
-syn region PosteSqlRequestName
+syn region PosteDbSqlRequestName
   \ start='^###' end='$'
-  \ contains=PosteSqlSeparator keepend
-syn match PosteSqlSeparator '^###' contained
+  \ contains=PosteDbSqlSeparator keepend
+syn match PosteDbSqlSeparator '^###' contained
 
-" ─── Directive lines (not Comment, takes priority over PosteSqlComment) ──
-syn match PosteSqlDirectiveLine '^--\s*@\%(connection\|database\|protocol\)\s*.*$'
-  \ contains=PosteSqlDirective
+" ─── Directive lines (not Comment, takes priority over PosteDbSqlComment) ──
+syn match PosteDbSqlDirectiveLine '^--\s*@\%(connection\|database\|protocol\)\s*.*$'
+  \ contains=PosteDbSqlDirective
 
 " ─── Directives (inside directive lines) ────────────
-syn match PosteSqlDirective
+syn match PosteDbSqlDirective
   \ '@\%(connection\|database\|protocol\)' contained
-  \ nextgroup=PosteSqlDirectiveValue skipwhite
-syn match PosteSqlDirectiveValue '\S.*$' contained
+  \ nextgroup=PosteDbSqlDirectiveValue skipwhite
+syn match PosteDbSqlDirectiveValue '\S.*$' contained
 
 " ─── Variable definitions: @name = value / @name value ──
-syn match PosteSqlVarDef '^\s*@\w\+'
-  \ nextgroup=PosteSqlVarAssign,PosteSqlVarValue skipwhite
-syn match PosteSqlVarAssign '=' contained
-  \ nextgroup=PosteSqlVarValue skipwhite
-syn match PosteSqlVarValue '.\+$' contained
+syn match PosteDbSqlVarDef '^\s*@\w\+'
+  \ nextgroup=PosteDbSqlVarAssign,PosteDbSqlVarValue skipwhite
+syn match PosteDbSqlVarAssign '=' contained
+  \ nextgroup=PosteDbSqlVarValue skipwhite
+syn match PosteDbSqlVarValue '.\+$' contained
 
 " ─── Variable references ────────────────────────────
-syn match PosteSqlMagicVar '{{\$\w\+}}'
-syn match PosteSqlVarRef '{{[^}]\+}}'
+syn match PosteDbSqlMagicVar '{{\$\w\+}}'
+syn match PosteDbSqlVarRef '{{[^}]\+}}'
 
 " ─── Comments ───────────────────────────────────────
-syn match PosteSqlComment '--.*$'
+syn match PosteDbSqlComment '--.*$'
 
 " ─── SQL Keywords, Functions, Types ─────────────────
 " NOTE: SQL keyword/function/type highlighting is handled by
@@ -44,44 +44,44 @@ syn match PosteSqlComment '--.*$'
 " source of truth shared with the log viewer.
 " Keep syn keyword lines here for Vim's synID-based motion/iskeyword,
 " but they no longer define highlight groups.
-syn keyword PosteSqlKeyword NONE_MATCH
-syn keyword PosteSqlFunction NONE_MATCH
-syn keyword PosteSqlType NONE_MATCH
+syn keyword PosteDbSqlKeyword NONE_MATCH
+syn keyword PosteDbSqlFunction NONE_MATCH
+syn keyword PosteDbSqlType NONE_MATCH
 
 " ─── Strings ────────────────────────────────────────
-syn region PosteSqlString start="'" skip="''" end="'"
-  \ contains=PosteSqlVarRef,PosteSqlMagicVar
+syn region PosteDbSqlString start="'" skip="''" end="'"
+  \ contains=PosteDbSqlVarRef,PosteDbSqlMagicVar
 
 " ─── Numbers ────────────────────────────────────────
-syn match PosteSqlNumber '\<\d\+\%(\.\d\+\)\?\>'
+syn match PosteDbSqlNumber '\<\d\+\%(\.\d\+\)\?\>'
 
 " ─── Operators ──────────────────────────────────────
-syn match PosteSqlOperator '[<>!=]=\?'
-syn match PosteSqlOperator '[+*/%]'
-syn match PosteSqlOperator '||'
-syn match PosteSqlOperator '::'
-syn match PosteSqlOperator '->>'
-syn match PosteSqlOperator '->'
-syn match PosteSqlOperator '@>'
-syn match PosteSqlOperator '<@'
+syn match PosteDbSqlOperator '[<>!=]=\?'
+syn match PosteDbSqlOperator '[+*/%]'
+syn match PosteDbSqlOperator '||'
+syn match PosteDbSqlOperator '::'
+syn match PosteDbSqlOperator '->>'
+syn match PosteDbSqlOperator '->'
+syn match PosteDbSqlOperator '@>'
+syn match PosteDbSqlOperator '<@'
 
 " ─── Highlight group links ──────────────────────────
-hi def link PosteSqlSeparator   Delimiter
-hi def link PosteSqlRequestName Title
-hi def link PosteSqlComment     Comment
-hi def link PosteSqlDirectiveLine Special
-hi def PosteSqlDirective        guifg=#D19A66 ctermfg=173 gui=bold
-hi def PosteSqlDirectiveValue   guifg=#E5C07B ctermfg=180
-hi def link PosteSqlVarDef      Identifier
-hi def link PosteSqlVarAssign   Operator
-hi def link PosteSqlVarValue    String
-hi def link PosteSqlVarRef      Identifier
-hi def link PosteSqlMagicVar    Special
-hi def link PosteSqlKeyword     Keyword
-hi def link PosteSqlFunction    Function
-hi def link PosteSqlType        Type
-hi def link PosteSqlString      String
-hi def link PosteSqlNumber      Number
-hi def link PosteSqlOperator    Operator
+hi def link PosteDbSqlSeparator   Delimiter
+hi def link PosteDbSqlRequestName Title
+hi def link PosteDbSqlComment     Comment
+hi def link PosteDbSqlDirectiveLine Special
+hi def PosteDbSqlDirective        guifg=#D19A66 ctermfg=173 gui=bold
+hi def PosteDbSqlDirectiveValue   guifg=#E5C07B ctermfg=180
+hi def link PosteDbSqlVarDef      Identifier
+hi def link PosteDbSqlVarAssign   Operator
+hi def link PosteDbSqlVarValue    String
+hi def link PosteDbSqlVarRef      Identifier
+hi def link PosteDbSqlMagicVar    Special
+hi def link PosteDbSqlKeyword     Keyword
+hi def link PosteDbSqlFunction    Function
+hi def link PosteDbSqlType        Type
+hi def link PosteDbSqlString      String
+hi def link PosteDbSqlNumber      Number
+hi def link PosteDbSqlOperator    Operator
 
 let b:current_syntax = "poste_sql"

@@ -43,9 +43,9 @@ function M.build_status_left(meta, tab)
   if tab and tab.num_pages and tab.num_pages > 1 and (tab.padded_full or tab.layout) then
     if tab.pagination_enabled then
       left = left .. string.format("  %sPage %d/%d%s",
-        "%#PosteSqlMetaDim#", tab.page, tab.num_pages, "%#PosteSqlMeta#")
+        "%#PosteDbDatasetMetaDim#", tab.page, tab.num_pages, "%#PosteDbDatasetMeta#")
     else
-      left = left .. "  %#PosteSqlMetaDim#All%#PosteSqlMeta#"
+      left = left .. "  %#PosteDbDatasetMetaDim#All%#PosteDbDatasetMeta#"
     end
   end
 
@@ -53,17 +53,17 @@ function M.build_status_left(meta, tab)
     local fv = tab.filter_val
     local fvs = (fv == nil or fv == vim.NIL) and "NULL" or tostring(fv)
     left = left .. string.format("  %sfilter: %s=%s%s",
-      "%#PosteFilterActive#", tab.filter_col_name, fvs, "%#PosteSqlMeta#")
+      "%#PosteDbDatasetFilterActive#", tab.filter_col_name, fvs, "%#PosteDbDatasetMeta#")
   end
 
   if tab and tab.search_text and tab.search_matches and #tab.search_matches > 0 then
     local cnt = string.format("%d/%d", tab.search_idx or 0, #tab.search_matches)
     local info = tab.search_text .. " (" .. cnt .. ")"
     left = left .. string.format("  %ssearch: %s%s",
-      "%#PosteSearchActive#", info, "%#PosteSqlMeta#")
+      "%#PosteDbDatasetSearchActive#", info, "%#PosteDbDatasetMeta#")
   elseif tab and tab.search_text then
     left = left .. string.format("  %ssearch: %s (0)%s",
-      "%#PosteSearchActive#", tab.search_text, "%#PosteSqlMeta#")
+      "%#PosteDbDatasetSearchActive#", tab.search_text, "%#PosteDbDatasetMeta#")
   end
 
   return left
@@ -104,7 +104,7 @@ function M.build_status_winbar_text(meta, tab, total_tabs, active_idx, pending)
   if not left or not right then return nil end
 
   local text = left .. "%=" .. right
-  return "%#PosteSqlMeta#" .. text
+  return "%#PosteDbDatasetMeta#" .. text
 end
 
 function M.build_status_winbar(meta, tab, total_tabs, active_idx)

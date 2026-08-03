@@ -381,7 +381,7 @@ local function highlight_match_chars(buf, line_to_node, matches)
         if name_start and match.positions then
           for _, pos in ipairs(match.positions) do
             local char_col = name_start + pos - 2
-            vim.api.nvim_buf_add_highlight(buf, search_char_ns, "PosteSqlBrowserSearchChar",
+            vim.api.nvim_buf_add_highlight(buf, search_char_ns, "PosteDbBrowserSearchChar",
               line_nr, char_col, char_col + 1)
           end
         end
@@ -417,7 +417,7 @@ local function do_jump(index)
         if n == match.node then
           local target_line = i + HEADER_LINES
           vim.api.nvim_buf_clear_namespace(ctx.browser_buf, search_hl_ns, 0, -1)
-          vim.api.nvim_buf_add_highlight(ctx.browser_buf, search_hl_ns, "PosteSqlBrowserSearchMatch",
+          vim.api.nvim_buf_add_highlight(ctx.browser_buf, search_hl_ns, "PosteDbBrowserSearchMatch",
             target_line - 1, 0, -1)
           vim.api.nvim_win_set_cursor(0, { target_line, 0 })
           break

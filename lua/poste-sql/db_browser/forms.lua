@@ -9,12 +9,12 @@ local ns_form = vim.api.nvim_create_namespace("poste_db_form")
 
 -- Form visual highlight groups — applied at load and on ColorScheme change
 local function setup_hl()
-  vim.api.nvim_set_hl(0, "PosteFormBorder",    { fg = 0x7aa2f7, bold = true })
-  vim.api.nvim_set_hl(0, "PosteFormTitle",     { fg = 0xe0af68, bold = true })
-  vim.api.nvim_set_hl(0, "PosteFormSubmit",    { fg = 0x98c379, bold = true })
-  vim.api.nvim_set_hl(0, "PosteFormCancel",    { fg = 0x5c6370 })
+  vim.api.nvim_set_hl(0, "PosteDbFormBorder",    { fg = 0x7aa2f7, bold = true })
+  vim.api.nvim_set_hl(0, "PosteDbFormTitle",     { fg = 0xe0af68, bold = true })
+  vim.api.nvim_set_hl(0, "PosteDbFormSubmit",    { fg = 0x98c379, bold = true })
+  vim.api.nvim_set_hl(0, "PosteDbFormCancel",    { fg = 0x5c6370 })
   state.apply_highlight_overrides({
-    "PosteFormBorder", "PosteFormTitle", "PosteFormSubmit", "PosteFormCancel",
+    "PosteDbFormBorder", "PosteDbFormTitle", "PosteDbFormSubmit", "PosteDbFormCancel",
   })
 end
 setup_hl()
@@ -90,14 +90,14 @@ local function render_form(buf, title, fields, current_idx)
   -- Hints row in subtle color
   vim.api.nvim_buf_add_highlight(buf, ns_form, "Comment", hints_row - 1, 0, -1)
   -- Submit / Cancel buttons with distinct colors — Cancel left, Submit right
-  vim.api.nvim_buf_add_highlight(buf, ns_form, "PosteFormCancel", submit_row - 1, right_pad + 2, right_pad + 12)
-  vim.api.nvim_buf_add_highlight(buf, ns_form, "PosteFormSubmit", submit_row - 1, right_pad + 14, right_pad + 24)
+  vim.api.nvim_buf_add_highlight(buf, ns_form, "PosteDbFormCancel", submit_row - 1, right_pad + 2, right_pad + 12)
+  vim.api.nvim_buf_add_highlight(buf, ns_form, "PosteDbFormSubmit", submit_row - 1, right_pad + 14, right_pad + 24)
   -- Top border + title
-  vim.api.nvim_buf_add_highlight(buf, ns_form, "PosteFormBorder", 0, 0, -1)
-  vim.api.nvim_buf_add_highlight(buf, ns_form, "PosteFormTitle", 0, 4, 4 + #title)
+  vim.api.nvim_buf_add_highlight(buf, ns_form, "PosteDbFormBorder", 0, 0, -1)
+  vim.api.nvim_buf_add_highlight(buf, ns_form, "PosteDbFormTitle", 0, 4, 4 + #title)
   -- Bottom border
   local last_line = #lines - 1
-  vim.api.nvim_buf_add_highlight(buf, ns_form, "PosteFormBorder", last_line, 0, -1)
+  vim.api.nvim_buf_add_highlight(buf, ns_form, "PosteDbFormBorder", last_line, 0, -1)
   -- Virtual text for unset defaults
   for i, f in ipairs(fields) do
     if f.kind == "text" and (f.value == nil or f.value == vim.NULL or type(f.value) == "userdata") and field_rows[i] then

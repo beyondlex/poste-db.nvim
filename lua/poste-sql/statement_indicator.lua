@@ -3,7 +3,7 @@ local ts_stmt = require("poste-sql.ts_stmt")
 local M = {}
 
 -- Define boundary sign highlight group
-vim.api.nvim_set_hl(0, "PosteSqlBoundaryBorder", { link = "Comment" })
+vim.api.nvim_set_hl(0, "PosteDbSqlBoundaryBorder", { link = "Comment" })
 
 local _debounce_timer = nil
 local _disabled = false
@@ -13,13 +13,13 @@ local sign_group = C.SIGN_GROUP_NAME .. "_boundary"
 
 -- Define sign texts for boundary indicators (multi-line statements only)
 local BOUNDARY_SIGNS = {
-  PosteBoundaryTop = "┌",
-  PosteBoundaryMid = "│",
-  PosteBoundaryBot = "└",
+  PosteDbBoundaryTop = "┌",
+  PosteDbBoundaryMid = "│",
+  PosteDbBoundaryBot = "└",
 }
 
 for name, text in pairs(BOUNDARY_SIGNS) do
-  pcall(vim.fn.sign_define, name, { text = text, texthl = "PosteSqlBoundaryBorder" })
+  pcall(vim.fn.sign_define, name, { text = text, texthl = "PosteDbSqlBoundaryBorder" })
 end
 
 local bound_sign_ids = {}  -- buf -> { line_0 -> sign_id }
@@ -45,11 +45,11 @@ local function apply_range(buf, start, stop)
   for line = start, stop do
     local sign_name
     if line == start then
-      sign_name = "PosteBoundaryTop"
+      sign_name = "PosteDbBoundaryTop"
     elseif line == stop then
-      sign_name = "PosteBoundaryBot"
+      sign_name = "PosteDbBoundaryBot"
     else
-      sign_name = "PosteBoundaryMid"
+      sign_name = "PosteDbBoundaryMid"
     end
     local sign_id = vim.fn.sign_place(0, sign_group, sign_name, buf, { lnum = line + 1 })
     if sign_id and sign_id > 0 then

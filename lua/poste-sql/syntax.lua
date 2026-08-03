@@ -9,9 +9,9 @@ local const = require("poste-sql.constants")
 -- Define highlight groups for directive comments.
 -- These are still needed because Tree-sitter doesn't understand
 -- poste-specific -- @connection semantics.
-vim.api.nvim_set_hl(0, "sqlDirective", { fg = "#D19A66", bold = true })
-vim.api.nvim_set_hl(0, "sqlDirectiveValue", { fg = "#E5C07B" })
-vim.api.nvim_set_hl(0, "sqlDirectiveComment", { link = "Special" })
+vim.api.nvim_set_hl(0, "PosteDbSqlDirective", { fg = "#D19A66", bold = true })
+vim.api.nvim_set_hl(0, "PosteDbSqlDirectiveValue", { fg = "#E5C07B" })
+vim.api.nvim_set_hl(0, "PosteDbSqlDirectiveComment", { link = "Special" })
 
 local DIRECTIVE_NS = vim.api.nvim_create_namespace("poste_sql_directive")
 local DIRECTIVE_KEYWORDS = {
@@ -33,15 +33,15 @@ function M.highlight_directive_comments(buf)
       local dstart, dend = line:find("^--%s*@" .. dir)
       if dstart then
         vim.api.nvim_buf_set_extmark(buf, DIRECTIVE_NS, i - 1, 0, {
-          end_col = dend, hl_group = "sqlDirectiveComment", priority = 101,
+          end_col = dend, hl_group = "PosteDbSqlDirectiveComment", priority = 101,
         })
         vim.api.nvim_buf_set_extmark(buf, DIRECTIVE_NS, i - 1, dstart - 1, {
-          end_col = dend, hl_group = "sqlDirective", priority = 102,
+          end_col = dend, hl_group = "PosteDbSqlDirective", priority = 102,
         })
         local vstart, vend = line:find("%S.*$", dend + 1)
         if vstart then
           vim.api.nvim_buf_set_extmark(buf, DIRECTIVE_NS, i - 1, vstart - 1, {
-            end_col = vend, hl_group = "sqlDirectiveValue", priority = 102,
+            end_col = vend, hl_group = "PosteDbSqlDirectiveValue", priority = 102,
           })
         end
         break

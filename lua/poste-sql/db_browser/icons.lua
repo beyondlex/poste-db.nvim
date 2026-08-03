@@ -54,51 +54,51 @@ local function setup_highlights()
   end
 
   if is_dark then
-    vim.api.nvim_set_hl(0, "PosteSqlBrowserHeader", { fg = "#7aa2f7", bold = true })
-    vim.api.nvim_set_hl(0, "PosteSqlBrowserSeparator", { fg = "#3b4261" })
-    vim.api.nvim_set_hl(0, "PosteSqlBrowserMarker", { fg = "#565f89" })
-    vim.api.nvim_set_hl(0, "PosteSqlBrowserTable", { fg = "#9ece6a" })
-    vim.api.nvim_set_hl(0, "PosteSqlBrowserType", { fg = "#565f89" })
-    vim.api.nvim_set_hl(0, "PosteSqlBrowserCount", { fg = "#565f89" })
-    vim.api.nvim_set_hl(0, "PosteSqlBrowserIconConn", { fg = "#7aa2f7" })
-    vim.api.nvim_set_hl(0, "PosteSqlBrowserIconDb", { fg = "#e0af68" })
-    vim.api.nvim_set_hl(0, "PosteSqlBrowserIconSchema", { fg = "#7dcfff" })
-    vim.api.nvim_set_hl(0, "PosteSqlBrowserIconTable", { fg = "#9ece6a" })
-    vim.api.nvim_set_hl(0, "PosteSqlBrowserIconCol", { fg = "#a9b1d6" })
-    vim.api.nvim_set_hl(0, "PosteSqlBrowserIconPk", { fg = "#e0af68" })
-    vim.api.nvim_set_hl(0, "PosteSqlBrowserIconFk", { fg = "#7dcfff" })
-    vim.api.nvim_set_hl(0, "PosteSqlBrowserKeyHint", { fg = "#9ece6a", bold = true })
-    vim.api.nvim_set_hl(0, "PosteSqlBrowserSearchMatch", { bg = "#544d33", bold = true })
-    vim.api.nvim_set_hl(0, "PosteSqlBrowserSearchChar", { fg = "#bb9af7", bold = true })
-    vim.api.nvim_set_hl(0, "PosteSqlBrowserSelected", { fg = "#7aa2f7", bold = true })
+    vim.api.nvim_set_hl(0, "PosteDbBrowserHeader", { fg = "#7aa2f7", bold = true })
+    vim.api.nvim_set_hl(0, "PosteDbBrowserSeparator", { fg = "#3b4261" })
+    vim.api.nvim_set_hl(0, "PosteDbBrowserMarker", { fg = "#565f89" })
+    vim.api.nvim_set_hl(0, "PosteDbBrowserTable", { fg = "#9ece6a" })
+    vim.api.nvim_set_hl(0, "PosteDbBrowserType", { fg = "#565f89" })
+    vim.api.nvim_set_hl(0, "PosteDbBrowserCount", { fg = "#565f89" })
+    vim.api.nvim_set_hl(0, "PosteDbBrowserIconConn", { fg = "#7aa2f7" })
+    vim.api.nvim_set_hl(0, "PosteDbBrowserIconDb", { fg = "#e0af68" })
+    vim.api.nvim_set_hl(0, "PosteDbBrowserIconSchema", { fg = "#7dcfff" })
+    vim.api.nvim_set_hl(0, "PosteDbBrowserIconTable", { fg = "#9ece6a" })
+    vim.api.nvim_set_hl(0, "PosteDbBrowserIconCol", { fg = "#a9b1d6" })
+    vim.api.nvim_set_hl(0, "PosteDbBrowserIconPk", { fg = "#e0af68" })
+    vim.api.nvim_set_hl(0, "PosteDbBrowserIconFk", { fg = "#7dcfff" })
+    vim.api.nvim_set_hl(0, "PosteDbBrowserKeyHint", { fg = "#9ece6a", bold = true })
+    vim.api.nvim_set_hl(0, "PosteDbBrowserSearchMatch", { bg = "#544d33", bold = true })
+    vim.api.nvim_set_hl(0, "PosteDbBrowserSearchChar", { fg = "#bb9af7", bold = true })
+    vim.api.nvim_set_hl(0, "PosteDbBrowserSelected", { fg = "#7aa2f7", bold = true })
   else
-    vim.api.nvim_set_hl(0, "PosteSqlBrowserHeader", { fg = "#2e7de9", bold = true })
-    vim.api.nvim_set_hl(0, "PosteSqlBrowserSeparator", { fg = "#a8aecb" })
-    vim.api.nvim_set_hl(0, "PosteSqlBrowserMarker", { fg = "#8990b3" })
-    vim.api.nvim_set_hl(0, "PosteSqlBrowserTable", { fg = "#587539" })
-    vim.api.nvim_set_hl(0, "PosteSqlBrowserType", { fg = "#8990b3" })
-    vim.api.nvim_set_hl(0, "PosteSqlBrowserCount", { fg = "#8990b3" })
-    vim.api.nvim_set_hl(0, "PosteSqlBrowserIconConn", { fg = "#2e7de9" })
-    vim.api.nvim_set_hl(0, "PosteSqlBrowserIconDb", { fg = "#8c6c3e" })
-    vim.api.nvim_set_hl(0, "PosteSqlBrowserIconSchema", { fg = "#1880a8" })
-    vim.api.nvim_set_hl(0, "PosteSqlBrowserIconTable", { fg = "#587539" })
-    vim.api.nvim_set_hl(0, "PosteSqlBrowserIconCol", { fg = "#6172b0" })
-    vim.api.nvim_set_hl(0, "PosteSqlBrowserIconPk", { fg = "#8c6c3e" })
-    vim.api.nvim_set_hl(0, "PosteSqlBrowserIconFk", { fg = "#1880a8" })
-    vim.api.nvim_set_hl(0, "PosteSqlBrowserKeyHint", { fg = "#587539", bold = true })
-    vim.api.nvim_set_hl(0, "PosteSqlBrowserSearchMatch", { bg = "#f5e6b8", bold = true })
-    vim.api.nvim_set_hl(0, "PosteSqlBrowserSearchChar", { fg = "#9854f1", bold = true })
-    vim.api.nvim_set_hl(0, "PosteSqlBrowserSelected", { fg = "#2e7de9", bold = true })
+    vim.api.nvim_set_hl(0, "PosteDbBrowserHeader", { fg = "#2e7de9", bold = true })
+    vim.api.nvim_set_hl(0, "PosteDbBrowserSeparator", { fg = "#a8aecb" })
+    vim.api.nvim_set_hl(0, "PosteDbBrowserMarker", { fg = "#8990b3" })
+    vim.api.nvim_set_hl(0, "PosteDbBrowserTable", { fg = "#587539" })
+    vim.api.nvim_set_hl(0, "PosteDbBrowserType", { fg = "#8990b3" })
+    vim.api.nvim_set_hl(0, "PosteDbBrowserCount", { fg = "#8990b3" })
+    vim.api.nvim_set_hl(0, "PosteDbBrowserIconConn", { fg = "#2e7de9" })
+    vim.api.nvim_set_hl(0, "PosteDbBrowserIconDb", { fg = "#8c6c3e" })
+    vim.api.nvim_set_hl(0, "PosteDbBrowserIconSchema", { fg = "#1880a8" })
+    vim.api.nvim_set_hl(0, "PosteDbBrowserIconTable", { fg = "#587539" })
+    vim.api.nvim_set_hl(0, "PosteDbBrowserIconCol", { fg = "#6172b0" })
+    vim.api.nvim_set_hl(0, "PosteDbBrowserIconPk", { fg = "#8c6c3e" })
+    vim.api.nvim_set_hl(0, "PosteDbBrowserIconFk", { fg = "#1880a8" })
+    vim.api.nvim_set_hl(0, "PosteDbBrowserKeyHint", { fg = "#587539", bold = true })
+    vim.api.nvim_set_hl(0, "PosteDbBrowserSearchMatch", { bg = "#f5e6b8", bold = true })
+    vim.api.nvim_set_hl(0, "PosteDbBrowserSearchChar", { fg = "#9854f1", bold = true })
+    vim.api.nvim_set_hl(0, "PosteDbBrowserSelected", { fg = "#2e7de9", bold = true })
   end
 
   state.apply_highlight_overrides({
-    "PosteSqlBrowserHeader", "PosteSqlBrowserSeparator", "PosteSqlBrowserMarker",
-    "PosteSqlBrowserTable", "PosteSqlBrowserType", "PosteSqlBrowserCount",
-    "PosteSqlBrowserIconConn", "PosteSqlBrowserIconDb", "PosteSqlBrowserIconSchema",
-    "PosteSqlBrowserIconTable", "PosteSqlBrowserIconCol",
-    "PosteSqlBrowserIconPk", "PosteSqlBrowserIconFk",
-    "PosteSqlBrowserKeyHint", "PosteSqlBrowserSearchMatch",
-    "PosteSqlBrowserSearchChar", "PosteSqlBrowserSelected",
+    "PosteDbBrowserHeader", "PosteDbBrowserSeparator", "PosteDbBrowserMarker",
+    "PosteDbBrowserTable", "PosteDbBrowserType", "PosteDbBrowserCount",
+    "PosteDbBrowserIconConn", "PosteDbBrowserIconDb", "PosteDbBrowserIconSchema",
+    "PosteDbBrowserIconTable", "PosteDbBrowserIconCol",
+    "PosteDbBrowserIconPk", "PosteDbBrowserIconFk",
+    "PosteDbBrowserKeyHint", "PosteDbBrowserSearchMatch",
+    "PosteDbBrowserSearchChar", "PosteDbBrowserSelected",
   })
 end
 

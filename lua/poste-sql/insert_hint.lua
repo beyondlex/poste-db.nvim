@@ -167,7 +167,7 @@ function M.update()
         dbg("PLACING extmark row=" .. row .. " col=" .. buf_col)
         vim.api.nvim_buf_set_extmark(bufnr, ns, row, buf_col, {
           end_col = buf_col + #target_col,
-          hl_group = "PosteInsertHint",
+          hl_group = "PosteDbDatasetInsertHint",
           priority = 200,
         })
         return

@@ -31,7 +31,7 @@ function M.apply_search_highlights()
     if line then
       local range = sql_highlights.find_cell_range(line, match.col + 1)
       if range then
-        local hl = (match.global_match_idx == tab.search_idx) and "PosteSearchCurrent" or "PosteSearchMatch"
+        local hl = (match.global_match_idx == tab.search_idx) and "PosteDbDatasetSearchCurrent" or "PosteDbDatasetSearchMatch"
         vim.api.nvim_buf_set_extmark(D.dataset_buffer, D.search_ns, buf_line - 1, range.ext_start, {
           end_row = buf_line - 1,
           end_col = range.ext_end,
