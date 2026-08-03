@@ -1,6 +1,7 @@
 --- SQL Dataset formatter — renders query results as Unicode tables.
 --- Used by the Dataset buffer (bottom horizontal split).
 local util = require("poste-sql.util")
+local C = require("poste-sql.constants")
 local M = {}
 
 ---------------------------------------------------------------------------
@@ -192,8 +193,9 @@ end
 --- @param columns table[] Column metadata
 --- @param rows table[][] Row data
 --- @param max_width number Maximum total table width (0 = unlimited)
+--- @param max_col_width number Per-column cap (0 = unlimited)
 --- @return number[] widths Array of column display widths
-local function calc_column_widths(columns, rows, max_width)
+local function calc_column_widths(columns, rows, max_width, max_col_width)
   local widths = {}
   local min_data_widths = {}
   for i, col in ipairs(columns) do
@@ -212,6 +214,13 @@ local function calc_column_widths(columns, rows, max_width)
     end
   end
 
+  -- Cap each column at max_col_width so short columns keep natural width
+  if max_col_width and max_col_width > 0 then
+    for i = 1, #widths do
+      widths[i] = math.min(widths[i], max_col_width)
+    end
+  end
+
   if max_width and max_width > 0 then
     local overhead = #widths * 3 + 1
     local available = max_width - overhead
@@ -223,6 +232,7 @@ local function calc_column_widths(columns, rows, max_width)
     for _, w in ipairs(widths) do total = total + w end
 
     if total > available then
+      -- Proportional squeeze only when still too wide after capping
       local scale = available / total
       for i = 1, #widths do
         widths[i] = math.max(4, math.floor(widths[i] * scale))
@@ -476,7 +486,7 @@ function M.plan_resultset_layout(data)
   local total_rows = tonumber(data.total_rows) or #rows
   local row_num_width = math.max(1, math.floor(math.log10(math.max(1, total_rows))) + 1)
 
-  local col_widths = calc_column_widths(columns, rows, 200)
+  local col_widths = calc_column_widths(columns, rows, 200, C.MAX_COL_WIDTH)
   table.insert(col_widths, 1, row_num_width)
 
   local numeric_cols = { false }
