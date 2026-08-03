@@ -1,9 +1,11 @@
 local ts_stmt = require("poste-sql.ts_stmt")
+local state = require("poste.state")
 
 local M = {}
 
 -- Define boundary sign highlight group
 vim.api.nvim_set_hl(0, "PosteDbSqlBoundaryBorder", { link = "Comment" })
+state.apply_highlight_overrides({ "PosteDbSqlBoundaryBorder" })
 
 local _debounce_timer = nil
 local _disabled = false

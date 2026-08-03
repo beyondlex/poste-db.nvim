@@ -9,6 +9,9 @@ local function setup_highlights()
   vim.api.nvim_set_hl(0, "PosteDbCopySuccess", { fg = "#9ece6a" })
   vim.api.nvim_set_hl(0, "PosteDbCopyError", { fg = "#f7768e" })
   vim.api.nvim_set_hl(0, "PosteDbCopyProgress", { fg = "#565f89" })
+  state.apply_highlight_overrides({
+    "PosteDbCopySuccess", "PosteDbCopyError", "PosteDbCopyProgress",
+  })
 end
 
 setup_highlights()
