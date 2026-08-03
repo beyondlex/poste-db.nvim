@@ -432,7 +432,8 @@ function M.run_sql_request()
           if current_seq < exec_seq then return end
           local stderr_text = table.concat(stderr_buf, "\n")
           indicators.set_indicator(src_buf, (stmt_end or first_line) - 1, "error")
-          vim.notify("Failed to start poste job", vim.log.levels.ERROR, { title = "Poste SQL" })
+          local notify_msg = stderr_text ~= "" and stderr_text or "Query failed with exit code " .. code
+          vim.notify(notify_msg, vim.log.levels.ERROR, { title = "Poste SQL" })
           local lines = sql_format.format_error(
             stderr_text ~= "" and stderr_text or "Query failed with exit code " .. code,
             state.sql.context.connection or ""
@@ -461,6 +462,7 @@ function M.run_sql_request()
     vim.fn.chanclose(job_id, "stdin")
   else
     indicators.set_indicator(src_buf, (stmt_end or first_line) - 1, "error")
+    vim.notify("Failed to start poste job", vim.log.levels.ERROR, { title = "Poste SQL" })
   end
 end
 
