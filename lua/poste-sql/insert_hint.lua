@@ -55,7 +55,10 @@ function M.update()
   local s, e = nil, nil
   local search_pos = 1
   while true do
-    local ns2, ne = full_text:find("[Ii][Nn][Ss][Ee][Rr][Tt]%s+[Ii][Nn][Tt][Oo]%s+[%w_]+%s*%(", search_pos)
+    local ns2, ne = full_text:find("[Ii][Nn][Ss][Ee][Rr][Tt]%s+[Ii][Nn][Tt][Oo]%s+`[^`]+`%s*%(", search_pos)
+    if not ns2 or ns2 > text_offset then
+      ns2, ne = full_text:find("[Ii][Nn][Ss][Ee][Rr][Tt]%s+[Ii][Nn][Tt][Oo]%s+[%w_]+%s*%(", search_pos)
+    end
     if not ns2 or ns2 > text_offset then break end
     s, e = ns2, ne
     search_pos = ne + 1
