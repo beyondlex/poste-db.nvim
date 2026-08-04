@@ -4,6 +4,14 @@ local util = require("poste-sql.util")
 local C = require("poste-sql.constants")
 local M = {}
 
+--- Normalized numeric ctypes (see M.normalize_type) eligible for right-alignment
+--- even when values arrive as strings (precision-preserving JSON strings).
+local NUMERIC_CTYPES = {
+  integer = true, int = true, bigint = true, smallint = true,
+  serial = true, bigserial = true, smallserial = true,
+  numeric = true, decimal = true, real = true, float = true, money = true,
+}
+
 ---------------------------------------------------------------------------
 -- Helpers
 ---------------------------------------------------------------------------
@@ -175,11 +183,28 @@ local function cell_to_string(val, col)
 end
 
 --- Check if a column contains only numeric values (for right-alignment).
-local function is_numeric_column(rows, col_idx)
+--- Values may arrive as Lua numbers OR as strings (bigints above 2^53 and
+--- large DECIMALs are serialized as JSON strings to preserve precision).
+--- @param rows table[] Row data
+--- @param col_idx number Column index (1-based)
+--- @param col_meta table|nil Column metadata with .type
+--- @return boolean
+local function is_numeric_column(rows, col_idx, col_meta)
+  local is_numeric_type = false
+  if col_meta and col_meta.type then
+    local ctype = M.normalize_type(col_meta.type)
+    is_numeric_type = NUMERIC_CTYPES[ctype] == true
+  end
   for _, row in ipairs(rows) do
     local val = row[col_idx]
-    if val ~= nil and val ~= vim.NIL and type(val) ~= "number" then
-      return false
+    if val ~= nil and val ~= vim.NIL then
+      if type(val) == "number" then
+        -- ok
+      elseif is_numeric_type and type(val) == "string" and val:match("^%-?%d+%.?%d*$") then
+        -- ok: numeric string (bigint/decimal preserved as string)
+      else
+        return false
+      end
     end
   end
   return true
@@ -491,7 +516,7 @@ function M.plan_resultset_layout(data)
 
   local numeric_cols = { false }
   for i = 1, #columns do
-    numeric_cols[i + 1] = is_numeric_column(rows, i)
+    numeric_cols[i + 1] = is_numeric_column(rows, i, columns[i])
   end
 
   -- Normalize raw DB type names to ctype for editor type-checking

@@ -62,4 +62,18 @@ describe("dataset compute_view_indices", function()
 
     assert.same({ 3, 1 }, tab.view_indices)
   end)
+
+  it("sorts numeric strings numerically (bigints arrive as strings)", function()
+    local tab = D.alloc_tab(1)
+    tab.rows_source = {
+      { "100" },
+      { "9" },
+      { "2084515900853196878" },
+    }
+    tab.sort = { col = 1, ascending = true }
+
+    D.compute_view_indices(tab)
+
+    assert.same({ 2, 1, 3 }, tab.view_indices)
+  end)
 end)

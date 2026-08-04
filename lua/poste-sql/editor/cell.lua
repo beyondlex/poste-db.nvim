@@ -91,6 +91,18 @@ function M.parse_value(input, old_val)
   -- Expressions (computed in SQL)
   if input:match("^__expr:") then return input end
 
+  -- Preserve integers/decimals that can't round-trip through a LuaJIT double
+  -- (|value| >= 2^53). Returning them as strings keeps bigint digits exact.
+  if input:match("^%-?%d+%.?%d*$") then
+    local num = tonumber(input)
+    if num then
+      local round_trip = num == math.floor(num) and string.format("%.0f", num) or tostring(num)
+      if round_trip ~= input then
+        return input
+      end
+    end
+  end
+
   local ok, parsed = pcall(vim.json.decode, input)
   if ok and type(parsed) ~= "string" then
     return parsed
@@ -157,7 +169,12 @@ function M.validate_value(value, col_meta)
       end
       return true
     end
-    if is_type(ctype, "integer") or is_type(ctype, "numeric") then
+    if is_type(ctype, "integer") then
+      if value:match("^%-?%d+$") then return true end
+      return false, "Cannot assign string to " .. (col_meta.ctype or "unknown") .. " integer column"
+    end
+    if is_type(ctype, "numeric") then
+      if value:match("^%-?%d+%.?%d*$") then return true end
       return false, "Cannot assign string to " .. (col_meta.ctype or "unknown") .. " column"
     end
     if is_type(ctype, "boolean") then

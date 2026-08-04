@@ -15,6 +15,14 @@ describe("dml generation", function()
     assert.equals('UPDATE "blog"."posts" SET "title" = \'new\' WHERE "id" = 7;', sql)
   end)
 
+  it("emits exact bigint strings unquoted in SET and WHERE", function()
+    local sql = dml.generate_update("blog", "posts", columns, {
+      { col = 2, old_val = "old", new_val = "2084515900853196878" },
+    }, { "2084515900853196878", "old", true }, "postgres")
+
+    assert.equals('UPDATE "blog"."posts" SET "title" = 2084515900853196878 WHERE "id" = 2084515900853196878;', sql)
+  end)
+
   it("generates insert statements and skips [Auto] markers", function()
     local sql = dml.generate_insert("blog", "posts", columns, {
       "[Auto]",

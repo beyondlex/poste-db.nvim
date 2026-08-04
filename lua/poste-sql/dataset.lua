@@ -81,6 +81,15 @@ function M.compute_view_indices(tab)
       if ta == "boolean" and tb == "boolean" then
         if ascending then return not va and vb else return va and not vb end
       end
+      -- Coerce numeric-looking strings (bigints arrive as strings) so a
+      -- bigint column sorts numerically instead of lexicographically.
+      local na = ta == "number" and va
+        or (ta == "string" and va:match("^%-?%d+%.?%d*$") and tonumber(va)) or nil
+      local nb = tb == "number" and vb
+        or (tb == "string" and vb:match("^%-?%d+%.?%d*$") and tonumber(vb)) or nil
+      if na and nb then
+        if ascending then return na < nb else return na > nb end
+      end
       local sa, sb = tostring(va), tostring(vb)
       if ascending then return sa < sb else return sa > sb end
     end)

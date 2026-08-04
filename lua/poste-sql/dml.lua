@@ -32,6 +32,12 @@ local function quote_val(val)
   if type(val) == "string" then
     local num = tonumber(val)
     if num and val:match("^%-?%d+%.?%d*$") then
+      -- Emit exact digits when the string can't round-trip through a double
+      -- (bigints/decimal > 2^53 arrive as strings; tonumber() would corrupt them).
+      local round_trip = num == math.floor(num) and string.format("%.0f", num) or tostring(num)
+      if round_trip ~= val then
+        return val
+      end
       if num == math.floor(num) then
         return string.format("%d", num)
       end
