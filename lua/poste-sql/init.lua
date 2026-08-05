@@ -5,6 +5,7 @@ local state = require("poste.state")
 local statement = require("poste-sql.statement")
 local sql_introspect = require("poste-sql.introspect")
 local sql_runner = require("poste-sql.sql_runner")
+local connections = require("poste-sql.connections")
 
 local M = {}
 M.ensure_sql_keymaps = sql_runner.ensure_sql_keymaps
@@ -162,6 +163,15 @@ function M.setup(opts)
       end
     else
       table.insert(parts, "poste_binary: not found")
+    end
+
+    local buf_name = vim.api.nvim_buf_get_name(0)
+    local search_dir = buf_name ~= "" and vim.fn.fnamemodify(buf_name, ":h") or vim.fn.getcwd()
+    local config_path = connections.find_connections_toml(search_dir)
+    if config_path then
+      table.insert(parts, "connections: " .. config_path)
+    else
+      table.insert(parts, "connections: not found (searched from " .. search_dir .. ")")
     end
 
     local parser_dir = vim.fn.stdpath("data") .. "/site/parser"
