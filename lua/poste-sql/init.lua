@@ -145,6 +145,62 @@ function M.setup(opts)
     end,
   })
 
+  pcall(vim.api.nvim_del_user_command, "PosteInfo")
+  vim.api.nvim_create_user_command("PosteInfo", function()
+    local sep = "─"
+    local parts = { sep }
+
+    local binary = state.find_poste_binary()
+    if binary then
+      table.insert(parts, "poste_binary: " .. binary)
+      local handle = io.popen('"' .. binary .. '" --version 2>/dev/null')
+      if handle then
+        local version = handle:read("*a"):gsub("%s+$", "")
+        handle:close()
+        if version ~= "" then
+          table.insert(parts, "version:     " .. version)
+        end
+      end
+    else
+      table.insert(parts, "poste_binary: not found")
+    end
+
+    local parser_dir = vim.fn.stdpath("data") .. "/site/parser"
+    local ts_ok, _ = pcall(vim.treesitter.get_parser, 0, "sql")
+    local ts_file = (vim.fn.filereadable(parser_dir .. "/sql.so") == 1) and "installed" or "missing"
+    table.insert(parts, "treesitter: " .. (ts_ok and "active" or "unavailable") .. " (" .. ts_file .. ")")
+
+    table.insert(parts, sep)
+
+    local blink_ok = pcall(require, "blink.cmp")
+    if blink_ok then
+      local providers = {}
+      local config_ok, config = pcall(require, "blink.cmp.config")
+      if config_ok and config.sources and config.sources.providers then
+        for id, _ in pairs(config.sources.providers) do
+          table.insert(providers, id)
+        end
+      end
+      local has_poste_sql = vim.tbl_contains(providers, "poste_sql") and "yes" or "no"
+      table.insert(parts, "blink.cmp: loaded")
+      table.insert(parts, "  providers:  " .. (#providers > 0 and table.concat(providers, ", ") or "(none)"))
+      table.insert(parts, "  poste_sql:  " .. has_poste_sql)
+    else
+      table.insert(parts, "blink.cmp: not loaded")
+    end
+
+    local cmp_ok = pcall(require, "cmp")
+    if cmp_ok then
+      table.insert(parts, "nvim-cmp:   loaded")
+    end
+
+    local ft = vim.bo.filetype or "(none)"
+    table.insert(parts, "filetype:   " .. ft)
+    table.insert(parts, sep)
+
+    vim.notify(table.concat(parts, "\n"), vim.log.levels.INFO)
+  end, { desc = "Show Poste SQL environment info" })
+
   vim.api.nvim_create_user_command("PosteSQLCmpStatus", function()
     local sql_comp = require("poste-sql.completion")
     local ft = vim.bo.filetype
