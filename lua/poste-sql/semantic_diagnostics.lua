@@ -426,7 +426,7 @@ function M.update(buf)
             col = tbl.col - 1,
             end_lnum = tbl.end_lnum - 1,
             end_col = tbl.end_col - 1,
-            severity = vim.diagnostic.severity.ERROR,
+            severity = vim.diagnostic.severity.WARN,
             source = "poste-sql",
             message = string.format("Table '%s' not found in database '%s'", tbl.name, target_db),
           })
@@ -444,7 +444,7 @@ function M.update(buf)
                   col = col.col - 1,
                   end_lnum = col.end_lnum - 1,
                   end_col = col.end_col - 1,
-                  severity = vim.diagnostic.severity.ERROR,
+                  severity = vim.diagnostic.severity.WARN,
                   source = "poste-sql",
                   message = string.format("Column '%s' not found in table '%s'", col.name, col.table),
                 })
@@ -464,7 +464,7 @@ function M.update(buf)
                   col = col.col - 1,
                   end_lnum = col.end_lnum - 1,
                   end_col = col.end_col - 1,
-                  severity = vim.diagnostic.severity.ERROR,
+                  severity = vim.diagnostic.severity.WARN,
                   source = "poste-sql",
                   message = string.format("Column '%s' not found in table '%s'", col.name, ptable),
                 })
@@ -485,7 +485,7 @@ function M.update(buf)
       vim.api.nvim_buf_set_extmark(buf, ns_hl, d.lnum, d.col, {
         end_row = d.end_lnum,
         end_col = d.end_col,
-        hl_group = "Error",
+        hl_group = "DiagnosticWarn",
         hl_mode = "combine",
         priority = 200,
       })
