@@ -163,7 +163,13 @@ function M.setup(opts)
         local version = handle:read("*a"):gsub("%s+$", "")
         handle:close()
         if version ~= "" then
-          table.insert(parts, "version:     " .. version)
+          local tag, date = version:match("poste ([^%(]+)%(([^%)]+)%)")
+          if tag and date then
+            table.insert(parts, "version:     " .. tag)
+            table.insert(parts, "released:    " .. date)
+          else
+            table.insert(parts, "version:     " .. version)
+          end
         end
       end
     else
