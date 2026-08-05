@@ -141,87 +141,41 @@ local function execute_sql(sql, conn_name, context, opts)
     return
   end
 
-  local binary = cli.binary()
-  if not binary then
-    vim.notify("Poste binary not found", vim.log.levels.ERROR)
-    return
-  end
-
-  local file_path = vim.fn.tempname() .. ".sql"
-  local cmd = {
-    binary, "run", "--stdin", "--line", "1", "--json", file_path,
-    "--connection-url", url,
-  }
-  if opts and opts.database then
-    table.insert(cmd, "--database")
-    table.insert(cmd, opts.database)
-  end
-
-  local stderr_buf = {}
-  local stdio_done = false
-  local job_id = vim.fn.jobstart(cmd, {
-    stdin = "pipe",
-    stdout_buffered = true,
-    stderr_buffered = true,
-    on_stdout = function(_, data)
-      if not data or #data == 0 then return end
-      stdio_done = true
-      local output = table.concat(data, "\n")
-      vim.schedule(function()
-        local ok, resp = pcall(vim.json.decode, output)
-        if not ok or not resp then
-          local stderr = table.concat(stderr_buf, "\n")
-          vim.notify("Schema create: failed to parse response\n" .. stderr:sub(1, 300),
-            vim.log.levels.ERROR)
-          return
-        end
-        local ok2, body = pcall(vim.json.decode, resp.body or "{}")
-        if not ok2 or type(body) ~= "table" then
-          body = {}
-        end
-        local errors = {}
-        if body.results then
-          for _, result in ipairs(body.results) do
-            if result.error and result.error ~= "" then
-              table.insert(errors, result.error)
-            end
+  local exec_run = require("poste-sql.exec_run")
+  local job_id = exec_run.run_async(sql, {
+    conn_url = url,
+    database = opts and opts.database or nil,
+    mode = "greedy",
+  }, {
+    on_response = function(resp)
+      local ok_body, body = pcall(vim.json.decode, resp.body or "{}")
+      if not ok_body or type(body) ~= "table" then
+        body = {}
+      end
+      local errors = {}
+      if body.results then
+        for _, result in ipairs(body.results) do
+          if result.error and result.error ~= "" then
+            table.insert(errors, result.error)
           end
         end
-        if body.has_error or #errors > 0 then
-          local msg = table.concat(errors, "\n")
-          if msg == "" then msg = "Unknown SQL error" end
-          vim.notify("Schema create failed:\n" .. msg, vim.log.levels.ERROR)
-        else
-          vim.notify("Schema created successfully", vim.log.levels.INFO)
-        end
-        refresh_database(opts and opts.target_node, context)
-      end)
-    end,
-    on_stderr = function(_, data)
-      if data then
-        for _, l in ipairs(data) do
-          if l ~= "" then table.insert(stderr_buf, l) end
-        end
       end
-    end,
-    on_exit = function(_, code)
-      if code ~= 0 and not stdio_done then
-        vim.schedule(function()
-          vim.notify("Schema creation failed: " .. table.concat(stderr_buf, "\n"),
-            vim.log.levels.ERROR)
-        end)
+      if resp.has_error or body.has_error or #errors > 0 then
+        local msg = table.concat(errors, "\n")
+        if msg == "" then msg = "Unknown SQL error" end
+        vim.notify("Schema create failed:\n" .. msg, vim.log.levels.ERROR)
+      else
+        vim.notify("Schema created successfully", vim.log.levels.INFO)
       end
+      refresh_database(opts and opts.target_node, context)
+    end,
+    on_error = function(message)
+      vim.notify("Schema creation failed: " .. message, vim.log.levels.ERROR)
     end,
   })
 
-  if job_id > 0 then
-    local full_sql = "-- @connection " .. url .. "\n" .. sql
-    vim.fn.chansend(job_id, full_sql)
-    vim.fn.chanclose(job_id, "stdin")
-  else
-    vim.schedule(function()
-      vim.notify("Schema create: failed to start poste process", vim.log.levels.ERROR)
-    end)
+  if not job_id or job_id <= 0 then
+    vim.notify("Schema create: failed to start poste process", vim.log.levels.ERROR)
   end
 end
 

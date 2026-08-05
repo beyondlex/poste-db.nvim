@@ -3,7 +3,6 @@
 local editor = require("poste-sql.editor")
 local sql_format = require("poste-sql.format")
 local sql_buffer = require("poste-sql.buffer")
-local cli = require("poste.cli")
 local const = require("poste-sql.constants")
 local dml = require("poste-sql.dml")
 local exec = require("poste-sql.edit_commit.exec")
@@ -94,59 +93,20 @@ function M.refresh_dataset(tab)
     end
   end
 
-  local content_lines = {}
-  if conn_url then
-    table.insert(content_lines, "-- @" .. const.DIRECTIVE_CONNECTION .. " " .. conn_url)
-  end
-  if db and db ~= "" then
-    table.insert(content_lines, "-- @" .. const.DIRECTIVE_DATABASE .. " " .. db)
-  end
-  table.insert(content_lines, "")
-  table.insert(content_lines, const.SECTION_MARKER .. " refresh")
-  local sql_start_line = #content_lines + 1
-  for _, line in ipairs(clean_sql_lines) do
-    table.insert(content_lines, line)
-  end
-  table.insert(content_lines, "")
-
-  -- Write temp file alongside source for connections.json discovery
-  local src_dir = tab.src_file and vim.fn.fnamemodify(tab.src_file, ":h") or ""
-  local tmpfile
-  if src_dir ~= "" and vim.fn.isdirectory(src_dir) == 1 then
-    tmpfile = src_dir .. "/.poste_refresh_" .. vim.fn.strftime("%Y%m%d%H%M%S") .. ".sql"
-  else
-    tmpfile = vim.fn.tempname() .. ".sql"
-  end
-  vim.fn.writefile(content_lines, tmpfile)
-
-  local cmd_parts = { binary, "run", tmpfile, "--line", tostring(sql_start_line), "--env", state.current_env, "--json" }
-  if conn_url then
-    table.insert(cmd_parts, "--connection-url")
-    table.insert(cmd_parts, conn_url)
-  end
-  if db and db ~= "" then
-    local db_clean = vim.split(db, "/")
-    table.insert(cmd_parts, "--database")
-    table.insert(cmd_parts, db_clean[#db_clean])
-  end
-
   -- Clear PK cache so the new layout gets primary_key info re-introspected
   editor.clear_pk_cache()
 
-  local stderr_buf = {}
+  local clean_sql = table.concat(clean_sql_lines, "\n")
+  local exec_run = require("poste-sql.exec_run")
 
-  local job_id = cli.run_async(cmd_parts, {
-    on_stdout = function(data)
-      if not data or #data == 0 then return end
-      local output = table.concat(data, "\n")
+  local job_id = exec_run.run_async(clean_sql, {
+    src_file = tab.src_file,
+    conn_url = conn_url,
+    database = db,
+    mode = "greedy",
+  }, {
+    on_response = function(parsed)
       vim.schedule(function()
-        local ok, parsed = pcall(vim.json.decode, output)
-        if not ok or not parsed then
-          local stderr_text = table.concat(stderr_buf, "\n")
-          vim.notify("Refresh failed: JSON parse error\n" .. stderr_text:sub(1, 300), vim.log.levels.ERROR)
-          return
-        end
-
         local lines, meta, layout = sql_format.format_dataset(parsed)
         if layout then
           local table_name = statement.extract_table_name(sql)
@@ -162,24 +122,14 @@ function M.refresh_dataset(tab)
         })
       end)
     end,
-    on_stderr = function(data)
-      if not data then return end
-      for _, l in ipairs(data) do
-        if l ~= "" then table.insert(stderr_buf, l) end
-      end
-    end,
-    on_exit = function(code)
-      pcall(vim.fn.delete, tmpfile)
-      if code ~= 0 then
-        vim.schedule(function()
-          local stderr_text = table.concat(stderr_buf, "\n")
-          vim.notify("Refresh failed (exit " .. code .. ")\n" .. stderr_text:sub(1, 300), vim.log.levels.ERROR)
-        end)
-      end
+    on_error = function(message)
+      vim.schedule(function()
+        vim.notify("Refresh failed: " .. message, vim.log.levels.ERROR)
+      end)
     end,
   })
 
-  if job_id <= 0 then
+  if not job_id or job_id <= 0 then
     vim.notify("Failed to start refresh job", vim.log.levels.ERROR)
   end
 end
@@ -258,72 +208,25 @@ function M.commit_edits()
   end
 
   local sql_content = sql
-  local cmd = { binary, "run", "--stdin", "--line", "2", "--json", src_file }
-  if conn_url then
-    table.insert(cmd, "--connection-url")
-    table.insert(cmd, conn_url)
-  end
-  if database and database ~= "" then
-    table.insert(cmd, "--database")
-    table.insert(cmd, database)
-  end
-
-  local stderr_buf = {}
   local start_time = vim.uv.now()
-  local job_id = cli.run_async(cmd, {
-    stdin = sql_content,
-    on_stdout = function(data)
-      if not data or #data == 0 then return end
-      vim.schedule(function()
-        local elapsed = vim.uv.now() - start_time
-        local output = table.concat(data, "\n")
+  local exec_run = require("poste-sql.exec_run")
 
-        local resp, resp_err = exec.decode_json(output)
-        if not resp then
-          local stderr_text = table.concat(stderr_buf, "\n")
-          vim.notify("Commit: failed to parse poste response\n" .. stderr_text:sub(1, 300), vim.log.levels.ERROR)
-          log.write_log({
-            source = "dataset_commit",
-            table_name = table_name,
-            connection = connection,
-            dialect = dialect,
-            database = database,
-            sql = sql,
-            status = "error",
-            elapsed_ms = elapsed,
-            edit_summary = summary,
-            error_msg = "JSON parse error: " .. (resp_err or stderr_text:sub(1, 200)),
-          })
-          return
-        end
+  local job_id = exec_run.run_async(sql_content, {
+    src_file = src_file,
+    conn_url = conn_url,
+    database = database,
+    mode = "greedy",
+  }, {
+    on_response = function(resp)
+      local elapsed = vim.uv.now() - start_time
 
-        -- Decode inner body to get per-statement errors
-        local body = exec.decode_body(resp)
-        local errors = exec.collect_statement_errors(body)
+      -- Decode inner body to get per-statement errors
+      local body = exec.decode_body(resp)
+      local errors = exec.collect_statement_errors(body)
 
-        if body.has_error or #errors > 0 then
-          local err_msg = exec.build_commit_error_message(body, errors)
-          vim.notify("Commit failed:\n" .. err_msg:sub(1, 500), vim.log.levels.ERROR)
-          log.write_log({
-            source = "dataset_commit",
-            table_name = table_name,
-            connection = connection,
-            dialect = dialect,
-            database = database,
-            sql = sql,
-            status = "error",
-            elapsed_ms = elapsed,
-            edit_summary = summary,
-            error_msg = err_msg:sub(1, 500),
-          })
-          return
-        end
-
-        -- Success
-        local affected = exec.count_affected_rows(body)
-
-        vim.notify(string.format("Committed: %d update(s), %d insert(s), %d delete(s) (%d row(s) affected)",
-          summary.updates, summary.inserts, summary.deletes, affected), vim.log.levels.INFO)
+      if resp.has_error or body.has_error or #errors > 0 then
+        local err_msg = exec.build_commit_error_message(body, errors)
+        vim.notify("Commit failed:\n" .. err_msg:sub(1, 500), vim.log.levels.ERROR)
         log.write_log({
           source = "dataset_commit",
           table_name = table_name,
@@ -331,36 +234,56 @@ function M.commit_edits()
           dialect = dialect,
           database = database,
           sql = sql,
-          status = "success",
+          status = "error",
           elapsed_ms = elapsed,
           edit_summary = summary,
-          affected_rows = affected,
+          error_msg = err_msg:sub(1, 500),
         })
-        -- Clear edit state and refresh dataset in-place
-        require("poste-sql.editor").reset_edit_state(tab.edit_state)
-        tab.edit_state = nil
-        M.refresh_dataset(tab)
-      end)
-    end,
-    on_stderr = function(data)
-      if not data then return end
-      for _, l in ipairs(data) do
-        if l ~= "" then table.insert(stderr_buf, l) end
+        return
       end
+
+      -- Success
+      local affected = exec.count_affected_rows(body)
+
+      vim.notify(string.format("Committed: %d update(s), %d insert(s), %d delete(s) (%d row(s) affected)",
+        summary.updates, summary.inserts, summary.deletes, affected), vim.log.levels.INFO)
+      log.write_log({
+        source = "dataset_commit",
+        table_name = table_name,
+        connection = connection,
+        dialect = dialect,
+        database = database,
+        sql = sql,
+        status = "success",
+        elapsed_ms = elapsed,
+        edit_summary = summary,
+        affected_rows = affected,
+      })
+      -- Clear edit state and refresh dataset in-place
+      require("poste-sql.editor").reset_edit_state(tab.edit_state)
+      tab.edit_state = nil
+      M.refresh_dataset(tab)
     end,
-    on_exit = function(code)
-      if code ~= 0 then
-        vim.schedule(function()
-          local stderr_text = table.concat(stderr_buf, "\n")
-          -- Only notify if on_stdout didn't already handle it
-          vim.notify("Commit process exited with code " .. code .. "\n" .. stderr_text:sub(1, 300), vim.log.levels.WARN)
-        end)
-      end
+    on_error = function(message)
+      local elapsed = vim.uv.now() - start_time
+      vim.notify("Commit: " .. message, vim.log.levels.ERROR)
+      log.write_log({
+        source = "dataset_commit",
+        table_name = table_name,
+        connection = connection,
+        dialect = dialect,
+        database = database,
+        sql = sql,
+        status = "error",
+        elapsed_ms = elapsed,
+        edit_summary = summary,
+        error_msg = message:sub(1, 500),
+      })
     end,
   })
 
   if not job_id or job_id <= 0 then
-    vim.notify("Failed to start poste job", vim.log.levels.ERROR)
+    vim.notify("Failed to start poste exec-file job", vim.log.levels.ERROR)
   end
 end
 

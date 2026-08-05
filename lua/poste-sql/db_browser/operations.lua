@@ -928,30 +928,11 @@ execute_drop = function(table_node, qualified, conn, schema_prefix, context)
   local sql = table.concat(sql_lines, "\n")
 
   local search_dir = get_search_dir(context)
-  local binary = state.find_poste_binary()
-  if not binary then
-    vim.notify("Poste binary not found", vim.log.levels.ERROR)
-    return
-  end
-
   local connections = require("poste-sql.connections")
   local url, err = connections.resolve_connection_url(conn)
   if not url then
     vim.notify("Drop table failed: " .. (err or "unknown"), vim.log.levels.ERROR)
     return
-  end
-
-  sql = "-- @connection " .. url .. "\n" .. sql
-
-  local file_path = search_dir .. "/browser_drop.sql"
-  local cmd = string.format("%s run %s --stdin --line 1 --env %s --json --connection-url %s",
-    vim.fn.shellescape(binary),
-    vim.fn.shellescape(file_path),
-    vim.fn.shellescape(state.current_env),
-    vim.fn.shellescape(url)
-  )
-  if table_node.meta and table_node.meta.database then
-    cmd = cmd .. " --database " .. vim.fn.shellescape(table_node.meta.database)
   end
 
   -- Find parent db/schema node to refresh
@@ -960,13 +941,20 @@ execute_drop = function(table_node, qualified, conn, schema_prefix, context)
     parent = parent.parent
   end
 
-  local stderr_buf = {}
-  local job_id = vim.fn.jobstart(cmd, {
-    stdin = "pipe",
-    stdout_buffered = true,
-    stderr_buffered = true,
-    on_stdout = function()
+  local database = table_node.meta and table_node.meta.database or nil
+  local exec_run = require("poste-sql.exec_run")
+  local job_id = exec_run.run_async(sql, {
+    src_file = search_dir .. "/browser_drop.sql",
+    conn_url = url,
+    database = database,
+    mode = "greedy",
+  }, {
+    on_response = function(resp)
       vim.schedule(function()
+        if resp.has_error then
+          vim.notify("Failed to drop table '" .. qualified .. "'", vim.log.levels.ERROR)
+          return
+        end
         vim.notify("Dropped table: " .. qualified, vim.log.levels.INFO)
         if parent then
           parent.children = nil
@@ -985,27 +973,14 @@ execute_drop = function(table_node, qualified, conn, schema_prefix, context)
         end
       end)
     end,
-    on_stderr = function(_, data)
-      if data then
-        for _, l in ipairs(data) do
-          if l ~= "" then table.insert(stderr_buf, l) end
-        end
-      end
-    end,
-    on_exit = function(_, code)
-      if code ~= 0 then
-        vim.schedule(function()
-          local err = table.concat(stderr_buf, "\n")
-          vim.notify("Failed to drop table '" .. qualified .. "': " .. (err ~= "" and err or "exit " .. code), vim.log.levels.ERROR)
-        end)
-      end
+    on_error = function(message)
+      vim.schedule(function()
+        vim.notify("Failed to drop table '" .. qualified .. "': " .. message, vim.log.levels.ERROR)
+      end)
     end,
   })
 
-  if job_id > 0 then
-    vim.fn.chansend(job_id, sql)
-    vim.fn.chanclose(job_id, "stdin")
-  else
+  if not job_id or job_id <= 0 then
     vim.notify("Failed to start poste job", vim.log.levels.ERROR)
   end
 end

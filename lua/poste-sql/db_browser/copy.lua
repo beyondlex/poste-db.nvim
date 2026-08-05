@@ -161,12 +161,6 @@ local function find_search_dir()
 end
 
 local function run_sql_on_conn(conn_name, database, sql, on_result, on_error)
-  local binary = cli.binary()
-  if not binary then
-    if on_error then on_error("Poste binary not found") end
-    return
-  end
-
   local connections = require("poste-sql.connections")
   local url, err = connections.resolve_connection_url(conn_name)
   if not url then
@@ -175,55 +169,24 @@ local function run_sql_on_conn(conn_name, database, sql, on_result, on_error)
   end
 
   local search_dir = find_search_dir()
-  local file = search_dir .. "/copy.sql"
-  local cmd = string.format("%s run %s --line 1 --env %s --json --stdin --connection-url %s",
-    vim.fn.shellescape(binary),
-    vim.fn.shellescape(file),
-    vim.fn.shellescape(state.current_env or "dev"),
-    vim.fn.shellescape(url)
-  )
-  if database and database ~= "" then
-    cmd = cmd .. " --database " .. vim.fn.shellescape(database)
-  end
-
-  local content = "-- @connection " .. url .. "\n" .. sql
-
-  local stderr_buf = {}
-  local job_id = vim.fn.jobstart(cmd, {
-    stdin = "pipe",
-    stdout_buffered = true,
-    stderr_buffered = true,
-    on_stdout = function(_, data)
-      if not data then return end
-      data = util.ensure_job_data(data)
-      if #data == 0 then return end
-      local output = table.concat(data, "\n")
-      vim.schedule(function()
-        if on_result then on_result(output) end
-      end)
+  local src_file = search_dir .. "/copy.sql"
+  local exec_run = require("poste-sql.exec_run")
+  local job_id = exec_run.run_async(sql, {
+    src_file = src_file,
+    conn_url = url,
+    database = database,
+    mode = "greedy",
+  }, {
+    on_response = function(resp)
+      if on_result then on_result(vim.json.encode(resp)) end
     end,
-    on_stderr = function(_, data)
-      if not data then return end
-      for _, l in ipairs(data) do
-        if l ~= "" then table.insert(stderr_buf, l) end
-      end
-    end,
-    on_exit = function(_, code)
-      if code ~= 0 and on_error then
-        vim.schedule(function()
-          local msg = table.concat(stderr_buf, "\n")
-          if msg == "" then msg = "Exit code: " .. code end
-          on_error(msg)
-        end)
-      end
+    on_error = function(message)
+      if on_error then on_error(message) end
     end,
   })
 
-  if job_id > 0 then
-    vim.fn.chansend(job_id, content)
-    vim.fn.chanclose(job_id, "stdin")
-  elseif on_error then
-    on_error("Failed to start job")
+  if not job_id or job_id <= 0 then
+    if on_error then on_error("Failed to start job") end
   end
 end
 

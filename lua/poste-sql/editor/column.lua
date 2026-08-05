@@ -3,7 +3,6 @@
 
 local M = {}
 
-local cli = require("poste.cli")
 local state = nil
 local function get_state()
   if not state then state = require("poste.state") end
@@ -141,13 +140,13 @@ local function resolve_src_file(tab)
 end
 
 local function run_introspection_query(query, connection, database, src_file)
-  local cmd = { "run", "--stdin", "--line", "2", src_file, "--json" }
-  if database and database ~= "" then
-    table.insert(cmd, "--database")
-    table.insert(cmd, database)
-  end
+  local exec_run = require("poste-sql.exec_run")
   local sql_content = "-- @connection " .. connection .. "\n" .. query
-  local parsed, err = cli.run_json(cmd, { stdin = sql_content })
+  local parsed = exec_run.run_sql(sql_content, {
+    src_file = src_file,
+    database = database,
+    mode = "greedy",
+  })
   if not parsed then return nil end
   local body_ok, body = pcall(vim.json.decode, parsed.body or "{}")
   if not body_ok or not body then return nil end
