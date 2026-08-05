@@ -145,8 +145,7 @@ function M.setup(opts)
     end,
   })
 
-  pcall(vim.api.nvim_del_user_command, "PosteInfo")
-  vim.api.nvim_create_user_command("PosteInfo", function()
+  vim.api.nvim_create_user_command("PosteDbInfo", function()
     local sep = "─"
     local parts = { sep }
 
