@@ -153,6 +153,11 @@ function M.setup(opts)
     local binary = state.find_poste_binary()
     if binary then
       table.insert(parts, "poste_binary: " .. binary)
+      local mtime = vim.loop.fs_stat(binary)
+      if mtime then
+        local date_str = os.date("%Y-%m-%d %H:%M:%S", mtime.mtime.sec)
+        table.insert(parts, "built:       " .. date_str)
+      end
       local handle = io.popen('"' .. binary .. '" --version 2>/dev/null')
       if handle then
         local version = handle:read("*a"):gsub("%s+$", "")
