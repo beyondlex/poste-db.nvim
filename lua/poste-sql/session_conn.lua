@@ -52,14 +52,20 @@ local function database_from_url(url)
   return nil
 end
 
+local function norm_affected(v)
+  if v == nil or v == vim.NIL then return nil end
+  return tonumber(v)
+end
+
 local function build_response(event, session)
   local has_err = event.status ~= "ok"
-  local is_query = event.affected_rows == nil
+  local aff = norm_affected(event.affected_rows)
+  local is_query = aff == nil
   local results = { {
     columns = event.columns or {},
     rows = event.rows or {},
     row_count = tonumber(event.row_count) or 0,
-    affected_rows = event.affected_rows,
+    affected_rows = aff,
     execution_time_ms = tonumber(event.execution_time_ms) or 0,
   } }
   if has_err then results[1].error = event.error or "unknown error" end
@@ -70,7 +76,7 @@ local function build_response(event, session)
     results = results,
     total_results = 1,
     total_rows = tonumber(event.row_count) or 0,
-    total_affected = (not has_err and event.affected_rows) or 0,
+    total_affected = (not has_err and aff) or 0,
     total_execution_time_ms = tonumber(event.execution_time_ms) or 0,
     connection = session.conn_url,
     database = session.database or "",
