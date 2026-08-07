@@ -90,41 +90,65 @@ local function build_response(event, session)
   }
 end
 
+local function process_event(session, event)
+  local cb = session.pending[event.seq]
+  if cb then
+    session.pending[event.seq] = nil
+    state.log("DEBUG", "SQL session callback found for seq=" .. tostring(event.seq))
+    local resp = build_response(event, session)
+    local ok_cb, err = pcall(function()
+      if resp.has_error then
+        if cb.on_error then cb.on_error(event.error or "unknown error", resp) end
+      else
+        if cb.on_response then cb.on_response(resp) end
+      end
+    end)
+    if not ok_cb then
+      state.log("ERROR", "SQL session callback error: " .. tostring(err))
+    end
+  end
+end
+
+local function process_line(session, line)
+  local ok, event = pcall(vim.json.decode, line)
+  if ok and type(event) == "table" and event.type == "result" then
+    process_event(session, event)
+  end
+end
+
 local function on_session_stdout(session, chunks)
   local combined = table.concat(chunks, "")
   state.log("DEBUG", "SQL session stdout (" .. #combined .. " bytes): " .. combined:sub(1, 200))
   session.buffer = session.buffer .. combined
-  -- Parse complete lines from the buffer
+  -- Each response from the Rust session is a single JSON line, but Neovim may
+  -- deliver it with or without the trailing newline (or split across chunks).
   local pos = 1
   while true do
+    -- Try newline-based parsing first
     local nl = session.buffer:find("\n", pos, true)
-    if not nl then
-      -- Keep the trailing partial line (pos onwards) in the buffer
-      session.buffer = session.buffer:sub(pos)
-      break
-    end
-    local line = session.buffer:sub(pos, nl - 1)
-    pos = nl + 1
-    if line ~= "" then
-      local ok, event = pcall(vim.json.decode, line)
-      if ok and type(event) == "table" and event.type == "result" then
-        local cb = session.pending[event.seq]
-        if cb then
-          session.pending[event.seq] = nil
-          state.log("DEBUG", "SQL session callback found for seq=" .. tostring(event.seq))
-          local resp = build_response(event, session)
-          local ok_cb, err = pcall(function()
-            if resp.has_error then
-              if cb.on_error then cb.on_error(event.error or "unknown error", resp) end
-            else
-              if cb.on_response then cb.on_response(resp) end
-            end
-          end)
-          if not ok_cb then
-            state.log("ERROR", "SQL session callback error: " .. tostring(err))
-          end
-        end
+    if nl then
+      local line = session.buffer:sub(pos, nl - 1)
+      pos = nl + 1
+      if line ~= "" then
+        process_line(session, line)
       end
+    else
+      -- No newline found. Try to parse the remaining buffer as a complete JSON
+      -- object (in case Neovim stripped the newline).
+      local remaining = session.buffer:sub(pos)
+      if remaining ~= "" then
+        local ok, event = pcall(vim.json.decode, remaining)
+        if ok and type(event) == "table" and event.type == "result" then
+          process_event(session, event)
+          session.buffer = ""
+        else
+          -- Incomplete data, keep the buffer for the next chunk
+          session.buffer = remaining
+        end
+      else
+        session.buffer = ""
+      end
+      break
     end
   end
 end
