@@ -129,6 +129,45 @@ function M.setup(opts)
 
   vim.api.nvim_set_hl(0, "PosteDbSqlDirectiveComment", { link = "Special" })
 
+  -- Close SQL sessions when a buffer is unloaded (sessions with no remaining
+  -- referencing buffers are shut down).
+  vim.api.nvim_create_autocmd("BufUnload", {
+    pattern = { "poste_sql", "poste_sqlite" },
+    callback = function(args)
+      pcall(require("poste-sql.session_conn").cleanup_buf, args.buf)
+    end,
+  })
+
+  vim.api.nvim_create_user_command("PosteSQLSessionStop", function(args)
+    local session_conn = require("poste-sql.session_conn")
+    local arg = vim.trim(args.args)
+    if arg == "" or arg == "--all" then
+      session_conn.stop_all()
+      vim.notify("Closed all SQL sessions", vim.log.levels.INFO, { title = "Poste SQL" })
+    else
+      session_conn.stop(arg)
+      vim.notify("Closed SQL session: " .. arg, vim.log.levels.INFO, { title = "Poste SQL" })
+    end
+  end, {
+    nargs = "*",
+    desc = "Close SQL session(s) — :PosteSQLSessionStop [--all] [connection_url]",
+  })
+
+  vim.api.nvim_create_user_command("PosteSQLSessionList", function()
+    local session_conn = require("poste-sql.session_conn")
+    local sessions = session_conn.list()
+    local lines = { "Active SQL sessions:" }
+    local count = 0
+    for conn_url, info in pairs(sessions) do
+      count = count + 1
+      table.insert(lines, string.format("  %s  (job %d, %s)", conn_url, info.job_id, info.dialect))
+    end
+    if count == 0 then
+      table.insert(lines, "  (none)")
+    end
+    vim.notify(table.concat(lines, "\n"), vim.log.levels.INFO, { title = "Poste SQL" })
+  end, { desc = "List active SQL sessions" })
+
   vim.api.nvim_create_autocmd("FileType", {
     pattern = { "sql", "poste_sql", "poste_sqlite" },
     callback = function(args)

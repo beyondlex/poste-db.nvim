@@ -7,6 +7,7 @@ local statement = require("poste-sql.statement")
 local sql_introspect = require("poste-sql.introspect")
 local sql_format = require("poste-sql.format")
 local sql_buffer = require("poste-sql.buffer")
+local session_conn = require("poste-sql.session_conn")
 
 local M = {}
 
@@ -174,6 +175,7 @@ function M.run_sql_request()
   local buf_content
   local adjusted_line
   local visual_sel_end
+  local stmt_start  -- used for session raw SQL extraction
   local stmt_end  -- used in callbacks for indicator placement on last line
   local stmt_lines
 
@@ -202,7 +204,6 @@ function M.run_sql_request()
     adjusted_line = math.max(1, adjusted_line)
   else
     local line = vim.fn.line(".")
-    local stmt_start
     buf_content, adjusted_line, stmt_start, stmt_end = statement.extract_stmt_at_cursor(buf_lines, line, src_buf)
     if not buf_content then return end
     stmt_lines = { stmt_start or 1 }
@@ -267,17 +268,35 @@ function M.run_sql_request()
   if db and db == "" then db = nil end
 
   local exec_run = require("poste-sql.exec_run")
-  state.log("INFO", string.format("SQL run via exec-file: conn=%s db=%s", tostring(conn_url), tostring(db)))
 
-  local job_id = exec_run.run_async(buf_content, {
-    src_file = file,
-    conn_url = conn_url,
-    database = db,
-    mode = "greedy",
-    max_rows = 0,
-  }, {
-    on_response = function(parsed)
-      if current_seq < exec_seq then return end
+  -- Detect lone USE statement (handled locally by exec_run, not via session)
+  local function is_use_stmt(s)
+    if not s then return false end
+    local trimmed = s:match("^%s*(.*)%s*$") or ""
+    return trimmed:match("^USE%s+([%w_]+)%s*;?%s*$") ~= nil
+  end
+
+  -- Extract raw SQL text for a single statement (without directives/###)
+  local stmt_sql_raw
+  if not is_visual and stmt_start and stmt_end then
+    local raw_lines = {}
+    for i = stmt_start, stmt_end do
+      raw_lines[#raw_lines + 1] = buf_lines[i] or ""
+    end
+    stmt_sql_raw = table.concat(raw_lines, "\n")
+  end
+
+  -- Route: single non-USE statement with a resolved connection → session
+  --         visual selection, USE, or no connection → exec-file
+  local use_session = not is_visual and conn_url and stmt_sql_raw and not is_use_stmt(stmt_sql_raw)
+
+  local on_response = function(parsed)
+    state.log("DEBUG", "SQL on_response called: latency=" .. tostring(parsed.latency_ms or "?") .. " type=" .. (parsed.dialect or "?"))
+    local ok_cb, err_cb = pcall(function()
+      if current_seq < exec_seq then
+        state.log("DEBUG", "SQL on_response stale: current=" .. tostring(current_seq) .. " exec=" .. tostring(exec_seq))
+        return
+      end
       state.last_response = parsed
 
       -- Clear completion cache to pick up schema changes from DDL
@@ -297,130 +316,188 @@ function M.run_sql_request()
       local results = decoded and decoded.results or {}
       local is_multi = #results > 1
 
-      if is_multi then
-        for i, result in ipairs(results) do
-          if result.error then
-            local err_line = stmt_lines[i] or first_line
-            local next_start = stmt_lines[i + 1]
-            local end_nr = next_start and (next_start - 1) or visual_sel_end or #buf_lines
-            while end_nr > err_line and (buf_lines[end_nr] or ""):match("^%s*$") do end_nr = end_nr - 1 end
-            indicators.set_indicator(src_buf, end_nr - 1, "error")
-            local err_text = type(result.error) == "string" and result.error or vim.inspect(result.error)
-            local lines = sql_format.format_error(err_text, parsed.connection or "")
-            sql_buffer.render_dataset(lines, { type = "error" }, { tab_index = i, exec_seq = current_seq })
+    if is_multi then
+      for i, result in ipairs(results) do
+        if result.error then
+          local err_line = stmt_lines[i] or first_line
+          local next_start = stmt_lines[i + 1]
+          local end_nr = next_start and (next_start - 1) or visual_sel_end or #buf_lines
+          while end_nr > err_line and (buf_lines[end_nr] or ""):match("^%s*$") do end_nr = end_nr - 1 end
+          indicators.set_indicator(src_buf, end_nr - 1, "error")
+          local err_text = type(result.error) == "string" and result.error or vim.inspect(result.error)
+          local lines = sql_format.format_error(err_text, parsed.connection or "")
+          sql_buffer.render_dataset(lines, { type = "error" }, { tab_index = i, exec_seq = current_seq })
+        else
+          local sql_text = statement.get_stmt_sql(buf_lines, stmt_lines, i, visual_sel_end)
+          local table_name = statement.extract_table_name(sql_text)
+          local single_data = {
+            type = "resultset",
+            results = { result },
+            total_rows = tonumber(result.row_count) or 0,
+            total_affected = tonumber(result.affected_rows) or 0,
+            total_execution_time_ms = tonumber(result.execution_time_ms) or 0,
+            connection = result.connection or parsed.connection,
+            database = parsed.database,
+            dialect = parsed.dialect,
+            table_name = table_name,
+          }
+          local layout = sql_format.plan_resultset_layout(single_data)
+          local lines, meta
+          if layout then
+            lines, meta = sql_format.render_page(layout, 1, 50)
+            meta.table_name = table_name
           else
-            local sql_text = statement.get_stmt_sql(buf_lines, stmt_lines, i, visual_sel_end)
-            local table_name = statement.extract_table_name(sql_text)
-            local single_data = {
-              type = "resultset",
-              results = { result },
-              total_rows = tonumber(result.row_count) or 0,
-              total_affected = tonumber(result.affected_rows) or 0,
-              total_execution_time_ms = tonumber(result.execution_time_ms) or 0,
-              connection = result.connection or parsed.connection,
-              database = parsed.database,
-              dialect = parsed.dialect,
-              table_name = table_name,
-            }
-            local layout = sql_format.plan_resultset_layout(single_data)
-            local lines, meta
-            if layout then
-              lines, meta = sql_format.render_page(layout, 1, 50)
-              meta.table_name = table_name
-            else
-              lines, meta = sql_format.format_resultset(single_data)
-            end
-            sql_buffer.render_dataset(lines, meta, {
-              tab_index = i,
-              exec_seq = current_seq,
-              data = single_data,
-              layout = layout,
-              original_sql = buf_content,
-              src_file = file,
-              src_buf = src_buf,
-            })
-
-            local line_nr = stmt_lines[i] or first_line
-            local next_start = stmt_lines[i + 1]
-            local end_nr = next_start and (next_start - 1) or visual_sel_end or #buf_lines
-            while end_nr > line_nr and (buf_lines[end_nr] or ""):match("^%s*$") do end_nr = end_nr - 1 end
-            indicators.set_indicator(src_buf, end_nr - 1, "success", result.execution_time_ms)
+            lines, meta = sql_format.format_resultset(single_data)
           end
-        end
-      else
-        -- Single result
-        local table_name
-        if is_visual then
-          local start_ln = math.min(_vis_start, _vis_end)
-          local end_ln = math.max(_vis_start, _vis_end)
-          local vis_lines = {}
-          for i = start_ln, end_ln do
-            local ln = buf_lines[i]
-            if ln then vis_lines[#vis_lines + 1] = ln end
-          end
-          table_name = statement.extract_table_name(table.concat(vis_lines, " "))
-        else
-          table_name = statement.extract_table_name(buf_content)
-        end
-        local lines, meta, layout = sql_format.format_dataset(parsed)
-        if table_name then meta.table_name = table_name end
-        sql_buffer.render_dataset(lines, meta, {
-          exec_seq = current_seq,
-          layout = layout,
-          original_sql = buf_content,
-          src_file = file,
-          src_buf = src_buf,
-        })
-
-        local has_err = results[1] and results[1].error
-        local result_line = stmt_end or first_line
-        if has_err then
-          indicators.set_indicator(src_buf, result_line - 1, "error")
-        else
-          indicators.set_indicator(src_buf, result_line - 1, "success", parsed.latency_ms)
-          -- Log successful manual execution
-          local edit_commit = require("poste-sql.edit_commit")
-          local context = require("poste-sql.context").resolve_full_context(src_buf, first_line)
-          edit_commit.write_log({
-            source = "manual_exec",
-            connection = context.connection or "",
-            dialect = parsed.dialect or "",
-            database = context.database or "",
-            sql = buf_content or "",
-            status = "success",
-            elapsed_ms = tonumber(parsed.latency_ms) or 0,
+          sql_buffer.render_dataset(lines, meta, {
+            tab_index = i,
+            exec_seq = current_seq,
+            data = single_data,
+            layout = layout,
+            original_sql = buf_content,
+            src_file = file,
+            src_buf = src_buf,
           })
+
+          local line_nr = stmt_lines[i] or first_line
+          local next_start = stmt_lines[i + 1]
+          local end_nr = next_start and (next_start - 1) or visual_sel_end or #buf_lines
+          while end_nr > line_nr and (buf_lines[end_nr] or ""):match("^%s*$") do end_nr = end_nr - 1 end
+          indicators.set_indicator(src_buf, end_nr - 1, "success", result.execution_time_ms)
         end
       end
-    end,
-    on_error = function(message)
-      state.log("ERROR", "SQL exec-file failed: " .. message)
-      vim.schedule(function()
-        if current_seq < exec_seq then return end
-        indicators.set_indicator(src_buf, (stmt_end or first_line) - 1, "error")
-        vim.notify(message, vim.log.levels.ERROR, { title = "Poste SQL" })
-        local lines = sql_format.format_error(message, state.sql.context.connection or "")
-        sql_buffer.render_dataset(lines, { type = "error" })
-        -- Log failed execution
+    else
+      -- Single result
+      local table_name
+      if is_visual then
+        local start_ln = math.min(_vis_start, _vis_end)
+        local end_ln = math.max(_vis_start, _vis_end)
+        local vis_lines = {}
+        for i = start_ln, end_ln do
+          local ln = buf_lines[i]
+          if ln then vis_lines[#vis_lines + 1] = ln end
+        end
+        table_name = statement.extract_table_name(table.concat(vis_lines, " "))
+      else
+        table_name = statement.extract_table_name(buf_content)
+      end
+      local lines, meta, layout = sql_format.format_dataset(parsed)
+      if table_name then meta.table_name = table_name end
+      sql_buffer.render_dataset(lines, meta, {
+        exec_seq = current_seq,
+        layout = layout,
+        original_sql = buf_content,
+        src_file = file,
+        src_buf = src_buf,
+      })
+
+      local has_err = results[1] and results[1].error
+      local result_line = stmt_end or first_line
+      if has_err then
+        indicators.set_indicator(src_buf, result_line - 1, "error")
+      else
+        indicators.set_indicator(src_buf, result_line - 1, "success", parsed.latency_ms)
+        -- Log successful manual execution
         local edit_commit = require("poste-sql.edit_commit")
-        local context = require("poste-sql.context").resolve_full_context(src_buf, #buf_lines)
+        local context = require("poste-sql.context").resolve_full_context(src_buf, first_line)
         edit_commit.write_log({
           source = "manual_exec",
           connection = context.connection or "",
-          dialect = state.sql.context.dialect or "",
+          dialect = parsed.dialect or "",
           database = context.database or "",
           sql = buf_content or "",
-          status = "error",
-          elapsed_ms = 0,
-          error_msg = message:sub(1, 500),
+          status = "success",
+          elapsed_ms = tonumber(parsed.latency_ms) or 0,
         })
-      end)
-    end,
-  })
+      end
+    end
+  end)
+  if not ok_cb then
+    state.log("ERROR", "SQL on_response error: " .. tostring(err_cb))
+    vim.notify("SQL execution error: " .. tostring(err_cb), vim.log.levels.ERROR, { title = "Poste SQL" })
+  end
+end
 
-  if not job_id or job_id <= 0 then
-    indicators.set_indicator(src_buf, (stmt_end or first_line) - 1, "error")
-    vim.notify("Failed to start poste exec-file job", vim.log.levels.ERROR, { title = "Poste SQL" })
+  local on_error = function(message)
+    state.log("ERROR", "SQL execution failed: " .. message)
+    vim.schedule(function()
+      if current_seq < exec_seq then return end
+      indicators.set_indicator(src_buf, (stmt_end or first_line) - 1, "error")
+      vim.notify(message, vim.log.levels.ERROR, { title = "Poste SQL" })
+      local lines = sql_format.format_error(message, state.sql.context.connection or "")
+      sql_buffer.render_dataset(lines, { type = "error" })
+      -- Log failed execution
+      local edit_commit = require("poste-sql.edit_commit")
+      local context = require("poste-sql.context").resolve_full_context(src_buf, #buf_lines)
+      edit_commit.write_log({
+        source = "manual_exec",
+        connection = context.connection or "",
+        dialect = state.sql.context.dialect or "",
+        database = context.database or "",
+        sql = buf_content or "",
+        status = "error",
+        elapsed_ms = 0,
+        error_msg = message:sub(1, 500),
+      })
+    end)
+  end
+
+  if use_session then
+    state.log("INFO", string.format("SQL run via session: conn=%s db=%s", tostring(conn_url), tostring(db)))
+    local ok = session_conn.execute(conn_url, stmt_sql_raw, {
+      on_response = on_response,
+      on_error = function(message)
+        state.log("WARN", "SQL session failed, falling back to exec-file: " .. message)
+        -- Fall back to exec-file when the session fails
+        local job_id = exec_run.run_async(buf_content, {
+          src_file = file,
+          conn_url = conn_url,
+          database = db,
+          mode = "greedy",
+          max_rows = 0,
+        }, {
+          on_response = on_response,
+          on_error = on_error,
+        })
+        if not job_id or job_id <= 0 then
+          indicators.set_indicator(src_buf, (stmt_end or first_line) - 1, "error")
+          vim.notify("Failed to start poste exec-file job (session fallback)", vim.log.levels.ERROR, { title = "Poste SQL" })
+        end
+      end,
+    }, src_buf)
+    if not ok then
+      state.log("WARN", "SQL session not available, falling back to exec-file")
+      local job_id = exec_run.run_async(buf_content, {
+        src_file = file,
+        conn_url = conn_url,
+        database = db,
+        mode = "greedy",
+        max_rows = 0,
+      }, {
+        on_response = on_response,
+        on_error = on_error,
+      })
+      if not job_id or job_id <= 0 then
+        indicators.set_indicator(src_buf, (stmt_end or first_line) - 1, "error")
+        vim.notify("Failed to start poste exec-file job", vim.log.levels.ERROR, { title = "Poste SQL" })
+      end
+    end
+  else
+    state.log("INFO", string.format("SQL run via exec-file: conn=%s db=%s", tostring(conn_url), tostring(db)))
+    local job_id = exec_run.run_async(buf_content, {
+      src_file = file,
+      conn_url = conn_url,
+      database = db,
+      mode = "greedy",
+      max_rows = 0,
+    }, {
+      on_response = on_response,
+      on_error = on_error,
+    })
+    if not job_id or job_id <= 0 then
+      indicators.set_indicator(src_buf, (stmt_end or first_line) - 1, "error")
+      vim.notify("Failed to start poste exec-file job", vim.log.levels.ERROR, { title = "Poste SQL" })
+    end
   end
 end
 
