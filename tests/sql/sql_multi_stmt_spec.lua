@@ -331,6 +331,81 @@ describe("extract_stmt_at_cursor — edge cases", function()
   end)
 end)
 
+describe("extract_stmt_at_cursor — SET user variables", function()
+  it("pulls in a preceding SET @var line in the same block", function()
+    local lines = {
+      "###",
+      "SET @a = 1;",
+      "SELECT * FROM items WHERE id = @a;",
+    }
+    local content, adjusted_line, stmt_start, stmt_end, set_lines = t.extract_stmt_at_cursor(lines, 3)
+    assert.equals(3, stmt_start, "stmt_start stays on the SELECT line for indicators")
+    assert.same({ "SET @a = 1;" }, set_lines)
+    assert.truthy(content:find("SET @a = 1;", 1, true))
+    assert.truthy(content:find("SELECT %* FROM items WHERE id = @a;", 1, false))
+  end)
+
+  it("includes multiple preceding SET statements in order", function()
+    local lines = {
+      "###",
+      "SET @a = 1;",
+      "SET @b = 2;",
+      "SELECT * FROM items WHERE id = @a AND type = @b;",
+    }
+    local content, _, _, _, set_lines = t.extract_stmt_at_cursor(lines, 4)
+    assert.same({ "SET @a = 1;", "SET @b = 2;" }, set_lines)
+    local a_idx = content:find("SET @a = 1;", 1, true)
+    local b_idx = content:find("SET @b = 2;", 1, true)
+    assert.is_true(a_idx ~= nil and b_idx ~= nil and a_idx < b_idx, "SET lines appear in source order")
+  end)
+
+  it("does not pull in a SET line outside the block (### boundary)", function()
+    local lines = {
+      "###",
+      "SET @a = 1;",
+      "SELECT 1;",
+      "###",
+      "SELECT * FROM items WHERE id = @a;",
+    }
+    local content, _, _, _, set_lines = t.extract_stmt_at_cursor(lines, 5)
+    assert.same({}, set_lines, "SET statement in the previous block is not included")
+    assert.is_false(content:find("SET @a = 1;", 1, true) ~= nil)
+  end)
+
+  it("returns empty set_lines when there are no preceding SET statements", function()
+    local lines = {
+      "###",
+      "SELECT * FROM users;",
+    }
+    local content, adjusted_line, stmt_start, stmt_end, set_lines = t.extract_stmt_at_cursor(lines, 2)
+    assert.same({}, set_lines)
+  end)
+
+  it("stops scanning at a preceding non-SET statement", function()
+    local lines = {
+      "###",
+      "SELECT 1;",
+      "SET @a = 1;",
+      "SELECT * FROM items WHERE id = @a;",
+    }
+    local _, _, _, _, set_lines = t.extract_stmt_at_cursor(lines, 4)
+    -- The SELECT on line 2 is a non-SET statement, so scanning stops there and
+    -- the SET @a on line 3 is still found (it's between the SELECT and the current stmt).
+    assert.same({ "SET @a = 1;" }, set_lines)
+  end)
+
+  it("adjusts adjusted_line to account for pulled-in SET lines", function()
+    local lines = {
+      "###",
+      "SET @a = 1;",
+      "SELECT * FROM items WHERE id = @a;",
+    }
+    local content, adjusted_line = t.extract_stmt_at_cursor(lines, 3)
+    -- content layout: ### (1) + SET @a (2) + SELECT (3) → SELECT is at line 3
+    assert.equals(3, adjusted_line)
+  end)
+end)
+
 describe("try_ts_stmt_span", function()
   if not has_sql_parser then
     it("is skipped when the SQL parser is unavailable", function()

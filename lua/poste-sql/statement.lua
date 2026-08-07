@@ -159,10 +159,17 @@ end
 
 --- Extract a single SQL statement at the cursor position.
 --- Delimited purely by semicolons, wrapped in a synthetic ### block.
+---
+--- Preceding `SET @var = ...` statements in the same ### block are pulled in so
+--- user variables referenced by the current statement are defined (e.g. a
+--- `SET @a = 1;` line before `SELECT * FROM items WHERE id = @a;`). They are
+--- returned as `set_lines` for callers that need the raw buffer text (session
+--- mode).
+---
 --- @param buf_lines string[]
 --- @param cursor_line number  1-based
 --- @param buf number|nil  buffer handle (for Tree-sitter)
---- @return string|nil content, number|nil adjusted_line, number|nil stmt_start, number|nil stmt_end
+--- @return string|nil content, number|nil adjusted_line, number|nil stmt_start, number|nil stmt_end, string[] set_lines
 function M.extract_stmt_at_cursor(buf_lines, cursor_line, buf)
   local directives = {}
   for _, l in ipairs(buf_lines) do
@@ -257,6 +264,31 @@ function M.extract_stmt_at_cursor(buf_lines, cursor_line, buf)
     stmt_start = stmt_start + 1
   end
 
+  -- Scan backward in the same ### block for `SET @var = ...` statements that
+  -- define user variables referenced by the current statement. Stops at the
+  -- first non-SET, non-comment, non-blank line (e.g. a preceding SELECT).
+  local set_lines = {}
+  if stmt_start then
+    local block_start = 1
+    for i = stmt_start - 1, 1, -1 do
+      if const.is_section_marker(buf_lines[i]) then
+        block_start = i + 1
+        break
+      end
+    end
+    for i = stmt_start - 1, block_start, -1 do
+      local line = buf_lines[i] or ""
+      local trimmed = line:match("^%s*(.*)$") or ""
+      if trimmed ~= "" then
+        if trimmed:upper():match("^SET%s+@") then
+          table.insert(set_lines, 1, line)
+        elseif not trimmed:match("^%-%-") then
+          break
+        end
+      end
+    end
+  end
+
   local stmt_lines = {}
   for i = stmt_start, stmt_end do
     table.insert(stmt_lines, buf_lines[i] or "")
@@ -287,13 +319,14 @@ function M.extract_stmt_at_cursor(buf_lines, cursor_line, buf)
   local parts = {}
   for _, l in ipairs(directives) do table.insert(parts, l) end
   table.insert(parts, const.SECTION_MARKER)
+  for _, l in ipairs(set_lines) do table.insert(parts, l) end
   for _, l in ipairs(stmt_lines) do table.insert(parts, l) end
 
   -- When cursor is below the statement (e.g. on blank lines below), clamp
   -- adjusted_line to stmt_end so it doesn't exceed the synthetic ### block.
   local cursor_ref = (cursor_line >= stmt_start) and math.min(cursor_line, stmt_end) or stmt_start
-  local adjusted_line = #directives + 1 + (cursor_ref - stmt_start + 1)
-  return table.concat(parts, "\n"), adjusted_line, stmt_start, stmt_end
+  local adjusted_line = #directives + 1 + #set_lines + (cursor_ref - stmt_start + 1)
+  return table.concat(parts, "\n"), adjusted_line, stmt_start, stmt_end, set_lines
 end
 
 ---------------------------------------------------------------------------

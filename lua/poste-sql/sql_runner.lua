@@ -178,6 +178,7 @@ function M.run_sql_request()
   local stmt_start  -- used for session raw SQL extraction
   local stmt_end  -- used in callbacks for indicator placement on last line
   local stmt_lines
+  local set_lines  -- preceding SET @var statements found by extract_stmt_at_cursor
 
   if is_visual then
     local sel_start = math.min(_vis_start, _vis_end)
@@ -204,7 +205,7 @@ function M.run_sql_request()
     adjusted_line = math.max(1, adjusted_line)
   else
     local line = vim.fn.line(".")
-    buf_content, adjusted_line, stmt_start, stmt_end = statement.extract_stmt_at_cursor(buf_lines, line, src_buf)
+    buf_content, adjusted_line, stmt_start, stmt_end, set_lines = statement.extract_stmt_at_cursor(buf_lines, line, src_buf)
     if not buf_content then return end
     stmt_lines = { stmt_start or 1 }
     stmt_end = stmt_end or stmt_start
@@ -280,6 +281,9 @@ function M.run_sql_request()
   local stmt_sql_raw
   if not is_visual and stmt_start and stmt_end then
     local raw_lines = {}
+    if set_lines then
+      for _, l in ipairs(set_lines) do raw_lines[#raw_lines + 1] = l end
+    end
     for i = stmt_start, stmt_end do
       raw_lines[#raw_lines + 1] = buf_lines[i] or ""
     end
@@ -314,6 +318,22 @@ function M.run_sql_request()
       end
 
       local results = decoded and decoded.results or {}
+      -- When preceding SET @var statements were pulled in, the first #set_lines
+      -- results are SET (affected-rows) responses — skip them since they're
+      -- dependencies, not the user-selected statement.
+      local prelude_count = (not is_visual and set_lines and #set_lines > 0) and #set_lines or 0
+      if prelude_count > 0 and #results > 1 then
+        local n = math.min(prelude_count, #results - 1)
+        local filtered = {}
+        for i = n + 1, #results do filtered[#filtered + 1] = results[i] end
+        results = filtered
+        if decoded then
+          decoded.results = results
+          decoded.total_results = #results
+          parsed.body = vim.json.encode(decoded)
+        end
+        parsed.results = results
+      end
       local is_multi = #results > 1
 
     if is_multi then
