@@ -9,6 +9,30 @@ local M = {}
 -- Item helpers
 -----------------------------------------------------------------------------
 
+--- Fuzzy match: each character of `pattern` must appear in `text` in order
+--- (case-insensitive). Empty pattern matches everything. This lets `ie`
+--- match both `ies` (prefix) and `item` (subsequence).
+function M.fuzzy_match(text, pattern)
+  if pattern == "" then return true end
+  local ti = 1
+  local plower = pattern:lower()
+  local tlower = text:lower()
+  for pi = 1, #plower do
+    local pc = plower:sub(pi, pi)
+    local found = false
+    while ti <= #tlower do
+      if tlower:sub(ti, ti) == pc then
+        ti = ti + 1
+        found = true
+        break
+      end
+      ti = ti + 1
+    end
+    if not found then return false end
+  end
+  return true
+end
+
 function M.make_items(names, kind, doc_prefix)
   local items = {}
   for _, n in ipairs(names or {}) do
@@ -20,18 +44,16 @@ end
 
 function M.filter(items, prefix)
   if prefix == "" then return items end
-  local low = prefix:lower()
   return vim.tbl_filter(function(i)
-    return i.label:lower():sub(1, #low) == low
+    return M.fuzzy_match(i.label, prefix)
   end, items)
 end
 
 function M.func_items(prefix, funcs)
-  local low = prefix:lower()
   local items = {}
   local list = funcs or data.SQL_FUNCTIONS
   for _, fn in ipairs(list) do
-    if fn:lower():sub(1, #low) == low then
+    if M.fuzzy_match(fn, prefix) then
       table.insert(items, {
         label = fn,
         kind = 3,
@@ -45,10 +67,9 @@ function M.func_items(prefix, funcs)
 end
 
 function M.kw_items(prefix, dialect)
-  local low = prefix:lower()
   local items = {}
   for _, kw in ipairs(data.KEYWORDS) do
-    if kw:lower():sub(1, #low) == low then
+    if M.fuzzy_match(kw, prefix) then
       table.insert(items, { label = kw, kind = 14, insertText = kw, sortText = "0" .. kw, documentation = "keyword" })
     end
   end
@@ -56,13 +77,13 @@ function M.kw_items(prefix, dialect)
   if dialect then
     local extra = data.DIALECT_KEYWORDS[dialect] or {}
     for _, kw in ipairs(extra) do
-      if kw:lower():sub(1, #low) == low then
+      if M.fuzzy_match(kw, prefix) then
         table.insert(items, { label = kw, kind = 14, insertText = kw, sortText = "0" .. kw, documentation = "keyword" })
       end
     end
   end
   for _, t in ipairs(data.DATA_TYPES) do
-    if t:lower():sub(1, #low) == low then
+    if M.fuzzy_match(t, prefix) then
       table.insert(items, { label = t, kind = 25, insertText = t, sortText = "0" .. t, documentation = "type" })
     end
   end

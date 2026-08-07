@@ -60,7 +60,7 @@ function M.handle_directives(line_before, callback)
     local items = {}
     for _, d in ipairs(directives) do
       local name = d:sub(2)
-      if name:lower():sub(1, #low) == low then
+      if ctx.fuzzy_match(name, partial) then
         table.insert(items, { label = d, kind = 14, insertText = d, documentation = "directive" })
       end
     end
@@ -282,7 +282,7 @@ local function handle_insert_column(line_before, prefix, ctx_data, callback)
       end
     end
     for _, c in ipairs(all) do
-      if not seen[c:lower()] and (prefix == "" or c:lower():sub(1, #prefix) == prefix) then
+      if not seen[c:lower()] and (prefix == "" or ctx.fuzzy_match(c, prefix)) then
         result[#result + 1] = { label = c, kind = 5, insertText = c, documentation = "col: " .. tbl .. "." .. c }
       end
     end
