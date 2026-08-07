@@ -172,23 +172,27 @@ local function on_session_exit(session, code)
   end
 end
 
-local function start(conn_url)
+local function start(conn_url, database)
   local binary = state.find_poste_binary()
   if not binary then return nil end
 
+  local db = database or database_from_url(conn_url)
   local session = {
     job_id = nil,
     conn_url = conn_url,
     dialect = dialect_from_url(conn_url),
-    database = database_from_url(conn_url),
+    database = db,
     bufs = {},
     seq = 0,
     pending = {},
-buffer  = "",
+    buffer  = "",
     alive = true,
   }
 
   local cmd = { binary, "session", "--connection", conn_url, "--max-rows", "0", "--timeout", "0" }
+  if db then
+    table.insert(cmd, "--database"); table.insert(cmd, db)
+  end
   local job_id = vim.fn.jobstart(cmd, {
     stdin = "pipe",
     stdout_buffered = false,
@@ -217,11 +221,12 @@ end
 --- Get the session for a connection_url, starting one if needed.
 --- @param conn_url string
 --- @param bufnr number|nil buffer that will use this session
+--- @param database string|nil database context to connect to (default: from URL)
 --- @return table|nil session
-function M.get(conn_url, bufnr)
+function M.get(conn_url, bufnr, database)
   local session = pool[conn_url]
   if not session or not session.alive then
-    session = start(conn_url)
+    session = start(conn_url, database)
     if not session then return nil end
   end
   if bufnr then session.bufs[bufnr] = true end
@@ -234,10 +239,11 @@ end
 --- @param sql string
 --- @param callbacks table { on_response = fn(parsed), on_error = fn(msg, parsed?) }
 --- @param bufnr number|nil
+--- @param database string|nil database context (e.g. from `@database` directive)
 --- @return boolean  true if the request was dispatched
-function M.execute(conn_url, sql, callbacks, bufnr)
+function M.execute(conn_url, sql, callbacks, bufnr, database)
   callbacks = callbacks or {}
-  local session = M.get(conn_url, bufnr)
+  local session = M.get(conn_url, bufnr, database)
   if not session then
     if callbacks.on_error then callbacks.on_error("Failed to start poste session") end
     return false

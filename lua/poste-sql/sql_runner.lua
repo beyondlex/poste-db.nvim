@@ -484,7 +484,7 @@ end
           vim.notify("Failed to start poste exec-file job (session fallback)", vim.log.levels.ERROR, { title = "Poste SQL" })
         end
       end,
-    }, src_buf)
+    }, src_buf, db)  -- 5th arg: database context from @database directive
     if not ok then
       state.log("WARN", "SQL session not available, falling back to exec-file")
       local job_id = exec_run.run_async(buf_content, {
