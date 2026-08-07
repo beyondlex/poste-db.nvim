@@ -70,6 +70,9 @@ function M.setup(opts)
   opts = opts or {}
   local state = require("poste.state")
   state.config.db_browser = vim.tbl_deep_extend("force", state.config.db_browser, opts.db_browser or {})
+  if opts.hide_empty_result_tabs ~= nil then
+    state.config.hide_empty_result_tabs = opts.hide_empty_result_tabs
+  end
   require("poste-sql.snippets").setup(opts)
   local default_icons = {
     Text = "",

@@ -337,8 +337,11 @@ function M.run_sql_request()
       local is_multi = #results > 1
 
     if is_multi then
+      local tab_idx = 0
+      local hide_empty = state.config.hide_empty_result_tabs ~= false
       for i, result in ipairs(results) do
         if result.error then
+          tab_idx = tab_idx + 1
           local err_line = stmt_lines[i] or first_line
           local next_start = stmt_lines[i + 1]
           local end_nr = next_start and (next_start - 1) or visual_sel_end or #buf_lines
@@ -346,7 +349,7 @@ function M.run_sql_request()
           indicators.set_indicator(src_buf, end_nr - 1, "error")
           local err_text = type(result.error) == "string" and result.error or vim.inspect(result.error)
           local lines = sql_format.format_error(err_text, parsed.connection or "")
-          sql_buffer.render_dataset(lines, { type = "error" }, { tab_index = i, exec_seq = current_seq })
+          sql_buffer.render_dataset(lines, { type = "error" }, { tab_index = tab_idx, exec_seq = current_seq })
         else
           local sql_text = statement.get_stmt_sql(buf_lines, stmt_lines, i, visual_sel_end)
           local table_name = statement.extract_table_name(sql_text)
@@ -364,13 +367,24 @@ function M.run_sql_request()
           local layout = sql_format.plan_resultset_layout(single_data)
           local lines, meta
           if layout then
+            tab_idx = tab_idx + 1
             lines, meta = sql_format.render_page(layout, 1, 50)
             meta.table_name = table_name
+          elseif hide_empty then
+            -- Skip statements with no result set (SET, USE, etc.) — they
+            -- would otherwise clutter the dataset with empty tabs.
+            local line_nr = stmt_lines[i] or first_line
+            local next_start = stmt_lines[i + 1]
+            local end_nr = next_start and (next_start - 1) or visual_sel_end or #buf_lines
+            while end_nr > line_nr and (buf_lines[end_nr] or ""):match("^%s*$") do end_nr = end_nr - 1 end
+            indicators.set_indicator(src_buf, end_nr - 1, "success", result.execution_time_ms)
+            goto continue
           else
+            tab_idx = tab_idx + 1
             lines, meta = sql_format.format_resultset(single_data)
           end
           sql_buffer.render_dataset(lines, meta, {
-            tab_index = i,
+            tab_index = tab_idx,
             exec_seq = current_seq,
             data = single_data,
             layout = layout,
@@ -385,6 +399,7 @@ function M.run_sql_request()
           while end_nr > line_nr and (buf_lines[end_nr] or ""):match("^%s*$") do end_nr = end_nr - 1 end
           indicators.set_indicator(src_buf, end_nr - 1, "success", result.execution_time_ms)
         end
+        ::continue::
       end
     else
       -- Single result
