@@ -1,9 +1,5 @@
-
--- @connection my-blog
+-- @connection my-inventory
 -- @database inventory
 
-SELECT * FROM items ;
+SELECT * from items;
 
-SELECT * FROM blog.authors WHERE  ;
-
-select id, slug FROM blog.posts;

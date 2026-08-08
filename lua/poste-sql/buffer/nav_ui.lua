@@ -5,11 +5,49 @@ local state = require("poste.state")
 
 local M = {}
 
+local ICON_DATABASE = "\239\135\128"
+local ICON_TABLE    = "\239\131\142"
+
 function M.format_conn_short(conn)
   if not conn or conn == "" then return nil end
   local host, port, db = conn:match("^%w+://[^@]*@([^:]+):(%d+)/([^?]+)")
   if host then return string.format("%s:%s/%s", host, port, db) end
   return conn:match("/([^/]+)$") or conn
+end
+
+function M.build_statusline_context(meta)
+  if not meta or meta.type ~= "resultset" then return nil end
+
+  local parts = {}
+
+  local conn = meta.connection
+  if conn and conn ~= "" then
+    local host, port = conn:match("^%w+://[^@]*@([^:]+):(%d+)")
+    if host then
+      parts[#parts + 1] = string.format("%s:%s", host, port)
+    end
+    local db = conn:match("^%w+://[^@]*@[^/]+/([^?]+)")
+    if db and db ~= "" then
+      db = (db:gsub("/$", ""))
+      parts[#parts + 1] = ICON_DATABASE .. " " .. db
+    end
+  end
+
+  local tbl = meta.table_name
+  if tbl and tbl ~= "" then
+    parts[#parts + 1] = ICON_TABLE .. " " .. tbl
+  end
+
+  if #parts == 0 then return nil end
+  return table.concat(parts, "  ")
+end
+
+function M.update_dataset_statusline(meta)
+  local buf = D.dataset_buffer
+  if not buf or not vim.api.nvim_buf_is_valid(buf) then return end
+  local ctx = M.build_statusline_context(meta)
+  vim.b[buf].poste_sql_context = ctx or ""
+  vim.cmd("redrawstatus")
 end
 
 function M.build_preview_float_opts(title)
@@ -81,10 +119,7 @@ function M.build_status_right(meta, total_tabs, active_idx, pending)
     local next_k = state.get_keymap("sql_dataset", "next_tab", "<Tab>")
     local prev_k = state.get_keymap("sql_dataset", "prev_tab", "<S-Tab>")
     right = right .. string.format("[%d/%d: %s] (%s/%s) ", active_idx, total_tabs, label, prev_k, next_k)
-  elseif meta.table_name then
-    right = right .. string.format("[%s] ", meta.table_name)
   end
-  right = right .. (M.format_conn_short(meta.connection) or "")
 
   return right
 end
@@ -110,6 +145,7 @@ end
 function M.build_status_winbar(meta, tab, total_tabs, active_idx)
   local current_tab = D.T()
   local pending = M.build_pending_changes_text(current_tab)
+  M.update_dataset_statusline(meta)
   return M.build_status_winbar_text(meta, tab, total_tabs, active_idx, pending)
 end
 

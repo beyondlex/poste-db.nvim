@@ -8,6 +8,12 @@ select * from poste_test_events;
 
 show tables;
 
+select 1;
+
+set @a = 3;
+SELECT * FROM items  where id = @a ;
+set @a = 4;
+SELECT * FROM items  where id = @a ;
 
 SELECT * FROM items  ;
 
@@ -23,7 +29,7 @@ select id, slug FROM blog.posts ;
 
 -- UPDATE posts SET bio = '' AFTERE id i
 
--- @database blog
+
 select * from poste_test_metrics; 
 select * from poste_test_events;;
 
@@ -34,6 +40,7 @@ drop table poste_test_metrics;
 drop table poste_test_users;
 drop table shipments;
 
+-- @database blog
 SELECT id, page_id, url, measured_at, metric_01 from web_vitals  ;
 SELECT * from web_vitals ;
 

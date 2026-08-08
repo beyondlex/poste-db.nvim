@@ -43,7 +43,18 @@ describe("buffer_nav_ui", function()
     assert.truthy(text:find("Page 2/3", 1, true))
     assert.truthy(text:find("filter: status=open", 1, true))
     assert.truthy(text:find("search: needle (2/2)", 1, true))
-    assert.truthy(text:find("localhost:5432/blog", 1, true))
+    assert.is_falsy(text:find("localhost:5432/blog", 1, true))
+  end)
+
+  it("builds the statusline context", function()
+    local ctx = ui.build_statusline_context({
+      type = "resultset",
+      table_name = "posts",
+      connection = "postgres://user:pass@localhost:5432/blog?sslmode=require",
+    })
+    assert.truthy(ctx:find("localhost:5432", 1, true))
+    assert.truthy(ctx:find("blog", 1, true))
+    assert.truthy(ctx:find("posts", 1, true))
   end)
 
   it("builds pending changes text only when dirty", function()
@@ -91,6 +102,6 @@ describe("buffer_nav_ui", function()
     assert.truthy(left:find("search: needle (0)", 1, true))
     assert.truthy(right:find("pending changes", 1, true))
     assert.truthy(right:find("[2/3: posts]", 1, true))
-    assert.truthy(right:find("localhost:5432/blog", 1, true))
+    assert.is_falsy(right:find("localhost:5432/blog", 1, true))
   end)
 end)
