@@ -22,7 +22,7 @@ function M.enter(tab, win)
 
   saved_hide_header_float = state.sql._hide_header_float
   state.sql._hide_header_float = true
-  D.close_header_float()
+  require("poste-sql.buffer.header").close()
 
   local lines = M.build_raw_lines(tab)
   raw_buffer = vim.api.nvim_create_buf(false, true)

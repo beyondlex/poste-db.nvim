@@ -44,7 +44,29 @@ describe("buffer_render", function()
     assert.is_not_nil(tab.buffer_col_starts[4])
     assert.equals(4, tab.buffer_col_starts[4][1].disp_start)
     assert.equals(7, tab.buffer_col_starts[4][1].disp_end)
-    assert.is_not_nil(tab.header_col_starts[1])
-    assert.equals(3, tab.header_col_starts[1].disp_start)
+  end)
+
+  it("inserts the sort indicator without corrupting the header text", function()
+    local tab = { sort = { col = 1, ascending = true } }
+    local _, meta = render.normalize_rendered_page(tab, {
+      "┌──────────────┐",
+      "│ # │ id    │ name   │",
+      "├──────────────┤",
+      "│ 1 │ 2     │ 3      │",
+      "└──────────────┘",
+    }, {
+      type = "resultset",
+      header_line = 2,
+      data_start_line = 4,
+      data_end_line = 4,
+      row_count = 1,
+    })
+    assert.truthy(tab.header_text:find(" ↑", 1, true))
+    assert.is_not_nil(tab.header_index)
+    local sep_count = 0
+    for _, c in ipairs(tab.header_index) do
+      if c.sep then sep_count = sep_count + 1 end
+    end
+    assert.equals(4, sep_count, "indicator insertion must not eat a column separator")
   end)
 end)

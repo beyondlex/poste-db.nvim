@@ -12,11 +12,6 @@ M.PADDING_SPACES = string.rep(" ", M.LEFT_PADDING)
 M.tabs = {}
 M.active_tab_idx = 0
 
-M.float_buf = nil
-M.float_win = nil
-M._float_cache_leftcol = nil
-M._float_cache_width = nil
-M._float_cache_header = nil
 M.scroll_autocmd_id = nil
 M.resize_autocmd_id = nil
 M.search_ns = vim.api.nvim_create_namespace("poste_sql_search")
@@ -95,32 +90,6 @@ function M.compute_view_indices(tab)
     end)
   end
   tab.view_indices = indices
-end
-
-function M.close_header_float()
-  local win = M.dataset_window
-  if win and vim.api.nvim_win_is_valid(win) then
-    local all_wins = vim.api.nvim_tabpage_list_wins(0)
-    for _, w in ipairs(all_wins) do
-      if w ~= win then
-        local ok, config = pcall(vim.api.nvim_win_get_config, w)
-        if ok and config.relative == "win" and config.win == win then
-          pcall(vim.api.nvim_win_close, w, true)
-        end
-      end
-    end
-  end
-  if M.float_win and vim.api.nvim_win_is_valid(M.float_win) then
-    pcall(vim.api.nvim_win_close, M.float_win, true)
-  end
-  if M.float_buf and vim.api.nvim_buf_is_valid(M.float_buf) then
-    pcall(vim.api.nvim_buf_delete, M.float_buf, { force = true })
-  end
-  M.float_win = nil
-  M.float_buf = nil
-  M._float_cache_leftcol = nil
-  M._float_cache_width = nil
-  M._float_cache_header = nil
 end
 
 return M

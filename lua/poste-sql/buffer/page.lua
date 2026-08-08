@@ -64,7 +64,7 @@ function M.refresh_page()
 
     -- Re-create header float if it was closed (e.g. after raw mode toggle)
     if tab.header_text and not state.sql._hide_header_float then
-      require("poste-sql.buffer.nav").update_header_float()
+      require("poste-sql.buffer.header").update()
     end
 
     return

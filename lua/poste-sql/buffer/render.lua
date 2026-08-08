@@ -46,12 +46,11 @@ function M.normalize_rendered_page(tab, lines, meta)
           local before = tab.header_text:sub(1, text_end)
           local after = tab.header_text:sub(text_end + 3)
           tab.header_text = before .. indicator .. after
-          tab.header_col_starts = nil
         end
       end
     end
-    local padded_h = "  " .. tab.header_text
-    tab.header_index = require("poste-sql.buffer.nav").build_header_index(padded_h)
+    local padded_h = D.PADDING_SPACES .. tab.header_text
+    tab.header_index = require("poste-sql.buffer.header").build_header_index(padded_h)
 
     table.remove(clean, meta.header_line + 1)
     table.remove(clean, meta.header_line)
@@ -76,6 +75,10 @@ function M.normalize_rendered_page(tab, lines, meta)
   return padded, meta, true
 end
 
+--- Build per-row column byte/display maps for cursor placement. Header
+--- positions are not mapped here: the header float slices the rendered
+--- header text per-char, which stays byte-vs-display correct for multibyte
+--- names and sort indicators.
 function M.build_column_start_maps(tab, meta)
   tab.buffer_col_starts = {}
   if meta and meta.col_starts then
@@ -99,24 +102,6 @@ function M.build_column_start_maps(tab, meta)
     end
   end
 
-  tab.header_col_starts = nil
-  if meta and meta.header_col_starts then
-    local hdr = {}
-    local cum_disp = D.LEFT_PADDING
-    for col_idx, cell in ipairs(meta.header_col_starts) do
-      local cell_disp = cell.ext_end - cell.ext_start
-      local ext_start = cell.ext_start + D.LEFT_PADDING
-      local ext_end = cell.ext_end + D.LEFT_PADDING
-      hdr[col_idx] = {
-        ext_start = ext_start,
-        ext_end = ext_end,
-        disp_start = cum_disp + 1,
-        disp_end = cum_disp + 1 + cell_disp,
-      }
-      cum_disp = cum_disp + 1 + cell_disp
-    end
-    tab.header_col_starts = hdr
-  end
 end
 
 return M

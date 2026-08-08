@@ -54,7 +54,7 @@ describe("buffer_nav_raw", function()
       win_is_valid = vim.api.nvim_win_is_valid,
       buf_delete = vim.api.nvim_buf_delete,
       keymap_set = vim.keymap.set,
-      close_header_float = D.close_header_float,
+      header_close = require("poste-sql.buffer.header").close,
       get_keymap = state.get_keymap,
       format = package.loaded["poste-sql.format"],
     }
@@ -97,7 +97,7 @@ describe("buffer_nav_raw", function()
     vim.keymap.set = function(mode, lhs, rhs, opts)
       calls[#calls + 1] = { kind = "keymap", lhs = lhs, opts = opts }
     end
-    D.close_header_float = function()
+    require("poste-sql.buffer.header").close = function()
       calls[#calls + 1] = "close_header_float"
     end
     state.get_keymap = function(_, _, default)
@@ -129,7 +129,7 @@ describe("buffer_nav_raw", function()
     vim.api.nvim_win_is_valid = saved.win_is_valid
     vim.api.nvim_buf_delete = saved.buf_delete
     vim.keymap.set = saved.keymap_set
-    D.close_header_float = saved.close_header_float
+    require("poste-sql.buffer.header").close = saved.header_close
     state.get_keymap = saved.get_keymap
     package.loaded["poste-sql.format"] = saved.format
 

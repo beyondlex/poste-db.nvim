@@ -3,8 +3,8 @@ local D = require("poste-sql.dataset")
 local C = require("poste-sql.constants")
 local state = require("poste.state")
 local sql_highlights = require("poste-sql.highlights")
-local util = require("poste-sql.util")
 local nav_state = require("poste-sql.buffer.nav_state")
+local header = require("poste-sql.buffer.header")
 local cell = require("poste-sql.buffer.nav_cell")
 local preview = require("poste-sql.buffer.nav_preview")
 local raw_mode = require("poste-sql.buffer.nav_raw")
@@ -53,223 +53,9 @@ local function focus_cell(tab, row, col, update_header)
   T_mark("highlight_cell")
   sql_highlights.highlight_cell(D.dataset_buffer, row, col, tab.meta, line, get_col_starts(tab, row))
   if update_header then
-    T_mark("update_header_float")
-    M.update_header_float()
+    T_mark("header_update")
+    header.update()
   end
-end
-
---- Truncate a string to fit within a given display width, preserving UTF-8 validity.
-local function trunc_disp(s, max_dw)
-  return util.truncate_displaywidth(s, max_dw)
-end
-
-local function build_header_index(line)
-  local sep = "│"
-  local sep_len = #sep
-  local index = {}
-  local disp_pos = 0
-  local byte_idx = 1
-  while byte_idx <= #line do
-    local char_bytes, char_width, is_sep
-    if line:sub(byte_idx, byte_idx + sep_len - 1) == sep then
-      char_bytes, char_width, is_sep = sep_len, 1, true
-    else
-      local b = line:byte(byte_idx)
-      char_bytes = util.utf8_char_bytes(b)
-      if byte_idx + char_bytes - 1 > #line then char_bytes = #line - byte_idx + 1 end
-      char_width = char_bytes == 1 and 1
-        or vim.fn.strdisplaywidth(line:sub(byte_idx, byte_idx + char_bytes - 1))
-      if char_width == 0 then char_width = 1 end
-      is_sep = false
-    end
-    index[#index + 1] = { bs=byte_idx, be=byte_idx+char_bytes-1,
-                          ds=disp_pos, de=disp_pos+char_width, sep=is_sep }
-    disp_pos = disp_pos + char_width
-    byte_idx = byte_idx + char_bytes
-  end
-  return index
-end
-M.build_header_index = build_header_index
-
-local function slice_header_to_win(leftcol, win_width, padded_header, index)
-  if not padded_header or not index then return D.PADDING_SPACES end
-  local right_edge = leftcol + win_width
-
-  local parts = {}
-  for _, c in ipairs(index) do
-    if c.de <= leftcol then goto continue end
-    if c.ds >= right_edge then break end
-
-    local text
-    if c.ds < leftcol then
-      text = string.rep(" ", math.min(c.de, right_edge) - leftcol)
-    elseif c.de > right_edge then
-      text = string.rep(" ", right_edge - c.ds)
-    else
-      text = padded_header:sub(c.bs, c.be)
-    end
-    parts[#parts + 1] = text
-
-    ::continue::
-  end
-
-  if #parts == 0 then return D.PADDING_SPACES end
-  return table.concat(parts)
-end
-
---- Slice header using pre-computed column positions (O(#visible_cols), no strdisplaywidth).
---- @param leftcol number Display-width offset of viewport left edge
---- @param win_width number Viewport width in display columns
---- @param padded_header string Header line with padding (includes D.LEFT_PADDING)
---- @param header_col_starts table[] Pre-computed column positions with disp_start/disp_end
---- @return string Sliced header text
-function M.slice_header_by_col_starts(leftcol, win_width, padded_header, header_col_starts)
-  if not padded_header or not header_col_starts then return D.PADDING_SPACES end
-  local right_edge = leftcol + win_width
-
-  -- Handle the 2-space left padding (display positions 0-1) before first │
-  local parts = {}
-  if leftcol < D.LEFT_PADDING then
-    local pad_start = math.max(leftcol, 0)
-    local pad_end = math.min(D.LEFT_PADDING, right_edge)
-    local pad_width = pad_end - pad_start
-    if pad_width > 0 then
-      parts[#parts + 1] = string.rep(" ", pad_width)
-    end
-  end
-
-  local last_fully_visible_idx
-  local has_partial_right = false
-
-  for i, cell in ipairs(header_col_starts) do
-    if cell.disp_end <= leftcol then goto continue end
-    if cell.disp_start > right_edge then break end
-
-    local text
-    if cell.disp_start < leftcol then
-      text = string.rep(" ", math.min(cell.disp_end, right_edge) - leftcol)
-    elseif cell.disp_end > right_edge then
-      -- Partially visible on right: show │ + as much content as fits
-      local seg_start
-      if i == 1 then
-        seg_start = D.LEFT_PADDING
-      else
-        seg_start = header_col_starts[i - 1].ext_end
-      end
-      local full_cell = padded_header:sub(seg_start + 1, cell.ext_end)
-      local visible_dw = right_edge - cell.disp_start + 1
-      if visible_dw > 0 then
-        text = trunc_disp(full_cell, visible_dw)
-        has_partial_right = true
-      end
-    else
-      -- Fully visible: extract │ before this cell + content (no trailing │)
-      local seg_start
-      if i == 1 then
-        seg_start = D.LEFT_PADDING  -- first │ at byte 2
-      else
-        seg_start = header_col_starts[i - 1].ext_end  -- byte of │ between cols
-      end
-      text = padded_header:sub(seg_start + 1, cell.ext_end)
-      last_fully_visible_idx = i
-    end
-    if text then
-      parts[#parts + 1] = text
-    end
-
-    ::continue::
-  end
-
-  -- Add trailing │ when last visible column is fully visible (no partial-right column)
-  if last_fully_visible_idx and not has_partial_right then
-    local last_cell = header_col_starts[last_fully_visible_idx]
-    parts[#parts + 1] = padded_header:sub(last_cell.ext_end + 1, last_cell.ext_end + 3)
-  end
-
-  if #parts == 0 then return D.PADDING_SPACES end
-  return table.concat(parts)
-end
-
-function M.update_header_float()
-  local tab = D.T()
-  if not tab or not tab.header_text or not D.dataset_window then T_mark("  hdr:early_exit"); return end
-  if not vim.api.nvim_win_is_valid(D.dataset_window) then T_mark("  hdr:early_exit"); return end
-  if state.sql._hide_header_float then D.close_header_float(); return end
-
-  T_mark("  hdr:win_width")
-  local win_width = vim.api.nvim_win_get_width(D.dataset_window)
-  if win_width <= 0 then return end
-
-  T_mark("  hdr:winsaveview")
-  local leftcol
-  if vim.api.nvim_get_current_win() == D.dataset_window then
-    leftcol = vim.fn.winsaveview().leftcol
-  else
-    leftcol = vim.api.nvim_win_call(D.dataset_window, function()
-      return vim.fn.winsaveview().leftcol
-    end)
-  end
-
-  T_mark("  hdr:cache_check")
-  if leftcol == D._float_cache_leftcol and win_width == D._float_cache_width
-     and tab.header_text == D._float_cache_header then
-    T_mark("  hdr:cached")
-    return
-  end
-
-  D._float_cache_leftcol = leftcol
-  D._float_cache_width = win_width
-  D._float_cache_header = tab.header_text
-
-  T_mark("  hdr:slice_to_win")
-  local padded = "  " .. tab.header_text
-  local text
-  if tab.header_col_starts then
-    text = M.slice_header_by_col_starts(leftcol, win_width, padded, tab.header_col_starts)
-  else
-    local index = tab.header_index or build_header_index(padded)
-    text = slice_header_to_win(leftcol, win_width, padded, index)
-  end
-
-  local float_buf = D.float_buf
-  local float_win = D.float_win
-
-  if float_buf and vim.api.nvim_buf_is_valid(float_buf) then
-    T_mark("  hdr:set_lines")
-    vim.api.nvim_set_option_value("modifiable", true, { buf = float_buf })
-    vim.api.nvim_buf_set_lines(float_buf, 0, -1, false, { text })
-    vim.api.nvim_set_option_value("modifiable", false, { buf = float_buf })
-    T_mark("  hdr:set_config")
-    if float_win and vim.api.nvim_win_is_valid(float_win) then
-      vim.api.nvim_win_set_config(float_win, { width = win_width })
-      T_mark("  hdr:done")
-      return
-    end
-  end
-
-  T_mark("  hdr:create_float")
-  D.close_header_float()
-  D.float_buf = vim.api.nvim_create_buf(false, true)
-  vim.bo[D.float_buf].buftype = "nofile"
-  vim.bo[D.float_buf].bufhidden = "wipe"
-  vim.bo[D.float_buf].swapfile = false
-  vim.api.nvim_buf_set_lines(D.float_buf, 0, -1, false, { text })
-  vim.bo[D.float_buf].modifiable = false
-
-  D.float_win = vim.api.nvim_open_win(D.float_buf, false, {
-    relative = "win",
-    win = D.dataset_window,
-    row = 0,
-    col = 0,
-    width = win_width,
-    height = 1,
-    style = "minimal",
-    border = "none",
-    focusable = false,
-    zindex = 40,
-  })
-  vim.wo[D.float_win].winhighlight = "Normal:PosteDbDatasetHeader"
-  T_mark("  hdr:done")
 end
 
 function M.move_cell(drow, dcol)
@@ -286,9 +72,9 @@ function M.move_cell(drow, dcol)
   col = math.max(1, math.min(col, tab.meta.col_count or 0))
 
   focus_cell(tab, row, col, false)
-  T_mark("update_header_float")
+  T_mark("header_update")
   if dcol ~= 0 then
-    M.update_header_float()
+    header.update()
   end
   T_mark("done")
   T_report()
@@ -496,9 +282,9 @@ end
 function M.toggle_header_float()
   state.sql._hide_header_float = not state.sql._hide_header_float
   if state.sql._hide_header_float then
-    D.close_header_float()
+    header.close()
   else
-    M.update_header_float()
+    header.update()
   end
   vim.notify(string.format("Header float: %s", state.sql._hide_header_float and "OFF" or "ON"),
     vim.log.levels.INFO, { title = C.TITLE })
@@ -529,7 +315,8 @@ function M.goto_header()
   M.goto_first_row()
 end
 M._test = {
-  build_header_index = build_header_index,
+  build_header_index = header.build_header_index,
+  slice_header_to_win = header.slice_header_to_win,
 }
 
 return M

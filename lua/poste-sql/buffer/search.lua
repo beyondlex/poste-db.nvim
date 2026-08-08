@@ -67,7 +67,7 @@ local function jump_to_search_match(idx)
   local line = require("poste-sql.buffer.nav").position_cursor(vis_row, match.col)
   local cs = tab.buffer_col_starts and tab.buffer_col_starts[(tab.meta.data_start_line or 1) + vis_row - 1]
   sql_highlights.highlight_cell(D.dataset_buffer, vis_row, match.col, tab.meta, line, cs)
-  require("poste-sql.buffer.nav").update_header_float()
+  require("poste-sql.buffer.header").update()
   M.apply_search_highlights()
   update_winbar()
 end
@@ -288,7 +288,7 @@ function M.find_column()
     local line = require("poste-sql.buffer.nav").position_cursor(row, info.idx)
     local cs = tab.buffer_col_starts and tab.buffer_col_starts[(tab.meta.data_start_line or 1) + row - 1]
     sql_highlights.highlight_cell(D.dataset_buffer, row, info.idx, tab.meta, line, cs)
-    require("poste-sql.buffer.nav").update_header_float()
+    require("poste-sql.buffer.header").update()
   end)
 end
 

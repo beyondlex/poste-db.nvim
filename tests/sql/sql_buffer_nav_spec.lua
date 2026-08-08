@@ -67,8 +67,37 @@ describe("buffer_nav horizontal scroll", function()
       pcall(vim.api.nvim_win_close, D.dataset_window, true)
     end
     D.dataset_window = nil
-    D.close_header_float()
+    require("poste-sql.buffer.header").close()
     state.sql.cell = { row = 1, col = 1 }
+  end)
+
+  it("slices the header with separators only at their true screen positions", function()
+    local full = "  │ # │ id    │ 姓名   │ 备注    │"
+    local idx = nav._test.build_header_index(full)
+    local function seps(text)
+      local out = {}
+      for _, c in ipairs(nav._test.build_header_index(text)) do
+        if c.sep then out[#out + 1] = c.ds end
+      end
+      return out
+    end
+
+    for _, leftcol in ipairs({ 0, 6, 7, 14, 15, 22, 26 }) do
+      local text = nav._test.slice_header_to_win(leftcol, 20, full, idx)
+      local expected = {}
+      for _, c in ipairs(idx) do
+        if c.sep and c.ds >= leftcol and c.ds < leftcol + 20 then
+          expected[#expected + 1] = c.ds - leftcol
+        end
+      end
+      local actual = seps(text)
+      assert.same(
+        expected,
+        actual,
+        string.format("leftcol=%d: slice separators %s, expected %s",
+          leftcol, table.concat(actual, ","), table.concat(expected, ","))
+      )
+    end
   end)
 
   it("restores the row-number column when scrolling back to the first column", function()
@@ -179,6 +208,99 @@ describe("buffer_nav horizontal scroll", function()
     assert.equals(24, state.sql.cell.col)
     local scrolled = vim.api.nvim_win_call(win, vim.fn.winsaveview).leftcol
     assert.is_true(scrolled > 0, "expected the window to have scrolled horizontally")
+
+    vim.o.columns = saved_columns
+  end)
+
+  it("keeps the header float aligned with data columns for multibyte names", function()
+    local saved_columns = vim.o.columns
+    vim.o.columns = 50
+
+    local format = require("poste-sql.format")
+    local buffer = require("poste-sql.buffer")
+    local cols = {}
+    local row = {}
+    for i, name in ipairs({ "id", "姓名", "备注", "data", "extra", "订单号", "金额", "状态", "时间" }) do
+      cols[i] = { name = name, type = "TEXT" }
+      row[i] = "v" .. i .. string.rep("x", i)
+    end
+    local body = vim.json.encode({
+      type = "resultset",
+      total_rows = 1,
+      results = {
+        {
+          columns = cols,
+          rows = { row },
+        },
+      },
+      connection = "postgres://localhost:5432/db",
+      database = "db",
+      dialect = "postgres",
+    })
+    local data = vim.json.decode(body)
+    local layout = format.plan_resultset_layout(data)
+    local lines, meta = format.render_page(layout, 1, 1)
+    buffer.render_dataset(lines, meta, { layout = layout, data = data })
+
+    local win = D.dataset_window
+    assert.is_not_nil(win)
+    vim.api.nvim_set_current_win(win)
+
+    local tab = D.T()
+    local cs = tab.buffer_col_starts[tab.meta.data_start_line]
+    local win_width = vim.api.nvim_win_get_width(win)
+
+    local function check_alignment(leftcol)
+      pcall(vim.api.nvim_win_call, win, function()
+        vim.fn.winrestview({ leftcol = leftcol })
+      end)
+      require("poste-sql.buffer.header").update()
+      local float_text = vim.api.nvim_buf_get_lines(
+        require("poste-sql.buffer.header")._test.float_buf(), 0, 1, false)[1]
+      assert.is_not_nil(float_text, "header float must exist after scroll")
+
+      local float_seps = {}
+      for _, c in ipairs(nav._test.build_header_index(float_text)) do
+        if c.sep then float_seps[#float_seps + 1] = c.ds end
+      end
+
+      -- Data row: each cell's leading │ sits at value start - 2 (two spaces
+      -- of left padding plus the separator), in screen coordinates.
+      local data_seps = {}
+      for col = 1, tab.meta.col_count do
+        local screen = cs[col].disp_start - 2 - leftcol
+        if screen >= 0 and screen < win_width then
+          data_seps[#data_seps + 1] = screen
+        end
+      end
+
+      for _, s in ipairs(data_seps) do
+        assert.is_true(
+          vim.tbl_contains(float_seps, s),
+          string.format("leftcol=%d: header float separator missing at screen col %d (float: %s, data: %s)",
+            leftcol, s, table.concat(float_seps, ","), table.concat(data_seps, ","))
+        )
+      end
+      for i, s in ipairs(float_seps) do
+        local trailing = i == #float_seps and not vim.tbl_contains(data_seps, s)
+        if not trailing then
+          assert.is_true(
+            vim.tbl_contains(data_seps, s),
+            string.format("leftcol=%d: header float separator misplaced at screen col %d (float: %s, data: %s)",
+              leftcol, s, table.concat(float_seps, ","), table.concat(data_seps, ","))
+          )
+        end
+      end
+      assert.is_true(#float_seps <= #data_seps + 1,
+        string.format("leftcol=%d: header float has unexpected extra separators (float: %s, data: %s)",
+          leftcol, table.concat(float_seps, ","), table.concat(data_seps, ",")))
+    end
+
+    -- Sweep viewport positions so multibyte columns straddle the window
+    -- edges, where byte-vs-display drift used to break the alignment.
+    for _, leftcol in ipairs({ 0, 8, 15, 22, 26, 30, 40, 55 }) do
+      check_alignment(leftcol)
+    end
 
     vim.o.columns = saved_columns
   end)

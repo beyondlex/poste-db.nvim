@@ -151,7 +151,7 @@ function M.get_dataset_buffer()
     callback = function()
       vim.schedule(function()
         if not M.is_open() then
-          D.close_header_float()
+          require("poste-sql.buffer.header").close()
           sql_highlights.clear_cell_highlight(D.dataset_buffer)
   if D.resize_autocmd_id then
     pcall(vim.api.nvim_del_autocmd, D.resize_autocmd_id)
@@ -211,7 +211,7 @@ local function switch_tab(idx)
     return
   end
   save_active_tab_state()
-  D.close_header_float()
+  require("poste-sql.buffer.header").close()
   D.active_tab_idx = idx
   local tab = D.tabs[idx]
   apply_tab_state(tab)
@@ -240,7 +240,7 @@ local function switch_tab(idx)
   end
 
   if tab.header_text then
-    require("poste-sql.buffer.nav").update_header_float()
+    require("poste-sql.buffer.header").update()
   end
 
   local winbar_text = require("poste-sql.buffer.nav").build_status_winbar(meta)
@@ -368,7 +368,7 @@ function M.render_dataset(lines, meta, opts)
     D.active_tab_idx = 0
   end
 
-  D.close_header_float()
+  require("poste-sql.buffer.header").close()
 
   local tab = D.alloc_tab(tab_idx)
   D.active_tab_idx = tab_idx
@@ -504,7 +504,7 @@ function M.render_dataset(lines, meta, opts)
     end
 
     if tab.header_text then
-      require("poste-sql.buffer.nav").update_header_float()
+      require("poste-sql.buffer.header").update()
     end
   end
 
@@ -520,19 +520,19 @@ function M.render_dataset(lines, meta, opts)
     if D.dataset_buffer then
       D.resize_autocmd_id = vim.api.nvim_create_autocmd("WinResized", {
         callback = function()
-          require("poste-sql.buffer.nav").update_header_float()
+          require("poste-sql.buffer.header").update()
         end,
       })
       D.scroll_autocmd_id = vim.api.nvim_create_autocmd("WinScrolled", {
         buffer = D.dataset_buffer,
         callback = function()
-          require("poste-sql.buffer.nav").update_header_float()
+          require("poste-sql.buffer.header").update()
         end,
       })
       D.winclose_autocmd_id = vim.api.nvim_create_autocmd("WinClosed", {
         callback = function()
           vim.schedule(function()
-            require("poste-sql.buffer.nav").update_header_float()
+            require("poste-sql.buffer.header").update()
           end)
         end,
       })
@@ -576,7 +576,7 @@ function M.clear_panel(seq)
       end
     end
   end
-  D.close_header_float()
+  require("poste-sql.buffer.header").close()
   if D.dataset_buffer and vim.api.nvim_buf_is_valid(D.dataset_buffer) then
     vim.api.nvim_set_option_value("modifiable", true, { buf = D.dataset_buffer })
     vim.api.nvim_buf_set_lines(D.dataset_buffer, 0, -1, false, { "" })
@@ -593,7 +593,7 @@ function M.close()
     pcall(vim.api.nvim_del_autocmd, D.scroll_autocmd_id)
     D.scroll_autocmd_id = nil
   end
-  D.close_header_float()
+  require("poste-sql.buffer.header").close()
   if D.dataset_window and vim.api.nvim_win_is_valid(D.dataset_window) then
     local all_wins = vim.api.nvim_tabpage_list_wins(0)
     for _, win in ipairs(all_wins) do
@@ -620,7 +620,7 @@ M._test = {
   set_header = function(header)
     local tab = D.alloc_tab(1)
     tab.header_text = header
-    tab.header_index = header and require("poste-sql.buffer.nav").build_header_index("  " .. header) or nil
+    tab.header_index = header and require("poste-sql.buffer.header").build_header_index("  " .. header) or nil
   end,
   reset = function()
     D.tabs = {}
