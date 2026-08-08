@@ -111,6 +111,22 @@ describe("connections resolve_connection_url", function()
     assert.equals("postgres://alice:secret@localhost:5432/blog", url)
   end)
 
+  it("percent-encodes special chars in user and password", function()
+    package.loaded["poste-sql.toml"].parse_file = function()
+      return { primary = { dialect = "postgres", host = "localhost", port = 5432, database = "blog", user = "alice", password = "p@ss:w/rd%" } }
+    end
+    local url = connections.resolve_connection_url("primary")
+    assert.equals("postgres://alice:p%40ss%3Aw%2Frd%25@localhost:5432/blog", url)
+  end)
+
+  it("percent-encodes user when it contains special chars", function()
+    package.loaded["poste-sql.toml"].parse_file = function()
+      return { primary = { dialect = "postgres", host = "localhost", port = 5432, database = "blog", user = "user@example.com", password = "pw" } }
+    end
+    local url = connections.resolve_connection_url("primary")
+    assert.equals("postgres://user%40example.com:pw@localhost:5432/blog", url)
+  end)
+
   it("builds mysql URL", function()
     package.loaded["poste-sql.toml"].parse_file = function()
       return { primary = { dialect = "mysql", host = "db.example.com", port = 3306, database = "shop", user = "root" } }
@@ -231,6 +247,89 @@ describe("connections list_connections", function()
   end)
 end)
 
+describe("connections env var resolution", function()
+  local tmpdir
+  local saved_cwd
+
+  before_each(function()
+    tmpdir = vim.fn.tempname()
+    vim.fn.mkdir(tmpdir, "p")
+    saved_cwd = vim.fn.getcwd()
+    vim.fn.chdir(tmpdir)
+    util_stub.find_file_upwards = function(filename)
+      if filename == ".env" then
+        return tmpdir .. "/.env"
+      end
+      if filename == "env.json" then
+        return tmpdir .. "/env.json"
+      end
+      return tmpdir .. "/connections.toml"
+    end
+  end)
+
+  after_each(function()
+    vim.env.POSTE_TEST_DB_PASS = nil
+    vim.fn.chdir(saved_cwd)
+    pcall(vim.fn.delete, tmpdir, "rf")
+  end)
+
+  it("substitutes known vars and keeps unknown ones literal", function()
+    local vars = { DB_USER = "alice" }
+    assert.equals("alice", connections.substitute_vars("{{DB_USER}}", vars))
+    assert.equals("alice:secret", connections.substitute_vars("{{DB_USER}}:secret", vars))
+    assert.equals("{{DB_PASS}}", connections.substitute_vars("{{DB_PASS}}", vars))
+    assert.equals(5432, connections.substitute_vars(5432, vars))
+  end)
+
+  it("resolves {{VAR}} from .env in connection config", function()
+    vim.fn.writefile({ "POSTE_TEST_DB_PASS=supersecret" }, tmpdir .. "/.env")
+    package.loaded["poste-sql.toml"].parse_file = function()
+      return { primary = { dialect = "postgres", host = "localhost", port = 5432, database = "blog", user = "alice", password = "{{POSTE_TEST_DB_PASS}}" } }
+    end
+    local config = connections.get_connection_config("primary")
+    assert.equals("supersecret", config.password)
+  end)
+
+  it("resolves {{VAR}} from .env in resolved URL", function()
+    vim.fn.writefile({ "POSTE_TEST_DB_PASS=supersecret" }, tmpdir .. "/.env")
+    package.loaded["poste-sql.toml"].parse_file = function()
+      return { primary = { dialect = "postgres", host = "localhost", port = 5432, database = "blog", user = "alice", password = "{{POSTE_TEST_DB_PASS}}" } }
+    end
+    local url = connections.resolve_connection_url("primary")
+    assert.equals("postgres://alice:supersecret@localhost:5432/blog", url)
+  end)
+
+  it("keeps unresolved {{VAR}} literal when .env is missing", function()
+    package.loaded["poste-sql.toml"].parse_file = function()
+      return { primary = { dialect = "postgres", host = "localhost", port = 5432, database = "blog", user = "alice", password = "{{DB_PASS}}" } }
+    end
+    local url = connections.resolve_connection_url("primary")
+    assert.equals("postgres://alice:%7B%7BDB_PASS%7D%7D@localhost:5432/blog", url)
+  end)
+
+  it("prefers OS env over .env over env.json", function()
+    vim.fn.writefile({ '{"dev": {"POSTE_TEST_DB_PASS": "from-envjson"}}' }, tmpdir .. "/env.json")
+    vim.fn.writefile({ "POSTE_TEST_DB_PASS=from-dotenv" }, tmpdir .. "/.env")
+
+    vim.env.POSTE_TEST_DB_PASS = "from-os"
+    assert.equals("from-os", connections.get_env_vars(tmpdir).POSTE_TEST_DB_PASS)
+
+    vim.env.POSTE_TEST_DB_PASS = nil
+    assert.equals("from-dotenv", connections.get_env_vars(tmpdir).POSTE_TEST_DB_PASS)
+
+    vim.fn.delete(tmpdir .. "/.env")
+    -- _dotenv_cache still holds the parsed .env; bypass it with a fresh dir
+    local other_dir = tmpdir .. "/nested"
+    vim.fn.mkdir(other_dir, "p")
+    util_stub.find_file_upwards = function(filename)
+      if filename == ".env" then return nil end
+      if filename == "env.json" then return tmpdir .. "/env.json" end
+      return tmpdir .. "/connections.toml"
+    end
+    assert.equals("from-envjson", connections.get_env_vars(other_dir).POSTE_TEST_DB_PASS)
+  end)
+end)
+
 describe("connections apply_connection", function()
   local function make_buf(lines)
     local buf = vim.api.nvim_create_buf(false, true)
@@ -272,4 +371,3 @@ describe("connections apply_connection", function()
     assert.equals("### query", lines[3])
   end)
 end)
-

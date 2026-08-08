@@ -41,8 +41,127 @@ end
 local _config_cache = nil
 local _config_cache_path = nil
 
+-----------------------------------------------------------------------
+-- Environment variable resolution (dotenv + env.json + OS env)
+-----------------------------------------------------------------------
+
+local _dotenv_cache = {}
+
+--- Parse dotenv content: `KEY=VALUE` lines, optional `export` prefix,
+--- `#` comments, and single/double quoted values. Inline comments are
+--- not stripped (values may legitimately contain `#`).
+--- @param content string
+--- @return table<string,string>
+local function parse_dotenv(content)
+  local vars = {}
+  for line in content:gmatch("[^\r\n]+") do
+    local trimmed = line:match("^%s*(.-)%s*$")
+    if trimmed ~= "" and trimmed:sub(1, 1) ~= "#" then
+      local key, value = trimmed:match("^export%s+([%w_.]+)%s*=%s*(.-)%s*$")
+      if not key then
+        key, value = trimmed:match("^([%w_.]+)%s*=%s*(.-)%s*$")
+      end
+      if key then
+        value = value:gsub('^"(.*)"$', "%1"):gsub("^'(.*)'$", "%1")
+        vars[key] = value
+      end
+    end
+  end
+  return vars
+end
+
+--- Find and parse `.env` walking up from `search_dir` (same discovery as
+--- connections.toml). Cached per search_dir.
+--- @param search_dir string
+--- @return table<string,string>
+local function load_dotenv(search_dir)
+  if _dotenv_cache[search_dir] ~= nil then
+    return _dotenv_cache[search_dir]
+  end
+  local vars = {}
+  local path = util.find_file_upwards(".env", search_dir)
+  if path then
+    local ok, data = pcall(vim.fn.readfile, path)
+    if ok and data then
+      vars = parse_dotenv(table.concat(data, "\n"))
+    end
+  end
+  _dotenv_cache[search_dir] = vars
+  return vars
+end
+
+--- Load `env.json` vars for the current environment (matches the Rust
+--- binary's `--env` flow: `{ "dev": { ... }, "prod": { ... } }`).
+--- @param search_dir string
+--- @return table<string,string>
+local function load_env_json_vars(search_dir)
+  local path = util.find_file_upwards("env.json", search_dir)
+  if not path then return {} end
+  local ok, data = pcall(vim.fn.readfile, path)
+  if not ok or not data then return {} end
+  local ok2, parsed = pcall(vim.json.decode, table.concat(data, "\n"))
+  if not ok2 or type(parsed) ~= "table" then return {} end
+  local envs = parsed.envs or parsed
+  local vars = envs[state.current_env or "dev"]
+  if type(vars) ~= "table" then return {} end
+  local result = {}
+  for k, v in pairs(vars) do result[k] = v end
+  return result
+end
+
+--- Merge all environment sources.
+--- Precedence (highest wins): OS environment > `.env` > `env.json`.
+--- @param search_dir string
+--- @return table<string,string>
+function M.get_env_vars(search_dir)
+  local vars = {}
+  for k, v in pairs(load_env_json_vars(search_dir)) do vars[k] = v end
+  for k, v in pairs(load_dotenv(search_dir)) do vars[k] = v end
+  -- `vim.fn.environ()` enumerates real OS vars; `pairs(vim.env)` does not.
+  for k, v in pairs(vim.fn.environ()) do vars[k] = v end
+  return vars
+end
+
+--- Substitute `{{VAR}}` references in a string. Unknown references are
+--- kept literal, matching Rust's `substitute_vars` behavior.
+--- @param s any
+--- @param vars table<string,string>
+--- @return any
+function M.substitute_vars(s, vars)
+  if type(s) ~= "string" or not s:find("{{", 1, true) then
+    return s
+  end
+  return (s:gsub("{{([%w_.]+)}}", function(name)
+    return vars[name] or "{{" .. name .. "}}"
+  end))
+end
+
+--- Copy a connection config with `{{VAR}}` references resolved.
+--- @param conn table Connection config (raw values)
+--- @param vars table<string,string>
+--- @return table Resolved connection config
+local function apply_env(conn, vars)
+  local resolved = {}
+  for k, v in pairs(conn) do
+    resolved[k] = M.substitute_vars(v, vars)
+  end
+  return resolved
+end
+
+--- Percent-encode a userinfo component (user/password) for URL building.
+--- Encodes every byte outside the RFC 3986 unreserved set, matching the
+--- Rust side's `ConnectionConfig::to_url` behavior.
+--- @param s any
+--- @return any
+local function percent_encode_userinfo(s)
+  if type(s) ~= "string" or s == "" then return s end
+  return (s:gsub("[^%w%.%-%_%~]", function(c)
+    return string.format("%%%02X", c:byte())
+  end))
+end
+
 --- Get the config for a named connection by reading connections.toml directly.
---- Returns raw values (before {{var}} substitution — use env-aware call for that).
+--- Returns values with `{{var}}` references resolved from .env / env.json / OS env.
 --- Caches parsed config to avoid file I/O on every cursor move.
 --- @param name string Connection name
 --- @return table|nil Connection config or nil
@@ -62,15 +181,17 @@ function M.get_connection_config(name)
     _config_cache_path = config_path
   end
   local conn = _config_cache[name]
-  if conn and conn.dialect == "mariadb" then
-    conn = vim.deepcopy(conn)
+  if not conn then return nil end
+  conn = apply_env(conn, M.get_env_vars(search_dir))
+  if conn.dialect == "mariadb" then
     conn.dialect = "mysql"
   end
   return conn
 end
 
 --- Resolve a connection name to a URL by reading connections.toml from cwd.
---- Replicates Rust's ConnectionConfig::to_url() logic.
+--- Replicates Rust's ConnectionConfig::to_url() logic, resolving `{{var}}`
+--- references first.
 --- @param name string Connection name
 --- @return string|nil, string|nil url, error_message
 function M.resolve_connection_url(name)
@@ -84,6 +205,7 @@ function M.resolve_connection_url(name)
   if not parsed then return nil, err end
   local conn = parsed[name]
   if not conn then return nil, "Connection '" .. name .. "' not found in " .. config_path end
+  conn = apply_env(conn, M.get_env_vars(search_dir))
 
   -- Use url field directly if present
   if conn.url and conn.url ~= "" then
@@ -106,9 +228,9 @@ function M.resolve_connection_url(name)
   local db = conn.database or ""
   local auth = ""
   if conn.user and conn.password then
-    auth = conn.user .. ":" .. conn.password .. "@"
+    auth = percent_encode_userinfo(conn.user) .. ":" .. percent_encode_userinfo(conn.password) .. "@"
   elseif conn.user then
-    auth = conn.user .. "@"
+    auth = percent_encode_userinfo(conn.user) .. "@"
   end
   return scheme .. "://" .. auth .. host .. ":" .. port .. "/" .. db, nil
 end
@@ -137,7 +259,9 @@ function M.list_connections(callback)
     return
   end
   local list = {}
+  local vars = M.get_env_vars(search_dir)
   for name, conn in pairs(parsed) do
+    conn = apply_env(conn, vars)
     table.insert(list, { name = name, dialect = conn.dialect, host = conn.host, port = conn.port, database = conn.database, path = conn.path })
   end
   vim.schedule(function() callback(list) end)

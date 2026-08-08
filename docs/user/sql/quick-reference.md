@@ -23,31 +23,32 @@ SELECT * FROM other_db.orders;  -- Cross-database query
 
 ## Connection Configuration
 
-`connections.json`:
-```json
-{
-  "dev-pg": {
-    "dialect": "postgres",
-    "host": "localhost",
-    "port": 5432,
-    "database": "myapp",
-    "user": "admin",
-    "password": "{{db_password}}"
-  },
-  "local-sqlite": {
-    "dialect": "sqlite",
-    "path": "./data/app.db"
-  },
-  "staging-mysql": {
-    "dialect": "mysql",
-    "host": "{{mysql_host}}",
-    "port": 3306,
-    "database": "staging_db",
-    "user": "root",
-    "password": "{{mysql_pass}}"
-  }
-}
+`connections.toml` (walked up from the SQL file):
+```toml
+[dev-pg]
+dialect = "postgres"
+host = "localhost"
+port = 5432
+database = "myapp"
+user = "{{PG_DEV_USER}}"
+password = "{{PG_DEV_PASSWORD}}"
+
+[local-sqlite]
+dialect = "sqlite"
+path = "./data/app.db"
+
+[staging-mysql]
+dialect = "mysql"
+host = "{{MYSQL_STAGING_HOST}}"
+port = 3306
+database = "staging_db"
+user = "{{MYSQL_STAGING_USER}}"
+password = "{{MYSQL_STAGING_PASSWORD}}"
 ```
+
+Sensitive fields are resolved from `.env` (gitignored; see `.env.example`) or
+real OS environment variables. Precedence: OS env > `.env` > `env.json`.
+Unknown `{{VAR}}` references stay literal.
 
 ---
 

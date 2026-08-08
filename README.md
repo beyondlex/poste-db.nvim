@@ -46,9 +46,17 @@ dialect = "postgres"
 host = "localhost"
 port = 5432
 database = "myapp"
-user = "app_user"
-password = "local-pass"
+user = "{{PG_DEV_USER}}"
+password = "{{PG_DEV_PASSWORD}}"
 ```
+
+Sensitive fields support `{{VAR}}` references resolved at runtime from a
+`.env` file next to `connections.toml` (same walk-up discovery), with real OS
+environment variables taking precedence. Unknown references stay literal, so
+plaintext configs keep working. Copy `.env.example` to `.env` and keep `.env`
+out of version control — never commit credentials. `user` and `password` are
+percent-encoded automatically when building connection URLs, so values
+containing `@`, `:`, `/`, `%` etc. work as-is.
 
 Reference in `.sql` files:
 

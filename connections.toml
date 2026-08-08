@@ -1,36 +1,39 @@
+# Sensitive fields (host/user/password/database) are resolved from .env at
+# runtime. See .env.example for the variable list. Never commit real values.
+
 [pg-ecommerce]
 dialect = "postgres"
-host = "localhost"
+host = "{{PG_ECOMMERCE_HOST}}"
 port = 15432
-database = "ecommerce"
-user = "poste"
-password = "poste_test"
+database = "{{PG_ECOMMERCE_DB}}"
+user = "{{PG_ECOMMERCE_USER}}"
+password = "{{PG_ECOMMERCE_PASSWORD}}"
 color = "MiniStatuslineModeOther"
 
 [pg-analytics]
 dialect = "postgres"
-host = "localhost"
+host = "{{PG_ANALYTICS_HOST}}"
 port = 15432
-database = "analytics"
-user = "poste"
-password = "poste_test"
+database = "{{PG_ANALYTICS_DB}}"
+user = "{{PG_ANALYTICS_USER}}"
+password = "{{PG_ANALYTICS_PASSWORD}}"
 
 [my-blog]
 dialect = "mysql"
-host = "localhost"
+host = "{{MYSQL_BLOG_HOST}}"
 port = 13306
-database = "blog"
-user = "root"
-password = "poste_test"
+database = "{{MYSQL_BLOG_DB}}"
+user = "{{MYSQL_BLOG_USER}}"
+password = "{{MYSQL_BLOG_PASSWORD}}"
 color = "MiniStatuslineModeReplace"
 
 [my-inventory]
 dialect = "mysql"
-host = "localhost"
+host = "{{MYSQL_INVENTORY_HOST}}"
 port = 13306
-database = "inventory"
-user = "root"
-password = "poste_test"
+database = "{{MYSQL_INVENTORY_DB}}"
+user = "{{MYSQL_INVENTORY_USER}}"
+password = "{{MYSQL_INVENTORY_PASSWORD}}"
 
 [sqlite-dev]
 dialect = "sqlite"
@@ -38,9 +41,8 @@ path = "./playground/sql/init/sqlite/test.db"
 
 [maria-dev]
 dialect = "mariadb"
-host = "localhost"
+host = "{{MARIADB_HOST}}"
 port = 13307
-database = "blog"
-user = "root"
-password = "poste_test"
-
+database = "{{MARIADB_DB}}"
+user = "{{MARIADB_USER}}"
+password = "{{MARIADB_PASSWORD}}"
