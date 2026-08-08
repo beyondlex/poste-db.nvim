@@ -359,21 +359,6 @@ function M.position_cursor(row, col)
   local target_on_screen = target_disp >= math.max(0, saved_leftcol - left_margin)
     and target_disp < saved_leftcol + win_width - right_margin
 
-  local last_col_fits = true
-  if last_col > 0 then
-    if col_starts then
-      local lc = col_starts[last_col + 1]
-      if lc then
-        local last_right_disp = lc.disp_end + 1  -- display pos after trailing │
-        last_col_fits = last_right_disp <= saved_leftcol + win_width
-      end
-    elseif ranges and ranges.last then
-      T_mark("  pos:strdisp_last")
-      local last_right_disp = vim.fn.strdisplaywidth(line:sub(1, ranges.last.ext_end + 3))
-      last_col_fits = last_right_disp <= saved_leftcol + win_width
-    end
-  end
-
   T_mark("  pos:cursor_set")
   if target_on_screen then
     local saved_sso = vim.api.nvim_get_option_value("sidescrolloff", { win = D.dataset_window })
@@ -386,12 +371,6 @@ function M.position_cursor(row, col)
     end
   else
     pcall(vim.api.nvim_win_set_cursor, D.dataset_window, { line_idx, target_col })
-    if not last_col_fits then
-      T_mark("  pos:zs_via_api")
-      local v = vim.fn.winsaveview()
-      v.leftcol = target_disp
-      vim.fn.winrestview(v)
-    end
   end
 
   -- Left-align to the buffer start when at the first data column so the

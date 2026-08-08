@@ -120,4 +120,66 @@ describe("buffer_nav horizontal scroll", function()
 
     vim.o.columns = saved_columns
   end)
+
+  it("keeps the cursor near the right edge while scrolling right", function()
+    local saved_columns = vim.o.columns
+    vim.o.columns = 60
+
+    local format = require("poste-sql.format")
+    local buffer = require("poste-sql.buffer")
+    local cols = {}
+    local row = {}
+    for i = 1, 30 do
+      cols[i] = { name = "c" .. i, type = "TEXT" }
+      row[i] = "val" .. i .. string.rep("x", i)
+    end
+    local body = vim.json.encode({
+      type = "resultset",
+      total_rows = 1,
+      results = {
+        {
+          columns = cols,
+          rows = { row },
+        },
+      },
+      connection = "postgres://localhost:5432/db",
+      database = "db",
+      dialect = "postgres",
+    })
+    local data = vim.json.decode(body)
+    local layout = format.plan_resultset_layout(data)
+    local lines, meta = format.render_page(layout, 1, 1)
+    buffer.render_dataset(lines, meta, { layout = layout, data = data })
+
+    local win = D.dataset_window
+    assert.is_not_nil(win)
+    vim.api.nvim_set_current_win(win)
+
+    local tab = D.T()
+    local col_starts = tab.buffer_col_starts[tab.meta.data_start_line]
+    local function cursor_screen_col()
+      local v = vim.fn.winsaveview()
+      return col_starts[state.sql.cell.col + 1].disp_start - v.leftcol
+    end
+
+    -- Walk right across the middle of the table (remaining columns still do
+    -- not fit in the window), where the cursor used to snap back to the left
+    -- edge on every scroll boundary.
+    local prev_screen = cursor_screen_col()
+    for _ = 1, 23 do
+      nav.move_cell(0, 1)
+      local screen = cursor_screen_col()
+      assert.is_true(
+        screen - prev_screen > -20,
+        string.format("cursor teleported back to the left edge (screen col %d -> %d)", prev_screen, screen)
+      )
+      prev_screen = screen
+    end
+
+    assert.equals(24, state.sql.cell.col)
+    local scrolled = vim.api.nvim_win_call(win, vim.fn.winsaveview).leftcol
+    assert.is_true(scrolled > 0, "expected the window to have scrolled horizontally")
+
+    vim.o.columns = saved_columns
+  end)
 end)
