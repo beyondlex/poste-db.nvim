@@ -221,12 +221,6 @@ local function setup_browser_buffer()
       actions.generate_select_query(vim.fn.line("."), make_context())
     end, opts)
   end
-  k = state.get_keymap("sql_db_browser", "describe_query", "d")
-  if k then
-    vim.keymap.set("n", k, function()
-      actions.generate_describe_query(vim.fn.line("."), make_context())
-    end, opts)
-  end
   k = state.get_keymap("sql_db_browser", "close", "q")
   if k then
     vim.keymap.set("n", k, function() M.close() end, opts)

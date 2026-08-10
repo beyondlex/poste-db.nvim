@@ -866,7 +866,7 @@ local function show_drop_confirm(table_node, qualified, conn, schema_prefix, con
 
   local line_n = 0
   lines[#lines + 1] = "  DANGER: This will permanently drop the table:"
-  highlights[#highlights + 1] = { line = line_n, col_start = 2, col_end = 50, hl_group = "DiagnosticError" }
+  highlights[#highlights + 1] = { line = line_n, col_start = 2, col_end = #lines[line_n + 1], hl_group = "DiagnosticError" }
   line_n = line_n + 1
 
   lines[#lines + 1] = "    " .. qualified
@@ -899,16 +899,14 @@ local function show_drop_confirm(table_node, qualified, conn, schema_prefix, con
     border = "rounded",
     backdrop = true,
     close_on_leave = false,
-    keymaps = {
-      y = function()
-        dlg:close()
-        vim.schedule(function()
-          execute_drop(table_node, qualified, conn, schema_prefix, context)
-        end)
-      end,
-      n = function() dlg:close() end,
-    },
   })
+  vim.keymap.set("n", "y", function()
+    dlg:close()
+    vim.schedule(function()
+      execute_drop(table_node, qualified, conn, schema_prefix, context)
+    end)
+  end, { buffer = dlg.buf, noremap = true, silent = true, nowait = true })
+  vim.keymap.set("n", "n", function() dlg:close() end, { buffer = dlg.buf, noremap = true, silent = true, nowait = true })
   dlg:update(lines, highlights)
 end
 

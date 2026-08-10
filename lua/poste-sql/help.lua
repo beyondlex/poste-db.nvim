@@ -68,7 +68,6 @@ local DESCRIPTIONS = {
     refresh_node = "Refresh node children",
     search_filter = "Fuzzy search tree",
     select_query = "Generate SELECT query",
-    describe_query = "Generate DESCRIBE query",
     close = "Close DB Browser",
     search_next = "Next search match",
     search_prev = "Previous search match",
