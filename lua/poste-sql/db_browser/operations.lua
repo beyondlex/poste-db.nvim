@@ -851,74 +851,65 @@ end
 --- Drop Table: show confirmation dialog, then execute DROP TABLE.
 -----------------------------------------------------------------------------
 
-local ns_drop = vim.api.nvim_create_namespace("poste_db_drop_confirm")
-
 local execute_drop  -- forward declaration
 
 --- Show a confirmation dialog for dropping a table (red warning text).
 local function show_drop_confirm(table_node, qualified, conn, schema_prefix, context)
-  local width = 52
-  local lines = {
-    "┌ Drop Table " .. string.rep("─", math.max(0, width - 14)) .. "┐",
-    "",
-    "  DANGER: This will permanently drop the table:",
-    "    " .. qualified,
-    "",
-    "  DROP TABLE " .. qualified .. ";",
-    "",
-    "  [y] Confirm  [n] Cancel",
-    "",
-    "└" .. string.rep("─", width - 2) .. "┘",
-  }
-  local height = #lines
+  local dialog = require("poste.dialog")
+  local layout = require("poste.layout")
 
-  local row = math.floor((vim.o.lines - height) / 2)
-  local col = math.floor((vim.o.columns - width) / 2)
+  local width = 56
+  local sql = "DROP TABLE " .. qualified .. ";"
 
-  local buf = vim.api.nvim_create_buf(false, true)
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-  vim.bo[buf].modifiable = false
+  local lines = {}
+  local highlights = {}
 
-  local win_opts = {
-    relative = "editor",
-    row = row,
-    col = col,
-    width = width,
-    height = height,
-    style = "minimal",
-    border = "none",
-  }
-  local ok, win = pcall(vim.api.nvim_open_win, buf, true, win_opts)
-  if not ok then return end
+  local line_n = 0
+  lines[#lines + 1] = "  DANGER: This will permanently drop the table:"
+  highlights[#highlights + 1] = { line = line_n, col_start = 2, col_end = 50, hl_group = "DiagnosticError" }
+  line_n = line_n + 1
 
-  vim.wo[win].cursorline = false
-  vim.wo[win].winhl = "Normal:NormalFloat"
+  lines[#lines + 1] = "    " .. qualified
+  highlights[#highlights + 1] = { line = line_n, col_start = 4, col_end = 4 + #qualified, hl_group = "DiagnosticError" }
+  line_n = line_n + 1
 
-  -- Highlight danger text in red
-  vim.api.nvim_buf_add_highlight(buf, ns_drop, "DiagnosticError", 2, 0, -1)
-  vim.api.nvim_buf_add_highlight(buf, ns_drop, "DiagnosticError", 3, 0, -1)
-  vim.api.nvim_buf_add_highlight(buf, ns_drop, "DiagnosticError", 5, 0, -1)
+  lines[#lines + 1] = ""
+  line_n = line_n + 1
 
-  local closed = false
-  local function close()
-    if closed then return end
-    closed = true
-    if win and vim.api.nvim_win_is_valid(win) then
-      vim.api.nvim_win_close(win, true)
-    end
+  lines[#lines + 1] = "  " .. sql
+  line_n = line_n + 1
+
+  lines[#lines + 1] = ""
+  line_n = line_n + 1
+
+  local km = layout.keymaps({
+    mapping = { { key = "y", label = "Confirm" }, { key = "n", label = "Cancel" } },
+    indent = 4,
+  })
+  lines[#lines + 1] = km.lines[1]
+  for _, h in ipairs(km.highlights) do
+    highlights[#highlights + 1] = { line = line_n, col_start = h.col_start, col_end = h.col_end, hl_group = h.hl_group }
   end
 
-  local km_opts = { buffer = buf, noremap = true, silent = true, nowait = true }
-
-  vim.keymap.set("n", "y", function()
-    close()
-    vim.schedule(function()
-      execute_drop(table_node, qualified, conn, schema_prefix, context)
-    end)
-  end, km_opts)
-
-  vim.keymap.set("n", "n", close, km_opts)
-  vim.keymap.set("n", "<Esc>", close, km_opts)
+  local height = #lines + 2
+  local dlg = dialog.open({
+    title = " Drop Table ",
+    width = width,
+    height = height,
+    border = "rounded",
+    backdrop = true,
+    close_on_leave = false,
+    keymaps = {
+      y = function()
+        dlg:close()
+        vim.schedule(function()
+          execute_drop(table_node, qualified, conn, schema_prefix, context)
+        end)
+      end,
+      n = function() dlg:close() end,
+    },
+  })
+  dlg:update(lines, highlights)
 end
 
 --- Execute DROP TABLE and refresh the browser tree.
