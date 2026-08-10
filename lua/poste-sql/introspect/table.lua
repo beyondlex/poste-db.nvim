@@ -34,6 +34,30 @@ function M.show_database_tables(conn, db_name, show_float)
   })
 end
 
+function M.show_database_info(conn, db_name, show_float)
+  local url, url_err = resolve_url(conn)
+  if not url then
+    vim.notify("Database info: " .. url_err, vim.log.levels.ERROR, { title = const.PLUGIN_TITLE })
+    return
+  end
+
+  local args = { "introspect", "--connection-url", url, "--type", "database_info" }
+  if db_name and db_name ~= "" then
+    table.insert(args, "--database")
+    table.insert(args, db_name)
+  end
+  exec.run_json_items_job(args, {
+    title = const.PLUGIN_TITLE,
+    failure_message = "Failed to get database info",
+    empty_message = "No database info returned",
+    stderr_prefix = "introspect stderr: ",
+    exit_kind = "Database info",
+    on_items = function(items)
+      ui.show_database_info(items, db_name or "", show_float)
+    end,
+  })
+end
+
 function M.show_table_ddl(conn, db, cword, show_float)
   local url, url_err = resolve_url(conn)
   if not url then

@@ -18,6 +18,7 @@ describe("introspect ui helpers", function()
       host = "localhost",
     }, "primary", show_float)
     ui.show_table_list({ { name = "authors", type = "table" } }, "blog", show_float)
+    ui.show_database_info({ { name = "blog", table_count = 2, total_size = "1 MB" } }, "blog", show_float)
 
     assert.same({
       { lines = {
@@ -25,6 +26,11 @@ describe("introspect ui helpers", function()
           "        Host  localhost",
         }, title = "Connection: primary", ft = nil },
       { lines = { "  authors  (table)" }, title = "Tables: blog", ft = nil },
+      { lines = {
+          "  Name          blog  ",
+          "  Table Count   2  ",
+          "  Total Size    1 MB  ",
+        }, title = "Database: blog", ft = nil },
     }, seen)
   end)
 
@@ -45,6 +51,12 @@ describe("introspect ui helpers", function()
     assert.is_false(ui.show_column_info({}, "authors", "missing", show_float))
     assert.is_true(ui.show_ddl({ { ddl = "CREATE TABLE authors (\n  id int\n);" } }, "authors", show_float))
 
+    local notified2 = nil
+    vim.notify = function(msg, level, opts)
+      notified2 = { msg = msg, level = level, opts = opts }
+    end
+    ui.show_database_info(nil, "blog", show_float)
+
     assert.same({
       { lines = {
           "  Table:    authors",
@@ -63,5 +75,10 @@ describe("introspect ui helpers", function()
       level = vim.log.levels.WARN,
       opts = { title = "Poste SQL" },
     }, notified)
+    assert.same({
+      msg = "No database info found",
+      level = vim.log.levels.WARN,
+      opts = { title = "Poste SQL" },
+    }, notified2)
   end)
 end)

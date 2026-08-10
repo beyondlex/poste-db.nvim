@@ -22,10 +22,35 @@ function M.build_connection_lines(config)
   return lines
 end
 
+function M.build_database_info_lines(item)
+  local lines = {}
+  local function v(val)
+    if val == vim.NIL then return nil end
+    return val
+  end
+  local fields = {
+    { "Name", v(item.name) },
+    { "Table Count", v(item.table_count) },
+    { "Total Size", v(item.total_size) or (v(item.size_mb) and string.format("%.2f MB", v(item.size_mb)) or nil) },
+    { "Encoding", v(item.encoding) },
+    { "Charset", v(item.charset) },
+    { "Collation", v(item.collation) },
+    { "File", v(item.file) },
+  }
+  for _, field in ipairs(fields) do
+    local label, value = field[1], field[2]
+    if value ~= nil and value ~= "" and value ~= vim.NIL then
+      lines[#lines + 1] = string.format("  %-12s  %s  ", label, value)
+    end
+  end
+  return lines
+end
+
 function M.build_table_lines(items)
   local lines = {}
   for _, item in ipairs(items or {}) do
-    lines[#lines + 1] = "  " .. item.name .. "  (" .. item.type .. ")"
+    local suffix = item.type ~= "BASE TABLE" and "  (" .. item.type .. ")" or ""
+    lines[#lines + 1] = "  " .. item.name .. suffix
   end
   return lines
 end

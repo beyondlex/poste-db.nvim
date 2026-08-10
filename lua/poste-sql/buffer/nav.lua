@@ -203,8 +203,7 @@ end
 
 function M.preview_cell()
   if preview_win and vim.api.nvim_win_is_valid(preview_win) then
-    vim.api.nvim_win_close(preview_win, true)
-    preview_win = nil
+    vim.api.nvim_set_current_win(preview_win)
     return
   end
 

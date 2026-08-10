@@ -1,15 +1,6 @@
 local ui = require("poste-sql.buffer.nav_ui")
 
 describe("buffer_nav_ui", function()
-  it("builds preview float opts from shared defaults", function()
-    local opts = ui.build_preview_float_opts("title")
-    assert.equals("text", opts.filetype)
-    assert.equals("title", opts.title)
-    assert.equals(0.7, opts.width_ratio)
-    assert.equals(120, opts.max_width)
-    assert.equals(0.6, opts.height_ratio)
-  end)
-
   it("formats connection urls for the winbar", function()
     assert.equals("localhost:5432/blog", ui.format_conn_short("postgres://user:pass@localhost:5432/blog?sslmode=require"))
     assert.equals("blog.sqlite", ui.format_conn_short("/tmp/blog.sqlite"))

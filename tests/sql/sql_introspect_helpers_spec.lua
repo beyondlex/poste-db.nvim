@@ -23,13 +23,50 @@ describe("introspect helpers", function()
 
   it("build_table_lines formats table name and type", function()
     local lines = helpers.build_table_lines({
-      { name = "authors", type = "table" },
+      { name = "authors", type = "BASE TABLE" },
       { name = "posts", type = "view" },
     })
 
     assert.same({
-      "  authors  (table)",
+      "  authors",
       "  posts  (view)",
+    }, lines)
+  end)
+
+  it("build_database_info_lines formats database metadata", function()
+    local lines = helpers.build_database_info_lines({
+      name = "blog",
+      table_count = 12,
+      total_size = "48 MB",
+      encoding = "UTF8",
+      charset = "utf8mb4",
+      collation = "utf8mb4_general_ci",
+      size_mb = 48.5,
+      file = "/tmp/blog.sqlite",
+    })
+
+    assert.same({
+      "  Name          blog  ",
+      "  Table Count   12  ",
+      "  Total Size    48 MB  ",
+      "  Encoding      UTF8  ",
+      "  Charset       utf8mb4  ",
+      "  Collation     utf8mb4_general_ci  ",
+      "  File          /tmp/blog.sqlite  ",
+    }, lines)
+  end)
+
+  it("build_database_info_lines omits nil and empty fields", function()
+    local lines = helpers.build_database_info_lines({
+      name = "blog",
+      table_count = 3,
+      encoding = nil,
+      file = "",
+    })
+
+    assert.same({
+      "  Name          blog  ",
+      "  Table Count   3  ",
     }, lines)
   end)
 

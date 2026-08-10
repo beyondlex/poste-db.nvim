@@ -6,7 +6,6 @@
 
 local state = require("poste.state")
 local util = require("poste.util")
-local float_window = require("poste-sql.float_window")
 local helpers = require("poste-sql.introspect.helpers")
 local route = require("poste-sql.introspect.route")
 local detect = require("poste-sql.introspect.detect")
@@ -18,6 +17,7 @@ local table_helper = require("poste-sql.introspect.table")
 local const = require("poste-sql.constants")
 
 local M = {}
+local show_float_win = nil
 
 ---------------------------------------------------------------------------
 -- Float window
@@ -32,19 +32,17 @@ function M.show_float(lines, title, ft)
     vim.notify("No content to display", vim.log.levels.WARN, { title = const.PLUGIN_TITLE })
     return
   end
-  local float_buf, win = float_window.open_centered(lines, {
-    filetype = ft or "sql",
+  local ok, float_buf, win = pcall(vim.lsp.util.open_floating_preview, lines, ft or "sql", {
+    border = "rounded",
     title = title,
     title_pos = "left",
-    width_ratio = const.INTROSPECT_FLOAT_WIDTH_RATIO,
-    max_width = const.INTROSPECT_FLOAT_MAX_WIDTH,
-    width_padding = const.INTROSPECT_FLOAT_WIDTH_PADDING,
-    height_ratio = const.INTROSPECT_FLOAT_HEIGHT_RATIO,
-    min_height = const.INTROSPECT_FLOAT_MIN_HEIGHT,
-    extra_height = const.INTROSPECT_FLOAT_EXTRA_HEIGHT,
   })
+  if not ok or not float_buf then
+    return
+  end
 
-  vim.wo[win].wrap = true
+  show_float_win = win
+
   vim.wo[win].linebreak = true
   vim.wo[win].scrolloff = 1
   vim.wo[win].cursorline = true
@@ -58,6 +56,7 @@ function M.show_float(lines, title, ft)
   vim.keymap.set("n", "G", "G", sopts)
   local close_fn = function()
     if vim.api.nvim_win_is_valid(win) then vim.api.nvim_win_close(win, true) end
+    show_float_win = nil
   end
   local ck = state.get_keymap("sql_introspect", "close", "q")
   if ck then vim.keymap.set("n", ck, close_fn, sopts) end
@@ -70,6 +69,11 @@ end
 
 --- Show DDL for the table under the cursor in a floating window.
 function M.show_table_ddl()
+  if show_float_win and vim.api.nvim_win_is_valid(show_float_win) then
+    vim.api.nvim_set_current_win(show_float_win)
+    return
+  end
+
   local binary = state.find_poste_binary()
   if not binary then
     vim.notify("Poste binary not found.", vim.log.levels.ERROR, { title = const.PLUGIN_TITLE })
@@ -91,7 +95,7 @@ function M.show_table_ddl()
       vim.notify("No connection context for database '" .. db_name .. "'", vim.log.levels.WARN, { title = const.PLUGIN_TITLE })
       return
     end
-    table_helper.show_database_tables(conn, db_name, M.show_float)
+    table_helper.show_database_info(conn, db_name, M.show_float)
     return
   end
 

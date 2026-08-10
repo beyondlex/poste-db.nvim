@@ -1,6 +1,5 @@
 --- Dataset winbar UI --- status line fragments for the dataset window.
 local D = require("poste-sql.dataset")
-local C = require("poste-sql.constants")
 local state = require("poste.state")
 
 local M = {}
@@ -48,19 +47,6 @@ function M.update_dataset_statusline(meta)
   local ctx = M.build_statusline_context(meta)
   vim.b[buf].poste_sql_context = ctx or ""
   vim.cmd("redrawstatus")
-end
-
-function M.build_preview_float_opts(title)
-  return {
-    filetype = "text",
-    title = title,
-    title_pos = "left",
-    width_ratio = C.FLOAT_WIDTH_RATIO,
-    max_width = C.FLOAT_MAX_WIDTH,
-    width_padding = 2,
-    height_ratio = C.FLOAT_HEIGHT_RATIO,
-    extra_height = 1,
-  }
 end
 
 function M.build_status_left(meta, tab)

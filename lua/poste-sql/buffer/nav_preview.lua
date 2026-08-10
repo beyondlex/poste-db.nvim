@@ -1,7 +1,4 @@
 --- Dataset cell preview --- floating window for cell value inspection.
-local ui = require("poste-sql.buffer.nav_ui")
-local float_window = require("poste-sql.float_window")
-
 local M = {}
 
 function M.build_preview_lines(text)
@@ -14,11 +11,15 @@ end
 
 function M.open_preview_float(title, text, ft)
   local lines = M.build_preview_lines(text)
-  local opts = ui.build_preview_float_opts(title)
-  opts.filetype = ft
-  local float_buf, win = float_window.open_centered(lines, opts)
+  local ok, float_buf, win = pcall(vim.lsp.util.open_floating_preview, lines, ft, {
+    border = "rounded",
+    title = title,
+    title_pos = "left",
+  })
+  if not ok or not float_buf then
+    return nil, nil
+  end
 
-  vim.wo[win].wrap = true
   vim.wo[win].linebreak = true
   vim.wo[win].scrolloff = 1
   vim.wo[win].cursorline = true

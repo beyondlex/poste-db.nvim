@@ -16,6 +16,15 @@ function M.show_table_list(items, db_name, show_float)
   show_float(helpers.build_table_lines(items), "Tables: " .. db_name)
 end
 
+function M.show_database_info(items, db_name, show_float)
+  local item = items and items[1]
+  if not item then
+    notify("No database info found", vim.log.levels.WARN)
+    return
+  end
+  show_float(helpers.build_database_info_lines(item), "Database: " .. db_name)
+end
+
 function M.show_column_info(items, table_name, col_name, show_float)
   local col = nil
   for _, item in ipairs(items or {}) do
