@@ -604,6 +604,44 @@ function M.is_open()
   return browser_win and vim.api.nvim_win_is_valid(browser_win)
 end
 
+local function find_refresh_node(root_nodes, conn_name, db_name)
+  for _, conn_node in ipairs(root_nodes) do
+    if conn_node.name == conn_name then
+      if db_name then
+        if not conn_node.children then return nil end
+        for _, db_node in ipairs(conn_node.children) do
+          if db_node.name == db_name then
+            return db_node
+          end
+        end
+      end
+      return conn_node
+    end
+  end
+  return nil
+end
+
+function M.refresh_by_conn(conn_name, db_name)
+  if not M.is_open() then return end
+  local node = find_refresh_node(root_nodes, conn_name, db_name)
+  if not node then return end
+
+  node.children = nil
+  node.expanded = false
+  node.loading = true
+  local new_map = tree.render_tree(browser_buf, line_to_node, root_nodes, state.sql.db_browser.connection or "No connection", multi_select)
+  line_to_node = new_map
+
+  local search_dir = M.get_search_dir()
+  async.fetch_children(node, function()
+    node.expanded = true
+    vim.schedule(function()
+      local nm = tree.render_tree(browser_buf, line_to_node, root_nodes, state.sql.db_browser.connection or "No connection", multi_select)
+      line_to_node = nm
+    end)
+  end, search_dir)
+end
+
 function M.toggle()
   if M.is_open() then
     M.close()

@@ -446,6 +446,12 @@ function M.run_sql_request()
         })
       end
     end
+
+      -- Refresh DB browser tree for the connection/database used
+      local db_browser = require("poste-sql.db_browser.init")
+      if db_browser.is_open() and parsed.connection then
+        db_browser.refresh_by_conn(parsed.connection, parsed.database)
+      end
   end)
   if not ok_cb then
     state.log("ERROR", "SQL on_response error: " .. tostring(err_cb))
