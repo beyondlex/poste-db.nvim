@@ -213,7 +213,7 @@ local function extract_references_from_node(stmt_node, buf)
         add_column(col_name, actual_table, parts[3].node)
       elseif #parts == 1 and parts[1].type == "identifier" then
         local col_name = parts[1].text
-        if col_name ~= "*" then
+        if col_name ~= "*" and not col_name:match("^@") then
           add_column(col_name, nil, parts[1].node)
         end
       end
@@ -224,7 +224,9 @@ local function extract_references_from_node(stmt_node, buf)
       for c in node:iter_children() do
         if c:type() == "identifier" then
           local col_name = vim.treesitter.get_node_text(c, buf)
-          add_column(col_name, nil, c)
+          if not col_name:match("^@") then
+            add_column(col_name, nil, c)
+          end
         end
       end
       return

@@ -272,22 +272,19 @@ function M.find_column()
 
   local picker = require("poste.select")
   local items = {}
-  local lookup = {}
   for i, col in ipairs(tab.meta.columns) do
-    local label = string.format("%s  (%s)", col.name or "", col.type or "?")
-    items[i] = label
-    lookup[label] = { idx = i, name = col.name }
+    items[i] = { key = tostring(i), name = col.name or "", description = col.type or "?" }
   end
 
   picker.select(items, "Find column", function(choice)
     if not choice then return end
-    local info = lookup[choice]
-    if not info then return end
-    state.sql.cell.col = info.idx
+    local idx = tonumber(choice)
+    if not idx then return end
+    state.sql.cell.col = idx
     local row = state.sql.cell.row
-    local line = require("poste-sql.buffer.nav").position_cursor(row, info.idx)
+    local line = require("poste-sql.buffer.nav").position_cursor(row, idx)
     local cs = tab.buffer_col_starts and tab.buffer_col_starts[(tab.meta.data_start_line or 1) + row - 1]
-    sql_highlights.highlight_cell(D.dataset_buffer, row, info.idx, tab.meta, line, cs)
+    sql_highlights.highlight_cell(D.dataset_buffer, row, idx, tab.meta, line, cs)
     require("poste-sql.buffer.header").update()
   end)
 end
