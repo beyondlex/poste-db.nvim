@@ -79,8 +79,11 @@ function M.execute_import(table_info, valid_rows, col_map, table_cols, callback)
   local src_file = table_info.search_dir .. "/.__poste_import_temp.sql"
 
   local conn_prefix = ""
+  local conn_url = nil
   if table_info.connection and table_info.connection ~= "" then
     conn_prefix = "-- @connection " .. table_info.connection .. "\n"
+    local connections = require("poste-sql.connections")
+    conn_url, _ = connections.resolve_connection_url(table_info.connection)
   end
   local db_prefix = ""
   if table_info.database and table_info.database ~= "" then
@@ -123,6 +126,8 @@ function M.execute_import(table_info, valid_rows, col_map, table_cols, callback)
     local exec_run = require("poste-sql.exec_run")
     exec_run.run_async(sql_content, {
       src_file = src_file,
+      conn_url = conn_url,
+      database = table_info.database,
       mode = "greedy",
     }, {
       on_response = function(resp)

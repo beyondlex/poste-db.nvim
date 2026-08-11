@@ -12,7 +12,7 @@ local function quote_schema(schema, dialect)
   return quote_ident(schema, dialect) .. "."
 end
 
-local function quote_val(val)
+local function quote_val(val, dialect)
   if val == nil or val == vim.NIL then
     return "NULL"
   end
@@ -32,8 +32,6 @@ local function quote_val(val)
   if type(val) == "string" then
     local num = tonumber(val)
     if num and val:match("^%-?%d+%.?%d*$") then
-      -- Emit exact digits when the string can't round-trip through a double
-      -- (bigints/decimal > 2^53 arrive as strings; tonumber() would corrupt them).
       local round_trip = num == math.floor(num) and string.format("%.0f", num) or tostring(num)
       if round_trip ~= val then
         return val
@@ -42,6 +40,12 @@ local function quote_val(val)
         return string.format("%d", num)
       end
       return tostring(num)
+    end
+    if dialect == "mysql" then
+      val = val:gsub("^(%d%d%d%d%-%d%d%-%d%d)T(%d%d:%d%d:%d%d%.%d+)[%+%-]%d%d:%d%d$", "%1 %2")
+      val = val:gsub("^(%d%d%d%d%-%d%d%-%d%d)T(%d%d:%d%d:%d%d)[%+%-]%d%d:%d%d$", "%1 %2")
+      val = val:gsub("^(%d%d%d%d%-%d%d%-%d%d)T(%d%d:%d%d:%d%d%.%d+)Z$", "%1 %2")
+      val = val:gsub("^(%d%d%d%d%-%d%d%-%d%d)T(%d%d:%d%d:%d%d)Z$", "%1 %2")
     end
     return "'" .. val:gsub("'", "''") .. "'"
   end
@@ -71,7 +75,7 @@ local function build_where(columns, pk_cols, row_values, dialect)
     for _, ci in ipairs(pk_cols) do
       local col = columns[ci]
       local val = row_values[ci]
-      parts[#parts + 1] = quote_ident(col.name, dialect) .. " = " .. quote_val(val)
+      parts[#parts + 1] = quote_ident(col.name, dialect) .. " = " .. quote_val(val, dialect)
     end
     return table.concat(parts, " AND ")
   end
@@ -79,7 +83,7 @@ local function build_where(columns, pk_cols, row_values, dialect)
   for i, col in ipairs(columns or {}) do
     local val = row_values[i]
     if val ~= nil and val ~= vim.NIL then
-      parts[#parts + 1] = quote_ident(col.name, dialect) .. " = " .. quote_val(val)
+      parts[#parts + 1] = quote_ident(col.name, dialect) .. " = " .. quote_val(val, dialect)
     end
   end
   return table.concat(parts, " AND ")
@@ -90,7 +94,7 @@ function M.generate_update(schema, table_name, columns, modifications, row_value
   for _, mod in ipairs(modifications or {}) do
     local col = columns and columns[mod.col]
     if col then
-      set_parts[#set_parts + 1] = quote_ident(col.name, dialect) .. " = " .. quote_val(mod.new_val)
+      set_parts[#set_parts + 1] = quote_ident(col.name, dialect) .. " = " .. quote_val(mod.new_val, dialect)
     end
   end
 
@@ -116,7 +120,7 @@ function M.generate_insert(schema, table_name, columns, row_values, dialect)
     local val = row_values and row_values[i]
     if val ~= "[Auto]" and val ~= nil then
       col_parts[#col_parts + 1] = quote_ident(col.name, dialect)
-      val_parts[#val_parts + 1] = quote_val(val)
+      val_parts[#val_parts + 1] = quote_val(val, dialect)
     end
   end
 

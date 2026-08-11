@@ -163,6 +163,12 @@ function M.commit_edits()
   end
 
   local dialect = tab.layout and tab.layout.dialect or "postgres"
+
+  -- Ensure primary key info is available so generated WHERE uses PK columns
+  -- (introspection may have been skipped or the cache cleared after refresh).
+  local column = require("poste-sql.editor.column")
+  column.ensure_primary_key(tab)
+
   local sql, summary = M.generate_combined_dml(es, tab, dialect)
   if not sql then
     vim.notify("No changes to commit", vim.log.levels.INFO)

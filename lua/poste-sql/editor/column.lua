@@ -141,12 +141,21 @@ end
 
 local function run_introspection_query(query, connection, database, src_file)
   local exec_run = require("poste-sql.exec_run")
-  local sql_content = "-- @connection " .. connection .. "\n" .. query
-  local parsed = exec_run.run_sql(sql_content, {
+  local opts = {
     src_file = src_file,
     database = database,
     mode = "greedy",
-  })
+  }
+  if connection:match("^%w+://") then
+    opts.conn_url = connection
+  else
+    local connections = require("poste-sql.connections")
+    local resolved, _ = connections.resolve_connection_url(connection)
+    if resolved and resolved ~= "" then
+      opts.conn_url = resolved
+    end
+  end
+  local parsed = exec_run.run_sql(query, opts)
   if not parsed then return nil end
   local body_ok, body = pcall(vim.json.decode, parsed.body or "{}")
   if not body_ok or not body then return nil end
@@ -279,6 +288,8 @@ function M.ensure_primary_key(tab)
     return
   end
 
+  local state = require("poste.state")
+  state.log("DEBUG", string.format("PK introspection: table=%s query=%s conn=%s db=%s", table_name, pk_query, connection, database))
   local body = run_introspection_query(pk_query, connection, database, src_file)
   if body and body.results then
     parse_pk_results(body, layout, dialect)
@@ -292,7 +303,11 @@ function M.ensure_primary_key(tab)
     end
   end
 
-  pk_cache[cache_key] = true
+  -- Cache only on success so a transient introspection failure is retried
+  -- on the next edit/commit instead of being permanently skipped.
+  if body and body.results then
+    pk_cache[cache_key] = true
+  end
 end
 
 return M
