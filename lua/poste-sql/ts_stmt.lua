@@ -133,8 +133,10 @@ end
 --- Filters out known false positives (USE, SET statements that
 --- tree-sitter-sql doesn't recognize).
 --- @param buf number
+--- @param dialect string|nil  Connection dialect (lowercase); enables
+---   dialect-specific filters. nil keeps all errors.
 --- @return {lnum: number, col: number, end_lnum: number, end_col: number, text: string}[]
-function M.find_error_nodes(buf)
+function M.find_error_nodes(buf, dialect)
   local parser = get_parser(buf)
   if not parser then return {} end
 
@@ -147,6 +149,7 @@ function M.find_error_nodes(buf)
   local query = vim.treesitter.query.parse("sql", "(ERROR) @err")
   for id, node, metadata in query:iter_captures(root, buf, 0, -1) do
     local text = vim.treesitter.get_node_text(node, buf) or ""
+    local start_row, start_col, end_row, end_col = node:range()
 
     -- Filter out false positives: statements that tree-sitter-sql
     -- doesn't recognize (MySQL-specific and other non-standard SQL),
@@ -156,6 +159,21 @@ function M.find_error_nodes(buf)
     -- Filter cascading parser errors: single char, punctuation-only, or short parenthesized identifiers
     if #text <= 2 or upper:match("^%(%w+%)$") then
       goto continue
+    end
+
+    -- Filter digit-leading identifiers that the parser splits in half:
+    -- `select * from 23_tablename` parses as ERROR[23] + relation[_tablename].
+    -- MySQL/MariaDB legally allow unquoted identifiers beginning with a digit
+    -- (as long as they aren't solely digits), so the digit fragment is not
+    -- an error for them. PostgreSQL/SQLite require quoting — keep the error.
+    if (dialect == "mysql" or dialect == "mariadb") and text:match("^%d+$") then
+      -- The fragment is only part of an identifier when it runs directly
+      -- into more identifier characters (`234_tablename`); whitespace means
+      -- a standalone all-digit table name, which MySQL also rejects.
+      local line = vim.api.nvim_buf_get_lines(buf, end_row, end_row + 1, false)[1] or ""
+      if line:sub(end_col + 1, end_col + 1):match("[%w_]") then
+        goto continue
+      end
     end
 
     -- Filter table option continuations (e.g. `= InnoDB` after `ENGINE`)
@@ -196,7 +214,6 @@ function M.find_error_nodes(buf)
       goto continue
     end
 
-    local start_row, start_col, end_row, end_col = node:range()
     errors[#errors + 1] = {
       lnum = start_row + 1,
       col = start_col + 1,

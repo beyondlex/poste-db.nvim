@@ -4,6 +4,9 @@
 --- Also runs semantic diagnostics (table/column existence checks).
 
 local ts_stmt = require("poste-sql.ts_stmt")
+local context = require("poste-sql.context")
+local connections = require("poste-sql.connections")
+local state = require("poste.state")
 
 local M = {}
 
@@ -12,6 +15,24 @@ local DEBOUNCE_MS = 300
 local ns = vim.api.nvim_create_namespace("poste_sql_diagnostics")
 local ns_hl = vim.api.nvim_create_namespace("poste_sql_diagnostics_highlight")
 
+--- Resolve the connection dialect for a buffer (lowercase), or nil.
+--- Mirrors completion's dialect flag: buffer context → runtime connection.
+--- @param buf number  buffer handle
+--- @return string|nil
+local function get_dialect(buf)
+  local ctx = context.resolve_context(buf)
+  local conn = ctx.connection
+  if not conn then
+    conn = state.sql and state.sql.context and state.sql.context.connection
+  end
+  if not conn then return nil end
+  local cfg = connections.get_connection_config(conn)
+  if cfg and cfg.dialect and cfg.dialect ~= "" then
+    return cfg.dialect:lower()
+  end
+  return nil
+end
+
 --- Update diagnostics for a buffer using Tree-sitter ERROR nodes.
 --- @param buf number  buffer handle
 function M.update_diagnostics(buf)
@@ -19,7 +40,7 @@ function M.update_diagnostics(buf)
   local ft = vim.bo[buf].filetype
   if ft ~= "poste_sql" and ft ~= "poste_sqlite" and ft ~= "sql" then return end
 
-  local errors = ts_stmt.find_error_nodes(buf)
+  local errors = ts_stmt.find_error_nodes(buf, get_dialect(buf))
   local diags = {}
   for _, err in ipairs(errors) do
     diags[#diags + 1] = {

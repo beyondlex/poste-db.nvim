@@ -163,6 +163,53 @@ describe("find_error_nodes", function()
       vim.api.nvim_buf_delete(buf, { force = true })
     end
   end)
+
+  it("suppresses digit-leading identifier fragment for mysql dialect", function()
+    local buf = make_buf({ "SELECT * FROM 23_tablename WHERE id = 1;" })
+    local errors = ts_stmt.find_error_nodes(buf, "mysql")
+    assert.same({}, errors, "23_tablename is one legal unquoted identifier in MySQL")
+  end)
+
+  it("suppresses digit-leading identifier fragment for mariadb dialect", function()
+    local buf = make_buf({ "SELECT * FROM 2024_log WHERE id = 1;" })
+    local errors = ts_stmt.find_error_nodes(buf, "mariadb")
+    assert.same({}, errors, "2024_log is one legal unquoted identifier in MariaDB")
+  end)
+
+  it("suppresses longer digit prefixes (no length cutoff)", function()
+    -- Regression: the old `#text <= 2` cascading filter only hid 1-2 digit
+    -- names; 3+ digit prefixes (234, 2024…) surfaced as errors.
+    local buf = make_buf({ "SELECT * FROM 2024_log WHERE id = 1;" })
+    local errors = ts_stmt.find_error_nodes(buf, "mysql")
+    assert.same({}, errors, "2024_log must not be flagged")
+  end)
+
+  it("keeps digit-leading diagnostics for postgres dialect", function()
+    local buf = make_buf({ "SELECT * FROM 2024_log;" })
+    local errors = ts_stmt.find_error_nodes(buf, "postgres")
+    assert.is_true(#errors > 0, "unquoted digit-leading identifier must stay an error for PG")
+  end)
+
+  it("keeps digit-leading diagnostics when dialect is unknown", function()
+    local buf = make_buf({ "SELECT * FROM 2024_log;" })
+    local errors = ts_stmt.find_error_nodes(buf)
+    assert.is_true(#errors > 0, "digit-leading unquoted identifier must remain an error when dialect is unknown")
+  end)
+
+  it("keeps all-digit table name flagged for mysql", function()
+    -- `from 234` is an ERROR whose text is "from 234" (not pure digits):
+    -- a table cannot consist solely of digits in MySQL either.
+    local buf = make_buf({ "SELECT * FROM 234;" })
+    local errors = ts_stmt.find_error_nodes(buf, "mysql")
+    assert.is_true(#errors > 0, "all-digit table name is invalid in MySQL")
+  end)
+
+  it("keeps digit fragment followed by whitespace for mysql", function()
+    -- `234 _tablename` = bare all-digit table + alias → still invalid.
+    local buf = make_buf({ "SELECT * FROM 234 _tablename;" })
+    local errors = ts_stmt.find_error_nodes(buf, "mysql")
+    assert.is_true(#errors > 0, "digit fragment is standalone here")
+  end)
 end)
 
 describe("USE/SET boundary detection", function()
