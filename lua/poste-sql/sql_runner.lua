@@ -543,6 +543,10 @@ end
   end
 end
 
+function M.get_exec_seq()
+  return exec_seq
+end
+
 M._test = statement._test
 
 return M

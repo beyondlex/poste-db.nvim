@@ -113,8 +113,9 @@ function M.refresh_dataset(tab)
           if table_name then meta.table_name = table_name end
         end
 
+        local sql_runner = require("poste-sql.sql_runner")
         sql_buffer.render_dataset(lines, meta, {
-          exec_seq = 0,
+          exec_seq = sql_runner.get_exec_seq(),
           layout = layout,
           original_sql = tab.original_sql,
           src_file = tab.src_file,

@@ -343,6 +343,13 @@ function M.render_dataset(lines, meta, opts)
   local tab_idx = opts.tab_index or 1
   local is_error = meta and meta.type == "error"
 
+  if opts.exec_seq then
+    local sql_runner = require("poste-sql.sql_runner")
+    if opts.exec_seq < sql_runner.get_exec_seq() then
+      return
+    end
+  end
+
   if tab_idx == 1 and not opts.keep_tabs then
     D.tabs = {}
     D.active_tab_idx = 0

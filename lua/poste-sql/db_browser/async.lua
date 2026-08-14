@@ -80,6 +80,8 @@ function M.run_introspect(conn_name, introspect_type, schema, table_name, databa
 end
 
 function M.fetch_children(node, callback, search_dir)
+  node.epoch = (node.epoch or 0) + 1
+  local epoch = node.epoch
   node.loading = true
 
   local conn = node.node_type == "connection" and node.name
@@ -90,9 +92,15 @@ function M.fetch_children(node, callback, search_dir)
     dialect = node.meta.dialect
   end
 
+  local function guard()
+    if node.epoch ~= epoch then return true end
+    return false
+  end
+
   if node.node_type == "connection" then
     if dialect == "sqlite" then
       M.run_introspect(conn, "tables", nil, nil, nil, function(result)
+        if guard() then return end
         node.loading = false
         node.children = {}
         if result and result.items then
@@ -106,6 +114,7 @@ function M.fetch_children(node, callback, search_dir)
       end, search_dir)
     else
       M.run_introspect(conn, "databases", nil, nil, nil, function(result)
+        if guard() then return end
         node.loading = false
         node.children = {}
         if result and result.items then
@@ -130,11 +139,11 @@ function M.fetch_children(node, callback, search_dir)
   elseif node.node_type == "database" then
     if dialect == "postgres" then
       M.run_introspect(conn, "schemas", nil, nil, node.name, function(result)
+        if guard() then return end
         node.loading = false
         node.children = {}
         if result and result.items then
           for _, item in ipairs(result.items) do
-            -- Skip system schemas
             if item.name ~= "pg_catalog"
               and item.name ~= "information_schema"
               and item.name:sub(1, 8) ~= "pg_toast" then
@@ -148,6 +157,7 @@ function M.fetch_children(node, callback, search_dir)
       end, search_dir)
     else
       M.run_introspect(conn, "tables", nil, nil, node.name, function(result)
+        if guard() then return end
         node.loading = false
         node.children = {}
         if result and result.items then
@@ -164,6 +174,7 @@ function M.fetch_children(node, callback, search_dir)
   elseif node.node_type == "schema" then
     local db_name = node.meta and node.meta.database
     M.run_introspect(conn, "tables", node.name, nil, db_name, function(result)
+      if guard() then return end
       node.loading = false
       node.children = {}
       if result and result.items then
@@ -184,6 +195,7 @@ function M.fetch_children(node, callback, search_dir)
     local columns_result, indexes_result = nil, nil
 
     local function check_done()
+      if guard() then return end
       if columns_done and indexes_done then
         node.loading = false
         local cols = columns_result and columns_result.items or {}
@@ -328,12 +340,14 @@ function M.fetch_children(node, callback, search_dir)
     end
 
     M.run_introspect(conn, "columns", schema_name, table_name, db_name, function(result)
+      if guard() then return end
       columns_result = result
       columns_done = true
       check_done()
     end, search_dir)
 
     M.run_introspect(conn, "indexes", schema_name, table_name, db_name, function(result)
+      if guard() then return end
       indexes_result = result
       indexes_done = true
       check_done()
