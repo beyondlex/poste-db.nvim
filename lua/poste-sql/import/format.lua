@@ -11,46 +11,50 @@ end
 
 function M.parse_csv(text)
   text = normalize_text(text)
-  local raw_lines = vim.split(text, "\n")
   local parsed_rows = {}
-  for _, raw in ipairs(raw_lines) do
-    local trimmed = raw:gsub("^%s+", ""):gsub("%s+$", "")
-    if trimmed ~= "" then
-      local row = {}
-      local i = 1
-      while i <= #trimmed do
-        if trimmed:sub(i, i) == '"' then
-          local val = {}
-          i = i + 1
-          while i <= #trimmed do
-            local ch = trimmed:sub(i, i)
-            if ch == '"' then
-              if trimmed:sub(i + 1, i + 1) == '"' then
-                table.insert(val, '"')
-                i = i + 2
-              else
-                i = i + 1
-                break
-              end
-            else
-              table.insert(val, ch)
-              i = i + 1
-            end
-          end
-          table.insert(row, table.concat(val))
-          local next = trimmed:sub(i, i)
-          if next == "," then i = i + 1 end
-        else
-          local comma = trimmed:find(",", i)
-          if comma then
-            table.insert(row, trimmed:sub(i, comma - 1))
-            i = comma + 1
+  local i = 1
+  local len = #text
+
+  while i <= len do
+    local row = {}
+    local in_quoted = false
+    local val_chars = {}
+
+    while i <= len do
+      local ch = text:sub(i, i)
+      if in_quoted then
+        if ch == '"' then
+          local next = text:sub(i + 1, i + 1)
+          if next == '"' then
+            table.insert(val_chars, '"')
+            i = i + 2
           else
-            table.insert(row, trimmed:sub(i))
-            break
+            in_quoted = false
+            i = i + 1
           end
+        else
+          table.insert(val_chars, ch)
+          i = i + 1
         end
+      elseif ch == '"' then
+        in_quoted = true
+        i = i + 1
+      elseif ch == "," then
+        table.insert(row, table.concat(val_chars))
+        val_chars = {}
+        i = i + 1
+      elseif ch == "\n" or ch == "\r" then
+        i = i + 1
+        break
+      else
+        table.insert(val_chars, ch)
+        i = i + 1
       end
+    end
+    table.insert(row, table.concat(val_chars))
+
+    local trimmed_first = (row[1] or ""):gsub("^%s+", ""):gsub("%s+$", "")
+    if #row > 1 or trimmed_first ~= "" then
       table.insert(parsed_rows, row)
     end
   end

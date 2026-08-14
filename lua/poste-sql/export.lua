@@ -103,8 +103,13 @@ end
 -- Formatters
 -------------------------------------------------------------------------------
 
+local function export_val(v)
+  if v == nil or v == vim.NIL then return "" end
+  return tostring(v)
+end
+
 local function csv_escape(v)
-  local s = tostring(v)
+  local s = export_val(v)
   if s:find('["\n,]') then
     return '"' .. s:gsub('"', '""') .. '"'
   end
@@ -142,7 +147,7 @@ local function format_tsv(data_result)
   for _, row in ipairs(rows) do
     local vals = {}
     for _, v in ipairs(row) do
-      table.insert(vals, (tostring(v):gsub("[\t\n]", " ")))
+      table.insert(vals, (export_val(v):gsub("[\t\n]", " ")))
     end
     table.insert(lines, table.concat(vals, "\t"))
   end
@@ -180,7 +185,7 @@ local function format_markdown(data_result)
   for _, row in ipairs(rows) do
     local vals = {}
     for _, v in ipairs(row) do
-      table.insert(vals, (tostring(v):gsub("|", "\\|")))
+      table.insert(vals, (export_val(v):gsub("|", "\\|")))
     end
     table.insert(lines, "| " .. table.concat(vals, " | ") .. " |")
   end
@@ -189,32 +194,37 @@ end
 
 local ident = require("poste-sql.ident")
 
+local function sql_escape_val(v)
+  if v == nil or v == vim.NIL then return "NULL" end
+  if type(v) == "number" then return tostring(v) end
+  if type(v) == "boolean" then return v and "TRUE" or "FALSE" end
+  local s = tostring(v):gsub("'", "''")
+  s = s:gsub("[%z\1-\8\11-\12\14-\31]", function(c)
+    return string.format("\\x%02X", c:byte())
+  end)
+  return "'" .. s .. "'"
+end
+
 local function format_sql_insert(data_result)
   local cols = data_result.columns or {}
   local rows = data_result.rows or {}
   local table_name = data_result.table_name or "export"
+  local schema = data_result.schema or ""
+  local dialect = data_result.dialect or "postgres"
+  local qualified = schema ~= "" and ident.quote_qualified(schema, table_name, dialect) or ident.quote(table_name, dialect)
   local col_names = {}
   for _, col in ipairs(cols) do
-    table.insert(col_names, ident.quote(col.name, "postgres"))
+    table.insert(col_names, ident.quote(col.name, dialect))
   end
   local col_names_str = table.concat(col_names, ", ")
   local lines = {}
   for _, row in ipairs(rows) do
     local vals = {}
-    for i, v in ipairs(row) do
-      if v == nil or v == vim.NIL then
-        table.insert(vals, "NULL")
-      elseif type(v) == "number" then
-        table.insert(vals, tostring(v))
-      elseif type(v) == "boolean" then
-        table.insert(vals, v and "TRUE" or "FALSE")
-      else
-        local s = tostring(v):gsub("'", "''")
-        table.insert(vals, "'" .. s .. "'")
-      end
+    for _, v in ipairs(row) do
+      table.insert(vals, sql_escape_val(v))
     end
     table.insert(lines, string.format("INSERT INTO %s (%s) VALUES (%s);",
-      ident.quote(table_name, "postgres"), col_names_str, table.concat(vals, ", ")))
+      qualified, col_names_str, table.concat(vals, ", ")))
   end
   return table.concat(lines, "\n")
 end
@@ -246,13 +256,15 @@ local function export_to_file(data_result, format_value, path)
     vim.notify("Export failed: " .. tostring(text), vim.log.levels.ERROR)
     return
   end
-  local f = io.open(path, "w")
+  local tmp = path .. ".tmp"
+  local f = io.open(tmp, "w")
   if not f then
     vim.notify("Cannot write to " .. path, vim.log.levels.ERROR)
     return
   end
   f:write(text)
   f:close()
+  os.rename(tmp, path)
   local abs_path = vim.fn.fnamemodify(path, ":p")
   vim.fn.setreg("+", abs_path)
   vim.fn.setreg('"', abs_path)

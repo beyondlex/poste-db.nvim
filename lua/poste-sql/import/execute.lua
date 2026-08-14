@@ -2,6 +2,7 @@ local state = require("poste.state")
 local dml = require("poste-sql.dml")
 local edit_commit = require("poste-sql.edit_commit")
 local mapping = require("poste-sql.import.mapping")
+local dialog = require("poste.dialog")
 
 local M = {}
 
@@ -203,7 +204,10 @@ function M.execute_import(table_info, valid_rows, col_map, table_cols, callback)
           error = "Process error:\n" .. message,
         })
         state.log("WARN", "Import chunk error: " .. message)
-        send_chunk(end_idx + 1)
+        vim.schedule(function()
+          vim.notify("Import stopped due to process error", vim.log.levels.ERROR)
+          if callback then callback({ imported = total_imported, errors = all_errors }) end
+        end)
       end,
     })
 end
