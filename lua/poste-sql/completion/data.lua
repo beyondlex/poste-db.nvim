@@ -174,6 +174,7 @@ M.COLUMN_CTX = COLUMN_CTX
 ---------------------------------------------------------------------------
 
 local cache = {}
+local cache_epoch = 0
 
 function M.get_cache() return cache end
 
@@ -181,9 +182,16 @@ function M.get_cache() return cache end
 --- Call after DDL execution (CREATE TABLE, ALTER, DROP, etc.)
 --- to force re-fetching on next completion.
 function M.clear_cache()
+  cache_epoch = cache_epoch + 1
   local key = M.conn_key()
   if key then
     cache[key] = nil
+    cache[key .. "/__databases__"] = nil
+    for k in pairs(cache) do
+      if k:find("^db:") then
+        cache[k] = nil
+      end
+    end
   end
 end
 
@@ -306,10 +314,11 @@ function M.ensure_tables(callback)
     vim.list_extend(args, { "--database", ctx.database })
   end
 
+  local epoch = cache_epoch
   vim.fn.jobstart(args, {
     stdout_buffered = true,
     on_stdout = function(_, data)
-      if not data then return end
+      if not data or epoch ~= cache_epoch then return end
       while #data > 0 and data[#data] == "" do data[#data] = nil end
       if #data == 0 then return end
       local ok, parsed = pcall(vim.json.decode, table.concat(data, "\n"))
@@ -376,10 +385,11 @@ function M.ensure_tables_for_db(db_name, callback)
   local args = { binary, "introspect", "--connection-url", url,
     "--type", "tables", "--database", db_name }
 
+  local epoch = cache_epoch
   vim.fn.jobstart(args, {
     stdout_buffered = true,
     on_stdout = function(_, data)
-      if not data then return end
+      if not data or epoch ~= cache_epoch then return end
       while #data > 0 and data[#data] == "" do data[#data] = nil end
       if #data == 0 then return end
       local ok, parsed = pcall(vim.json.decode, table.concat(data, "\n"))
@@ -443,10 +453,11 @@ function M.ensure_databases(callback)
   local args = { binary, "introspect", "--connection-url", url,
     "--type", "databases" }
 
+  local epoch = cache_epoch
   vim.fn.jobstart(args, {
     stdout_buffered = true,
     on_stdout = function(_, data)
-      if not data then return end
+      if not data or epoch ~= cache_epoch then return end
       while #data > 0 and data[#data] == "" do data[#data] = nil end
       if #data == 0 then return end
       local ok, parsed = pcall(vim.json.decode, table.concat(data, "\n"))
@@ -571,10 +582,11 @@ function M.ensure_columns(tbl, schema, callback)
     vim.list_extend(args, { "--database", db_override })
   end
 
+  local epoch = cache_epoch
   vim.fn.jobstart(args, {
     stdout_buffered = true,
     on_stdout = function(_, data)
-      if not data then return end
+      if not data or epoch ~= cache_epoch then return end
       while #data > 0 and data[#data] == "" do data[#data] = nil end
       if #data == 0 then return end
       local ok, parsed = pcall(vim.json.decode, table.concat(data, "\n"))

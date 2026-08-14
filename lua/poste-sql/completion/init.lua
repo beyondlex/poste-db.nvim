@@ -52,12 +52,10 @@ end
 
 local function extract_sql_block(bufnr, line_before, cursor_line)
   local total_lines = vim.api.nvim_buf_line_count(bufnr)
-  local all_lines = vim.api.nvim_buf_get_lines(bufnr, 0, total_lines, false)
-
   local block_start = 1
   if cursor_line > 1 then
     for i = cursor_line - 1, 1, -1 do
-      if const.is_section_marker(all_lines[i]) then
+      if const.is_section_marker(vim.api.nvim_buf_get_lines(bufnr, i - 1, i, false)[1] or "") then
         block_start = i + 1
         break
       end
@@ -66,7 +64,7 @@ local function extract_sql_block(bufnr, line_before, cursor_line)
 
   local block_end = total_lines
   for i = cursor_line + 1, total_lines do
-    if const.is_section_marker(all_lines[i]) then
+    if const.is_section_marker(vim.api.nvim_buf_get_lines(bufnr, i - 1, i, false)[1] or "") then
       block_end = i - 1
       break
     end
@@ -76,18 +74,12 @@ local function extract_sql_block(bufnr, line_before, cursor_line)
     return nil
   end
 
-  local sql_parts = {}
-  for i = block_start, block_end do
-    table.insert(sql_parts, all_lines[i])
-  end
-  local sql_text = table.concat(sql_parts, "\n")
+  local block_lines = vim.api.nvim_buf_get_lines(bufnr, block_start - 1, block_end, false)
+  local sql_text = table.concat(block_lines, "\n")
 
-  local before_parts = {}
-  for i = block_start, cursor_line - 1 do
-    table.insert(before_parts, all_lines[i])
-  end
-  table.insert(before_parts, line_before)
-  local offset = #table.concat(before_parts, "\n")
+  local before_lines = vim.api.nvim_buf_get_lines(bufnr, block_start - 1, cursor_line - 1, false)
+  table.insert(before_lines, line_before)
+  local offset = #table.concat(before_lines, "\n")
 
   return sql_text, offset
 end
@@ -98,13 +90,24 @@ local function cache_key(bufnr, cursor_line, line_before)
   return string.format("%d|%d|%d|%s|%s", bufnr, changedtick, cursor_line, line_before or "", dialect)
 end
 
+local CTX_CACHE_MAX = 10
+local _ctx_cache_keys = {}
+
+local function trim_ctx_cache()
+  if #_ctx_cache_keys <= CTX_CACHE_MAX then return end
+  local n = #_ctx_cache_keys - CTX_CACHE_MAX
+  for _ = 1, n do
+    local key = table.remove(_ctx_cache_keys, 1)
+    _ctx_cache[key] = nil
+  end
+end
+
 ---------------------------------------------------------------------------
 -- Rust context detection via async vim.system
 ---------------------------------------------------------------------------
 
---- Detect context via sync vim.fn.system(). Calls callback(rust_ctx)
---- synchronously. Uses _ctx_cache to avoid re-running the binary on
---- repeated calls for the same input.
+--- Detect context via async vim.system(). Calls callback(rust_ctx).
+--- Uses _ctx_cache to avoid re-running the binary on repeated calls.
 local function try_rust_context_async(bufnr, line_before, cursor_line, callback)
   local ok_ft, ft = pcall(vim.api.nvim_buf_get_option, bufnr, "filetype")
   if not ok_ft or (ft ~= "poste_sql" and ft ~= "poste_sqlite") then callback(nil); return end
@@ -131,18 +134,25 @@ local function try_rust_context_async(bufnr, line_before, cursor_line, callback)
   local binary = data.find_binary()
   if not binary then callback(nil); return end
 
-  local cmd = string.format("%s context detect %d%s", vim.fn.shellescape(binary), offset,
-    dialect ~= "generic" and (" --dialect " .. dialect) or "")
-  local output = vim.fn.system(cmd, sql_text)
-  if vim.v.shell_error ~= 0 then callback(nil); return end
+  local cmd = { binary, "context", "detect", tostring(offset) }
+  if dialect ~= "generic" then
+    table.insert(cmd, "--dialect"); table.insert(cmd, dialect)
+  end
 
-  local ok, parsed = pcall(vim.json.decode, output)
+  local ok_sys, obj = pcall(vim.system, cmd, { stdin = sql_text, text = true, timeout = 2000 })
+  if not ok_sys then callback(nil); return end
+  local result = obj:wait()
+  if result.code ~= 0 or not result.stdout then callback(nil); return end
+
+  local ok, parsed = pcall(vim.json.decode, result.stdout)
   if not ok or not parsed or type(parsed) ~= "table" then callback(nil); return end
 
-  debug.set_rust_raw(output)
+  debug.set_rust_raw(result.stdout)
   deep_clean(parsed)
 
   _ctx_cache[ckey] = parsed
+  table.insert(_ctx_cache_keys, ckey)
+  trim_ctx_cache()
   if vim.g.poste_sql_debug then
     state.log("INFO", string.format("Rust context: type=%s, prefix='%s', tables=%d",
       tostring(parsed.ctx_type), tostring(parsed.prefix or ""),

@@ -308,8 +308,15 @@ function M.run_sql_request()
       end
       state.last_response = parsed
 
-      -- Clear completion cache to pick up schema changes from DDL
-      require("poste-sql.completion.data").clear_cache()
+      local function is_ddl(sql)
+        if not sql then return false end
+        local s = sql:match("^%s*(.-)%s*$") or ""
+        return s:match("^%s*CREATE%s") or s:match("^%s*ALTER%s") or s:match("^%s*DROP%s")
+          or s:match("^%s*TRUNCATE%s") or s:match("^%s*RENAME%s")
+      end
+      if is_ddl(buf_content) then
+        require("poste-sql.completion.data").clear_cache()
+      end
 
       -- If raw mode was active, restore dataset buffer before rendering new results
       require("poste-sql.buffer.nav").restore_from_raw_mode()
