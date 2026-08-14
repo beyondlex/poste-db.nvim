@@ -148,11 +148,12 @@ function M.position_cursor(row, col)
   T_mark("  pos:cursor_set")
   if target_on_screen then
     local saved_sso = vim.api.nvim_get_option_value("sidescrolloff", { win = D.dataset_window })
-    if saved_sso > 0 then
+    local ok_cursor = false
+    if saved_sso and saved_sso > 0 then
       vim.api.nvim_set_option_value("sidescrolloff", 0, { win = D.dataset_window })
     end
-    pcall(vim.api.nvim_win_set_cursor, D.dataset_window, { line_idx, target_col })
-    if saved_sso > 0 then
+    ok_cursor = pcall(vim.api.nvim_win_set_cursor, D.dataset_window, { line_idx, target_col })
+    if saved_sso and saved_sso > 0 then
       vim.api.nvim_set_option_value("sidescrolloff", saved_sso, { win = D.dataset_window })
     end
   else

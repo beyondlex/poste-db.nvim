@@ -293,6 +293,10 @@ end
 
 function M.run(opts)
   opts = opts or {}
+  if S.is_running then
+    vim.notify("File execution already in progress", vim.log.levels.WARN)
+    return
+  end
   local filepath = opts.filepath
   local conn = opts.conn
   local db = opts.database

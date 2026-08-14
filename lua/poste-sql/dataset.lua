@@ -5,6 +5,7 @@ local M = {}
 
 M.dataset_buffer = nil
 M.dataset_window = nil
+M.dataset_tabpage = nil
 
 M.LEFT_PADDING = 2
 M.PADDING_SPACES = string.rep(" ", M.LEFT_PADDING)

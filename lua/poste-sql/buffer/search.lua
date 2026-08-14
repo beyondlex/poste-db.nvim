@@ -207,8 +207,9 @@ function M.filter_by_current_cell()
 
   local layout = tab.layout
   if layout then
+    local page_limit = tab.pagination_enabled and tab.page_size or #tab.view_indices
     local lines, meta = sql_format.render_view(
-      layout, tab.view_indices, 1, tab.page_size,
+      layout, tab.view_indices, 1, page_limit,
       { row_number_mode = "view" }
     )
     tab.page = 1

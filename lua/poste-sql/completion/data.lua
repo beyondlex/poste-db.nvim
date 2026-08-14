@@ -534,7 +534,7 @@ function M.ensure_columns(tbl, schema, callback)
 
   local binary = M.find_binary()
   if not binary then
-    vim.notify("DEBUG: binary not found!", vim.log.levels.ERROR)
+    if vim.g.poste_sql_debug then vim.notify("DEBUG: binary not found!", vim.log.levels.ERROR) end
     fetching_cols[fkey] = false
     for _, cb in ipairs(cols_callbacks[fkey] or {}) do cb() end
     cols_callbacks[fkey] = nil

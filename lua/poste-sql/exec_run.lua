@@ -39,14 +39,7 @@ end
 --- as a non-query (DML) and rendered as "Query OK".
 local function write_temp_file(sql, src_file)
   local lines = vim.split(strip_section_markers(sql), "\n", { plain = true })
-
-  local dir = src_file and vim.fn.fnamemodify(src_file, ":h") or ""
-  local tmp
-  if dir ~= "" and vim.fn.isdirectory(dir) == 1 then
-    tmp = dir .. "/.poste_sql_" .. vim.fn.strftime("%Y%m%d%H%M%S") .. "_" .. math.random(1000, 9999) .. ".sql"
-  else
-    tmp = vim.fn.tempname() .. ".sql"
-  end
+  local tmp = vim.fn.tempname() .. ".sql"
   vim.fn.writefile(lines, tmp)
   return tmp
 end
@@ -61,7 +54,14 @@ end
 --- @return string|nil database_name
 local function detect_use(sql)
   local trimmed = sql:match("^%s*(.*)%s*$") or ""
-  return trimmed:match("^USE%s+([%w_]+)%s*;?%s*$")
+  local name = trimmed:match("^USE%s+([%w_]+)%s*;?%s*$")
+  if not name then
+    name = trimmed:match("^USE%s+[\"`]([%w_]+)[\"`]%s*;?%s*$")
+  end
+  if not name then
+    name = trimmed:match("^USE%s+[%w_]+%s*%-%-.*$")
+  end
+  return name
 end
 
 ----------------------------------------------------------------------------

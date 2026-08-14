@@ -153,26 +153,6 @@ function M.get_dataset_buffer()
         if not M.is_open() then
           require("poste-sql.buffer.header").close()
           sql_highlights.clear_cell_highlight(D.dataset_buffer)
-  if D.resize_autocmd_id then
-    pcall(vim.api.nvim_del_autocmd, D.resize_autocmd_id)
-    D.resize_autocmd_id = nil
-  end
-  if D.scroll_autocmd_id then
-    pcall(vim.api.nvim_del_autocmd, D.scroll_autocmd_id)
-    D.scroll_autocmd_id = nil
-  end
-  if D.winclose_autocmd_id then
-    pcall(vim.api.nvim_del_autocmd, D.winclose_autocmd_id)
-    D.winclose_autocmd_id = nil
-  end
-          if D.scroll_autocmd_id then
-            pcall(vim.api.nvim_del_autocmd, D.scroll_autocmd_id)
-            D.scroll_autocmd_id = nil
-          end
-          if D.winclose_autocmd_id then
-            pcall(vim.api.nvim_del_autocmd, D.winclose_autocmd_id)
-            D.winclose_autocmd_id = nil
-          end
         end
       end)
     end,
@@ -458,12 +438,14 @@ function M.render_dataset(lines, meta, opts)
     render_dataset_legacy(tab, lines, meta)
   end
 
-  if not D.dataset_window or not vim.api.nvim_win_is_valid(D.dataset_window) then
+  if not D.dataset_window or not vim.api.nvim_win_is_valid(D.dataset_window)
+      or (D.dataset_tabpage and vim.api.nvim_win_get_tabpage(D.dataset_window) ~= D.dataset_tabpage) then
     local src_win = vim.api.nvim_get_current_win()
     local src_view = vim.fn.winsaveview()
     local height = math.floor(vim.o.lines * 0.4)
     vim.cmd("botright " .. height .. "split")
     D.dataset_window = vim.api.nvim_get_current_win()
+    D.dataset_tabpage = vim.api.nvim_get_current_tabpage()
     vim.api.nvim_set_current_win(src_win)
     vim.fn.winrestview(src_view)
   end

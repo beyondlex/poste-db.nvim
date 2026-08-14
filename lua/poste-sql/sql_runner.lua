@@ -212,6 +212,11 @@ function M.run_sql_request()
   end
 
   -- Only clear after we confirm there's something to execute
+  local tab = D.T()
+  if tab and tab.edit_state and tab.edit_state.dirty then
+    vim.notify("You have unsaved edits. Commit or discard them first.", vim.log.levels.WARN, { title = "Poste SQL" })
+    return
+  end
   exec_seq = exec_seq + 1
   local current_seq = exec_seq
   indicators.clear_all(src_buf)

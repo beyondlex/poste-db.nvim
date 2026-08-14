@@ -220,7 +220,7 @@ end
 --- @param name string Connection name
 --- @return string|nil, string|nil url, error_message
 function M.resolve_connection_url(name)
-  local search_dir = vim.fn.getcwd()
+  local search_dir = get_search_dir()
   local config_path = M.find_connections_toml(search_dir)
   if not config_path then
     return nil, "connections.toml not found (searched from " .. search_dir .. ")"
