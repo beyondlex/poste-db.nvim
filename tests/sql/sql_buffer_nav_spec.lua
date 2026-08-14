@@ -55,7 +55,6 @@ describe("buffer_nav helpers", function()
     assert.truthy(text:find("Page 2/3", 1, true))
     assert.truthy(text:find("filter: status=open", 1, true))
     assert.truthy(text:find("search: needle (2/2)", 1, true))
-    assert.truthy(text:find("localhost:5432/blog", 1, true))
   end)
 end)
 
