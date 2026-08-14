@@ -1,6 +1,7 @@
-local cli = require("poste.cli")
 local state = require("poste.state")
 local tree = require("poste-sql.db_browser.tree")
+local async = require("poste-sql.async")
+local log = require("poste-sql.log")
 
 local M = {}
 
@@ -27,27 +28,17 @@ function M.run_introspect(conn_name, introspect_type, schema, table_name, databa
     table.insert(cmd, "--database"); table.insert(cmd, database)
   end
 
-  local log = require("poste-sql.log")
   log.info("DB Browser introspect: " .. log.redact_cmd(cmd))
 
   local stderr_buf = {}
-  local stdout_done = false
-  local exit_done = false
   local parsed_result = nil
 
-  local function try_finish()
-    if not stdout_done or not exit_done then return end
-    vim.schedule(function()
-      callback(parsed_result)
-    end)
-  end
-
-  cli.run_async(cmd, {
-    on_stdout = function(data)
-      stdout_done = true
-      if not data then try_finish(); return end
+  return async.run(cmd, {
+    timeout = 15000,
+    on_data = function(data)
+      if not data then return end
       while #data > 0 and data[#data] == "" do data[#data] = nil end
-      if #data == 0 then try_finish(); return end
+      if #data == 0 then return end
 
       local output = table.concat(data, "\n")
       local ok, parsed = pcall(vim.json.decode, output)
@@ -56,7 +47,6 @@ function M.run_introspect(conn_name, introspect_type, schema, table_name, databa
       else
         state.log("WARN", "Introspect JSON parse failed: " .. output:sub(1, 200))
       end
-      try_finish()
     end,
     on_stderr = function(data)
       if not data then return end
@@ -65,7 +55,6 @@ function M.run_introspect(conn_name, introspect_type, schema, table_name, databa
       end
     end,
     on_exit = function(code)
-      exit_done = true
       if code ~= 0 then
         vim.schedule(function()
           local err = table.concat(stderr_buf, "\n")
@@ -74,7 +63,15 @@ function M.run_introspect(conn_name, introspect_type, schema, table_name, databa
         end)
         parsed_result = nil
       end
-      try_finish()
+      vim.schedule(function()
+        callback(parsed_result)
+      end)
+    end,
+    on_error = function(msg)
+      vim.schedule(function()
+        vim.notify("Introspect error: " .. msg, vim.log.levels.ERROR)
+        callback(nil)
+      end)
     end,
   })
 end
