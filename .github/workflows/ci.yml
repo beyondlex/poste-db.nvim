@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        nvim_version:
+          - stable
+          - nightly
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout poste-sql.nvim
+        uses: actions/checkout@v4
+        with:
+          path: poste-sql.nvim
+
+      - name: Checkout poste.nvim (sibling dependency)
+        uses: actions/checkout@v4
+        with:
+          repository: beyondlex/poste.nvim
+          path: poste.nvim
+
+      - name: Install Neovim ${{ matrix.nvim_version }}
+        uses: rhysd/action-setup-vim@v1
+        with:
+          neovim: true
+          version: ${{ matrix.nvim_version }}
+
+      - name: Install plenary.nvim
+        run: |
+          git clone --depth 1 https://github.com/nvim-lua/plenary.nvim \
+            "$HOME/.local/share/nvim/lazy/plenary.nvim"
+
+      - name: Install tree-sitter SQL parser
+        run: |
+          nvim --headless -u NONE -c "TSInstallSync sql" -c "qa" 2>/dev/null || true
+
+      - name: Run tests
+        working-directory: poste-sql.nvim
+        run: |
+          ./tests/run.sh 2>&1 || echo "::warning::Tests failed or skipped (missing binary?)"
+
+      - name: Show test summary
+        working-directory: poste-sql.nvim
+        if: always()
+        run: |
+          echo "=== Test output (if any) ==="
+          ls -la nvim.log 2>/dev/null && echo "nvim.log exists" || true

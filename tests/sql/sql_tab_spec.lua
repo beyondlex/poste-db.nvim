@@ -1,7 +1,7 @@
 --- Tests for the dataset tab system (tab-based state isolation).
 ---
 --- Each tab holds its own meta, sort, cursor, scroll, and header.
---- Multi-statement execution is not yet implemented, but the tab
+--- Multi-statement execution works (see sql_runner), but the tab
 --- infrastructure must work correctly when multiple tabs are created.
 
 local buffer = require("poste-sql.buffer")

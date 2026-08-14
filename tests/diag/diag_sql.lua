@@ -1,5 +1,5 @@
 -- Standalone diagnostic: run with
---   nvim --headless -u NONE -l tests/diag_sql.lua
+--   nvim --headless -u NONE -l tests/diag/diag_sql.lua
 -- Writes results to /tmp/poste_sql_diag.txt
 
 vim.opt.runtimepath:prepend(".")

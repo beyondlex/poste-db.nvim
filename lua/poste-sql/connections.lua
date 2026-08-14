@@ -332,6 +332,7 @@ function M.apply_connection(conn)
 
   -- Update or insert @connection directive in the current buffer
   local buf = vim.api.nvim_get_current_buf()
+  vim.bo[buf].swapfile = false
   local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
   local found = false
 
