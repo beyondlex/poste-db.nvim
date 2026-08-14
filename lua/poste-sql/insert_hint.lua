@@ -33,20 +33,20 @@ function M.update()
 
   local block_start = 1
   for i = #lines, 1, -1 do
-    if const.is_section_marker(lines[i]) then block_start = i; break end
+    if const.is_section_marker(lines[i]) then block_start = i + 1; break end
   end
   dbg("block_start=" .. block_start .. " first line=" .. (lines[1] or "nil"))
 
   local text_segments = {}
   for i = block_start, #lines do
-    local clean = (lines[i - block_start + 1] or ""):gsub("%-%-.*", "")
+    local clean = (lines[i] or ""):gsub("%-%-.*", "")
     text_segments[#text_segments + 1] = clean
   end
   local full_text = table.concat(text_segments, "\n")
 
   local text_offset = 0
   for i = block_start, cursor_row - 1 do
-    local clean = (lines[i - block_start + 1] or ""):gsub("%-%-.*", "")
+    local clean = (lines[i] or ""):gsub("%-%-.*", "")
     text_offset = text_offset + #clean + 1
   end
   text_offset = text_offset + cursor_col
@@ -137,7 +137,7 @@ function M.update()
   local function to_buf_pos(byte_off)
     local acc = 0
     for i = block_start, #lines do
-      local clean = (lines[i - block_start + 1] or ""):gsub("%-%-.*", "")
+      local clean = (lines[i] or ""):gsub("%-%-.*", "")
       local line_len = #clean
       if byte_off <= acc + line_len then
         return i - 1, byte_off - acc

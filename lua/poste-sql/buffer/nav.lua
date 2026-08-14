@@ -219,6 +219,7 @@ function M.preview_cell()
   local col_name = res.columns[col] and res.columns[col].name or "?"
 
   local float_buf, win = preview.open_preview_float(col_name, text, ft)
+  if not float_buf then return end
 
   preview_win = win
 

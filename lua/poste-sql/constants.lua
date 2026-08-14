@@ -7,6 +7,9 @@ M.SECTION_MARKER = "###"
 M.DIRECTIVE_PREFIX_PATTERN = "^%s*%-%-%s*@"
 M.SECTION_MARKER_PATTERN = "^%s*###"
 M.PLUGIN_TITLE = "Poste SQL"
+M.TITLE = M.PLUGIN_TITLE
+M.EDIT_CONFLICT_MSG = "You have unsaved edits. Commit or discard them first."
+M.RAW_MODE_WINBAR = " Raw Mode "
 
 M.FLOAT_WIDTH_RATIO = 0.7
 M.FLOAT_MAX_WIDTH = 120

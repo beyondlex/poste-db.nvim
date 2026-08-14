@@ -86,8 +86,7 @@ function M.try_rust_stmt_ranges(buf_lines, start_line, end_line)
   local parsed, err = cli.run_json({ "context", "stmt-ranges" }, { stdin = input })
   if not parsed then return nil end
 
-  local ok, parsed = pcall(vim.json.decode, output)
-  if not ok or type(parsed) ~= "table" or #parsed == 0 then return nil end
+  if type(parsed) ~= "table" or #parsed == 0 then return nil end
 
   -- parsed is [[start0, end0], [start1, end1], ...] (0-based, relative to range)
   local stmt_lines = {}

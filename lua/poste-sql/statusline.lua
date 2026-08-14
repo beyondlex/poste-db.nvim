@@ -52,15 +52,12 @@ local function get_ctx_color(conn_name)
 end
 
 local function fmt_ctx(ctx)
-  local conn_name = ctx:match("^(.-)[/]")
-  if not conn_name then
-    conn_name = ctx
-  end
-  if not conn_name then return ctx end
-
-  local hl_name = get_ctx_color(conn_name)
-  if hl_name then
-    return "%#" .. hl_name .. "# " .. ctx .. " "
+  local conn_name = vim.b.poste_sql_conn
+  if conn_name then
+    local hl_name = get_ctx_color(conn_name)
+    if hl_name then
+      return "%#" .. hl_name .. "# " .. ctx .. " "
+    end
   end
   return ctx
 end
