@@ -365,7 +365,8 @@ function M.run(opts)
     cmd = cmd .. " --database " .. vim.fn.shellescape(db)
   end
 
-  state.log("INFO", "ExecFile cmd: " .. cmd)
+  local log = require("poste-sql.log")
+  log.info("ExecFile cmd: " .. log.redact_cmd_str(cmd))
 
   local partial = ""
   S.job_id = vim.fn.jobstart(cmd, {

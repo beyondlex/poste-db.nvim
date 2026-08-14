@@ -484,11 +484,12 @@ end
   end
 
   if use_session then
-    state.log("INFO", string.format("SQL run via session: conn=%s db=%s", tostring(conn_url), tostring(db)))
+    local log = require("poste-sql.log")
+    log.info_fmt("SQL run via session: conn=%s db=%s", tostring(conn_url), tostring(db))
     local ok = session_conn.execute(conn_url, stmt_sql_raw, {
       on_response = on_response,
       on_error = function(message)
-        state.log("WARN", "SQL session failed, falling back to exec-file: " .. message)
+        log.warn("SQL session failed, falling back to exec-file: " .. message)
         -- Fall back to exec-file when the session fails
         local job_id = exec_run.run_async(buf_content, {
           src_file = file,
@@ -507,7 +508,7 @@ end
       end,
     }, src_buf, db)  -- 5th arg: database context from @database directive
     if not ok then
-      state.log("WARN", "SQL session not available, falling back to exec-file")
+      log.warn("SQL session not available, falling back to exec-file")
       local job_id = exec_run.run_async(buf_content, {
         src_file = file,
         conn_url = conn_url,
@@ -524,7 +525,7 @@ end
       end
     end
   else
-    state.log("INFO", string.format("SQL run via exec-file: conn=%s db=%s", tostring(conn_url), tostring(db)))
+    log.info_fmt("SQL run via exec-file: conn=%s db=%s", tostring(conn_url), tostring(db))
     local job_id = exec_run.run_async(buf_content, {
       src_file = file,
       conn_url = conn_url,

@@ -151,7 +151,8 @@ function M.show_ddl(node, context)
     table.insert(cmd, "--database"); table.insert(cmd, database)
   end
 
-  state.log("INFO", "DB Browser DDL: " .. table.concat(cmd, " "))
+  local log = require("poste-sql.log")
+  log.info("DB Browser DDL: " .. log.redact_cmd(cmd))
 
   cli.run_async(cmd, {
     on_stdout = function(data)

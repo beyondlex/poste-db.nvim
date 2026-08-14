@@ -319,7 +319,8 @@ local function run_async(sql, opts, callbacks)
   local tmpfile = write_temp_file(sql, src_file)
 
   local cmd = build_cmd(tmpfile, opts)
-  state.log("INFO", "exec-run cmd: " .. table.concat({ binary, unpack(cmd) }, " "))
+  local log = require("poste-sql.log")
+  log.info("exec-run cmd: " .. log.redact_cmd(cmd))
 
   local events = {}
   local stderr_buf = {}

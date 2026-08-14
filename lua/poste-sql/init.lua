@@ -158,12 +158,13 @@ function M.setup(opts)
 
   vim.api.nvim_create_user_command("PosteSQLSessionList", function()
     local session_conn = require("poste-sql.session_conn")
+    local log = require("poste-sql.log")
     local sessions = session_conn.list()
     local lines = { "Active SQL sessions:" }
     local count = 0
     for conn_url, info in pairs(sessions) do
       count = count + 1
-      table.insert(lines, string.format("  %s  (job %d, %s)", conn_url, info.job_id, info.dialect))
+      table.insert(lines, string.format("  %s  (job %d, %s)", log.redact_url(conn_url), info.job_id, info.dialect))
     end
     if count == 0 then
       table.insert(lines, "  (none)")

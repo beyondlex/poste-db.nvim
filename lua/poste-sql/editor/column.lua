@@ -288,8 +288,8 @@ function M.ensure_primary_key(tab)
     return
   end
 
-  local state = require("poste.state")
-  state.log("DEBUG", string.format("PK introspection: table=%s query=%s conn=%s db=%s", table_name, pk_query, connection, database))
+  local log = require("poste-sql.log")
+  log.debug(string.format("PK introspection: table=%s query=%s conn=%s db=%s", table_name, pk_query, log.redact_url(connection), database))
   local body = run_introspection_query(pk_query, connection, database, src_file)
   if body and body.results then
     parse_pk_results(body, layout, dialect)

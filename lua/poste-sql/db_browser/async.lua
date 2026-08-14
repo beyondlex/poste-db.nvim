@@ -27,7 +27,8 @@ function M.run_introspect(conn_name, introspect_type, schema, table_name, databa
     table.insert(cmd, "--database"); table.insert(cmd, database)
   end
 
-  state.log("INFO", "DB Browser introspect: " .. table.concat(cmd, " "))
+  local log = require("poste-sql.log")
+  log.info("DB Browser introspect: " .. log.redact_cmd(cmd))
 
   local stderr_buf = {}
   local stdout_done = false

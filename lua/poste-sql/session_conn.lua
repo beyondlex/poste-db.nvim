@@ -124,7 +124,7 @@ end
 
 local function on_session_stdout(session, chunks)
   local combined = table.concat(chunks, "")
-  state.log("DEBUG", "SQL session stdout (" .. #combined .. " bytes): " .. combined:sub(1, 200))
+  state.log("DEBUG", "SQL session stdout (" .. #combined .. " bytes)")
   session.buffer = session.buffer .. combined
   -- Each response from the Rust session is a single JSON line, but Neovim may
   -- deliver it with or without the trailing newline (or split across chunks).
