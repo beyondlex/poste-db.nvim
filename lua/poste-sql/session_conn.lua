@@ -104,7 +104,7 @@ local function process_event(session, event)
     local resp = build_response(event, session)
     local ok_cb, err = pcall(function()
       if resp.has_error then
-        if cb.on_error then cb.on_error(event.error or "unknown error", resp) end
+        if cb.on_sql_error then cb.on_sql_error(event.error or "unknown error", resp) end
       else
         if cb.on_response then cb.on_response(resp) end
       end
@@ -237,29 +237,36 @@ end
 --- connection. Starts a session if none exists.
 --- @param conn_url string
 --- @param sql string
---- @param callbacks table { on_response = fn(parsed), on_error = fn(msg, parsed?) }
+--- @param callbacks table { on_response = fn(parsed), on_error = fn(msg), on_sql_error = fn(msg, parsed?) }
 --- @param bufnr number|nil
 --- @param database string|nil database context (e.g. from `@database` directive)
---- @return boolean  true if the request was dispatched
+--- @return string  "dispatched", "start_failed", or "not_running"
 function M.execute(conn_url, sql, callbacks, bufnr, database)
   callbacks = callbacks or {}
   local session = M.get(conn_url, bufnr, database)
   if not session then
-    if callbacks.on_error then callbacks.on_error("Failed to start poste session") end
-    return false
+    return "start_failed"
   end
   if not session.alive then
-    if callbacks.on_error then callbacks.on_error("SQL session is not running") end
-    return false
+    return "not_running"
   end
 
   session.seq = session.seq + 1
   local seq = session.seq
-  session.pending[seq] = { on_response = callbacks.on_response, on_error = callbacks.on_error }
+  session.pending[seq] = {
+    on_response = callbacks.on_response,
+    on_error = callbacks.on_error,
+    on_sql_error = callbacks.on_sql_error,
+  }
   local payload = vim.json.encode({ seq = seq, sql = sql }) .. "\n"
   local sent = vim.fn.chansend(session.job_id, payload)
+  if sent <= 0 then
+    session.pending[seq] = nil
+    if callbacks.on_error then callbacks.on_error("SQL session chansend failed") end
+    return "not_running"
+  end
   state.log("DEBUG", string.format("SQL session send seq=%d job=%d chansend=%d", seq, session.job_id, sent))
-  return true
+  return "dispatched"
 end
 
 --- Close a session for a connection_url.
