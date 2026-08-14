@@ -7,6 +7,7 @@ local async = require("poste-sql.db_browser.async")
 local icons = require("poste-sql.db_browser.icons")
 local forms = require("poste-sql.db_browser.forms")
 local select_mod = require("poste.select")
+local ident = require("poste-sql.ident")
 
 local HEADER_LINES = icons.HEADER_LINES
 local M = {}
@@ -97,7 +98,7 @@ function M.select_star(node, context)
   local conn = get_connection_name(table_node, context)
   local schema_prefix = ""
   if table_node.meta and table_node.meta.schema and dialect == "postgres" then
-    schema_prefix = table_node.meta.schema .. "."
+    schema_prefix = ident.quote(table_node.meta.schema, dialect) .. "."
   end
 
   local query_lines = { "" }
@@ -110,7 +111,7 @@ function M.select_star(node, context)
     table.insert(query_lines, "-- @database " .. table_node.meta.database)
     cursor_offset = cursor_offset + 1
   end
-  table.insert(query_lines, "SELECT * FROM " .. schema_prefix .. table_node.name .. " LIMIT 100;")
+  table.insert(query_lines, "SELECT * FROM " .. schema_prefix .. ident.quote(table_node.name, dialect) .. " LIMIT 100;")
   table.insert(query_lines, "")
 
   if insert_into_source(context, query_lines, cursor_offset) then
@@ -244,11 +245,11 @@ function M.rename(node, context)
       end
 
       if dialect == "mysql" then
-        table.insert(lines, "RENAME TABLE `" .. node.name .. "` TO `" .. input .. "`;")
+        table.insert(lines, "RENAME TABLE " .. ident.quote(node.name, dialect) .. " TO " .. ident.quote(input, dialect) .. ";")
       elseif dialect == "sqlite" then
-        table.insert(lines, "ALTER TABLE " .. node.name .. " RENAME TO " .. input .. ";")
+        table.insert(lines, "ALTER TABLE " .. ident.quote(node.name, dialect) .. " RENAME TO " .. ident.quote(input, dialect) .. ";")
       else
-        table.insert(lines, "ALTER TABLE " .. node.name .. " RENAME TO " .. input .. ";")
+        table.insert(lines, "ALTER TABLE " .. ident.quote(node.name, dialect) .. " RENAME TO " .. ident.quote(input, dialect) .. ";")
       end
     elseif node.node_type == "column" then
       local table_node = find_table_node(context, vim.fn.line(".") - HEADER_LINES)
@@ -266,11 +267,11 @@ function M.rename(node, context)
       end
       if dialect == "mysql" then
         local col_type = node.meta and node.meta.col_type or "TEXT"
-        table.insert(lines, "ALTER TABLE `" .. table_node.name
-          .. "` CHANGE COLUMN `" .. node.name .. "` `" .. input .. "` " .. col_type .. ";")
+        table.insert(lines, "ALTER TABLE " .. ident.quote(table_node.name, dialect)
+          .. " CHANGE COLUMN " .. ident.quote(node.name, dialect) .. " " .. ident.quote(input, dialect) .. " " .. col_type .. ";")
       else
-        table.insert(lines, "ALTER TABLE " .. table_node.name
-          .. " RENAME COLUMN " .. node.name .. " TO " .. input .. ";")
+        table.insert(lines, "ALTER TABLE " .. ident.quote(table_node.name, dialect)
+          .. " RENAME COLUMN " .. ident.quote(node.name, dialect) .. " TO " .. ident.quote(input, dialect) .. ";")
       end
     end
 
@@ -371,7 +372,7 @@ function M.new_query(node, context)
     cursor_offset = cursor_offset + 1
   end
   if node.node_type == "database" then
-    table.insert(lines, "USE " .. node.name .. ";")
+    table.insert(lines, "USE " .. ident.quote(node.name, dialect) .. ";")
     cursor_offset = cursor_offset + 1
   end
   table.insert(lines, "")
@@ -393,12 +394,12 @@ function M.set_default(node, context)
   end
 
   if node.node_type == "database" then
-    table.insert(lines, "USE " .. node.name .. ";")
+    table.insert(lines, "USE " .. ident.quote(node.name, dialect) .. ";")
   elseif node.node_type == "schema" then
     if dialect == "postgres" then
-      table.insert(lines, "SET search_path TO " .. node.name .. ";")
+      table.insert(lines, "SET search_path TO " .. ident.quote(node.name, dialect) .. ";")
     elseif dialect == "mysql" then
-      table.insert(lines, "USE " .. node.name .. ";")
+      table.insert(lines, "USE " .. ident.quote(node.name, dialect) .. ";")
     else
       table.insert(lines, "-- schema: " .. node.name)
     end
@@ -482,11 +483,11 @@ function M.modify_col(node, context)
 
     local sql_parts
     if dialect == "mysql" then
-      sql_parts = { "ALTER TABLE `" .. table_node.name .. "` MODIFY COLUMN `" .. node.name .. "` " .. col_type }
+      sql_parts = { "ALTER TABLE " .. ident.quote(table_node.name, dialect) .. " MODIFY COLUMN " .. ident.quote(node.name, dialect) .. " " .. col_type }
     elseif dialect == "postgres" then
-      sql_parts = { "ALTER TABLE " .. table_node.name .. " ALTER COLUMN " .. node.name .. " TYPE " .. col_type }
+      sql_parts = { "ALTER TABLE " .. ident.quote(table_node.name, dialect) .. " ALTER COLUMN " .. ident.quote(node.name, dialect) .. " TYPE " .. col_type }
     else
-      sql_parts = { "ALTER TABLE " .. table_node.name .. " ALTER COLUMN " .. node.name .. " TYPE " .. col_type }
+      sql_parts = { "ALTER TABLE " .. ident.quote(table_node.name, dialect) .. " ALTER COLUMN " .. ident.quote(node.name, dialect) .. " TYPE " .. col_type }
     end
 
     if not nullable then
@@ -514,20 +515,20 @@ function M.modify_col(node, context)
     end
 
     if dialect == "postgres" then
-      table.insert(lines, "ALTER TABLE " .. table_node.name .. " ALTER COLUMN " .. node.name .. " TYPE " .. col_type .. ";")
+      table.insert(lines, "ALTER TABLE " .. ident.quote(table_node.name, dialect) .. " ALTER COLUMN " .. ident.quote(node.name, dialect) .. " TYPE " .. col_type .. ";")
       if not nullable then
-        table.insert(lines, "ALTER TABLE " .. table_node.name .. " ALTER COLUMN " .. node.name .. " SET NOT NULL;")
+        table.insert(lines, "ALTER TABLE " .. ident.quote(table_node.name, dialect) .. " ALTER COLUMN " .. ident.quote(node.name, dialect) .. " SET NOT NULL;")
       end
       if default_val ~= nil and default_val ~= "" then
-        table.insert(lines, "ALTER TABLE " .. table_node.name .. " ALTER COLUMN " .. node.name .. " SET DEFAULT " .. default_val .. ";")
+        table.insert(lines, "ALTER TABLE " .. ident.quote(table_node.name, dialect) .. " ALTER COLUMN " .. ident.quote(node.name, dialect) .. " SET DEFAULT " .. default_val .. ";")
       elseif default_val == "" then
-        table.insert(lines, "ALTER TABLE " .. table_node.name .. " ALTER COLUMN " .. node.name .. " SET DEFAULT '';")
+        table.insert(lines, "ALTER TABLE " .. ident.quote(table_node.name, dialect) .. " ALTER COLUMN " .. ident.quote(node.name, dialect) .. " SET DEFAULT '';")
       end
       if comment_val ~= nil and comment_val ~= "" then
-        table.insert(lines, "COMMENT ON COLUMN " .. table_node.name .. "." .. node.name .. " IS '" .. comment_val:gsub("'", "''") .. "';")
+        table.insert(lines, "COMMENT ON COLUMN " .. ident.quote(table_node.name, dialect) .. "." .. ident.quote(node.name, dialect) .. " IS '" .. comment_val:gsub("'", "''") .. "';")
       end
     elseif dialect == "mysql" then
-      local parts = { "ALTER TABLE `" .. table_node.name .. "` MODIFY COLUMN `" .. node.name .. "` " .. col_type }
+      local parts = { "ALTER TABLE " .. ident.quote(table_node.name, dialect) .. " MODIFY COLUMN " .. ident.quote(node.name, dialect) .. " " .. col_type }
       if not nullable then table.insert(parts, " NOT NULL") end
       if default_val ~= nil and default_val ~= "" then table.insert(parts, " DEFAULT " .. default_val)
       elseif default_val == "" then table.insert(parts, " DEFAULT ''") end
@@ -579,9 +580,9 @@ function M.new_table(node, context)
       cursor_offset = cursor_offset + 1
     end
 
-    local qualified = table_name
+    local qualified = ident.quote(table_name, dialect)
     if schema and dialect == "postgres" then
-      qualified = schema .. "." .. table_name
+      qualified = ident.quote(schema, dialect) .. "." .. ident.quote(table_name, dialect)
     end
 
     table.insert(lines, "CREATE TABLE " .. qualified .. " (")
@@ -683,13 +684,13 @@ function M.new_column(node, context)
       cursor_offset = cursor_offset + 1
     end
 
-    local add_col = "ALTER TABLE " .. table_node.name .. " ADD COLUMN " .. col_name .. " " .. col_type
+    local add_col = "ALTER TABLE " .. ident.quote(table_node.name, dialect) .. " ADD COLUMN " .. ident.quote(col_name, dialect) .. " " .. col_type
     if not nullable then add_col = add_col .. " NOT NULL" end
     if default_val ~= "" then add_col = add_col .. " DEFAULT " .. default_val end
     add_col = add_col .. ";"
 
     if dialect == "mysql" then
-      add_col = "ALTER TABLE `" .. table_node.name .. "` ADD COLUMN `" .. col_name .. "` " .. col_type
+      add_col = "ALTER TABLE " .. ident.quote(table_node.name, dialect) .. " ADD COLUMN " .. ident.quote(col_name, dialect) .. " " .. col_type
       if not nullable then add_col = add_col .. " NOT NULL" end
       if default_val ~= "" then add_col = add_col .. " DEFAULT " .. default_val end
       add_col = add_col .. ";"
@@ -742,14 +743,13 @@ function M.insert_template(node, context)
   local conn = get_connection_name(table_node, context)
   local schema_prefix = ""
   if table_node.meta and table_node.meta.schema and dialect == "postgres" then
-    schema_prefix = table_node.meta.schema .. "."
+    schema_prefix = ident.quote(table_node.meta.schema, dialect) .. "."
   end
 
   local col_names = {}
   for _, c in ipairs(cols) do
-    if not c.is_pk then  -- skip auto-increment PK
-      local q = dialect == "mysql" and "`" or ""
-      table.insert(col_names, q .. c.name .. q)
+    if not c.is_pk then
+      table.insert(col_names, ident.quote(c.name, dialect))
     end
   end
 
@@ -764,7 +764,7 @@ function M.insert_template(node, context)
     cursor_offset = cursor_offset + 1
   end
 
-  table.insert(lines, "INSERT INTO " .. schema_prefix .. table_node.name .. " (" .. table.concat(col_names, ", ") .. ")")
+  table.insert(lines, "INSERT INTO " .. schema_prefix .. ident.quote(table_node.name, dialect) .. " (" .. table.concat(col_names, ", ") .. ")")
   table.insert(lines, "VALUES ()")
   table.insert(lines, "")
   cursor_offset = cursor_offset + 1  -- land on VALUES line
@@ -794,17 +794,16 @@ function M.update_template(node, context)
   local conn = get_connection_name(table_node, context)
   local schema_prefix = ""
   if table_node.meta and table_node.meta.schema and dialect == "postgres" then
-    schema_prefix = table_node.meta.schema .. "."
+    schema_prefix = ident.quote(table_node.meta.schema, dialect) .. "."
   end
 
   local pk_cols = {}
   local set_cols = {}
   for _, c in ipairs(cols) do
-    local q = dialect == "mysql" and "`" or ""
     if c.is_pk then
-      table.insert(pk_cols, q .. c.name .. q)
+      table.insert(pk_cols, ident.quote(c.name, dialect))
     else
-      table.insert(set_cols, "  " .. q .. c.name .. q .. " = 'val'")
+      table.insert(set_cols, "  " .. ident.quote(c.name, dialect) .. " = 'val'")
     end
   end
 
@@ -819,7 +818,7 @@ function M.update_template(node, context)
     cursor_offset = cursor_offset + 1
   end
 
-  table.insert(lines, "UPDATE " .. schema_prefix .. table_node.name)
+  table.insert(lines, "UPDATE " .. schema_prefix .. ident.quote(table_node.name, dialect))
   table.insert(lines, "SET")
   for _, sc in ipairs(set_cols) do table.insert(lines, sc .. ",") end
   -- Remove trailing comma from last SET column
@@ -990,10 +989,10 @@ function M.drop_table(node, context)
   local conn = get_connection_name(table_node, context)
   local schema_prefix = ""
   if table_node.meta and table_node.meta.schema and dialect == "postgres" then
-    schema_prefix = table_node.meta.schema .. "."
+    schema_prefix = ident.quote(table_node.meta.schema, dialect) .. "."
   end
 
-  local qualified = schema_prefix .. table_node.name
+  local qualified = schema_prefix .. ident.quote(table_node.name, dialect)
   show_drop_confirm(table_node, qualified, conn, schema_prefix, context)
 end
 

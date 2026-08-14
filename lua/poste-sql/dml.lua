@@ -1,15 +1,9 @@
 local M = {}
-
-local function quote_ident(name, dialect)
-  if dialect == "mysql" then
-    return "`" .. name .. "`"
-  end
-  return '"' .. name .. '"'
-end
+local ident = require("poste-sql.ident")
 
 local function quote_schema(schema, dialect)
   if not schema or schema == "" then return "" end
-  return quote_ident(schema, dialect) .. "."
+  return ident.quote(schema, dialect) .. "."
 end
 
 local function quote_val(val, dialect)
@@ -69,13 +63,20 @@ local function find_pk_columns(columns)
   return pks
 end
 
+local function where_eq(col_name, val, dialect)
+  if val == nil or val == vim.NIL then
+    return ident.quote(col_name, dialect) .. " IS NULL"
+  end
+  return ident.quote(col_name, dialect) .. " = " .. quote_val(val, dialect)
+end
+
 local function build_where(columns, pk_cols, row_values, dialect)
   if #pk_cols > 0 then
     local parts = {}
     for _, ci in ipairs(pk_cols) do
       local col = columns[ci]
       local val = row_values[ci]
-      parts[#parts + 1] = quote_ident(col.name, dialect) .. " = " .. quote_val(val, dialect)
+      parts[#parts + 1] = where_eq(col.name, val, dialect)
     end
     return table.concat(parts, " AND ")
   end
@@ -83,7 +84,7 @@ local function build_where(columns, pk_cols, row_values, dialect)
   for i, col in ipairs(columns or {}) do
     local val = row_values[i]
     if val ~= nil and val ~= vim.NIL then
-      parts[#parts + 1] = quote_ident(col.name, dialect) .. " = " .. quote_val(val, dialect)
+      parts[#parts + 1] = where_eq(col.name, val, dialect)
     end
   end
   return table.concat(parts, " AND ")
@@ -94,7 +95,7 @@ function M.generate_update(schema, table_name, columns, modifications, row_value
   for _, mod in ipairs(modifications or {}) do
     local col = columns and columns[mod.col]
     if col then
-      set_parts[#set_parts + 1] = quote_ident(col.name, dialect) .. " = " .. quote_val(mod.new_val, dialect)
+      set_parts[#set_parts + 1] = ident.quote(col.name, dialect) .. " = " .. quote_val(mod.new_val, dialect)
     end
   end
 
@@ -104,7 +105,7 @@ function M.generate_update(schema, table_name, columns, modifications, row_value
     where = build_where(columns, pk_cols, row_values, dialect)
   end
 
-  local sql = "UPDATE " .. quote_schema(schema, dialect) .. quote_ident(table_name, dialect)
+  local sql = "UPDATE " .. quote_schema(schema, dialect) .. ident.quote(table_name, dialect)
     .. " SET " .. table.concat(set_parts, ", ")
   if where ~= "" then
     sql = sql .. " WHERE " .. where
@@ -119,12 +120,12 @@ function M.generate_insert(schema, table_name, columns, row_values, dialect)
   for i, col in ipairs(columns or {}) do
     local val = row_values and row_values[i]
     if val ~= "[Auto]" and val ~= nil then
-      col_parts[#col_parts + 1] = quote_ident(col.name, dialect)
+      col_parts[#col_parts + 1] = ident.quote(col.name, dialect)
       val_parts[#val_parts + 1] = quote_val(val, dialect)
     end
   end
 
-  return "INSERT INTO " .. quote_schema(schema, dialect) .. quote_ident(table_name, dialect)
+  return "INSERT INTO " .. quote_schema(schema, dialect) .. ident.quote(table_name, dialect)
     .. " (" .. table.concat(col_parts, ", ") .. ")"
     .. " VALUES (" .. table.concat(val_parts, ", ") .. ");"
 end
@@ -132,7 +133,7 @@ end
 function M.generate_delete(schema, table_name, columns, row_values, dialect)
   local pk_cols = find_pk_columns(columns)
   local where = build_where(columns, pk_cols, row_values or {}, dialect)
-  return "DELETE FROM " .. quote_schema(schema, dialect) .. quote_ident(table_name, dialect)
+  return "DELETE FROM " .. quote_schema(schema, dialect) .. ident.quote(table_name, dialect)
     .. " WHERE " .. where .. ";"
 end
 

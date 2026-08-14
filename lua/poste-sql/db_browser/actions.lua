@@ -3,6 +3,7 @@ local tree = require("poste-sql.db_browser.tree")
 local async = require("poste-sql.db_browser.async")
 local state = require("poste.state")
 local cli = require("poste.cli")
+local ident = require("poste-sql.ident")
 
 local HEADER_LINES = icons.HEADER_LINES
 
@@ -257,10 +258,10 @@ execute_table_select = function(node, context)
   local conn = get_connection(node, context.root_nodes)
   local schema_prefix = ""
   if node.meta and node.meta.schema and dialect == "postgres" then
-    schema_prefix = node.meta.schema .. "."
+    schema_prefix = ident.quote(node.meta.schema, dialect) .. "."
   end
 
-  local sql = "-- @connection " .. conn .. "\nSELECT * FROM " .. schema_prefix .. node.name .. " LIMIT 100;"
+  local sql = "-- @connection " .. conn .. "\nSELECT * FROM " .. schema_prefix .. ident.quote(node.name, dialect) .. " LIMIT 100;"
   local search_dir = vim.fn.getcwd()
 
   local connections = require("poste-sql.connections")
@@ -497,7 +498,7 @@ function M.generate_select_query(buf_line, context)
   for _, line in ipairs(context_lines) do
     table.insert(query_lines, line)
   end
-  table.insert(query_lines, "SELECT * FROM " .. schema_prefix .. table_node.name .. " LIMIT 100;")
+  table.insert(query_lines, "SELECT * FROM " .. schema_prefix .. ident.quote(table_node.name, dialect) .. " LIMIT 100;")
   table.insert(query_lines, "")
 
   local line_count = vim.api.nvim_buf_line_count(context.source_buf)

@@ -3,14 +3,15 @@ local cli = require("poste.cli")
 local forms_advanced = require("poste-sql.db_browser.forms_advanced")
 local tree = require("poste-sql.db_browser.tree")
 local async = require("poste-sql.db_browser.async")
+local ident = require("poste-sql.ident")
 
 local M = {}
 
 local function postgres_create_schema(fields)
   local parts = { "CREATE SCHEMA", "IF NOT EXISTS" }
-  table.insert(parts, '"' .. fields.name .. '"')
+  table.insert(parts, ident.quote(fields.name, "postgres"))
   if fields.owner and fields.owner ~= "" then
-    table.insert(parts, 'AUTHORIZATION "' .. fields.owner .. '"')
+    table.insert(parts, "AUTHORIZATION " .. ident.quote(fields.owner, "postgres"))
   end
   return table.concat(parts, " ") .. ";"
 end
@@ -28,9 +29,9 @@ local function gen_grant(grant, dialect)
   table.insert(parts, "ON")
   table.insert(parts, on_object)
   if on_object ~= "SCHEMA" and schema_name ~= "" then
-    table.insert(parts, 'IN SCHEMA "' .. schema_name .. '"')
+    table.insert(parts, "IN SCHEMA " .. ident.quote(schema_name, dialect))
   end
-  table.insert(parts, 'TO "' .. grant.grantee .. '"')
+  table.insert(parts, "TO " .. ident.quote(grant.grantee, dialect))
   if grant.with_grant_option then
     table.insert(parts, "WITH GRANT OPTION")
   end
@@ -39,7 +40,7 @@ end
 
 local function gen_grant_usage(grant)
   local schema_name = grant._schema_name or ""
-  return 'GRANT USAGE ON SCHEMA "' .. schema_name .. '" TO "' .. grant.grantee .. '";'
+  return "GRANT USAGE ON SCHEMA " .. ident.quote(schema_name, "postgres") .. " TO " .. ident.quote(grant.grantee, "postgres") .. ";"
 end
 
 local function get_dialect(node, context)

@@ -187,13 +187,15 @@ local function format_markdown(data_result)
   return table.concat(lines, "\n")
 end
 
+local ident = require("poste-sql.ident")
+
 local function format_sql_insert(data_result)
   local cols = data_result.columns or {}
   local rows = data_result.rows or {}
   local table_name = data_result.table_name or "export"
   local col_names = {}
   for _, col in ipairs(cols) do
-    table.insert(col_names, '"' .. tostring(col.name) .. '"')
+    table.insert(col_names, ident.quote(col.name, "postgres"))
   end
   local col_names_str = table.concat(col_names, ", ")
   local lines = {}
@@ -211,8 +213,8 @@ local function format_sql_insert(data_result)
         table.insert(vals, "'" .. s .. "'")
       end
     end
-    table.insert(lines, string.format('INSERT INTO "%s" (%s) VALUES (%s);',
-      table_name, col_names_str, table.concat(vals, ", ")))
+    table.insert(lines, string.format("INSERT INTO %s (%s) VALUES (%s);",
+      ident.quote(table_name, "postgres"), col_names_str, table.concat(vals, ", ")))
   end
   return table.concat(lines, "\n")
 end
