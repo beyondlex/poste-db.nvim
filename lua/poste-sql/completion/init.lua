@@ -186,12 +186,6 @@ local function detect_context_async(bufnr, line_before, cursor_line, callback)
   end)
 end
 
---- Sync fallback for debug/status commands that call without bufnr/cursor_line.
---- Always returns "keyword" to match previous behavior.
-local function detect_context_for_completion(...)
-  return "keyword", nil, nil
-end
-
 local function get_items(bufnr, line_before, cursor_line, callback)
   local prefix = line_before:match("[%w_]*$") or ""
   local dialect = get_dialect_flag()
@@ -456,7 +450,6 @@ end
 
 M._test = {
   detect_context_async = detect_context_async,
-  detect_context_for_completion = detect_context_for_completion,
   resolve_current_context = data.resolve_current_context,
   conn_key = data.conn_key,
   get_items = get_items,

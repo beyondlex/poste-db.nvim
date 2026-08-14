@@ -304,11 +304,7 @@ function M.setup(opts)
     table.insert(status, "  After cursor: '" .. line:sub(col + 1) .. "'")
 
     if sql_comp._test then
-      local ctx_type, ctx_data = sql_comp._test.detect_context_for_completion(line_before)
-      table.insert(status, "  Detected context: " .. tostring(ctx_type))
-      if ctx_data then
-        table.insert(status, "  Context data: " .. tostring(ctx_data))
-      end
+      table.insert(status, "  Detected context: (see Rust context detect)")
     end
 
     vim.notify(table.concat(status, "\n"), vim.log.levels.INFO)
@@ -374,8 +370,7 @@ function M.setup(opts)
     local line_before = line:sub(1, col)
     local cursor_lnum = cursor[1]
 
-    local ctx_type, _ = sql_comp._test.detect_context_for_completion(line_before)
-    local tbls, alias_map = sql_comp._test.extract_from_tables(buf, cursor_lnum)
+    local tbls, alias_map = sql_comp._test.get_tables_and_alias and sql_comp._test.get_tables_and_alias(buf, cursor_lnum) or {}
     local conn = sql_comp._test.conn_key()
 
     local blink_src = require("poste-sql.completion.adapter").get_source_lib()
@@ -451,13 +446,7 @@ function M.setup(opts)
     }
 
     if sql_comp._test then
-      local ctx_type = sql_comp._test.detect_context_for_completion(line_before)
-      table.insert(status, "  Context: " .. tostring(ctx_type))
-
-      if ctx_type == "column" and sql_comp._test.extract_from_tables then
-        local tbls = sql_comp._test.extract_from_tables(buf, cursor_line)
-        table.insert(status, "  Tables found: " .. #tbls .. " - " .. vim.inspect(tbls))
-      end
+      table.insert(status, "  Context: (see Rust context detect)")
 
       local conn = sql_comp._test.conn_key and sql_comp._test.conn_key()
       table.insert(status, "  Connection key: " .. tostring(conn))

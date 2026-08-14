@@ -198,7 +198,7 @@ end
 function M.resolve_current_context()
   local ok, sql_context = pcall(require, "poste-sql.context")
   if not ok then return state.sql and state.sql.context end
-  local ctx = sql_context.resolve_context(vim.api.nvim_get_current_buf())
+  local ctx = sql_context.resolve_full_context(vim.api.nvim_get_current_buf())
   if not ctx.connection then
     ctx.connection = state.sql and state.sql.context and state.sql.context.connection
   end

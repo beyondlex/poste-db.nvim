@@ -3,6 +3,7 @@
 local state = require("poste.state")
 local select_mod = require("poste.select")
 local const = require("poste-sql.constants")
+local lex = require("poste-sql.lex")
 
 local M = {}
 
@@ -12,20 +13,20 @@ local M = {}
 
 --- Resolve the SQL execution context from the current buffer.
 --- Scans file header for @connection/@database directives, then scans
---- ALL lines from file start up to the cursor for USE statements.
+--- the cursor's ### block for USE statements and block-level overrides.
 --- The last USE statement before the cursor wins (JetBrains behavior).
 --- @param buf number Buffer handle (default: current buffer)
 --- @return table context { connection = string|nil, database = string|nil }
 function M.resolve_context(buf, limit_line)
   buf = buf or vim.api.nvim_get_current_buf()
-  local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
   local cursor_line = limit_line or vim.fn.line(".")
 
   -- Phase 1: Scan file header (before first ###) for global defaults
   local connection = nil
   local database = nil
+  local header_lines = vim.api.nvim_buf_get_lines(buf, 0, cursor_line - 1, false)
 
-  for i, line in ipairs(lines) do
+  for i, line in ipairs(header_lines) do
     if const.is_section_marker(line) then break end
     local conn_match = const.match_directive(line, const.DIRECTIVE_CONNECTION)
     if conn_match then connection = vim.trim(conn_match) end
@@ -33,23 +34,18 @@ function M.resolve_context(buf, limit_line)
     if db_match then database = vim.trim(db_match) end
   end
 
-  -- Phase 2: Scan ALL lines from top to cursor for USE statements and
-  -- block-level @connection/@database overrides. Last one wins.
-  for i = 1, cursor_line do
-    local line = lines[i]
-    if not line then break end
+  -- Phase 2: Scan cursor's ### block for USE statements and block-level overrides
+  local block_start = lex.find_block_for_line(header_lines, cursor_line)
+  local block_lines = vim.api.nvim_buf_get_lines(buf, block_start - 1, cursor_line, false)
 
-    -- Block-level directive override
+  for i, line in ipairs(block_lines) do
     local conn_match = const.match_directive(line, const.DIRECTIVE_CONNECTION)
     if conn_match then connection = vim.trim(conn_match) end
     local db_match = const.match_directive(line, const.DIRECTIVE_DATABASE)
     if db_match then database = vim.trim(db_match) end
 
-    -- USE statement: last one before cursor wins
-    local use_match = line:match("^%s*[Uu][Ss][Ee]%s+(%S+)")
-    if use_match then
-      database = use_match:gsub(";$", ""):gsub("^['\"`]", ""):gsub("['\"`]$", "")
-    end
+    local use_db = lex.find_use_database(line)
+    if use_db then database = use_db end
   end
 
   return { connection = connection, database = database }
