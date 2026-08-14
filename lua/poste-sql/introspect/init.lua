@@ -155,11 +155,16 @@ function M.show_table_ddl()
     local cc = require("poste-sql.connections").get_connection_config(conn)
     if cc and cc.dialect then dial = " --dialect " .. cc.dialect end
 
-    local cmd = string.format("%s context detect %d%s", vim.fn.shellescape(binary), payload.offset, dial)
-    local out = vim.fn.system(cmd, payload.sql_text)
-    if vim.v.shell_error ~= 0 or not out or out == "" then
+    local ok_sys, result_obj = pcall(vim.system, { binary, "context", "detect", tostring(payload.offset) }, {
+      stdin = payload.sql_text,
+      timeout = 5000,
+    })
+    if not ok_sys then return nil end
+    local result = result_obj:wait()
+    if result.code ~= 0 or not result.stdout or result.stdout == "" then
       return nil
     end
+    local out = result.stdout
 
     local ok, parsed = pcall(vim.json.decode, out)
     if not ok or not parsed then

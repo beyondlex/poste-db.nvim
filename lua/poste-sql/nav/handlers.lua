@@ -78,20 +78,25 @@ function M.handle_table_reference(buf, line_num, line_text, cursor, full_ctx, ta
     local block = detect.extract_sql_block(all_lines, line_num, line_text, end_col)
     if block then
       local conn_config = require("poste-sql.connections").get_connection_config(full_ctx.connection)
-      local cmd = detect.build_context_detect_command(bin, block.offset, conn_config and conn_config.dialect or nil)
-      local output = vim.fn.system(cmd, block.sql_text)
-      if vim.v.shell_error == 0 then
-        local ok, parsed = pcall(vim.json.decode, output)
-        if ok and parsed then
-          util.clean_nil(parsed)
-          local target = detect.resolve_detected_table_target(parsed, line_text, end_col, table_name, full_ctx)
-          if target then
-            if target.action == "navigate_to" then
-              vim.cmd("normal! m'")
-              require("poste-sql.db_browser").navigate_to(
-                target.connection or full_ctx.connection,
-                target.database or full_ctx.database or table_name
-              )
+      local cmd = { bin, "context", "detect", tostring(block.offset) }
+      if conn_config and conn_config.dialect then
+        table.insert(cmd, "--dialect"); table.insert(cmd, conn_config.dialect)
+      end
+      local ok_sys, result_obj = pcall(vim.system, cmd, { stdin = block.sql_text, timeout = 5000 })
+      if ok_sys then
+        local result = result_obj:wait()
+        if result.code == 0 and result.stdout then
+          local ok, parsed = pcall(vim.json.decode, result.stdout)
+          if ok and parsed then
+            util.clean_nil(parsed)
+            local target = detect.resolve_detected_table_target(parsed, line_text, end_col, table_name, full_ctx)
+            if target then
+              if target.action == "navigate_to" then
+                vim.cmd("normal! m'")
+                require("poste-sql.db_browser").navigate_to(
+                  target.connection or full_ctx.connection,
+                  target.database or full_ctx.database or table_name
+                )
               return true
             end
             table_name = target.table_name or table_name

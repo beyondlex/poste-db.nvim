@@ -268,50 +268,23 @@ function M.format_text(text, opts)
       local stderr_data = {}
       local exit_code
 
-      local job_id = vim.fn.jobstart({ cmd, unpack(args) }, {
-        stdin = "pipe",
-        stdout_buffered = true,
-        stderr_buffered = true,
-        on_stdout = function(_, data)
-          if not data then return end
-          for _, l in ipairs(data) do
-            table.insert(stdout_data, l)
-          end
-        end,
-        on_stderr = function(_, data)
-          if not data then return end
-          for _, l in ipairs(data) do
-            table.insert(stderr_data, l)
-          end
-        end,
-        on_exit = function(_, code)
-          exit_code = code
-        end,
+      local ok_sys, sys_obj = pcall(vim.system, { cmd, unpack(args) }, {
+        stdin = text,
+        timeout = 10000,
       })
-
-      if job_id <= 0 then
+      if not ok_sys then
         last_err = string.format("Failed to start %s", cmd)
       else
-        -- Write input and close stdin
-        vim.fn.chansend(job_id, text)
-        vim.fn.chanclose(job_id, "stdin")
-
-        -- Wait for completion (up to 10 seconds)
-        vim.fn.jobwait({ job_id }, 10000)
-
-        if exit_code ~= 0 then
-          local err = table.concat(stderr_data, "\n")
-          if err == "" then err = string.format("Exit code %d", exit_code) end
+        local result_obj = sys_obj:wait()
+        if result_obj.code ~= 0 then
+          local err = result_obj.stderr
+          if err == "" then err = string.format("Exit code %d", result_obj.code) end
           last_err = string.format("%s: %s", formatter, err)
         else
-          local result = table.concat(stdout_data, "\n")
-
-          -- Ensure trailing newline
+          local result = result_obj.stdout
           if result ~= "" and not result:match("\n$") then
             result = result .. "\n"
           end
-
-          -- Success
           return result, nil, formatter
         end
       end

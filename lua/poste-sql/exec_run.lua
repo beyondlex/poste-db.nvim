@@ -264,9 +264,12 @@ local function run_sql(sql, opts)
   if not binary then return nil end
   local tmpfile = write_temp_file(sql, opts.src_file or (opts.conn_url and vim.fn.tempname() .. ".sql" or nil))
   local cmd = vim.list_extend({ binary }, build_cmd(tmpfile, opts))
-  local out = vim.fn.system(cmd)
+  local ok_sys, result_obj = pcall(vim.system, cmd, { timeout = 30000 })
+  if not ok_sys then pcall(vim.fn.delete, tmpfile); return nil end
+  local result = result_obj:wait()
   pcall(vim.fn.delete, tmpfile)
-  local events = parse_lines(out)
+  if result.code ~= 0 then return nil end
+  local events = parse_lines(result.stdout)
   if #events == 0 then return nil end
   return build_response(events, opts.conn_url, opts.database)
 end
