@@ -60,14 +60,41 @@ local function extract_references_from_node(stmt_node, buf)
     return start_row + 1, start_col + 1, end_row + 1, end_col + 1
   end
 
-  local function add_table(name, node, db_prefix)
+  --- tree-sitter splits digit-leading identifiers (`123_abc`) into
+  --- ERROR[123] + relation/object_reference[_abc]. Rejoin the fragment
+  --- when its text is pure digits and it runs directly into the
+  --- identifier (byte-contiguous; `234 _tablename` has a space gap and
+  --- must stay separate). The merged name is what the user wrote —
+  --- digit-leading unquoted identifiers are legal in MySQL/MariaDB.
+  --- @param buf number
+  --- @param node TSNode  node whose previous sibling may be the digit ERROR
+  --- @param tbl_name string
+  --- @param id_node TSNode  the identifier node inside the relation
+  --- @return string tbl_name, TSNode|nil span_start
+  local function merge_digit_fragment(buf, node, tbl_name, id_node)
+    local prev = node:prev_sibling()
+    if not (prev and prev:type() == "ERROR") then return tbl_name, nil end
+    local err_text = vim.treesitter.get_node_text(prev, buf) or ""
+    if not err_text:match("^%d+$") then return tbl_name, nil end
+    local _, _, per, pec = prev:range()
+    local isr, isc = id_node:range()
+    if per ~= isr or pec ~= isc then return tbl_name, nil end
+    return err_text .. tbl_name, prev
+  end
+
+  local function add_table(name, node, db_prefix, start_node)
     name = name:gsub("^[`\"'\\[]+", ""):gsub("[]`\"'\\]+$", "")
     if name == "" then return end
     local key = name:lower() .. ":" .. node:start() .. ":" .. node:end_()
     if seen_tables[key] then return end
     seen_tables[key] = true
-    local lnum, col, end_lnum, end_col = get_node_range(node)
-    table.insert(tables, { name = name, db_prefix = db_prefix, lnum = lnum, col = col, end_lnum = end_lnum, end_col = end_col })
+    local start_row, start_col = (start_node or node):range()
+    local _, _, end_row, end_col = node:range()
+    table.insert(tables, {
+      name = name, db_prefix = db_prefix,
+      lnum = start_row + 1, col = start_col + 1,
+      end_lnum = end_row + 1, end_col = end_col + 1,
+    })
   end
 
   local function add_column(name, tbl, node)
@@ -148,6 +175,8 @@ local function extract_references_from_node(stmt_node, buf)
         end
       end
       if tbl_name and tbl_node then
+        local merged_name, span_start = merge_digit_fragment(buf, node, tbl_name, tbl_node)
+        tbl_name = merged_name
         local is_from_or_join = false
         for _, ctx in ipairs(context_stack) do
           if ctx == "from" or ctx == "join" or ctx == "update" or ctx == "delete" or ctx == "insert" then
@@ -156,7 +185,7 @@ local function extract_references_from_node(stmt_node, buf)
           end
         end
         if is_from_or_join then
-          add_table(tbl_name, tbl_node, db_prefix)
+          add_table(tbl_name, tbl_node, db_prefix, span_start)
           table.insert(from_tables, tbl_name)
           if alias then alias_map[alias] = tbl_name end
         end
@@ -187,8 +216,9 @@ local function extract_references_from_node(stmt_node, buf)
         elseif #children == 1 and children[1].type == "identifier" then
           local tn = children[1].text:gsub("^[`\"'\\[]+", ""):gsub("[]`\"'\\]+$", "")
           if tn ~= "" then
-            add_table(tn, children[1].node)
-            table.insert(from_tables, tn)
+            local merged_tn, span_start = merge_digit_fragment(buf, node, tn, children[1].node)
+            add_table(merged_tn, children[1].node, nil, span_start)
+            table.insert(from_tables, merged_tn)
           end
         else
           local tn = vim.treesitter.get_node_text(node, buf):gsub("^[`\"'\\[]+", ""):gsub("[]`\"'\\]+$", "")
@@ -513,5 +543,9 @@ function M.update(buf)
     state.log("ERROR", "semantic_diagnostics: " .. tostring(err))
   end
 end
+
+M._test = {
+  extract_references_from_node = extract_references_from_node,
+}
 
 return M

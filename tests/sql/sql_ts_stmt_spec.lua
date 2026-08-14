@@ -212,6 +212,68 @@ describe("find_error_nodes", function()
   end)
 end)
 
+local sem_ok, sem = pcall(require, "poste-sql.semantic_diagnostics")
+if sem_ok and sem._test and sem._test.extract_references_from_node then
+  describe("semantic reference extraction (digit-leading identifiers)", function()
+    local extract = sem._test.extract_references_from_node
+
+    local function extract_tables(sql)
+      local buf = make_buf({ sql })
+      local parser = assert(vim.treesitter.get_parser(buf, "sql"))
+      local root = parser:parse()[1]:root()
+      local stmt = nil
+      for child in root:iter_children() do
+        if child:type() == "statement" then stmt = child break end
+      end
+      local refs = extract(stmt, buf)
+      local names = {}
+      for _, t in ipairs(refs.tables) do names[#names + 1] = t.name end
+      return names, refs, buf
+    end
+
+    it("rejoins digit fragment from SELECT FROM", function()
+      local names = extract_tables("SELECT * FROM 123_abc;")
+      assert.same({ "123_abc" }, names, "must look up 123_abc, not the _abc fragment")
+    end)
+
+    it("rejoins longer digit prefix (2024_log)", function()
+      local names = extract_tables("select * from 2024_log where id = 1;")
+      assert.same({ "2024_log" }, names)
+    end)
+
+    it("rejoins with AS alias", function()
+      local names, refs = extract_tables("select * from 123_abc as t;")
+      assert.same({ "123_abc" }, names)
+      assert.equal("123_abc", refs.from_tables[1])
+    end)
+
+    it("rejoins INSERT INTO target", function()
+      local names = extract_tables("insert into 123_abc values (1);")
+      assert.same({ "123_abc" }, names)
+    end)
+
+    it("rejoins UPDATE target", function()
+      local names = extract_tables("update 123_abc set x = 1;")
+      assert.same({ "123_abc" }, names)
+    end)
+
+    it("does not merge when whitespace separates (234 _tablename)", function()
+      local names = extract_tables("select * from 234 _tablename;")
+      assert.same({ "_tablename" }, names, "digit fragment is a separate standalone name")
+    end)
+
+    it("leaves plain identifiers untouched", function()
+      local names = extract_tables("select * from users;")
+      assert.same({ "users" }, names)
+    end)
+
+    it("rejoins both sides of a JOIN", function()
+      local names = extract_tables("select * from 23_tablename join 2024_log l on l.id = x.id;")
+      assert.same({ "23_tablename", "2024_log" }, names)
+    end)
+  end)
+end
+
 describe("USE/SET boundary detection", function()
   it("finds span for USE statement", function()
     local buf = make_buf({ "use inventory;", "SELECT 1;" })
