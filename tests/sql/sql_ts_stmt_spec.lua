@@ -274,6 +274,80 @@ if sem_ok and sem._test and sem._test.extract_references_from_node then
   end)
 end
 
+describe("digit-fragment highlight (syntax.highlight_digit_prefix_fragments)", function()
+  local syntax = require("poste-sql.syntax")
+  --- Byte spans (from, to) covered by digit-fragment extmarks in a buffer.
+  local function fragment_spans(buf)
+    local ns = vim.api.nvim_create_namespace("poste_sql_digit_fragment")
+    local spans = {}
+    for _, m in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true })) do
+      local details = m[4] or {}
+      spans[#spans + 1] = { m[3], details.end_col }
+    end
+    table.sort(spans, function(a, b) return a[1] < b[1] end)
+    return spans
+  end
+  local function name_span(line, name)
+    local pos = line:find(name, 1, true) - 1
+    return pos, pos + #name
+  end
+
+  it("recolors the digit prefix for mysql dialect", function()
+    local sql = "SELECT * FROM 123_abc;"
+    local buf = make_buf({ sql })
+    syntax.highlight_digit_prefix_fragments(buf, "mysql")
+    local s, e = name_span(sql, "123_abc")
+    assert.same({ { s, e } }, fragment_spans(buf))
+  end)
+
+  it("recolors the digit prefix for mariadb dialect", function()
+    local sql = "SELECT * FROM 2024_log;"
+    local buf = make_buf({ sql })
+    syntax.highlight_digit_prefix_fragments(buf, "mariadb")
+    local s, e = name_span(sql, "2024_log")
+    assert.same({ { s, e } }, fragment_spans(buf))
+  end)
+
+  it("recolors both sides of a JOIN", function()
+    local sql = "SELECT * FROM 23_tablename JOIN 2024_log l ON l.id = x.id;"
+    local buf = make_buf({ sql })
+    syntax.highlight_digit_prefix_fragments(buf, "mysql")
+    local s1, e1 = name_span(sql, "23_tablename")
+    local s2, e2 = name_span(sql, "2024_log")
+    assert.same({ { s1, e1 }, { s2, e2 } }, fragment_spans(buf))
+  end)
+
+  it("leaves whitespace-separated all-digit names untouched for mysql", function()
+    local sql = "SELECT * FROM 234 _tablename;"
+    local buf = make_buf({ sql })
+    syntax.highlight_digit_prefix_fragments(buf, "mysql")
+    assert.same({}, fragment_spans(buf))
+  end)
+
+  it("keeps the error color for postgres dialect", function()
+    local sql = "SELECT * FROM 123_abc;"
+    local buf = make_buf({ sql })
+    syntax.highlight_digit_prefix_fragments(buf, "postgres")
+    assert.same({}, fragment_spans(buf))
+  end)
+
+  it("keeps the error color when dialect is unknown", function()
+    local sql = "SELECT * FROM 123_abc;"
+    local buf = make_buf({ sql })
+    syntax.highlight_digit_prefix_fragments(buf)
+    assert.same({}, fragment_spans(buf))
+  end)
+
+  it("clears previous extmarks on re-run", function()
+    local sql = "SELECT * FROM 123_abc;"
+    local buf = make_buf({ sql })
+    syntax.highlight_digit_prefix_fragments(buf, "mysql")
+    assert.is_true(#fragment_spans(buf) > 0)
+    syntax.highlight_digit_prefix_fragments(buf, "postgres")
+    assert.same({}, fragment_spans(buf))
+  end)
+end)
+
 describe("USE/SET boundary detection", function()
   it("finds span for USE statement", function()
     local buf = make_buf({ "use inventory;", "SELECT 1;" })

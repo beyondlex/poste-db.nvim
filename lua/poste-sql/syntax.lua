@@ -5,6 +5,9 @@
 
 local M = {}
 local const = require("poste-sql.constants")
+local context = require("poste-sql.context")
+local connections = require("poste-sql.connections")
+local state = require("poste.state")
 
 -- Define highlight groups for directive comments.
 -- These are still needed because Tree-sitter doesn't understand
@@ -46,6 +49,98 @@ function M.highlight_directive_comments(buf)
         end
         break
       end
+    end
+  end
+end
+
+local DIGIT_PREFIX_NS = vim.api.nvim_create_namespace("poste_sql_digit_fragment")
+
+--- Resolve the connection dialect for a buffer (lowercase), or nil.
+--- Mirrors diagnostics.get_dialect: buffer context → runtime connection.
+--- @param buf number  buffer handle
+--- @return string|nil
+local function get_dialect(buf)
+  local ctx = context.resolve_context(buf)
+  local conn = ctx.connection
+  if not conn then
+    conn = state.sql and state.sql.context and state.sql.context.connection
+  end
+  if not conn then return nil end
+  local cfg = connections.get_connection_config(conn)
+  if cfg and cfg.dialect and cfg.dialect ~= "" then
+    return cfg.dialect:lower()
+  end
+  return nil
+end
+
+--- tree-sitter-sql splits digit-leading identifiers (`123_abc`) into
+--- ERROR[123] + identifier[_abc]; the ERROR fragment inherits nvim-treesitter's
+--- @error color while `_abc` renders as a table name (@type). For MySQL/MariaDB
+--- (where digit-leading unquoted identifiers are legal) recolor the fragment
+--- with the @type group so the name renders as one token.
+--- Geometry rule: ERROR text is pure digits AND its next sibling's first leaf
+--- is an identifier starting exactly where the ERROR ends. `234 _tablename`
+--- has a whitespace gap → untouched (it is a standalone all-digit name, illegal
+--- even in MySQL). Non-mysql dialects keep the red @error signal; unknown
+--- dialect (nil) is conservative and keeps it too.
+--- @param buf number  Buffer handle
+--- @param dialect string|nil  Optional dialect override (lowercase); nil
+---   resolves via connection context.
+function M.highlight_digit_prefix_fragments(buf, dialect)
+  buf = buf or 0
+  if buf == 0 then buf = vim.api.nvim_get_current_buf() end
+  vim.api.nvim_buf_clear_namespace(buf, DIGIT_PREFIX_NS, 0, -1)
+  dialect = dialect or get_dialect(buf)
+  if dialect ~= "mysql" and dialect ~= "mariadb" then return end
+
+  local ok_lang, lang = pcall(vim.treesitter.language.get_lang, "sql")
+  if not (ok_lang and lang) then return end
+  local ok_parse, parser = pcall(vim.treesitter.get_parser, buf, "sql")
+  if not ok_parse or not parser then return end
+  local ok_trees, trees = pcall(parser.parse, parser)
+  if not ok_trees or not trees or #trees == 0 then return end
+
+  local hl = "@type"
+  if vim.fn.hlexists("@type") ~= 1 then
+    if vim.fn.hlexists("Type") == 1 then
+      hl = "Type"
+    else
+      hl = nil -- no usable group: skip coloring
+    end
+  end
+
+  local stack = { trees[1]:root() }
+  while #stack > 0 do
+    local node = table.remove(stack)
+    if node:type() == "ERROR" then
+      local text = vim.treesitter.get_node_text(node, buf) or ""
+      if text:match("^%d+$") then
+        local _, _, er, ec = node:range()
+        local next_node = node:next_sibling()
+        if next_node and hl then
+          local first = next_node
+          while first:child_count() > 0 do
+            first = first:child(0)
+          end
+          local fsr, fsc = first:range()
+          if first:type() == "identifier" and fsr == er and fsc == ec then
+            -- MySQL dialect: the ERROR digits are part of the identifier that
+            -- follows immediately. Color the whole name like a table.
+            local sr, sc = node:range()
+            local _, _, fer, fec = first:range()
+            pcall(vim.api.nvim_buf_set_extmark, buf, DIGIT_PREFIX_NS, sr, sc, {
+              end_row = fer,
+              end_col = fec,
+              hl_group = hl,
+              hl_mode = "combine",
+              priority = 300,
+            })
+          end
+        end
+      end
+    end
+    for i = node:child_count() - 1, 0, -1 do
+      stack[#stack + 1] = node:child(i)
     end
   end
 end
