@@ -495,59 +495,21 @@ end
     end)
   end
 
-  local fallback_used = false
-  local function exec_file_fallback(msg)
-    if fallback_used then return end
-    fallback_used = true
-    local log = require("poste-sql.log")
-    log.warn("SQL session failed, falling back to exec-file: " .. msg)
-    local job_id = exec_run.run_async(buf_content, {
-      src_file = file,
-      conn_url = conn_url,
-      database = db,
-      mode = "greedy",
-      max_rows = 0,
-    }, {
-      on_response = on_response,
-      on_error = on_error,
-    })
-    if not job_id or job_id <= 0 then
+  local executor = require("poste-sql.executor")
+  executor.execute({
+    sql = buf_content,
+    conn_url = conn_url,
+    database = db,
+    mode = "greedy",
+    prefer_session = use_session,
+    src_buf = src_buf,
+    src_file = file,
+    on_response = on_response,
+    on_error = function(message, parsed)
       indicators.set_indicator(src_buf, (stmt_end or first_line) - 1, "error")
-      vim.notify("Failed to start poste exec-file job (session fallback): " .. msg, vim.log.levels.ERROR, { title = "Poste SQL" })
-    end
-  end
-
-  if use_session then
-    local log = require("poste-sql.log")
-    log.info_fmt("SQL run via session: conn=%s db=%s", tostring(conn_url), tostring(db))
-    local ok = session_conn.execute(conn_url, stmt_sql_raw, {
-      on_response = on_response,
-      on_error = exec_file_fallback,
-      on_sql_error = function(message, parsed)
-        indicators.set_indicator(src_buf, (stmt_end or first_line) - 1, "error")
-        on_error(message, parsed)
-      end,
-    }, src_buf, db)  -- 5th arg: database context from @database directive
-    if ok ~= "dispatched" then
-      exec_file_fallback("session " .. ok)
-    end
-  else
-    log.info_fmt("SQL run via exec-file: conn=%s db=%s", tostring(conn_url), tostring(db))
-    local job_id = exec_run.run_async(buf_content, {
-      src_file = file,
-      conn_url = conn_url,
-      database = db,
-      mode = "greedy",
-      max_rows = 0,
-    }, {
-      on_response = on_response,
-      on_error = on_error,
-    })
-    if not job_id or job_id <= 0 then
-      indicators.set_indicator(src_buf, (stmt_end or first_line) - 1, "error")
-      vim.notify("Failed to start poste exec-file job", vim.log.levels.ERROR, { title = "Poste SQL" })
-    end
-  end
+      on_error(message, parsed)
+    end,
+  })
 end
 
 function M.get_exec_seq()
