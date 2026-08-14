@@ -24,36 +24,47 @@ end
 -----------------------------------------------------------------------
 
 local _config_search_cache = {}
+local _config_search_cache_mtime = {}
 
 --- Walk up from `search_dir` to find connections.toml.
 --- Caches results to avoid directory traversal on every cursor move.
+--- Invalidated when the found file's mtime changes.
 --- @param search_dir string Directory to start from
 --- @return string|nil Path to connections.toml
 function M.find_connections_toml(search_dir)
   if _config_search_cache[search_dir] ~= nil then
-    return _config_search_cache[search_dir] ~= false and _config_search_cache[search_dir] or nil
+    local cached = _config_search_cache[search_dir]
+    if cached == false then return nil end
+    local mtime = vim.fn.getftime(cached)
+    if _config_search_cache_mtime[search_dir] == mtime then
+      return cached
+    end
   end
   local result = util.find_file_upwards("connections.toml", search_dir)
   _config_search_cache[search_dir] = result or false
+  _config_search_cache_mtime[search_dir] = result and vim.fn.getftime(result) or nil
   return result
 end
 
 local _config_cache = nil
 local _config_cache_path = nil
+local _config_cache_mtime = nil
 
 -----------------------------------------------------------------------
 -- Environment variable resolution (dotenv + env.json + OS env)
 -----------------------------------------------------------------------
 
 local _dotenv_cache = {}
+local _dotenv_cache_mtime = {}
 
 --- Parse dotenv content: `KEY=VALUE` lines, optional `export` prefix,
---- `#` comments, and single/double quoted values. Inline comments are
---- not stripped (values may legitimately contain `#`).
+--- `#` comments, and single/double quoted values. Also resolves `{{VAR}}`
+--- references within values.
 --- @param content string
+--- @param vars table<string,string> existing vars for recursive substitution
 --- @return table<string,string>
-local function parse_dotenv(content)
-  local vars = {}
+local function parse_dotenv(content, vars)
+  vars = vars or {}
   for line in content:gmatch("[^\r\n]+") do
     local trimmed = line:match("^%s*(.-)%s*$")
     if trimmed ~= "" and trimmed:sub(1, 1) ~= "#" then
@@ -67,26 +78,31 @@ local function parse_dotenv(content)
       end
     end
   end
+  for k, v in pairs(vars) do
+    vars[k] = M.substitute_vars(v, vars)
+  end
   return vars
 end
 
 --- Find and parse `.env` walking up from `search_dir` (same discovery as
---- connections.toml). Cached per search_dir.
+--- connections.toml). Cached per search_dir with mtime invalidation.
 --- @param search_dir string
 --- @return table<string,string>
 local function load_dotenv(search_dir)
-  if _dotenv_cache[search_dir] ~= nil then
+  local path = util.find_file_upwards(".env", search_dir)
+  local mtime = path and vim.fn.getftime(path) or nil
+  if _dotenv_cache[search_dir] ~= nil and _dotenv_cache_mtime[search_dir] == mtime then
     return _dotenv_cache[search_dir]
   end
   local vars = {}
-  local path = util.find_file_upwards(".env", search_dir)
   if path then
     local ok, data = pcall(vim.fn.readfile, path)
     if ok and data then
-      vars = parse_dotenv(table.concat(data, "\n"))
+      vars = parse_dotenv(table.concat(data, "\n"), vars)
     end
   end
   _dotenv_cache[search_dir] = vars
+  _dotenv_cache_mtime[search_dir] = mtime
   return vars
 end
 
@@ -124,16 +140,24 @@ end
 
 --- Substitute `{{VAR}}` references in a string. Unknown references are
 --- kept literal, matching Rust's `substitute_vars` behavior.
+--- Recursively resolves values that contain further `{{VAR}}` references
+--- (up to a max depth to prevent infinite loops).
 --- @param s any
 --- @param vars table<string,string>
 --- @return any
-function M.substitute_vars(s, vars)
+function M.substitute_vars(s, vars, depth)
   if type(s) ~= "string" or not s:find("{{", 1, true) then
     return s
   end
-  return (s:gsub("{{([%w_.]+)}}", function(name)
+  depth = depth or 0
+  if depth >= 10 then return s end
+  local result = (s:gsub("{{([%w_.]+)}}", function(name)
     return vars[name] or "{{" .. name .. "}}"
   end))
+  if result:find("{{", 1, true) then
+    return M.substitute_vars(result, vars, depth + 1)
+  end
+  return result
 end
 
 --- Copy a connection config with `{{VAR}}` references resolved.
@@ -148,12 +172,11 @@ local function apply_env(conn, vars)
   return resolved
 end
 
---- Percent-encode a userinfo component (user/password) for URL building.
---- Encodes every byte outside the RFC 3986 unreserved set, matching the
---- Rust side's `ConnectionConfig::to_url` behavior.
+--- Percent-encode a component for URL building.
+--- Encodes every byte outside the RFC 3986 unreserved set.
 --- @param s any
 --- @return any
-local function percent_encode_userinfo(s)
+local function percent_encode(s)
   if type(s) ~= "string" or s == "" then return s end
   return (s:gsub("[^%w%.%-%_%~]", function(c)
     return string.format("%%%02X", c:byte())
@@ -173,12 +196,14 @@ function M.get_connection_config(name)
     _config_cache_path = nil
     return nil
   end
-  if _config_cache_path ~= config_path then
+  local mtime = vim.fn.getftime(config_path)
+  if _config_cache_path ~= config_path or _config_cache_mtime ~= mtime then
     local toml = require("poste-sql.toml")
     local parsed, err = toml.parse_file(config_path)
     if not parsed then return nil end
     _config_cache = parsed
     _config_cache_path = config_path
+    _config_cache_mtime = mtime
   end
   local conn = _config_cache[name]
   if not conn then return nil end
@@ -218,7 +243,7 @@ function M.resolve_connection_url(name)
     if path == ":memory:" then
       return "sqlite::memory:", nil
     end
-    return "sqlite:" .. path .. "?mode=rwc", nil
+    return "sqlite:" .. percent_encode(path) .. "?mode=rwc", nil
   end
 
   local scheme = conn.dialect == "postgres" and "postgres" or "mysql"
@@ -228,11 +253,11 @@ function M.resolve_connection_url(name)
   local db = conn.database or ""
   local auth = ""
   if conn.user and conn.password then
-    auth = percent_encode_userinfo(conn.user) .. ":" .. percent_encode_userinfo(conn.password) .. "@"
+    auth = percent_encode(conn.user) .. ":" .. percent_encode(conn.password) .. "@"
   elseif conn.user then
-    auth = percent_encode_userinfo(conn.user) .. "@"
+    auth = percent_encode(conn.user) .. "@"
   end
-  return scheme .. "://" .. auth .. host .. ":" .. port .. "/" .. db, nil
+  return scheme .. "://" .. auth .. host .. ":" .. port .. "/" .. percent_encode(db), nil
 end
 
 ---------------------------------------------------------------------------
