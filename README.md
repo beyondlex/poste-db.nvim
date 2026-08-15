@@ -114,10 +114,9 @@ Auto-detection: `color` values that are valid Neovim highlight groups are linked
 
 | Key | Action |
 |-----|--------|
-| `i` / `a` | Enter edit mode |
+| `i` / `cc` | Enter edit mode |
 | `dd` | Delete row |
-| `o` / `O` | Insert row below/above |
-| `u` | Undo edit |
+| `o` | Insert row below |
 | `<leader>w` | Commit changes (generate DML) |
 
 ### Export
@@ -198,14 +197,18 @@ require("poste-sql").setup({
 })
 ```
 
+## Requirements
+
+- Neovim >= 0.10.0
+- [poste.nvim](https://github.com/beyondlex/poste.nvim) (sibling directory or on rtp)
+- `poste` binary (from poste.nvim)
+- blink.cmp (recommended) or nvim-cmp for completion
+
 ## Integration Tests
 
 ```bash
 # Start test databases (PG 16 on 15432, MySQL 8.0 on 13306)
-cd tests/sql && docker compose up -d
-
-# Run queries
-cargo run --manifest-path ../poste.nvim/Cargo.toml -- run tests/sql/queries/postgres.sql --line 4 --env dev
+cd playground/sql && docker compose up -d
 
 # Run Lua tests
 tests/run.sh

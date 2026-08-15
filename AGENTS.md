@@ -25,10 +25,7 @@ See `docs/dev/sql/README.md` for detailed file index.
 
 - Zero coupling to HTTP modules — no `require("poste.http.*")`
 - State lives in `lua/poste-sql/state.lua` (accessed via `require("poste-sql.state")`)
-- Help in `lua/poste/help.lua` (shared infra, filetype-aware dispatch)
-- **Module name ownership**: `poste-http.nvim` comes before `poste-sql.nvim` in rtp.
-  Never create files under `lua/poste-sql/` in `poste-http.nvim` — they would shadow
-  this repo's modules silently.
+- Help in `lua/poste-sql/help.lua` (filetype-aware dispatch, sits in this repo)
 
 ## Lua Pitfalls
 

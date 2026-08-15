@@ -17,4 +17,4 @@
 
 ---
 
-*SQL developer documentation — Last updated: 2026-08-01*
+*SQL developer documentation — Last updated: 2026-08-15*

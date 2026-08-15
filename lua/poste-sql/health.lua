@@ -8,11 +8,11 @@ local error = vim.health.error or vim.health.report_error
 function M.check()
   start("poste-sql.nvim")
 
-  -- Neovim version
-  if vim.fn.has("nvim-0.9.0") == 1 then
-    ok("Neovim >= 0.9.0")
+  -- Neovim version (requires 0.10+ for vim.system, vim.treesitter.language)
+  if vim.fn.has("nvim-0.10.0") == 1 then
+    ok("Neovim >= 0.10.0")
   else
-    error("Neovim >= 0.9.0 required")
+    error("Neovim >= 0.10.0 required (uses vim.system, vim.treesitter.language)")
   end
 
   -- Shared infra (poste.nvim)
@@ -98,6 +98,22 @@ function M.check()
     ok("platform: " .. sys .. " " .. machine)
   else
     warn("platform: " .. sys .. " " .. machine .. " — may not have prebuilt binaries")
+  end
+
+  -- connections.toml discovery
+  local buf_name = vim.api.nvim_buf_get_name(0)
+  local search_dir = buf_name ~= "" and vim.fn.fnamemodify(buf_name, ":h") or vim.fn.getcwd()
+  local util = require("poste.util")
+  local config_path = util.find_file_upwards("connections.toml", search_dir)
+  if config_path then
+    ok("connections.toml: " .. config_path)
+  else
+    warn("connections.toml not found (searched from " .. search_dir .. ")")
+  end
+
+  -- Legacy completion mode
+  if vim.g.poste_sql_legacy_completion then
+    ok("legacy completion mode: " .. vim.g.poste_sql_legacy_completion)
   end
 end
 
