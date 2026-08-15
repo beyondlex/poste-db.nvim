@@ -2,10 +2,7 @@ local ts_stmt = require("poste-sql.ts_stmt")
 local state = require("poste.state")
 
 local M = {}
-
--- Define boundary sign highlight group
-vim.api.nvim_set_hl(0, "PosteDbSqlBoundaryBorder", { link = "Comment" })
-state.apply_highlight_overrides({ "PosteDbSqlBoundaryBorder" })
+local _setup_done = false
 
 local _debounce_timer = nil
 local _disabled = false
@@ -13,15 +10,20 @@ local _disabled = false
 local C = require("poste.constants")
 local sign_group = C.SIGN_GROUP_NAME .. "_boundary"
 
--- Define sign texts for boundary indicators (multi-line statements only)
 local BOUNDARY_SIGNS = {
   PosteDbBoundaryTop = "┌",
   PosteDbBoundaryMid = "│",
   PosteDbBoundaryBot = "└",
 }
 
-for name, text in pairs(BOUNDARY_SIGNS) do
-  pcall(vim.fn.sign_define, name, { text = text, texthl = "PosteDbSqlBoundaryBorder" })
+function M.setup()
+  if _setup_done then return end
+  _setup_done = true
+  vim.api.nvim_set_hl(0, "PosteDbSqlBoundaryBorder", { link = "Comment" })
+  state.apply_highlight_overrides({ "PosteDbSqlBoundaryBorder" })
+  for name, text in pairs(BOUNDARY_SIGNS) do
+    pcall(vim.fn.sign_define, name, { text = text, texthl = "PosteDbSqlBoundaryBorder" })
+  end
 end
 
 local bound_sign_ids = {}  -- buf -> { line_0 -> sign_id }

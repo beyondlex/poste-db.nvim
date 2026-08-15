@@ -6,8 +6,6 @@ local sql_runner = require("poste-sql.sql_runner")
 local M = {}
 M.ensure_sql_keymaps = sql_runner.ensure_sql_keymaps
 
-require("poste-sql.insert_hint").setup()
-
 local ck = state.get_keymap("sql_source", "clear_filter", "<leader>cr")
 if ck then
   vim.keymap.set("n", ck, function()
@@ -28,6 +26,7 @@ function M.setup(opts)
     state.config.hide_empty_result_tabs = opts.hide_empty_result_tabs
   end
   require("poste-sql.snippets").setup(opts)
+  require("poste-sql.insert_hint").setup()
 
   local sql_state = require("poste-sql.state")
   if vim.tbl_isempty(sql_state.icons) then
@@ -48,10 +47,15 @@ function M.setup(opts)
     end })
   end
 
+  require("poste-sql.highlights").setup()
+  require("poste-sql.statement_indicator").setup()
+  vim.api.nvim_create_autocmd("ColorScheme", { callback = function()
+    require("poste-sql.highlights").setup()
+    require("poste-sql.statement_indicator").setup()
+  end })
   require("poste-sql.autocmds").setup()
   require("poste-sql.commands").setup()
-  require("poste-sql.statusline").setup()
-  vim.api.nvim_set_hl(0, "PosteDbSqlDirectiveComment", { link = "Special" })
+  if opts.statusline then require("poste-sql.statusline").setup() end
   require("poste-sql.autocmds").setup_existing_buffers()
 end
 

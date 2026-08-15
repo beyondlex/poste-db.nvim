@@ -1,14 +1,26 @@
 local M = {}
 
-function M.quote(name, dialect)
+function M.quote(name, dialect, depth)
+  depth = depth or 0
+  if depth > 10 then return name or "" end
   if not name or name == "" or name == "*" then return name or "" end
-  if name:find(".") and not name:match("^[%w_]+%.[%w_]+$") then
-    local parts = vim.split(name, ".", { plain = true })
-    local q = {}
-    for _, p in ipairs(parts) do
-      q[#q + 1] = M.quote(p, dialect)
+  local dot = name:find(".", 1, true)
+  if dot then
+    local parts = {}
+    local prev = 1
+    for i = 1, #name do
+      if name:sub(i, i) == "." then
+        if prev < i then parts[#parts + 1] = name:sub(prev, i - 1) end
+        prev = i + 1
+      end
     end
-    return table.concat(q, ".")
+    if prev <= #name then parts[#parts + 1] = name:sub(prev) end
+    if #parts > 1 then
+      for i, p in ipairs(parts) do
+        parts[i] = M.quote(p, dialect, depth + 1)
+      end
+      return table.concat(parts, ".")
+    end
   end
   if dialect == "mysql" then
     return "`" .. name:gsub("`", "``") .. "`"

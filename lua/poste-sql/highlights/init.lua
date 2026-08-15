@@ -18,8 +18,4 @@ M.clear_cell_highlight = render.clear_cell_highlight
 M.apply_edit_highlights = render.apply_edit_highlights
 M.clear_edit_highlights = render.clear_edit_highlights
 
-M.setup()
-vim.api.nvim_create_autocmd("ColorScheme", { callback = M.setup })
-vim.api.nvim_create_autocmd("VimEnter", { callback = M.setup, once = true })
-
 return M

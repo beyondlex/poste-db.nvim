@@ -24,9 +24,8 @@ function M.resolve_context(buf, limit_line)
   -- Phase 1: Scan file header (before first ###) for global defaults
   local connection = nil
   local database = nil
-  local header_lines = vim.api.nvim_buf_get_lines(buf, 0, cursor_line - 1, false)
-
-  for i, line in ipairs(header_lines) do
+  local all_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+  for i, line in ipairs(all_lines) do
     if const.is_section_marker(line) then break end
     local conn_match = const.match_directive(line, const.DIRECTIVE_CONNECTION)
     if conn_match then connection = vim.trim(conn_match) end
@@ -35,7 +34,7 @@ function M.resolve_context(buf, limit_line)
   end
 
   -- Phase 2: Scan cursor's ### block for USE statements and block-level overrides
-  local block_start = lex.find_block_for_line(header_lines, cursor_line)
+  local block_start = lex.find_block_for_line(all_lines, cursor_line)
   local block_lines = vim.api.nvim_buf_get_lines(buf, block_start - 1, cursor_line, false)
 
   for i, line in ipairs(block_lines) do
@@ -62,7 +61,8 @@ function M.resolve_full_context(buf, limit_line)
   local ctx = M.resolve_context(buf, limit_line)
 
   -- Fallback to runtime state for connection (from :PosteSQLContext or manual set)
-  local conn = ctx.connection or state.sql.context.connection
+  local state_sql = state.sql
+  local conn = ctx.connection or (state_sql and state_sql.context and state_sql.context.connection)
 
   -- Database: buffer scan → connections.json default
   local db = ctx.database

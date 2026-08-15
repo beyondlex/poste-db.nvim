@@ -243,7 +243,7 @@ function M.resolve_connection_url(name)
     if path == ":memory:" then
       return "sqlite::memory:", nil
     end
-    return "sqlite:" .. percent_encode(path) .. "?mode=rwc", nil
+    return "sqlite:" .. path .. "?mode=rwc", nil
   end
 
   local scheme = conn.dialect == "postgres" and "postgres" or "mysql"

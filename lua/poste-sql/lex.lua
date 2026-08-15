@@ -2,47 +2,49 @@ local M = {}
 
 function M.is_comment_or_string(line, pos)
   local i = 1
-  local in_string = false
+  local region_start = nil
+  local region_type = nil
   local string_char = nil
-  local in_line_comment = false
   local in_block_comment = 0
+
   while i <= #line do
     local ch = line:sub(i, i)
-    if in_line_comment then
-      if i >= pos then return true end
+    if region_type == "line_comment" then
+      if pos >= region_start then return true end
       i = i + 1
-    elseif in_block_comment > 0 then
+    elseif region_type == "block_comment" then
       if ch == "*" and line:sub(i + 1, i + 1) == "/" then
+        if pos >= region_start and pos <= i + 1 then return true end
         in_block_comment = in_block_comment - 1
+        if in_block_comment == 0 then region_type = nil; region_start = nil end
         i = i + 2
       else
         i = i + 1
       end
-      if i >= pos and in_block_comment > 0 then return true end
-    elseif in_string then
+    elseif region_type == "string" then
       if ch == "\\" then
         i = i + 2
       elseif ch == string_char then
-        in_string = false
+        if pos >= region_start and pos <= i then return true end
+        region_type = nil; region_start = nil; string_char = nil
         i = i + 1
       else
         i = i + 1
       end
-      if i >= pos and in_string then return true end
     elseif ch == "-" and line:sub(i + 1, i + 1) == "-" then
-      in_line_comment = true
-      i = i + 2
+      region_start = i; region_type = "line_comment"; i = i + 2
     elseif ch == "/" and line:sub(i + 1, i + 1) == "*" then
-      in_block_comment = in_block_comment + 1
-      i = i + 2
+      if in_block_comment == 0 then region_start = i; region_type = "block_comment" end
+      in_block_comment = in_block_comment + 1; i = i + 2
     elseif ch == "'" or ch == '"' or ch == "`" then
-      in_string = true
-      string_char = ch
-      i = i + 1
+      region_start = i; region_type = "string"; string_char = ch; i = i + 1
     else
       i = i + 1
     end
   end
+  if region_type == "line_comment" and pos >= region_start then return true end
+  if region_type == "block_comment" and pos >= region_start then return true end
+  if region_type == "string" and pos >= region_start then return true end
   return false
 end
 

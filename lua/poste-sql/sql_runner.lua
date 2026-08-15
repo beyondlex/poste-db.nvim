@@ -8,6 +8,7 @@ local sql_introspect = require("poste-sql.introspect")
 local sql_format = require("poste-sql.format")
 local sql_buffer = require("poste-sql.buffer")
 local session_conn = require("poste-sql.session_conn")
+local D = require("poste-sql.dataset")
 
 local M = {}
 

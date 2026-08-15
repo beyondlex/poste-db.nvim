@@ -9,12 +9,15 @@ local context = require("poste-sql.context")
 local connections = require("poste-sql.connections")
 local state = require("poste.state")
 
--- Define highlight groups for directive comments.
--- These are still needed because Tree-sitter doesn't understand
--- poste-specific -- @connection semantics.
-vim.api.nvim_set_hl(0, "PosteDbSqlDirective", { fg = "#D19A66", bold = true })
-vim.api.nvim_set_hl(0, "PosteDbSqlDirectiveValue", { fg = "#E5C07B" })
-vim.api.nvim_set_hl(0, "PosteDbSqlDirectiveComment", { link = "Special" })
+local _hl_setup_done = false
+
+local function ensure_hl()
+  if _hl_setup_done then return end
+  _hl_setup_done = true
+  vim.api.nvim_set_hl(0, "PosteDbSqlDirective", { fg = "#D19A66", bold = true })
+  vim.api.nvim_set_hl(0, "PosteDbSqlDirectiveValue", { fg = "#E5C07B" })
+  vim.api.nvim_set_hl(0, "PosteDbSqlDirectiveComment", { link = "Special" })
+end
 
 local DIRECTIVE_NS = vim.api.nvim_create_namespace("poste_sql_directive")
 local DIRECTIVE_KEYWORDS = {
@@ -27,6 +30,7 @@ local DIRECTIVE_KEYWORDS = {
 --- Uses priority 101-102 (> Tree-sitter's default 100) to override
 --- the comment highlighting from after/queries/poste_sql/highlights.scm.
 function M.highlight_directive_comments(buf)
+  ensure_hl()
   buf = buf or 0
   if buf == 0 then buf = vim.api.nvim_get_current_buf() end
   vim.api.nvim_buf_clear_namespace(buf, DIRECTIVE_NS, 0, -1)
@@ -87,6 +91,7 @@ end
 --- @param dialect string|nil  Optional dialect override (lowercase); nil
 ---   resolves via connection context.
 function M.highlight_digit_prefix_fragments(buf, dialect)
+  ensure_hl()
   buf = buf or 0
   if buf == 0 then buf = vim.api.nvim_get_current_buf() end
   vim.api.nvim_buf_clear_namespace(buf, DIGIT_PREFIX_NS, 0, -1)
