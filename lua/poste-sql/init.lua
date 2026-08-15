@@ -33,6 +33,9 @@ function M.setup(opts)
     sql_state.icons = vim.tbl_deep_extend("force", {}, { Text = "", Field = "󰇨", Variable = "󰆧", Class = "", Interface = "󰏘", Function = "󰊕", Keyword = "󰌆", TypeParameter = "󰜢" })
   end
   if opts.icons then sql_state.icons = vim.tbl_deep_extend("force", sql_state.icons, opts.icons) end
+  if opts.history_max ~= nil then
+    require("poste-sql.dataset").set_max_history(opts.history_max)
+  end
 
   if not pcall(vim.treesitter.language.get_lang, "sql") then
     vim.notify("poste-sql: Tree-sitter SQL parser not found. Run :TSInstall sql to enable. Falling back to Rust/Lua heuristics.", vim.log.levels.WARN, { title = "Poste SQL" })

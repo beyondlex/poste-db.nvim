@@ -103,6 +103,11 @@ function M.build_status_right(meta, total_tabs, active_idx, pending)
   if pending then
     right = right .. pending .. "  "
   end
+  -- Request history position (JetBrains-style sidebar)
+  local hcount = D.history_count()
+  if hcount > 1 and D.active_history >= 1 then
+    right = right .. string.format("h:%d/%d ", D.active_history, hcount)
+  end
   if total_tabs > 1 then
     local label = meta.table_name or ("result " .. active_idx)
     local next_k = state.get_keymap("sql_dataset", "next_tab", "<Tab>")

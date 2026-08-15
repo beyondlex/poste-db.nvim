@@ -353,18 +353,72 @@
 - **验收标准**：四条调用路径行为一致；降级只发生一次；`max_rows` 统一可配置。
 - **依赖**：F1-3 完成后进行。
 
-### F3-5 数据集缓冲重构（tabpage / 内存 / 单例）
+### F3-5 数据集缓冲重构（历史列表 / tabpage / 内存）
 
-- **问题**：审查报告 P2-5、P1-9（tabpage 行）、P2-8（内存）。
-- **设计（建议）**：
-  1. **tabpage**：`D.dataset_window` 记录 `tabpage`；渲染/关闭前校验（已在 F2-15 打底）。
-  2. **多源隔离（产品决策）**：评估两种模型——a) 维持单面板（REPL 式），b) 每 src_buf 独立结果缓冲（JetBrains 式）。建议**维持单面板**（与现状一致、改动小），但 tab 命名含 src 文件名并在 winbar 显示来源；跨 buffer 执行时提示"将替换当前结果"（若 dirty）。若选 b，`dataset.lua` 的 `tabs` 改为 `{ [src_buf] = tabs }`，render_dataset 按 src_buf 路由——列为可选项，不在本期强制。
-  3. **内存**：`padded_full/meta_full` 全量驻留改为惰性——分页开启时只保留当前页 `padded`；`original_rows` 保留（编辑需要）但加行数上限提示（>N 行禁编辑，沿用 `EDIT_MAX_ROWS`）；布局扫描抽样（`format.lua:502-555` 只扫前 1000 行做宽度/数值探测，或依赖 Rust 返回的列元数据）。
-  4. **搜索**：`buffer/search.lua:125-141` 同步全扫改异步（`vim.defer_fn` 分片扫描，每片 50ms 让出）或加行数上限；matches 按页存储（`search_matches_by_page` 已存在，淘汰全量 `search_matches`）。
-  5. **双真相源**：`state.sql.cell` 收敛为 `D.T().cursor` 的投影（只读）；所有写入点（`search.lua:65-66,283`、`nav.lua:50-51`、`buffer/init.lua:191,200-201`）改走 tab。
-- **涉及文件**：`lua/poste-sql/dataset.lua`、`lua/poste-sql/buffer/init.lua`、`lua/poste-sql/buffer/{nav,search,page}.lua`、`lua/poste-sql/format.lua`、`lua/poste-sql/state.lua`
-- **验收标准**：10 万行结果内存峰值显著下降（测量）；大结果分页流畅；搜索大结果不卡 UI；跨 tabpage 行为正确。
-- **风险**：内存/惰性渲染改动面大，建议拆 3 个子 PR（tabpage → 内存 → 搜索/状态），每个独立验收。
+> 本小节于多源隔离产品决策后更新：**已确认采用 JetBrains 式历史列表**（浮动窗 v1；错误/空结果入历史并标红）。以下设计为定稿。
+>
+> **进度**：✅ P1（数据模型 + `extract_label`（含 `### name` 回退与截断）+ `fallback_label` + `format_elapsed`/`format_wallclock`，`sql_history_spec.lua` 25 用例）✅ P2（侧栏浮动窗 `buffer/history.lua`：j/k 移动 + cursorline、`<CR>` 切换、`d` 删除、`q` 关闭、`▸` 当前项标记、`✗` 错误标红、显示宽度对齐；`<leader>ph/pn/pp` 键位；winbar `h:n/m`；时间列显示执行时刻时间戳 `时:分:秒.毫秒`）⬜ P3（非活跃项内存瘦身策略已内建于 layout 路径，超大结果 `[truncated]` 标记未做；历史跨会话持久化）⬜ P4（真分栏、持久化）。全量套件 677 用例通过。
+
+- **问题**：审查报告 P2-5、P1-9（tabpage 行）、P2-8（内存）。现状单一面板：新执行直接顶掉旧结果，多源 buffer 互相覆盖，无历史回溯。
+
+- **设计（定稿）——历史项 = 一次请求的结果集**：
+
+  1. **数据模型（指针交换，现有代码零改动）**：
+     ```lua
+     -- dataset.lua 增量
+     M.history = {}            -- [n] = { label, elapsed_ms, src_buf, src_file, sql, stmt_line, error, tabs = {}, last_tab = 0 }
+     M.active_history = 0
+     M.buf_label_count = {}    -- [bufnr] = n，回退命名计数器
+     M.max_history = 20        -- 可配置（setup opts），超出淘汰最旧（当前项除外）
+
+     function M.new_entry(meta)   -- sql_runner 请求开始时调用
+       local entry = { tabs = {}, last_tab = 0, ... }
+       table.insert(M.history, entry)
+       M.active_history = #M.history
+       M.tabs = entry.tabs        -- ← 指针交换
+       M.active_tab_idx = 0
+       return entry
+     end
+     function M.switch_entry(idx) -- 保存/恢复 tabs 引用与当前 tab
+       M.history[M.active_history].last_tab = M.active_tab_idx
+       M.active_history = idx
+       M.tabs = M.history[idx].tabs
+       M.active_tab_idx = M.history[idx].last_tab or 0
+     end
+     ```
+     所有读 `D.tabs`/`D.T()` 的现有模块（`buffer/nav*`、`page.lua`、`search.lua`）**不改**。配套改动：`sql_runner.run_sql_request` 在 `exec_seq` 校验**之后**、渲染之前建 entry；`render_dataset` 的 `D.tabs = {}`（`buffer/init.lua:354-355`）改为"复用当前 entry 或建新 entry"；`clear_panel`（`:555`）与 `close()` 改为清整个 `history`（`M.history = {}`、`M.tabs = {}`）。
+
+  2. **标签推导规则**（新增纯函数 `statement.extract_label(buf_lines, stmt_start)`，可单测）：
+     - 从 `stmt_start-1` 向上走：跳过空行、跳过 `###` 标记行、跳过 `-- @connection/@database/@protocol` 指令行；遇到首个普通 `-- xxx` 注释 → 取 `xxx`（trim，截断 ~40 字符 + `…`）；遇到代码行即停。
+     - 回退：`fnamemodify(src_file, ":t"):gsub("%.sql$", "")` + `M.buf_label_count[bufnr]` 自增 → `test_1`、`test_2`（按 buffer 计数，跨文件独立）。
+     - 可选第二优先：语句所在 `###` block 头部若带名字（`### users list`）→ 优先于 buffer 回退、次于紧邻注释。
+     - 多语句请求取首条语句上方的注释；可视化选区从选区起始行向上取；整个文件执行（`<leader>ef`）取文件头首个普通注释，否则文件名。
+     - 边界：上一语句的尾随注释（代码行）不会误取；`--` 空注释视为无标签。
+
+  3. **时间显示**（已确认：**执行时刻时间戳**，`时:分:秒.毫秒`）：`dataset.now_wall()`（`vim.uv.clock_gettime("realtime")` → `{ sec, nsec }`，旧版 nvim 回退 `os.time()`）+ `M.format_wallclock(sec, nsec)` → 如 `14:32:07.456`。entry 同时保留 `elapsed_ms`（`parsed.latency_ms`）供内部使用；`format_elapsed` 保留为通用工具。
+     单语句用 `parsed.latency_ms`；多语句显示总耗时（`total_execution_time_ms`）。侧栏右对齐固定宽度列。
+
+  4. **侧栏 UI（已确认：浮动窗 v1）**：
+     - `nvim_open_win(buf, false, { relative = "win", win = dataset_win, row = 0, col = 0, width ≈ 36, height = win 高度 })`——不改 dataset 缓冲宽度、不触发整表重排；v2 再评估真分栏。
+     - 每行：`[3] get users        0:01.234`；当前项高亮 extmark；错误项前缀 `✗` + 红色。
+     - 键位（`poste_history` buffer）：`j/k`（或 `<C-n>/<C-p>`）移动、`<CR>` 切换、`q`/`<Esc>` 关闭、`d` 删除该项（删当前项切到邻居，历史空则关 dataset）。
+     - `sql_dataset` keymap 区新增：`history_toggle`（默认 `<leader>ph`，需与现有键位查重）、`history_next/prev`（不开侧栏直接循环）。
+     - winbar 加历史位置 `h:2/5`；侧栏项源文件用暗淡色显示（多 buffer 混跑可区分）。
+     - 切换时：`switch_entry(idx)` + `render_page` 重渲染当前页 + 重放 cell/edit 高亮（顺带消除 F2-16 的翻页丢高亮）。
+
+  5. **内存与生命周期**：历史保留上限 `max_history`（默认 20）；**非活跃项瘦身**——只保留 `meta + data(rows) + layout + cursor/sort/filter/page` 等轻状态，不保留 `padded_full/meta_full/lines`，切换时 `render_page(layout, page, page_size)` 按需重渲染当前页（每次查询 O(R×C) 摊薄为每次切换 O(页)，与 F3-10 方向一致）；`data(rows)` 是编辑必需予以保留，超大结果可配每项行数上限（超限标记 `[truncated]`）；新请求自动建 entry 并跳转（保持"执行即显示"）。
+
+  6. **tabpage**：`D.dataset_window` 记录 `tabpage`；渲染/关闭前校验（已在 F2-15 打底）。
+
+  7. **双真相源**：`state.sql.cell` 收敛为 `D.T().cursor` 的只读投影；所有写入点（`search.lua:65-66,283`、`nav.lua:50-51`、`buffer/init.lua:191,200-201`）改走 tab；entry 切换时随 `switch_entry` 重设。
+
+  8. **搜索**：`buffer/search.lua:125-141` 同步全扫改异步（`vim.defer_fn` 分片扫描，每片 50ms 让出）或加行数上限；matches 按页存储（淘汰全量 `search_matches`）。
+
+  9. **与现有机制衔接**：`R` 重跑改读 `entry.sql`；`<Tab>/<S-Tab>` 语义保持"当前请求内结果 tab 切换"，与请求级切换正交；**entry 创建必须在 `exec_seq` 校验之后**（先完成 F2-7，否则旧响应会污染历史）。
+
+- **涉及文件**：`lua/poste-sql/dataset.lua`、`lua/poste-sql/buffer/init.lua`、`lua/poste-sql/buffer/{nav,search,page}.lua`、`lua/poste-sql/buffer/nav_ui.lua`、`lua/poste-sql/statement.lua`（`extract_label`）、`lua/poste-sql/sql_runner.lua`、`lua/poste-sql/format.lua`、`lua/poste-sql/state.lua`、新增 `lua/poste-sql/buffer/history.lua`（侧栏浮动窗）
+- **验收标准**：多 buffer 多次执行后侧栏可切换各请求，标签/时间/错误标红正确；切换不触发整表重排、保留各请求的 page/cursor/filter 状态；10 万行 × 20 条历史内存峰值受控；`tests/sql/sql_history_spec.lua`（label 提取/format_elapsed/计数器/指针交换）通过；`tests/run.sh` 全绿。
+- **风险**：内存/惰性渲染改动面大——按 P1（数据模型+标签，行为与现状一致）→ P2（侧栏+切换）→ P3（内存策略+`### name`+错误标红+winbar）→ P4（可选：真分栏、历史跨会话持久化到 `stdpath("data")` jsonl）分 4 步落地，每步独立验收。
 
 ### F3-6 `init.lua setup()` 拆分与调试命令收敛
 

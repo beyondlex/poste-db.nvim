@@ -459,6 +459,60 @@ function M.get_stmt_sql(buf_lines, stmt_lines, idx, max_end)
   return table.concat(lines, " ")
 end
 
+--- Extract a display label for a statement from the comment directly above it.
+--- Walks up from `stmt_start - 1`, skipping blank lines, `###` markers and
+--- directive comments (`-- @connection` etc.); the first plain `-- comment`
+--- found (nearest to the statement) wins. Falls back to the enclosing
+--- `### name` block header. Returns nil when neither exists.
+--- @param buf_lines string[] buffer lines
+--- @param stmt_start number 1-based line of the statement start
+--- @return string|nil label (trimmed, capped at LABEL_MAX_CHARS)
+local LABEL_MAX_CHARS = 40
+
+function M.extract_label(buf_lines, stmt_start)
+  if not buf_lines or not stmt_start or stmt_start < 1 then return nil end
+  for i = stmt_start - 1, 1, -1 do
+    local trimmed = (buf_lines[i] or ""):match("^%s*(.-)%s*$") or ""
+    if trimmed == "" then
+      -- blank line: keep walking up
+    elseif trimmed:match("^%-%-") then
+      if trimmed:match("^%-%-%s*@") then
+        -- directive comment: not a label, keep walking
+      else
+        -- plain comment: nearest one wins
+        local text = trimmed:match("^%-%-%s*(.-)%s*$") or ""
+        if text == "" then return nil end
+        if #text > LABEL_MAX_CHARS then
+          text = text:sub(1, LABEL_MAX_CHARS) .. "…"
+        end
+        return text
+      end
+    elseif trimmed:match("^###") then
+      -- enclosing block header name (fallback label)
+      local name = trimmed:match("^###%s*(.-)%s*$") or ""
+      if name == "" then return nil end
+      if #name > LABEL_MAX_CHARS then
+        name = name:sub(1, LABEL_MAX_CHARS) .. "…"
+      end
+      return name
+    else
+      -- code line above: no label
+      return nil
+    end
+  end
+  return nil
+end
+
+--- Fallback label: `<basename>_<per-buffer counter>` (e.g. test_1, test_2).
+--- @param src_file string source buffer path
+--- @param src_buf number source buffer handle
+--- @return string label
+function M.fallback_label(src_file, src_buf)
+  local base = vim.fn.fnamemodify(src_file or "", ":t"):gsub("%.sql$", ""):gsub("%.sqlite$", "")
+  if base == "" then base = "untitled" end
+  return string.format("%s_%d", base, require("poste-sql.dataset").next_label_number(src_buf or 0))
+end
+
 M._test = {
   extract_stmt_at_cursor = M.extract_stmt_at_cursor,
   find_stmt_lines = M.find_stmt_lines,
@@ -468,6 +522,7 @@ M._test = {
   try_ts_stmt_span = M.try_ts_stmt_span,
   try_ts_stmt_ranges = M.try_ts_stmt_ranges,
   find_block_for_line = M.find_block_for_line,
+  extract_label = M.extract_label,
 }
 
 return M

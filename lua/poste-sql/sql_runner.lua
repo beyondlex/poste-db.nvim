@@ -221,6 +221,27 @@ function M.run_sql_request()
   exec_seq = exec_seq + 1
   local current_seq = exec_seq
   indicators.clear_all(src_buf)
+
+  -- Request history entry (JetBrains-style sidebar): one entry per request.
+  -- Created here so the label is captured at request time; elapsed/error are
+  -- filled in by on_response/on_error via the captured entry reference.
+  local dataset = require("poste-sql.dataset")
+  local label_start = stmt_start
+    or (is_visual and math.max(1, math.min(_vis_start, _vis_end)) or nil) or 1
+  local label = statement.extract_label(buf_lines, label_start)
+  if not label then
+    -- Fallback: <basename>_<per-buffer counter> (e.g. test_1, test_2)
+    label = statement.fallback_label(file, src_buf)
+  end
+  local ts = dataset.now_wall()
+  local entry = dataset.new_entry({
+    label = label,
+    ts_sec = ts.sec,
+    ts_nsec = ts.nsec,
+    src_buf = src_buf,
+    src_file = file,
+    stmt_line = stmt_start,
+  })
   sql_buffer.clear_panel(current_seq)
 
   -- Set running indicators
@@ -295,6 +316,7 @@ function M.run_sql_request()
     end
     stmt_sql_raw = table.concat(raw_lines, "\n")
   end
+  entry.sql = stmt_sql_raw or buf_content
 
   -- Route: single non-USE statement with a resolved connection → session
   --         visual selection, USE, or no connection → exec-file
@@ -308,6 +330,7 @@ function M.run_sql_request()
         return
       end
       state.last_response = parsed
+      entry.elapsed_ms = tonumber(parsed.latency_ms) or 0
 
       local function is_ddl(sql)
         if not sql then return false end
@@ -350,6 +373,7 @@ function M.run_sql_request()
       local hide_empty = state.config.hide_empty_result_tabs ~= false
       for i, result in ipairs(results) do
         if result.error then
+          entry.error = true
           tab_idx = tab_idx + 1
           local err_line = stmt_lines[i] or first_line
           local next_start = stmt_lines[i + 1]
@@ -436,6 +460,7 @@ function M.run_sql_request()
       })
 
       local has_err = results[1] and results[1].error
+      if has_err then entry.error = true end
       local result_line = stmt_end or first_line
       if has_err then
         indicators.set_indicator(src_buf, result_line - 1, "error")
@@ -472,6 +497,7 @@ end
     state.log("ERROR", "SQL execution failed: " .. message)
     vim.schedule(function()
       if current_seq < exec_seq then return end
+      entry.error = true
       indicators.set_indicator(src_buf, (stmt_end or first_line) - 1, "error")
       vim.notify(message, vim.log.levels.ERROR, { title = "Poste SQL" })
       local lines = sql_format.format_error(message, state.sql.context.connection or "")

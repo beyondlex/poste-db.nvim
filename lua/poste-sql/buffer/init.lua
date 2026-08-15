@@ -135,6 +135,20 @@ function M.get_dataset_buffer()
     vim.keymap.set("n", k, function() require("poste-sql.help").open() end, opts)
   end
 
+  -- Request history (JetBrains-style sidebar)
+  k = state.get_keymap("sql_dataset", "history_toggle", "<leader>ph")
+  if k then
+    vim.keymap.set("n", k, function() require("poste-sql.buffer.history").toggle() end, opts)
+  end
+  k = state.get_keymap("sql_dataset", "history_next", "<leader>pn")
+  if k then
+    vim.keymap.set("n", k, function() M.history_next() end, opts)
+  end
+  k = state.get_keymap("sql_dataset", "history_prev", "<leader>pp")
+  if k then
+    vim.keymap.set("n", k, function() M.history_prev() end, opts)
+  end
+
   -- BufWriteCmd: :w triggers commit
   vim.api.nvim_create_autocmd("BufWriteCmd", {
     buffer = D.dataset_buffer,
@@ -182,18 +196,12 @@ local function apply_tab_state(tab)
   if tab.data then state.sql.last_dataset = tab.data end
 end
 
-local function switch_tab(idx)
-  if not D.tabs[idx] then return end
-  -- Block tab switch if current tab has dirty edits
-  local current = D.T()
-  if current and current.edit_state and current.edit_state.dirty then
-    vim.notify(C.EDIT_CONFLICT_MSG, vim.log.levels.WARN, { title = C.TITLE })
-    return
-  end
-  save_active_tab_state()
+--- Render the currently active tab (D.T()) into the dataset window.
+--- No guards, no state saving — callers decide what to switch away from.
+local function render_active_tab()
+  local tab = D.T()
+  if not tab then return end
   require("poste-sql.buffer.header").close()
-  D.active_tab_idx = idx
-  local tab = D.tabs[idx]
   apply_tab_state(tab)
 
   if not D.dataset_window or not vim.api.nvim_win_is_valid(D.dataset_window) then return end
@@ -231,6 +239,19 @@ local function switch_tab(idx)
   require("poste-sql.buffer.search").apply_search_highlights()
 end
 
+local function switch_tab(idx)
+  if not D.tabs[idx] then return end
+  -- Block tab switch if current tab has dirty edits
+  local current = D.T()
+  if current and current.edit_state and current.edit_state.dirty then
+    vim.notify(C.EDIT_CONFLICT_MSG, vim.log.levels.WARN, { title = C.TITLE })
+    return
+  end
+  save_active_tab_state()
+  D.active_tab_idx = idx
+  render_active_tab()
+end
+
 function M.next_tab()
   if #D.tabs < 2 then return end
   local idx = D.active_tab_idx + 1
@@ -247,6 +268,84 @@ end
 
 function M.tab_count()
   return #D.tabs
+end
+
+--------------------------------------------------------------------------------
+-- Request history switching (JetBrains-style sidebar)
+--------------------------------------------------------------------------------
+
+--- Switch to a history entry and render its last-active tab (or blank the
+--- panel for entries with no result tabs). Blocks on dirty edits, matching
+--- tab-switch semantics.
+--- @param idx number 1-based history index
+function M.switch_history_entry(idx)
+  local current = D.T()
+  if current and current.edit_state and current.edit_state.dirty then
+    vim.notify(C.EDIT_CONFLICT_MSG, vim.log.levels.WARN, { title = C.TITLE })
+    return
+  end
+  save_active_tab_state()
+  local entry = D.switch_entry(idx)
+  if not entry then return end
+  local tab_idx = entry.last_tab
+  if tab_idx < 1 or not entry.tabs[tab_idx] then tab_idx = 1 end
+  if entry.tabs[tab_idx] then
+    D.active_tab_idx = tab_idx
+    render_active_tab()
+  else
+    -- Entry with no result tabs (empty/error request): blank the panel
+    require("poste-sql.buffer.header").close()
+    if D.dataset_buffer and vim.api.nvim_buf_is_valid(D.dataset_buffer) then
+      vim.api.nvim_set_option_value("modifiable", true, { buf = D.dataset_buffer })
+      vim.api.nvim_buf_set_lines(D.dataset_buffer, 0, -1, false, { "" })
+      vim.api.nvim_set_option_value("modifiable", false, { buf = D.dataset_buffer })
+    end
+    local winbar_text = require("poste-sql.buffer.nav").build_status_winbar(nil)
+    if D.dataset_window and vim.api.nvim_win_is_valid(D.dataset_window) then
+      pcall(vim.api.nvim_set_option_value, "winbar", winbar_text or "", { win = D.dataset_window })
+    end
+  end
+  require("poste-sql.buffer.history").refresh()
+end
+
+--- Next request in history (without opening the sidebar).
+function M.history_next()
+  local n = D.history_count()
+  if n < 2 then return end
+  local idx = D.active_history + 1
+  if idx > n then idx = 1 end
+  M.switch_history_entry(idx)
+end
+
+--- Previous request in history (without opening the sidebar).
+function M.history_prev()
+  local n = D.history_count()
+  if n < 2 then return end
+  local idx = D.active_history - 1
+  if idx < 1 then idx = n end
+  M.switch_history_entry(idx)
+end
+
+--- Delete a history entry; if the active entry was deleted, switch to the
+--- entry now at the same index (or blank the panel when history is empty).
+--- @param idx number 1-based history index
+function M.delete_history_entry(idx)
+  local n = D.history_count()
+  if idx < 1 or idx > n then return end
+  local was_active = (idx == D.active_history)
+  D.delete_entry(idx)
+  if n == 1 then
+    -- history now empty: blank the panel
+    require("poste-sql.buffer.header").close()
+    if D.dataset_buffer and vim.api.nvim_buf_is_valid(D.dataset_buffer) then
+      vim.api.nvim_set_option_value("modifiable", true, { buf = D.dataset_buffer })
+      vim.api.nvim_buf_set_lines(D.dataset_buffer, 0, -1, false, { "" })
+      vim.api.nvim_set_option_value("modifiable", false, { buf = D.dataset_buffer })
+    end
+  elseif was_active then
+    M.switch_history_entry(math.min(idx, D.history_count()))
+  end
+  require("poste-sql.buffer.history").refresh()
 end
 
 --------------------------------------------------------------------------------
@@ -351,8 +450,9 @@ function M.render_dataset(lines, meta, opts)
   end
 
   if tab_idx == 1 and not opts.keep_tabs then
-    D.tabs = {}
-    D.active_tab_idx = 0
+    -- Clear the active request's tabs (history entry stays; its fresh tabs
+    -- table is reused, or a new entry is auto-created for legacy callers).
+    D.reset_active_entry_tabs()
   end
 
   require("poste-sql.buffer.header").close()
@@ -545,6 +645,9 @@ function M.render_dataset(lines, meta, opts)
   if not is_error then
     vim.api.nvim_set_option_value("sidescrolloff", 5, { win = D.dataset_window })
   end
+
+  local history = require("poste-sql.buffer.history")
+  if history.is_open() then history.refresh() end
 end
 
 --------------------------------------------------------------------------------
@@ -552,15 +655,20 @@ end
 --------------------------------------------------------------------------------
 
 function M.clear_panel(seq)
-  D.tabs = {}
-  D.active_tab_idx = 0
+  -- Keep the active history entry's tabs; only blank the visible panel so
+  -- results can stream in. (Tab tables are reset by the request starter /
+  -- render_dataset via D.reset_active_entry_tabs().)
   if D.dataset_window and vim.api.nvim_win_is_valid(D.dataset_window) then
     local all_wins = vim.api.nvim_tabpage_list_wins(0)
     for _, win in ipairs(all_wins) do
       if win ~= D.dataset_window then
         local ok, config = pcall(vim.api.nvim_win_get_config, win)
         if ok and config.relative == "win" and config.win == D.dataset_window then
-          pcall(vim.api.nvim_win_close, win, true)
+          local wbuf = vim.api.nvim_win_get_buf(win)
+          -- keep the request-history sidebar open across executions
+          if not (vim.api.nvim_buf_is_valid(wbuf) and vim.bo[wbuf].filetype == "poste_history") then
+            pcall(vim.api.nvim_win_close, win, true)
+          end
         end
       end
     end
@@ -597,8 +705,11 @@ function M.close()
     D.dataset_window = nil
   end
   sql_highlights.clear_cell_highlight(D.dataset_buffer)
+  require("poste-sql.buffer.history").close()
   D.tabs = {}
   D.active_tab_idx = 0
+  D.history = {}
+  D.active_history = 0
 end
 
 function M.is_open()
@@ -614,6 +725,9 @@ M._test = {
   reset = function()
     D.tabs = {}
     D.active_tab_idx = 0
+    D.history = {}
+    D.active_history = 0
+    D.buf_label_count = {}
   end,
   tab_count = function() return #D.tabs end,
   active_tab_idx = function() return D.active_tab_idx end,

@@ -78,7 +78,8 @@ function M.slice_header_to_win(leftcol, win_width, padded_header, index)
 end
 
 --- Close the header float and any other window anchored to the dataset
---- window, then reset the slice cache.
+--- window, then reset the slice cache. The request-history sidebar
+--- (filetype `poste_history`) is intentionally kept open.
 function M.close()
   local win = D.dataset_window
   if win and vim.api.nvim_win_is_valid(win) then
@@ -87,7 +88,10 @@ function M.close()
       if w ~= win then
         local ok, config = pcall(vim.api.nvim_win_get_config, w)
         if ok and config.relative == "win" and config.win == win then
-          pcall(vim.api.nvim_win_close, w, true)
+          local wbuf = vim.api.nvim_win_get_buf(w)
+          if not (vim.api.nvim_buf_is_valid(wbuf) and vim.bo[wbuf].filetype == "poste_history") then
+            pcall(vim.api.nvim_win_close, w, true)
+          end
         end
       end
     end
