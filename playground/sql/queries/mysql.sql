@@ -30,7 +30,7 @@ select id, slug FROM blog.posts ;
 -- UPDATE posts SET bio = '' AFTERE id i
 
 
-select * from poste_test_metrics; 
+select * from poste_test_metrics;
 select * from poste_test_events;;
 
 select id, slug FROM blog.posts ;
@@ -50,7 +50,7 @@ SELECT p.slug, a.bio FROM posts p LEFT JOIN authors a on a.id = p.author_id;
 SELECT * from comments;
 SELECT * FROM posts;
 
--- ALTER TABLE authors 
+-- ALTER TABLE authors
 -- ADD COLUMN name   ;
 
 SELECT * FROM categories;
@@ -164,7 +164,7 @@ GROUP BY sh.id, wf.name, wt.name, sh.status;
 
 
 
--- @connection pg-ecommerce 
+-- @connection pg-ecommerce
 create table table_name (
   column_name INTEGER NOT NULL
 );

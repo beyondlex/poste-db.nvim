@@ -324,13 +324,7 @@ function M.run_sql_request()
 
       sql_context.handle_use_statement(parsed)
 
-      -- Decode body to get actual SQL results
-      local ok_body, decoded = pcall(vim.json.decode, parsed.body)
-      if not ok_body or type(decoded) ~= "table" then
-        decoded = nil
-      end
-
-      local results = decoded and decoded.results or {}
+      local results = parsed.results or {}
       -- When preceding SET @var statements were pulled in, the first #set_lines
       -- results are SET (affected-rows) responses — skip them since they're
       -- dependencies, not the user-selected statement.
@@ -340,12 +334,14 @@ function M.run_sql_request()
         local filtered = {}
         for i = n + 1, #results do filtered[#filtered + 1] = results[i] end
         results = filtered
-        if decoded then
+        parsed.results = results
+        -- Re-encode body for consumers that rely on parsed.body
+        local ok_body, decoded = pcall(vim.json.decode, parsed.body)
+        if ok_body and type(decoded) == "table" then
           decoded.results = results
           decoded.total_results = #results
           parsed.body = vim.json.encode(decoded)
         end
-        parsed.results = results
       end
       local is_multi = #results > 1
 
