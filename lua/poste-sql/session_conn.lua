@@ -260,6 +260,8 @@ function M.execute(conn_url, sql, callbacks, bufnr, database)
   }
   local payload = vim.json.encode({ seq = seq, sql = sql }) .. "\n"
   local sent = vim.fn.chansend(session.job_id, payload)
+  state.log("DEBUG", string.format("SQL session send seq=%d job=%d chansend=%d", seq, session.job_id, sent))
+  state.log("DEBUG", "SQL session payload: " .. (sql and sql:sub(1, 300):gsub("\n", "\\n") or "nil"))
   if sent <= 0 then
     session.pending[seq] = nil
     if callbacks.on_error then callbacks.on_error("SQL session chansend failed") end

@@ -29,6 +29,7 @@ function M.execute(opts)
     if fallback_used then return end
     fallback_used = true
     log.warn("SQL session failed, falling back to exec-file: " .. msg)
+    log.debug("SQL via exec-file (fallback): " .. (sql and sql:sub(1, 200):gsub("\n", "\\n") or "nil"))
     local job_id = exec_run.run_async(sql, {
       src_file = src_file,
       conn_url = conn_url,
@@ -46,6 +47,7 @@ function M.execute(opts)
 
   if prefer_session and conn_url then
     log.info_fmt("SQL run via session: conn=%s db=%s", tostring(conn_url), tostring(database))
+    log.debug("SQL via session: " .. (sql and sql:sub(1, 200):gsub("\n", "\\n") or "nil"))
     local ok = session_conn.execute(conn_url, sql, {
       on_response = on_response,
       on_error = exec_file_fallback,
@@ -58,6 +60,7 @@ function M.execute(opts)
     end
   else
     log.info_fmt("SQL run via exec-file: conn=%s db=%s", tostring(conn_url), tostring(database))
+    log.debug("SQL via exec-file: " .. (sql and sql:sub(1, 200):gsub("\n", "\\n") or "nil"))
     local job_id = exec_run.run_async(sql, {
       src_file = src_file,
       conn_url = conn_url,
