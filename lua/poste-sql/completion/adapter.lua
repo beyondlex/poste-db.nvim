@@ -11,7 +11,6 @@
 ---   is_menu_open() → bool      — check if menu is visible
 ---   get_config()               — access blink.cmp config safely
 ---   get_enabled_providers()    — list active provider IDs
----   set_provider_for_filetype(ft, providers) — override per-filetype providers
 ---   get_source_lib()           — access blink.cmp sources.lib for advanced use
 
 local M = {}
@@ -65,32 +64,11 @@ function M.register_filetype(ft, source_name)
   b.add_filetype_source(ft, source_name)
 end
 
---- Map filetype in config's per_filetype table.
-function M.set_per_filetype(ft, sources)
-  local cfg = blink_config()
-  if not cfg or not cfg.sources then return end
-  cfg.sources.per_filetype[ft] = sources
-end
-
---- Set provider for a filetype in per_filetype_provider_ids.
-function M.set_provider_for_filetype(ft, provider_ids)
-  local src = blink_sources()
-  if not src then return end
-  src.per_filetype_provider_ids[ft] = provider_ids
-end
-
 --- Get enabled provider IDs for completion mode.
 function M.get_enabled_providers()
   local src = blink_sources()
   if not src then return {} end
   return src.get_enabled_provider_ids("insert") or {}
-end
-
---- Get per_filetype_provider_ids for diagnostics.
-function M.get_per_filetype_provider_ids()
-  local src = blink_sources()
-  if not src then return {} end
-  return src.per_filetype_provider_ids or {}
 end
 
 --- Show the completion menu.
@@ -129,21 +107,6 @@ end
 function M.get_trigger()
   local ok, trigger = pcall(require, "blink.cmp.completion.trigger")
   return ok and trigger or nil
-end
-
---- Override show_on_blocked_trigger_characters to allow space in SQL.
-function M.patch_blocked_trigger_chars()
-  local cfg = blink_config()
-  if not cfg or not cfg.completion or not cfg.completion.trigger then return end
-  local orig = cfg.completion.trigger.show_on_blocked_trigger_characters
-  cfg.completion.trigger.show_on_blocked_trigger_characters = function()
-    local ft = vim.bo.filetype
-    if ft == "poste_sql" or ft == "poste_sqlite" then
-      local blocked = type(orig) == "function" and orig() or orig
-      return vim.tbl_filter(function(c) return c ~= " " end, blocked or {})
-    end
-    return type(orig) == "function" and orig() or orig
-  end
 end
 
 --- Check if a specific provider is registered in config.

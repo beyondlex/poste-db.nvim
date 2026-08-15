@@ -15,9 +15,6 @@ function M.register()
   })
   adapter.register_filetype("poste_sql", "poste_sql")
   adapter.register_filetype("poste_sqlite", "poste_sql")
-  adapter.set_per_filetype("poste_sql", { "poste_sql" })
-  adapter.set_per_filetype("poste_sqlite", { "poste_sql" })
-  adapter.patch_blocked_trigger_chars()
 end
 
 return M

@@ -208,7 +208,7 @@ function M.setup()
         "cursor_lnum: " .. cursor_lnum, "ft: " .. vim.bo.filetype,
         "active blink providers: " .. vim.inspect(active_providers),
         "static per_filetype[poste_sql]: " .. per_ft,
-        "runtime per_filetype_provider_ids: " .. vim.inspect(blink_src.per_filetype_provider_ids) }
+        "runtime per_filetype_provider_ids: " .. vim.inspect(blink_src and blink_src.per_filetype_provider_ids or {}) }
       local buf_lines = vim.api.nvim_buf_get_lines(buf, 0, cursor_lnum, false)
       for i, l in ipairs(buf_lines) do msg[#msg + 1] = "  " .. i .. ": " .. l end
       msg[#msg + 1] = "tables: " .. vim.inspect(tbls)
