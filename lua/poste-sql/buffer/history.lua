@@ -39,23 +39,19 @@ local function truncate_display(s, max_width)
   return table.concat(out) .. "…"
 end
 
---- Right-pad a string to `width` display cells (keeps the time column
---- aligned even when labels contain multi-byte characters).
-local function pad_display(s, width)
-  return s .. string.rep(" ", math.max(0, width - display_width(s)))
-end
-
 --- Build the sidebar lines: `[i] label  time`, active marked with ▸,
 --- errors prefixed with ✗. The time column shows the wall-clock moment the
---- request executed (时:分:秒.毫秒); label is truncated/padded by display
---- width so the time column stays right-aligned.
+--- request executed (时:分:秒.毫秒) and is right-aligned to the window's right
+--- edge (SIDEBAR_WIDTH); the label is truncated so it never overlaps.
 local function build_lines()
   local lines = {}
   for i, entry in ipairs(D.history) do
     local label = truncate_display(entry.label or "?", LABEL_COL_WIDTH)
     local marker = entry.error and "✗" or (i == D.active_history and "▸" or " ")
     local time = D.format_wallclock(entry.ts_sec, entry.ts_nsec)
-    lines[#lines + 1] = string.format("%s[%d] %s %s", marker, i, pad_display(label, LABEL_COL_WIDTH), time)
+    local left = string.format("%s[%d] %s", marker, i, label)
+    local gap = math.max(1, SIDEBAR_WIDTH - display_width(left) - display_width(time))
+    lines[#lines + 1] = left .. string.rep(" ", gap) .. time
   end
   if #lines == 0 then
     lines[1] = "  (no history)"
@@ -79,6 +75,9 @@ function M.refresh()
     if entry.error then
       vim.api.nvim_buf_add_highlight(buf, hl_ns, "DiagnosticError", i - 1, 0, 1)
     end
+    local time = D.format_wallclock(entry.ts_sec, entry.ts_nsec)
+    local start = SIDEBAR_WIDTH - display_width(time)
+    vim.api.nvim_buf_add_highlight(buf, hl_ns, "Comment", i - 1, start, -1)
   end
 end
 
@@ -125,7 +124,9 @@ function M.open()
   vim.api.nvim_set_option_value("swapfile", false, { buf = buf })
   vim.api.nvim_set_option_value("filetype", "poste_history", { buf = buf })
 
-  local height = math.max(1, vim.api.nvim_win_get_height(dataset_win) - 2)
+  local dh = vim.api.nvim_win_get_height(dataset_win)
+  local winbar_rows = vim.api.nvim_get_option_value("winbar", { win = dataset_win }) ~= "" and 1 or 0
+  local height = math.max(1, dh - winbar_rows - 2)
   win = vim.api.nvim_open_win(buf, true, {
     relative = "win",
     win = dataset_win,
