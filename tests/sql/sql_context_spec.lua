@@ -166,5 +166,12 @@ describe("context handle_use_statement", function()
     })
     assert.equals("blog", state_stub.sql.context.database)
   end)
+
+  teardown(function()
+    package.loaded["poste.state"] = saved_state
+    package.loaded["poste.select"] = saved_select
+    package.loaded["poste-sql.constants"] = saved_const
+    package.loaded["poste-sql.connections"] = saved_connections
+  end)
 end)
 

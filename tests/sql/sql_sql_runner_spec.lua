@@ -81,5 +81,15 @@ describe("sql_runner run_sql_request", function()
     assert.is_not_nil(notified)
     assert.matches("not found", notified.msg)
   end)
+
+  teardown(function()
+    package.loaded["poste.state"] = saved_state
+    package.loaded["poste.util"] = saved_util
+    package.loaded["poste.indicators"] = saved_indicators
+    package.loaded["poste-sql.statement"] = saved_statement
+    package.loaded["poste-sql.introspect"] = saved_introspect
+    package.loaded["poste-sql.format"] = saved_format
+    package.loaded["poste-sql.buffer"] = saved_buffer
+  end)
 end)
 

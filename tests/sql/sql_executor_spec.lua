@@ -173,4 +173,11 @@ describe("executor session routing", function()
     })
     assert.is_true(exec_run_called)
   end)
+
+  teardown(function()
+    package.loaded["poste-sql.session_conn"] = saved_session_conn
+    package.loaded["poste-sql.exec_run"] = saved_exec_run
+    package.loaded["poste.state"] = saved_state
+    package.loaded["poste-sql.log"] = saved_log
+  end)
 end)
