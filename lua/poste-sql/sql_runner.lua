@@ -498,7 +498,7 @@ end
 
   local executor = require("poste-sql.executor")
   executor.execute({
-    sql = buf_content,
+    sql = stmt_sql_raw or buf_content,
     conn_url = conn_url,
     database = db,
     mode = "greedy",
