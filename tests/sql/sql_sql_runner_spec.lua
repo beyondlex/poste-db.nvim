@@ -82,7 +82,7 @@ describe("sql_runner run_sql_request", function()
     assert.matches("not found", notified.msg)
   end)
 
-  teardown(function()
+  after_each(function()
     package.loaded["poste.state"] = saved_state
     package.loaded["poste.util"] = saved_util
     package.loaded["poste.indicators"] = saved_indicators
