@@ -4,6 +4,7 @@ local async = require("poste-sql.db_browser.async")
 local state = require("poste.state")
 local cli = require("poste.cli")
 local ident = require("poste-sql.ident")
+local util = require("poste-sql.db_browser.util")
 
 local HEADER_LINES = icons.HEADER_LINES
 
@@ -54,44 +55,11 @@ local function fuzzy_match(text, pattern)
   return true, positions
 end
 
-function M.find_table_node(line_to_node, start_idx)
-  for i = start_idx, 1, -1 do
-    if line_to_node[i] and line_to_node[i].node_type == "table" then
-      return line_to_node[i]
-    end
-  end
-  return nil
-end
+M.find_table_node = util.find_table_node
 
-local function get_connection(node, root_nodes)
-  if node.node_type == "connection" then
-    return node.name
-  end
-  return node.meta and node.meta.connection or state.sql.db_browser.connection
-end
-
-local function get_dialect(node, root_nodes)
-  if node.meta and node.meta.dialect then
-    return node.meta.dialect
-  end
-  local conn = get_connection(node, root_nodes)
-  for _, root in ipairs(root_nodes) do
-    if root.name == conn then
-      return root.meta and root.meta.dialect
-    end
-  end
-  return "postgres"
-end
-
-local function get_search_dir(source_buf)
-  if source_buf and vim.api.nvim_buf_is_valid(source_buf) then
-    local buf_name = vim.api.nvim_buf_get_name(source_buf)
-    if buf_name ~= "" then
-      return vim.fn.fnamemodify(buf_name, ":p:h")
-    end
-  end
-  return vim.fn.getcwd()
-end
+local get_connection = util.get_connection
+local get_dialect = util.get_dialect
+local get_search_dir = util.get_search_dir
 
 local execute_table_select  -- forward declaration
 

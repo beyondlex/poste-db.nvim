@@ -1,7 +1,7 @@
-local state = require("poste.state")
 local forms_advanced = require("poste-sql.db_browser.forms_advanced")
 local tree = require("poste-sql.db_browser.tree")
 local async = require("poste-sql.db_browser.async")
+local util = require("poste-sql.db_browser.util")
 
 local M = {}
 
@@ -27,19 +27,11 @@ local function mysql_create_database(fields)
 end
 
 local function get_dialect(node, context)
-  if node.meta and node.meta.dialect then return node.meta.dialect end
-  local conn_name = node.meta and node.meta.connection or state.sql.db_browser.connection
-  for _, root in ipairs(context.root_nodes) do
-    if root.name == conn_name then
-      return root.meta and root.meta.dialect or "postgres"
-    end
-  end
-  return "postgres"
+  return util.get_dialect(node, context and context.root_nodes or {})
 end
 
 local function get_connection_name(node, context)
-  if node.node_type == "connection" then return node.name end
-  return node.meta and node.meta.connection or state.sql.db_browser.connection
+  return util.get_connection(node)
 end
 
 local function fetch_roles(url)

@@ -8,6 +8,7 @@ local icons = require("poste-sql.db_browser.icons")
 local forms = require("poste-sql.db_browser.forms")
 local select_mod = require("poste.select")
 local ident = require("poste-sql.ident")
+local util = require("poste-sql.db_browser.util")
 
 local HEADER_LINES = icons.HEADER_LINES
 local M = {}
@@ -22,36 +23,19 @@ local function safe_str(v)
 end
 
 local function get_dialect(node, context)
-  if node.meta and node.meta.dialect then return node.meta.dialect end
-  local conn_name = node.meta and node.meta.connection or state.sql.db_browser.connection
-  for _, root in ipairs(context.root_nodes) do
-    if root.name == conn_name then
-      return root.meta and root.meta.dialect or "postgres"
-    end
-  end
-  return "postgres"
+  return util.get_dialect(node, context and context.root_nodes or {})
 end
 
 local function get_connection_name(node, context)
-  if node.node_type == "connection" then return node.name end
-  return node.meta and node.meta.connection or state.sql.db_browser.connection
+  return util.get_connection(node)
 end
 
 local function get_search_dir(context)
-  if context.source_buf and vim.api.nvim_buf_is_valid(context.source_buf) then
-    local buf_name = vim.api.nvim_buf_get_name(context.source_buf)
-    if buf_name ~= "" then return vim.fn.fnamemodify(buf_name, ":p:h") end
-  end
-  return vim.fn.getcwd()
+  return util.get_search_dir(context and context.source_buf)
 end
 
 local function find_table_node(context, start_idx)
-  for i = start_idx, 1, -1 do
-    local n = context.line_to_node[i]
-    if n and n.node_type == "table" then return n end
-    if n and (n.node_type == "database" or n.node_type == "schema" or n.node_type == "connection") then break end
-  end
-  return nil
+  return util.find_table_node(context and context.line_to_node or {}, start_idx)
 end
 
 local function insert_into_source(context, lines, cursor_offset, cursor_col)
