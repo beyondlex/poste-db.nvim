@@ -58,7 +58,9 @@ function M.setup(opts)
   end })
   require("poste-sql.autocmds").setup()
   require("poste-sql.commands").setup()
-  if opts.statusline then require("poste-sql.statusline").setup() end
+  -- Statusline integration on by default (opt-out)
+  -- always-on behavior so the SQL-file/dataset context stays visible.
+  if opts.statusline ~= false then require("poste-sql.statusline").setup() end
   require("poste-sql.autocmds").setup_existing_buffers()
 end
 

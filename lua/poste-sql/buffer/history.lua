@@ -20,6 +20,8 @@ local buf = nil
 local win = nil
 local hl_ns = vim.api.nvim_create_namespace("poste_sql_history")
 
+local update_sql_statusline  -- forward declaration (refresh ⇢ update_sql_statusline)
+
 --- Display width (CJK/emoji-aware) — `vim.fn.strdisplaywidth`.
 local function display_width(s)
   return vim.fn.strdisplaywidth(s or "")
@@ -60,8 +62,11 @@ local function build_lines()
 end
 
 --- Re-render the sidebar content and highlights (safe no-op when closed).
+--- Also keeps the sidebar's own statusline in sync with the item under the
+--- cursor (shows that request's SQL instead of the scratch-buffer default).
 function M.refresh()
   if not win or not vim.api.nvim_win_is_valid(win) then return end
+  update_sql_statusline()
   local lines = build_lines()
   vim.api.nvim_set_option_value("modifiable", true, { buf = buf })
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
@@ -88,13 +93,37 @@ local function set_cursor_line(lnum)
   vim.api.nvim_win_set_cursor(win, { math.max(1, math.min(lnum, n)), 0 })
 end
 
+local activate  -- forward declaration (move ⇢ activate)
+
+--- Show the SQL of the history item under the cursor in the sidebar's own
+--- statusline. Falls back to the default statusline when there's no SQL.
+update_sql_statusline = function()
+  if not win or not vim.api.nvim_win_is_valid(win) then return end
+  local lnum = vim.api.nvim_win_get_cursor(win)[1]
+  local entry = D.history[lnum]
+  local sql = entry and entry.sql
+  -- Under globalstatus the sidebar's statusline spans the full editor width,
+  -- so truncate to that; otherwise the float renders its own 40-col bar.
+  local width
+  if vim.api.nvim_get_option_value("laststatus", {}) >= 3 then
+    width = vim.api.nvim_get_option_value("columns", {})
+  else
+    width = vim.api.nvim_win_get_width(win)
+  end
+  local nav_ui = require("poste-sql.buffer.nav_ui")
+  local text = nav_ui.build_sql_statusline(sql, width)
+  pcall(vim.api.nvim_set_option_value, "statusline", text, { win = win })
+  vim.cmd("redrawstatus")
+end
+
 local function move(rel)
   if not win or not vim.api.nvim_win_is_valid(win) then return end
   local cur = vim.api.nvim_win_get_cursor(win)[1]
   set_cursor_line(cur + rel)
+  activate()
 end
 
-local function activate()
+activate = function()
   if not win or not vim.api.nvim_win_is_valid(win) then return end
   local lnum = vim.api.nvim_win_get_cursor(win)[1]
   require("poste-sql.buffer").switch_history_entry(lnum)
@@ -107,6 +136,12 @@ local function delete_current()
   require("poste-sql.buffer").delete_history_entry(lnum)
   M.refresh()
   set_cursor_line(math.min(lnum, D.history_count()))
+end
+
+--- Activate the item under the cursor and close the sidebar.
+local function activate_and_close()
+  activate()
+  M.close()
 end
 
 --- Open the sidebar (re-focus if already open).
@@ -144,7 +179,7 @@ function M.open()
   local km = { buffer = buf, noremap = true, silent = true }
   vim.keymap.set("n", "j", function() move(1) end, km)
   vim.keymap.set("n", "k", function() move(-1) end, km)
-  vim.keymap.set("n", "<CR>", activate, km)
+  vim.keymap.set("n", "<CR>", activate_and_close, km)
   vim.keymap.set("n", "d", delete_current, km)
   vim.keymap.set("n", "q", M.close, km)
   vim.keymap.set("n", "<Esc>", M.close, km)

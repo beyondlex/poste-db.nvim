@@ -58,4 +58,15 @@ describe("format bigint precision", function()
 
     assert.is_true(layout.numeric_cols[2], "bigint column should be flagged numeric for right-alignment")
   end)
+
+  it("formats floats with a capped decimal precision", function()
+    assert.equals("578.472", format.format_number(578.47196567559))
+    assert.equals("123.45", format.format_number(123.45))
+    assert.equals("3.1416", format.format_number(math.pi))
+    -- tiny magnitudes stay significant, not rounded to 0
+    assert.equals("1.2345e-06", format.format_number(0.0000012345))
+    -- integers keep their exact form
+    assert.equals("120000000", format.format_number(120000000))
+    assert.equals("2", format.format_number(2))
+  end)
 end)

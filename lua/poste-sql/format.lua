@@ -135,6 +135,36 @@ local function format_datetime_local(s)
   return ok and result or s
 end
 
+--- Format a Lua number for table display. Integer-valued numbers keep the
+--- integer form; fractional doubles are rounded to at most `MAX_FLOAT_DECIMALS`
+--- digits after the dot (trailing zeros stripped) so values like
+--- `578.47196567559` don't blow up the column width. `format_number` is also
+--- used for cell previews, so precision beyond the cap is expected display only.
+local MAX_FLOAT_DECIMALS = 4
+
+local function trim_trailing_zeros(s)
+  s = s:gsub("0+$", "")
+  s = s:gsub("%.$", "")
+  return s
+end
+
+function M.format_number(val)
+  if type(val) ~= "number" then return tostring(val) end
+  if val == math.floor(val) and math.abs(val) < 1e15 then
+    return string.format("%.0f", val)
+  end
+  if val ~= 0 and math.abs(val) < 0.0001 then
+    -- Tiny magnitudes: keep significant digits (scientific form) instead of
+    -- collapsing to 0.0000.
+    return string.format("%.6g", val)
+  end
+  local s = string.format("%." .. MAX_FLOAT_DECIMALS .. "f", val)
+  return trim_trailing_zeros(s)
+end
+
+-- Local binding so cell_to_string (defined below) can call it without a global.
+local format_number = M.format_number
+
 --- Convert a cell value to display string.
 --- Newlines are replaced with ⏎ to keep table layout intact.
 --- Timestamps are converted to local timezone.
@@ -158,10 +188,7 @@ local function cell_to_string(val, col)
     return tostring(val)
   end
   if type(val) == "number" then
-    if val == math.floor(val) then
-      return string.format("%.0f", val)
-    end
-    return tostring(val)
+    return format_number(val)
   end
   local s
   if type(val) == "table" then

@@ -7,6 +7,30 @@ local M = {}
 local ICON_DATABASE = "\239\135\128"
 local ICON_TABLE    = "\239\131\142"
 
+--- Escape `%` for use inside a statusline/winbar string.
+local function statusline_escape(s)
+  return (s:gsub("%%", "%%%%"))
+end
+
+--- Flatten a multi-line SQL to a single line.
+local function flatten_sql(sql)
+  return (sql or ""):gsub("[ \t\r\n]+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+end
+
+--- Truncate a string to `max_width` display cells, appending `…`. Uses
+--- `strdisplaywidth` so CJK/emoji never split mid-character.
+local function truncate_display(s, max_width)
+  if vim.fn.strdisplaywidth(s) <= max_width then return s end
+  local out, w = {}, 0
+  for _, ch in ipairs(vim.fn.split(s, "\\zs")) do
+    local cw = vim.fn.strdisplaywidth(ch)
+    if w + cw > max_width - 1 then break end
+    w = w + cw
+    out[#out + 1] = ch
+  end
+  return table.concat(out) .. "…"
+end
+
 function M.format_conn_short(conn)
   if not conn or conn == "" then return nil end
   local host, port, db = conn:match("^%w+://[^@]*@([^:]+):(%d+)/([^?]+)")
@@ -25,11 +49,17 @@ function M.build_statusline_context(meta)
     if host then
       parts[#parts + 1] = string.format("%s:%s", host, port)
     end
-    local db = conn:match("^%w+://[^@]*@[^/]+/([^?]+)")
-    if db and db ~= "" then
-      db = (db:gsub("/$", ""))
-      parts[#parts + 1] = ICON_DATABASE .. " " .. db
-    end
+  end
+
+  -- Prefer the resolved database actually used by the query (from @database /
+  -- USE), falling back to the one embedded in the connection URL.
+  local db = meta.database
+  if (not db or db == "" or db == vim.NIL) and conn and conn ~= "" then
+    db = conn:match("^%w+://[^@]*@[^/]+/([^?]+)")
+    if db then db = (db:gsub("/$", "")) end
+  end
+  if db and db ~= "" and db ~= vim.NIL then
+    parts[#parts + 1] = ICON_DATABASE .. " " .. db
   end
 
   local tbl = meta.table_name
@@ -49,6 +79,7 @@ function M.update_dataset_statusline(meta)
   if meta and meta.connection then
     vim.b[buf].poste_sql_conn = meta.connection
   end
+  M.update_dataset_sql_statusline()
   vim.cmd("redrawstatus")
 end
 
@@ -132,6 +163,16 @@ function M.build_status_winbar_text(meta, tab, total_tabs, active_idx, pending)
   local right = M.build_status_right(meta, total_tabs, active_idx, pending)
   if not left or not right then return nil end
 
+  -- Connection/db/table context lives on the winbar's left; `%<` drops the
+  -- status fragments first when the window is too narrow.
+  local win = D.dataset_window
+  local width = win and vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_width(win) or vim.o.columns
+  local ctx = M.build_statusline_context(meta)
+  if ctx and ctx ~= "" then
+    local ctx_text = truncate_display(flatten_sql(ctx), math.max(10, width - 24))
+    left = "%#PosteDbDatasetMeta# " .. statusline_escape(ctx_text) .. "%#PosteDbDatasetMeta#%<" .. left
+  end
+
   local text = left .. "%=" .. right
   return "%#PosteDbDatasetMeta#" .. text
 end
@@ -141,6 +182,29 @@ function M.build_status_winbar(meta, tab, total_tabs, active_idx)
   local pending = M.build_pending_changes_text(current_tab)
   M.update_dataset_statusline(meta)
   return M.build_status_winbar_text(meta, tab, total_tabs, active_idx, pending)
+end
+
+--- Build the dataset statusline: the active request's SQL, truncated to the
+--- window width. Empty when no SQL (falls back to the default statusline).
+--- @param sql string|nil active entry's SQL
+--- @param width number statusline width in cells
+--- @return string
+function M.build_sql_statusline(sql, width)
+  local text = truncate_display(flatten_sql(sql or ""), math.max(10, width - 2))
+  if text == "" then return "" end
+  return "%#PosteDbDatasetMeta# " .. statusline_escape(text) .. "%#PosteDbDatasetMeta#"
+end
+
+--- Set the dataset window's statusline to a SQL preview of the active history
+--- entry (or its given entry). Called on render and on every history switch.
+--- @param entry table|nil overrides D.active_entry()
+function M.update_dataset_sql_statusline(entry)
+  local win = D.dataset_window
+  if not win or not vim.api.nvim_win_is_valid(win) then return end
+  local sql = (entry or D.active_entry() or {}).sql
+  local text = M.build_sql_statusline(sql, vim.api.nvim_win_get_width(win))
+  pcall(vim.api.nvim_set_option_value, "statusline", text, { win = win })
+  vim.cmd("redrawstatus")
 end
 
 return M

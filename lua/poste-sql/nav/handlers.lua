@@ -97,12 +97,13 @@ function M.handle_table_reference(buf, line_num, line_text, cursor, full_ctx, ta
                   target.connection or full_ctx.connection,
                   target.database or full_ctx.database or table_name
                 )
-              return true
-            end
-            table_name = target.table_name or table_name
-            column_name = target.column_name
-            if target.database then
-              full_ctx.database = target.database
+                return true
+              end
+              table_name = target.table_name or table_name
+              column_name = target.column_name
+              if target.database then
+                full_ctx.database = target.database
+              end
             end
           end
         end
