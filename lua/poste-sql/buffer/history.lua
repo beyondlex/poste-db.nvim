@@ -45,9 +45,13 @@ end
 --- errors prefixed with ✗. The time column shows the wall-clock moment the
 --- request executed (时:分:秒.毫秒) and is right-aligned to the window's right
 --- edge (SIDEBAR_WIDTH); the label is truncated so it never overlaps.
+--- Entries are shown newest-first (reverse execution order).
 local function build_lines()
   local lines = {}
-  for i, entry in ipairs(D.history) do
+  local n = #D.history
+  for offset = 0, n - 1 do
+    local i = n - offset
+    local entry = D.history[i]
     local label = truncate_display(entry.label or "?", LABEL_COL_WIDTH)
     local marker = entry.error and "✗" or (i == D.active_history and "▸" or " ")
     local time = D.format_wallclock(entry.ts_sec, entry.ts_nsec)
@@ -61,6 +65,11 @@ local function build_lines()
   return lines
 end
 
+--- Display line number → history index (entries render newest-first).
+local function line_to_index(lnum)
+  return #D.history - lnum + 1
+end
+
 --- Re-render the sidebar content and highlights (safe no-op when closed).
 --- Also keeps the sidebar's own statusline in sync with the item under the
 --- cursor (shows that request's SQL instead of the scratch-buffer default).
@@ -72,17 +81,20 @@ function M.refresh()
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
   vim.api.nvim_buf_clear_namespace(buf, hl_ns, 0, -1)
-  if D.active_history >= 1 and D.active_history <= #lines then
+  local active_line = D.active_history >= 1 and D.active_history <= #D.history
+    and line_to_index(D.active_history) or 0
+  if active_line >= 1 and active_line <= #lines then
     vim.api.nvim_buf_add_highlight(buf, hl_ns, "PosteDbDatasetSearchCurrent",
-      D.active_history - 1, 0, -1)
+      active_line - 1, 0, -1)
   end
-  for i, entry in ipairs(D.history) do
+  for offset = 0, #D.history - 1 do
+    local entry = D.history[#D.history - offset]
     if entry.error then
-      vim.api.nvim_buf_add_highlight(buf, hl_ns, "DiagnosticError", i - 1, 0, 1)
+      vim.api.nvim_buf_add_highlight(buf, hl_ns, "DiagnosticError", offset, 0, 1)
     end
     local time = D.format_wallclock(entry.ts_sec, entry.ts_nsec)
     local start = SIDEBAR_WIDTH - display_width(time)
-    vim.api.nvim_buf_add_highlight(buf, hl_ns, "Comment", i - 1, start, -1)
+    vim.api.nvim_buf_add_highlight(buf, hl_ns, "Comment", offset, start, -1)
   end
 end
 
@@ -100,7 +112,7 @@ local activate  -- forward declaration (move ⇢ activate)
 update_sql_statusline = function()
   if not win or not vim.api.nvim_win_is_valid(win) then return end
   local lnum = vim.api.nvim_win_get_cursor(win)[1]
-  local entry = D.history[lnum]
+  local entry = D.history[line_to_index(lnum)]
   local sql = entry and entry.sql
   -- Under globalstatus the sidebar's statusline spans the full editor width,
   -- so truncate to that; otherwise the float renders its own 40-col bar.
@@ -126,14 +138,14 @@ end
 activate = function()
   if not win or not vim.api.nvim_win_is_valid(win) then return end
   local lnum = vim.api.nvim_win_get_cursor(win)[1]
-  require("poste-sql.buffer").switch_history_entry(lnum)
+  require("poste-sql.buffer").switch_history_entry(line_to_index(lnum))
   M.refresh()
 end
 
 local function delete_current()
   if not win or not vim.api.nvim_win_is_valid(win) then return end
   local lnum = vim.api.nvim_win_get_cursor(win)[1]
-  require("poste-sql.buffer").delete_history_entry(lnum)
+  require("poste-sql.buffer").delete_history_entry(line_to_index(lnum))
   M.refresh()
   set_cursor_line(math.min(lnum, D.history_count()))
 end
@@ -185,7 +197,9 @@ function M.open()
   vim.keymap.set("n", "<Esc>", M.close, km)
 
   M.refresh()
-  set_cursor_line(D.active_history)
+  if D.active_history >= 1 then
+    set_cursor_line(line_to_index(D.active_history))
+  end
 end
 
 function M.toggle()

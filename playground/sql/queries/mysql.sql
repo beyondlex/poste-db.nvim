@@ -35,10 +35,10 @@ select * from poste_test_events;;
 
 select id, slug FROM blog.posts ;
 
-drop table poste_test_events;
-drop table poste_test_metrics;
-drop table poste_test_users;
-drop table shipments;
+-- drop table poste_test_events;
+-- drop table poste_test_metrics;
+-- drop table poste_test_users;
+-- drop table shipments;
 
 -- @database blog
 SELECT id, page_id, url, measured_at, metric_01 from web_vitals  ;

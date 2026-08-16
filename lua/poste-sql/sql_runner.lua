@@ -22,6 +22,25 @@ local _vis_end = 0
 local _cursor_moved_timer = nil
 local CURSOR_MOVED_DEBOUNCE_MS = 100
 
+--- Compute the indicator line for a statement: `end_nr` exclusive, trimmed
+--- past trailing blank lines AND `--` comment lines so the marker lands on the
+--- statement itself, never on the section separator or the next statement's
+--- comment (which would split pending/success icons across lines).
+--- @param buf_lines string[]
+--- @param line_nr number statement start line (inclusive)
+--- @param next_start number|nil next statement start (exclusive bound)
+--- @param max_end number fallback exclusive bound (visual selection end / buffer end)
+--- @return number 0-based line index for indicators.set_indicator
+local function stmt_indicator_line(buf_lines, line_nr, next_start, max_end)
+  local end_nr = next_start and (next_start - 1) or max_end
+  while end_nr > line_nr do
+    local trimmed = (buf_lines[end_nr] or ""):match("^%s*(.*)$")
+    if trimmed ~= "" and not trimmed:match("^%-%-") then break end
+    end_nr = end_nr - 1
+  end
+  return (end_nr - 1)
+end
+
 
 --- Install keymaps for this SQL buffer (one-time setup).
 function M.ensure_sql_keymaps(buf)
@@ -377,9 +396,9 @@ function M.run_sql_request()
           tab_idx = tab_idx + 1
           local err_line = stmt_lines[i] or first_line
           local next_start = stmt_lines[i + 1]
-          local end_nr = next_start and (next_start - 1) or visual_sel_end or #buf_lines
-          while end_nr > err_line and (buf_lines[end_nr] or ""):match("^%s*$") do end_nr = end_nr - 1 end
-          indicators.set_indicator(src_buf, end_nr - 1, "error")
+          indicators.set_indicator(src_buf,
+            stmt_indicator_line(buf_lines, err_line, next_start, visual_sel_end or #buf_lines),
+            "error")
           local err_text = type(result.error) == "string" and result.error or vim.inspect(result.error)
           local lines = sql_format.format_error(err_text, parsed.connection or "")
           sql_buffer.render_dataset(lines, { type = "error" }, { tab_index = tab_idx, exec_seq = current_seq })
@@ -408,9 +427,9 @@ function M.run_sql_request()
             -- would otherwise clutter the dataset with empty tabs.
             local line_nr = stmt_lines[i] or first_line
             local next_start = stmt_lines[i + 1]
-            local end_nr = next_start and (next_start - 1) or visual_sel_end or #buf_lines
-            while end_nr > line_nr and (buf_lines[end_nr] or ""):match("^%s*$") do end_nr = end_nr - 1 end
-            indicators.set_indicator(src_buf, end_nr - 1, "success", result.execution_time_ms)
+            indicators.set_indicator(src_buf,
+              stmt_indicator_line(buf_lines, line_nr, next_start, visual_sel_end or #buf_lines),
+              "success", result.execution_time_ms)
             goto continue
           else
             tab_idx = tab_idx + 1
@@ -428,9 +447,9 @@ function M.run_sql_request()
 
           local line_nr = stmt_lines[i] or first_line
           local next_start = stmt_lines[i + 1]
-          local end_nr = next_start and (next_start - 1) or visual_sel_end or #buf_lines
-          while end_nr > line_nr and (buf_lines[end_nr] or ""):match("^%s*$") do end_nr = end_nr - 1 end
-          indicators.set_indicator(src_buf, end_nr - 1, "success", result.execution_time_ms)
+          indicators.set_indicator(src_buf,
+            stmt_indicator_line(buf_lines, line_nr, next_start, visual_sel_end or #buf_lines),
+            "success", result.execution_time_ms)
         end
         ::continue::
       end

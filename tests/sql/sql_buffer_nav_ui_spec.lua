@@ -31,14 +31,14 @@ describe("buffer_nav_ui", function()
 
     assert.truthy(text:find("12 rows", 1, true))
     assert.truthy(text:find("title ↓", 1, true))
-    assert.truthy(text:find("Page 2/3", 1, true))
+    assert.truthy(text:find("P:2/3", 1, true))
     assert.truthy(text:find("filter: status=open", 1, true))
     assert.truthy(text:find("search: needle (2/2)", 1, true))
     assert.is_falsy(text:find("localhost:5432/blog", 1, true))
-    -- context + SQL preview moved onto the winbar
+    -- connection/db context moved onto the winbar; table name is omitted
     assert.truthy(text:find("localhost:5432", 1, true))
     assert.truthy(text:find("🄳 blog", 1, true))
-    assert.truthy(text:find("🃎 posts", 1, true))
+    assert.is_falsy(text:find("🃎 posts", 1, true))
   end)
 
   it("builds the statusline context", function()
@@ -62,6 +62,19 @@ describe("buffer_nav_ui", function()
     assert.truthy(ctx:find("localhost:5432", 1, true))
     assert.truthy(ctx:find("inventory", 1, true))
     assert.is_falsy(ctx:find("blog", 1, true))
+  end)
+
+  it("omits the table name when include_table is false", function()
+    local ctx = ui.build_statusline_context({
+      type = "resultset",
+      table_name = "warehouses",
+      database = "blog",
+      connection = "postgres://user:pass@localhost:5432/blog?sslmode=require",
+    }, { include_table = false })
+    assert.truthy(ctx:find("localhost:5432", 1, true))
+    assert.truthy(ctx:find("blog", 1, true))
+    assert.is_falsy(ctx:find("warehouses", 1, true))
+    assert.is_falsy(ctx:find("🃎", 1, true))
   end)
 
   it("builds pending changes text only when dirty", function()

@@ -38,8 +38,9 @@ function M.format_conn_short(conn)
   return conn:match("/([^/]+)$") or conn
 end
 
-function M.build_statusline_context(meta)
+function M.build_statusline_context(meta, opts)
   if not meta or meta.type ~= "resultset" then return nil end
+  opts = opts or {}
 
   local parts = {}
 
@@ -62,9 +63,11 @@ function M.build_statusline_context(meta)
     parts[#parts + 1] = ICON_DATABASE .. " " .. db
   end
 
-  local tbl = meta.table_name
-  if tbl and tbl ~= "" then
-    parts[#parts + 1] = ICON_TABLE .. " " .. tbl
+  if opts.include_table ~= false then
+    local tbl = meta.table_name
+    if tbl and tbl ~= "" then
+      parts[#parts + 1] = ICON_TABLE .. " " .. tbl
+    end
   end
 
   if #parts == 0 then return nil end
@@ -100,7 +103,7 @@ function M.build_status_left(meta, tab)
 
   if tab and tab.num_pages and tab.num_pages > 1 and (tab.padded_full or tab.layout) then
     if tab.pagination_enabled then
-      left = left .. string.format("  %sPage %d/%d%s",
+      left = left .. string.format("  %sP:%d/%d%s",
         "%#PosteDbDatasetMetaDim#", tab.page, tab.num_pages, "%#PosteDbDatasetMeta#")
     else
       left = left .. "  %#PosteDbDatasetMetaDim#All%#PosteDbDatasetMeta#"
@@ -137,7 +140,7 @@ function M.build_status_right(meta, total_tabs, active_idx, pending)
   -- Request history position (JetBrains-style sidebar)
   local hcount = D.history_count()
   if hcount > 1 and D.active_history >= 1 then
-    right = right .. string.format("h:%d/%d ", D.active_history, hcount)
+    right = right .. string.format("H:%d/%d ", D.active_history, hcount)
   end
   if total_tabs > 1 then
     local label = meta.table_name or ("result " .. active_idx)
@@ -163,11 +166,12 @@ function M.build_status_winbar_text(meta, tab, total_tabs, active_idx, pending)
   local right = M.build_status_right(meta, total_tabs, active_idx, pending)
   if not left or not right then return nil end
 
-  -- Connection/db/table context lives on the winbar's left; `%<` drops the
+  -- Connection/db context lives on the winbar's left (table name omitted — the
+  -- queried tables are already visible in the dataset content); `%<` drops the
   -- status fragments first when the window is too narrow.
   local win = D.dataset_window
   local width = win and vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_width(win) or vim.o.columns
-  local ctx = M.build_statusline_context(meta)
+  local ctx = M.build_statusline_context(meta, { include_table = false })
   if ctx and ctx ~= "" then
     local ctx_text = truncate_display(flatten_sql(ctx), math.max(10, width - 24))
     left = "%#PosteDbDatasetMeta# " .. statusline_escape(ctx_text) .. "%#PosteDbDatasetMeta#%<" .. left
