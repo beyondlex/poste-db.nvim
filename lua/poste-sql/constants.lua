@@ -15,6 +15,12 @@ M.FLOAT_WIDTH_RATIO = 0.7
 M.FLOAT_MAX_WIDTH = 120
 M.FLOAT_HEIGHT_RATIO = 0.6
 
+--- Dataset split: share of the editor height at creation and on resize.
+M.DATASET_HEIGHT_RATIO = 0.4
+--- Lower bound the dataset window is kept to so it never collapses to just
+--- its winbar after editor/window resizes.
+M.DATASET_MIN_HEIGHT = 4
+
 M.INTROSPECT_FLOAT_WIDTH_RATIO = 0.7
 M.INTROSPECT_FLOAT_MAX_WIDTH = 100
 M.INTROSPECT_FLOAT_WIDTH_PADDING = 4

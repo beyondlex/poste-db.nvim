@@ -7,6 +7,37 @@ local render = require("poste-sql.buffer.render")
 
 local M = {}
 
+--- Target height for the dataset window after editor/window resizes.
+--- nvim freely redistributes window heights on resize; a terminal shrink can
+--- squeeze the dataset split down to just its winbar. Re-apply the
+--- configured share of the editor, never smaller than the current height
+--- (a user-enlarged dataset survives), never below a visible floor, and
+--- never at the cost of the SQL file window's last rows.
+--- @param current number current dataset window height
+--- @param editor_lines number current editor height (vim.o.lines)
+--- @return number target height
+local function compute_dataset_height(current, editor_lines)
+  local target = math.max(
+    current,
+    math.floor(editor_lines * C.DATASET_HEIGHT_RATIO),
+    C.DATASET_MIN_HEIGHT
+  )
+  return math.min(target, math.max(editor_lines - 4, 1))
+end
+
+--- Raise the dataset window when a resize left it smaller than its target.
+--- Monotone: never shrinks the dataset (manual enlargement is respected).
+local function ensure_dataset_visible()
+  if not D.dataset_window or not vim.api.nvim_win_is_valid(D.dataset_window) then
+    return
+  end
+  local current = vim.api.nvim_win_get_height(D.dataset_window)
+  local target = compute_dataset_height(current, vim.o.lines)
+  if target > current then
+    pcall(vim.api.nvim_win_set_height, D.dataset_window, target)
+  end
+end
+
 --------------------------------------------------------------------------------
 -- Buffer creation + keymaps
 --------------------------------------------------------------------------------
@@ -549,7 +580,7 @@ function M.render_dataset(lines, meta, opts)
       or (D.dataset_tabpage and vim.api.nvim_win_get_tabpage(D.dataset_window) ~= D.dataset_tabpage) then
     local src_win = vim.api.nvim_get_current_win()
     local src_view = vim.fn.winsaveview()
-    local height = math.floor(vim.o.lines * 0.4)
+    local height = math.floor(vim.o.lines * C.DATASET_HEIGHT_RATIO)
     vim.cmd("botright " .. height .. "split")
     D.dataset_window = vim.api.nvim_get_current_win()
     D.dataset_tabpage = vim.api.nvim_get_current_tabpage()
@@ -610,6 +641,14 @@ function M.render_dataset(lines, meta, opts)
       D.resize_autocmd_id = vim.api.nvim_create_autocmd("WinResized", {
         callback = function()
           require("poste-sql.buffer.header").update()
+          ensure_dataset_visible()
+        end,
+      })
+      -- Whole-editor resize (terminal grew/shrunk): re-apply the dataset's
+      -- share so the split cannot collapse to just its winbar.
+      D.vimresized_autocmd_id = vim.api.nvim_create_autocmd("VimResized", {
+        callback = function()
+          ensure_dataset_visible()
         end,
       })
       D.scroll_autocmd_id = vim.api.nvim_create_autocmd("WinScrolled", {
@@ -686,6 +725,10 @@ function M.close()
     pcall(vim.api.nvim_del_autocmd, D.resize_autocmd_id)
     D.resize_autocmd_id = nil
   end
+  if D.vimresized_autocmd_id then
+    pcall(vim.api.nvim_del_autocmd, D.vimresized_autocmd_id)
+    D.vimresized_autocmd_id = nil
+  end
   if D.scroll_autocmd_id then
     pcall(vim.api.nvim_del_autocmd, D.scroll_autocmd_id)
     D.scroll_autocmd_id = nil
@@ -717,6 +760,8 @@ function M.is_open()
 end
 
 M._test = {
+  compute_dataset_height = compute_dataset_height,
+  ensure_dataset_visible = ensure_dataset_visible,
   set_header = function(header)
     local tab = D.alloc_tab(1)
     tab.header_text = header
