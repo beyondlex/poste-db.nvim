@@ -252,8 +252,17 @@ execute_table_select = function(node, context)
       local lines, meta, layout = sql_format.format_dataset(parsed)
       meta = meta or {}
       meta.table_name = node.name
+      -- Pass the fresh resultset explicitly: render_dataset otherwise falls
+      -- back to state.last_response.body (only the sql_runner path updates
+      -- it), so cell preview (K) / yank / sort would read stale rows.
+      local data = nil
+      if parsed and parsed.body then
+        local ok, d = pcall(vim.json.decode, parsed.body)
+        if ok then data = d end
+      end
       sql_buffer.render_dataset(lines, meta, {
         layout = layout,
+        data = data,
         original_sql = sql,
         src_file = "poste://db_browser",
         src_buf = context.source_buf,
