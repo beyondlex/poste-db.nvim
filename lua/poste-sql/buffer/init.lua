@@ -149,6 +149,24 @@ function M.get_dataset_buffer()
     vim.keymap.set("n", k, function() M.history_prev() end, opts)
   end
 
+  -- Prevent dataset buffer from being replaced in its window
+  vim.api.nvim_create_autocmd("BufLeave", {
+    buffer = D.dataset_buffer,
+    callback = function()
+      if not D.dataset_window then return end
+      local win = vim.api.nvim_get_current_win()
+      if win ~= D.dataset_window then return end
+      vim.schedule(function()
+        if not vim.api.nvim_win_is_valid(win) then return end
+        if not vim.api.nvim_buf_is_valid(D.dataset_buffer) then return end
+        local buf = vim.api.nvim_win_get_buf(win)
+        if buf ~= D.dataset_buffer then
+          vim.api.nvim_win_set_buf(win, D.dataset_buffer)
+        end
+      end)
+    end,
+  })
+
   -- BufWriteCmd: :w triggers commit
   vim.api.nvim_create_autocmd("BufWriteCmd", {
     buffer = D.dataset_buffer,
