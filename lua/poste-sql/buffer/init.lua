@@ -144,7 +144,7 @@ function M.get_dataset_buffer()
   if k then
     vim.keymap.set("n", k, function() M.history_next() end, opts)
   end
-  k = state.get_keymap("sql_dataset", "history_prev", "<leader>p")
+  k = state.get_keymap("sql_dataset", "history_prev", "<leader>b")
   if k then
     vim.keymap.set("n", k, function() M.history_prev() end, opts)
   end

@@ -490,6 +490,38 @@ local function format_bytes(bytes)
   return bytes .. " B"
 end
 
+function M.show_column_info(buf_line, context)
+  local node = tree.get_node_at_line(context.line_to_node, buf_line)
+  if not node or node.node_type ~= "column" then
+    vim.notify("Move cursor to a column", vim.log.levels.INFO)
+    return
+  end
+
+  local meta = node.meta
+  local lines = {}
+  local label_width = 10
+
+  local function add(label, value)
+    if value ~= nil and value ~= "" and value ~= vim.NIL then
+      lines[#lines + 1] = string.format("  %s%s  %s", string.rep(" ", label_width - #label), label, value)
+    end
+  end
+
+  add("Type",     meta.col_type)
+  add("Default",  meta.default ~= vim.NIL and tostring(meta.default) or "(null)")
+  add("Nullable", meta.nullable == true and "YES" or (meta.nullable == false and "NO" or "?"))
+  if meta.extra and meta.extra ~= "" then
+    add("Extra", meta.extra)
+  end
+  add("Comment",  meta.comment ~= "" and ("'" .. meta.comment .. "'") or nil)
+  add("Collation", meta.collation)
+
+  vim.schedule(function()
+    local title = "Column Info: " .. node.name
+    require("poste-sql.introspect").show_float(lines, title, "text")
+  end)
+end
+
 function M.show_table_info(buf_line, context)
   local idx = buf_line - HEADER_LINES
   local table_node = M.find_table_node(context.line_to_node, idx)

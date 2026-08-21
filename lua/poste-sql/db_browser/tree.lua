@@ -93,6 +93,7 @@ function M.make_column_node(item)
       default = item.default,
       extra = item.extra or "",
       comment = item.comment or "",
+      collation = item.collation,
       is_pk = is_pk,
       icon = icon,
     },

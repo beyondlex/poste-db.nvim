@@ -265,11 +265,17 @@ local function setup_browser_buffer()
     end, opts)
   end
 
-  -- Table info: i shows table metadata
+  -- Info: i shows table or column metadata based on cursor position
   k = state.get_keymap("sql_db_browser", "table_info", "i")
   if k then
     vim.keymap.set("n", k, function()
-      actions.show_table_info(vim.fn.line("."), make_context())
+      local buf_line = vim.fn.line(".")
+      local node = tree.get_node_at_line(line_to_node, buf_line)
+      if node and node.node_type == "column" then
+        actions.show_column_info(buf_line, make_context())
+      else
+        actions.show_table_info(buf_line, make_context())
+      end
     end, opts)
   end
 
