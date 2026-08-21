@@ -1,9 +1,37 @@
 local ui = require("poste-sql.buffer.nav_ui")
+local state = require("poste.state")
 
 describe("buffer_nav_ui", function()
+  before_each(function()
+    _G.__saved_conn_name = state.sql and state.sql.context and state.sql.context.connection
+  end)
+
+  after_each(function()
+    if state.sql and state.sql.context then
+      state.sql.context.connection = _G.__saved_conn_name
+    end
+    _G.__saved_conn_name = nil
+  end)
   it("formats connection urls for the winbar", function()
     assert.equals("localhost:5432/blog", ui.format_conn_short("postgres://user:pass@localhost:5432/blog?sslmode=require"))
     assert.equals("blog.sqlite", ui.format_conn_short("/tmp/blog.sqlite"))
+  end)
+
+  it("includes the connection name in the winbar text", function()
+    if state.sql and state.sql.context then
+      state.sql.context.connection = "inventory"
+    end
+    local text = ui.build_status_winbar_text({
+      type = "resultset",
+      total_rows = 5,
+      total_execution_time_ms = 3,
+      table_name = "users",
+      connection = "postgres://user:pass@localhost:5432/blog?sslmode=require",
+    }, {}, 1, 1)
+    assert.truthy(text:find("inventory: localhost:5432", 1, true))
+    if state.sql and state.sql.context then
+      state.sql.context.connection = nil
+    end
   end)
 
   it("builds the status winbar text", function()
@@ -50,6 +78,23 @@ describe("buffer_nav_ui", function()
     assert.truthy(ctx:find("localhost:5432", 1, true))
     assert.truthy(ctx:find("blog", 1, true))
     assert.truthy(ctx:find("posts", 1, true))
+  end)
+
+  it("includes the connection name when state.sql.context.connection is set", function()
+    if state.sql and state.sql.context then
+      state.sql.context.connection = "inventory"
+    end
+    local ctx = ui.build_statusline_context({
+      type = "resultset",
+      table_name = "posts",
+      connection = "postgres://user:pass@localhost:5432/blog?sslmode=require",
+    })
+    assert.truthy(ctx:find("inventory: localhost:5432", 1, true))
+    assert.truthy(ctx:find("blog", 1, true))
+    assert.truthy(ctx:find("posts", 1, true))
+    if state.sql and state.sql.context then
+      state.sql.context.connection = nil
+    end
   end)
 
   it("prefers the resolved database over the connection URL db", function()
