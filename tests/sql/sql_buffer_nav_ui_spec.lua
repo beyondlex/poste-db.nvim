@@ -28,7 +28,8 @@ describe("buffer_nav_ui", function()
       table_name = "users",
       connection = "postgres://user:pass@localhost:5432/blog?sslmode=require",
     }, {}, 1, 1)
-    assert.truthy(text:find("inventory: localhost:5432", 1, true))
+    assert.truthy(text:find("inventory", 1, true))
+    assert.is_falsy(text:find("localhost:5432", 1, true))
     if state.sql and state.sql.context then
       state.sql.context.connection = nil
     end
@@ -89,7 +90,8 @@ describe("buffer_nav_ui", function()
       table_name = "posts",
       connection = "postgres://user:pass@localhost:5432/blog?sslmode=require",
     })
-    assert.truthy(ctx:find("inventory: localhost:5432", 1, true))
+    assert.truthy(ctx:find("inventory", 1, true))
+    assert.is_falsy(ctx:find("localhost:5432", 1, true))
     assert.truthy(ctx:find("blog", 1, true))
     assert.truthy(ctx:find("posts", 1, true))
     if state.sql and state.sql.context then

@@ -46,12 +46,12 @@ function M.build_statusline_context(meta, opts)
 
   local conn = meta.connection
   if conn and conn ~= "" then
-    local host, port = conn:match("^%w+://[^@]*@([^:]+):(%d+)")
-    if host then
-      local conn_name = state.sql and state.sql.context and state.sql.context.connection
-      if conn_name and conn_name ~= "" then
-        parts[#parts + 1] = string.format("%s: %s:%s", conn_name, host, port)
-      else
+    local conn_name = state.sql and state.sql.context and state.sql.context.connection
+    if conn_name and conn_name ~= "" then
+      parts[#parts + 1] = conn_name
+    else
+      local host, port = conn:match("^%w+://[^@]*@([^:]+):(%d+)")
+      if host then
         parts[#parts + 1] = string.format("%s:%s", host, port)
       end
     end
