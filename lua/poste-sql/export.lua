@@ -391,7 +391,7 @@ end
 -- Public API
 -------------------------------------------------------------------------------
 
---- Main entry: :PosteExport [format] [destination] [path]
+--- Main entry: :PosteDbExport [format] [destination] [path]
 --- format: csv|tsv|json|md|sql (optional, prompts if omitted)
 --- destination: file|clipboard (optional, prompts if omitted)
 --- path: file path (only if destination=file, prompts if omitted)

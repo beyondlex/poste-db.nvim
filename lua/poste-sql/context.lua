@@ -60,7 +60,7 @@ function M.resolve_full_context(buf, limit_line)
 
   local ctx = M.resolve_context(buf, limit_line)
 
-  -- Fallback to runtime state for connection (from :PosteSQLContext or manual set)
+  -- Fallback to runtime state for connection (from :PosteDbContext or manual set)
   local state_sql = state.sql
   local conn = ctx.connection or (state_sql and state_sql.context and state_sql.context.connection)
 
@@ -131,9 +131,9 @@ end
 
 --- Switch SQL context interactively.
 --- Usage:
----   :PosteSQLContext              — interactive: pick connection, then database
----   :PosteSQLContext <conn>       — set connection only
----   :PosteSQLContext <conn> <db>  — set connection and database
+---   :PosteDbContext              — interactive: pick connection, then database
+---   :PosteDbContext <conn>       — set connection only
+---   :PosteDbContext <conn> <db>  — set connection and database
 function M.switch_context(args)
   if args and #args >= 1 then
     -- Direct argument mode

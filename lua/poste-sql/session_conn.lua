@@ -302,7 +302,7 @@ function M.cleanup_buf(bufnr)
   end
 end
 
---- List active sessions (for debugging / :PosteSQLSessionList).
+--- List active sessions (for debugging / :PosteDbSessionList).
 --- @return { [conn_url] = { job_id, dialect } }
 function M.list()
   local out = {}

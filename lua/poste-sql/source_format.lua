@@ -315,7 +315,7 @@ function M.format(opts)
   local bufnr = opts.bufnr or vim.api.nvim_get_current_buf()
   local ft = vim.bo[bufnr].filetype
   if ft ~= "poste_sql" and ft ~= "poste_sqlite" then
-    vim.notify("PosteFormat: not a SQL buffer", vim.log.levels.WARN)
+    vim.notify("PosteDbFormat: not a SQL buffer", vim.log.levels.WARN)
     return
   end
 
@@ -393,7 +393,7 @@ function M.format(opts)
     vim.log.levels.INFO)
 end
 
---- Format the entire buffer in-place (for :PosteFormat command).
+--- Format the entire buffer in-place (for :PosteDbFormat command).
 function M.format_buffer()
   M.format()
 end
@@ -489,7 +489,7 @@ function M.setup_lazyvim()
     _register_lazyvim_formatter(lazyvim_format)
   end
   -- LazyVim not installed: silently skip.
-  -- Poste still has :PosteFormat and the <leader>ff keymap.
+  -- Poste still has :PosteDbFormat and the <leader>ff keymap.
 end
 
 ---------------------------------------------------------------------------
@@ -532,7 +532,7 @@ function M.setup_conform()
   end
   -- conform not installed: silently skip.
   -- LazyVim users: PosteSQL LazyFormatter handles <leader>cf directly.
-  -- Other users: use :PosteFormat or the <leader>ff keymap.
+  -- Other users: use :PosteDbFormat or the <leader>ff keymap.
 end
 
 --- Format on save with conform.nvim (if user opts in).

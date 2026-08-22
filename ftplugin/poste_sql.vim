@@ -23,7 +23,7 @@ lua pcall(function() require("poste-sql.completion").register() end)
 " Integrates with:
 "   - LazyVim <leader>cf (via LazyFormatter registration)
 "   - conform.nvim :ConformFormat (by setting formatters_by_ft)
-"   - :PosteFormat or keymap (default <leader>ff) — direct usage
+"   - :PosteDbFormat or keymap (default <leader>ff) — direct usage
 " All integrations handle timing — work regardless of plugin load order.
 lua << EOF
 local ok, source_format = pcall(require, "poste-sql.source_format")

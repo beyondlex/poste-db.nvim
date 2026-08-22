@@ -79,9 +79,9 @@
   1. 在 `poste.nvim` 的 `state.log` 增加级别门控：`M.config.log_level`（默认 `"WARN"`），`DEBUG`/`INFO` 不落盘除非显式开启。**注意**：`state.log` 是 poste.nvim 共享设施，改动需评估对 HTTP/Redis 模块的影响——建议在 poste.nvim 侧做兼容性修改（新增 `state.log_level` 配置，默认保持现行为或按调用方传入级别过滤，需与 poste.nvim 维护者确认）。
   2. 若不能改共享设施，则在 poste-sql 侧新增 `lua/poste-sql/log.lua` 包装层：`M.info(conn_url, ...)` 等，统一在入口做 URL 脱敏后再调 `state.log`。
   3. 脱敏规则（统一函数 `redact_url(url)`）：`scheme://user:***@host:port/db`——只保留 user 与 host:port/db，抹掉 password 段；argv 日志中对 `--connection*` 参数整体替换为 `<redacted>`。
-  4. 逐点替换（必须全改）：`exec_run.lua:322`、`sql_runner.lua:487,527`、`file_exec.lua:368`、`db_browser/async.lua:30`、`db_browser/operations.lua:154`、`session_conn.lua:127`（改记字节数）、`init.lua:164-166`（`:PosteSQLSessionList` 显示脱敏 URL）。
+  4. 逐点替换（必须全改）：`exec_run.lua:322`、`sql_runner.lua:487,527`、`file_exec.lua:368`、`db_browser/async.lua:30`、`db_browser/operations.lua:154`、`session_conn.lua:127`（改记字节数）、`init.lua:164-166`（`:PosteDbSessionList` 显示脱敏 URL）。
 - **涉及文件**：`poste.nvim/lua/poste/state.lua`、`lua/poste-sql/{exec_run,sql_runner,file_exec,init,context}.lua`、`lua/poste-sql/db_browser/{async,operations}.lua`、`lua/poste-sql/session_conn.lua`、新增 `lua/poste-sql/log.lua`
-- **验收标准**：grep 确认所有 `state.log` 调用不再含 password 段；`:PosteSQLSessionList` 展示脱敏；开启 DEBUG 日志后 URL 仍脱敏；`session_conn.lua:127` 不再打印行数据。
+- **验收标准**：grep 确认所有 `state.log` 调用不再含 password 段；`:PosteDbSessionList` 展示脱敏；开启 DEBUG 日志后 URL 仍脱敏；`session_conn.lua:127` 不再打印行数据。
 - **风险**：poste.nvim 共享改动需同步回归其 HTTP/Redis 模块。
 
 ### F1-2 凭据传递改环境变量（不进 argv）
@@ -424,9 +424,9 @@
 
 - **问题**：审查报告 P2-6。
 - **设计（建议）**：`init.lua` 的 626 行拆为注册模块：
-  - `lua/poste-sql/commands.lua`：全部 `nvim_create_user_command`（保留调试命令但加 `vim.g.poste_sql_debug` 门控，默认不注册 `PosteSQLDiag/PosteSQLDebugSpace/PosteSQLCmpTest` 等；`PosteSQLCmpReload/PosteSQLCmpStatus` 保留为运维命令）。
+  - `lua/poste-sql/commands.lua`：全部 `nvim_create_user_command`（保留调试命令但加 `vim.g.poste_sql_debug` 门控，默认不注册 `PosteDbDiag/PosteDbDebugSpace/PosteDbCmpTest` 等；`PosteDbCmpReload/PosteDbCmpStatus` 保留为运维命令）。
   - `lua/poste-sql/autocmds.lua`：全部 autocmd（FileType/BufRead/BufNewFile/BufUnload/ColorScheme），收敛文件类型 4 条路径为一条（ftdetect 负责检测、setup 只注册一次 FileType 回调 + 存量 buffer 循环）。
-  - `lua/poste-sql/completion/register.lua`：`register_sql_completion` 与 `PosteSQLCmpReload` 共用（消除重复注册代码）。
+  - `lua/poste-sql/completion/register.lua`：`register_sql_completion` 与 `PosteDbCmpReload` 共用（消除重复注册代码）。
   - `setup()` 变为组装调用。
 - **涉及文件**：`lua/poste-sql/init.lua`、新增 `lua/poste-sql/{commands,autocmds}.lua`、`lua/poste-sql/completion/register.lua`
 - **验收标准**：`setup()` 行数显著下降；调试命令默认不注册（`vim.g.poste_sql_debug` 时注册）；现有行为（键位/命令/自动注册）回归通过。
@@ -461,7 +461,7 @@
   3. `set_per_filetype` 的无效写（setup 后改写 config 对运行时无效）删除。
   4. 版本声明：README 注明最低 blink.cmp 版本（以 CI 固定版本为准）。
 - **涉及文件**：`lua/poste-sql/completion/adapter.lua`、`lua/poste-sql/completion/init.lua`、`lua/poste-sql/init.lua`
-- **验收标准**：无 blink 私有字段写入（grep 验证）；空格触发在 poste setup 先/后于 blink.setup 两种顺序下都生效；`PosteSQLCmpReload` 幂等。
+- **验收标准**：无 blink 私有字段写入（grep 验证）；空格触发在 poste setup 先/后于 blink.setup 两种顺序下都生效；`PosteDbCmpReload` 幂等。
 - **风险**：空格触发是既有用户习惯，改动需覆盖测试（mock blink provider 接口）。
 
 ### F3-10 大结果集管线（内存 3 份拷贝 → 流式）

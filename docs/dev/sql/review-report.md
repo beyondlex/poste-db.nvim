@@ -46,7 +46,7 @@
 | `db_browser/async.lua:30` | `DB Browser introspect: <argv>` |
 | `db_browser/operations.lua:154` | `DB Browser DDL: <argv 含 --connection-url>` |
 | `session_conn.lua:127` | stdout 前 200 字节——**含查询结果行数据** |
-| `init.lua:164-166` | `:PosteSQLSessionList` 通知直接展示含密码的 conn_url |
+| `init.lua:164-166` | `:PosteDbSessionList` 通知直接展示含密码的 conn_url |
 
 另外凭据**以 argv 传递**给每个进程，`ps` 可见；其中 session 进程长驻整个编辑会话（`session_conn.lua:192`），密码在进程列表中长期暴露。涉及：`exec_run.lua:72-94`、`session_conn.lua:192`、`introspect/table.lua:24,44,68`、`introspect/column.lua:27`、`file_exec.lua:355`、`db_browser/async.lua:18`。
 
@@ -147,7 +147,7 @@ local ok, parsed = pcall(vim.json.decode, output)   -- output 从未定义！
 
 ### P1-4 `connections.lua:341,359` `apply_connection` 未禁用 swapfile → E303
 
-直接 `nvim_buf_set_lines` 修改源 buffer 前未置 `swapfile=false`。headless / swap 目录不可写环境下 `:PosteConnection` 崩溃（测试已复现 E303）。
+直接 `nvim_buf_set_lines` 修改源 buffer 前未置 `swapfile=false`。headless / swap 目录不可写环境下 `:PosteDbConnection` 崩溃（测试已复现 E303）。
 
 ### P1-5 statusline 按连接着色是死代码
 
@@ -187,7 +187,7 @@ local ok, parsed = pcall(vim.json.decode, output)   -- output 从未定义！
 | `nav.lua:150-157` | `sidescrolloff` 临时置 0 后 `pcall(nvim_win_set_cursor)`，抛错则 sso 永久停在 0 |
 | `buffer/init.lua:221-226` / `page.lua` | 切 tab 丢 edit highlights；翻页丢 cell highlight（`nvim_buf_set_lines` 删 extmark 后不重放） |
 | `exec_run.lua:62-65`、`statement.lua:49` | USE 检测只匹配 `USE <word>;`——`USE "my db"`、`` USE `db` ``、`USE db -- comment`、多行 USE 漏检 |
-| `export.lua:384-401` | `export.M.run` 忽略 `path` 参数——`:PosteExport csv file /x/y.csv` 仍弹交互选择器 |
+| `export.lua:384-401` | `export.M.run` 忽略 `path` 参数——`:PosteDbExport csv file /x/y.csv` 仍弹交互选择器 |
 | `file_exec.lua:300-301` vs `sql_runner.lua:498,533` | `max_rows` 不一致：文件执行截断 1000 行，手动执行 0 不限 |
 | `exec_run.lua:40-52` | 临时 SQL 文件写进**源文件目录**（`.poste_sql_*.sql`），崩溃残留、污染 git 状态；`strftime+math.random` 同秒碰撞 |
 | `completion/data.lua:537` | `vim.notify("DEBUG: binary not found!", ERROR)` **无条件触发**（同文件其余 496-529 行都有 `vim.g.poste_sql_debug` 门控，唯独此处漏）——缺 binary 时每次列补全弹 ERROR |
@@ -226,7 +226,7 @@ local ok, parsed = pcall(vim.json.decode, output)   -- output 从未定义！
 
 ### P2-6 `init.lua setup()` 上帝函数与调试残留
 
-`init.lua` 626 行：约 20 个用户命令、多组 autocmd、注册逻辑重复（`register_sql_completion` 与 `PosteSQLCmpReload`）；**默认注册 7+ 个调试命令**（`PosteSQLDiag:364`、`PosteSQLDebugSpace:409`、`PosteSQLCmpTest:434`、`PosteSQLCmpDebug:480`、`PosteSQLCmpStatus:266`、`PosteSQLAutoTrigger:313`、`PosteSQLCmpReload:342`）；`completion/init.lua:181-183` 的 `detect_context_for_completion` 是恒返回 `"keyword"` 的假桩（`:PosteSQLCmpStatus`/`:PosteSQLDiag` 显示假上下文）；`PosteSQLDiag`（`init.lua:374`）调用已删除的 `_test.extract_from_tables` 直接报错。
+`init.lua` 626 行：约 20 个用户命令、多组 autocmd、注册逻辑重复（`register_sql_completion` 与 `PosteDbCmpReload`）；**默认注册 7+ 个调试命令**（`PosteDbDiag:364`、`PosteDbDebugSpace:409`、`PosteDbCmpTest:434`、`PosteDbCmpDebug:480`、`PosteDbCmpStatus:266`、`PosteDbAutoTrigger:313`、`PosteDbCmpReload:342`）；`completion/init.lua:181-183` 的 `detect_context_for_completion` 是恒返回 `"keyword"` 的假桩（`:PosteDbCmpStatus`/`:PosteDbDiag` 显示假上下文）；`PosteDbDiag`（`init.lua:374`）调用已删除的 `_test.extract_from_tables` 直接报错。
 
 ### P2-7 耦合与重复
 

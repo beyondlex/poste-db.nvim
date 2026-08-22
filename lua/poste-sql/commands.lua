@@ -7,7 +7,7 @@ local M = {}
 function M.setup()
   local session_conn = require("poste-sql.session_conn")
 
-  vim.api.nvim_create_user_command("PosteSQLSessionStop", function(args)
+  vim.api.nvim_create_user_command("PosteDbSessionStop", function(args)
     local arg = vim.trim(args.args)
     if arg == "" or arg == "--all" then
       session_conn.stop_all()
@@ -16,9 +16,9 @@ function M.setup()
       session_conn.stop(arg)
       vim.notify("Closed SQL session: " .. arg, vim.log.levels.INFO, { title = "Poste SQL" })
     end
-  end, { nargs = "*", desc = "Close SQL session(s) — :PosteSQLSessionStop [--all] [connection_url]" })
+  end, { nargs = "*", desc = "Close SQL session(s) — :PosteDbSessionStop [--all] [connection_url]" })
 
-  vim.api.nvim_create_user_command("PosteSQLSessionList", function()
+  vim.api.nvim_create_user_command("PosteDbSessionList", function()
     local sessions = session_conn.list()
     local lines = { "Active SQL sessions:" }
     local count = 0
@@ -86,7 +86,7 @@ function M.setup()
     vim.notify(table.concat(parts, "\n"), vim.log.levels.INFO)
   end, { desc = "Show Poste SQL environment info" })
 
-  vim.api.nvim_create_user_command("PosteSQLCmpStatus", function()
+  vim.api.nvim_create_user_command("PosteDbCmpStatus", function()
     local sql_comp = require("poste-sql.completion")
     local ft = vim.bo.filetype
     local buf = vim.api.nvim_get_current_buf()
@@ -110,7 +110,7 @@ function M.setup()
     vim.notify(table.concat(status, "\n"), vim.log.levels.INFO)
   end, { desc = "Check SQL completion status" })
 
-  vim.api.nvim_create_user_command("PosteSQLCmpReload", function()
+  vim.api.nvim_create_user_command("PosteDbCmpReload", function()
     package.loaded["poste-sql.completion"] = nil
     require("poste-sql.completion")
     local adapter = require("poste-sql.completion.adapter")
@@ -125,48 +125,48 @@ function M.setup()
     vim.notify("SQL completion reloaded and re-registered with blink.cmp", vim.log.levels.INFO)
   end, { desc = "Reload SQL completion provider" })
 
-  vim.api.nvim_create_user_command("PosteConnection", function()
+  vim.api.nvim_create_user_command("PosteDbConnection", function()
     require("poste-sql.connections").show_menu()
   end, { desc = "Manage SQL connections" })
 
-  vim.api.nvim_create_user_command("PosteFormat", function()
+  vim.api.nvim_create_user_command("PosteDbFormat", function()
     local _, source_format = pcall(require, "poste-sql.source_format")
     if source_format then source_format.format_buffer()
     else vim.notify("Poste source_format module not available", vim.log.levels.ERROR) end
   end, { desc = "Format SQL buffer/selection" })
 
-  vim.api.nvim_create_user_command("PosteFormatStatus", function()
+  vim.api.nvim_create_user_command("PosteDbFormatStatus", function()
     local _, source_format = pcall(require, "poste-sql.source_format")
     if source_format then source_format.status()
     else vim.notify("Poste source_format module not available", vim.log.levels.ERROR) end
   end, { desc = "Show formatter status" })
 
-  vim.api.nvim_create_user_command("PosteDBBrowser", function()
+  vim.api.nvim_create_user_command("PosteDbBrowser", function()
     require("poste-sql.db_browser").toggle()
   end, { desc = "Toggle database browser" })
 
-  vim.api.nvim_create_user_command("PosteExport", function(args)
+  vim.api.nvim_create_user_command("PosteDbExport", function(args)
     local parts = {}; for word in args.args:gmatch("%S+") do parts[#parts + 1] = word end
     require("poste-sql.export").run(parts[1], parts[2], parts[3])
   end, { nargs = "*", complete = function(a, l) return require("poste-sql.export").complete(a, l) end,
-    desc = "Export dataset — :PosteExport [format] [destination] [path]" })
+    desc = "Export dataset — :PosteDbExport [format] [destination] [path]" })
 
-  vim.api.nvim_create_user_command("PosteSqlLog", function()
+  vim.api.nvim_create_user_command("PosteDbLog", function()
     require("poste-sql.log_viewer").toggle()
   end, { desc = "Toggle SQL execution log viewer" })
 
-  vim.api.nvim_create_user_command("PosteSQLContext", function(args)
+  vim.api.nvim_create_user_command("PosteDbContext", function(args)
     local context = require("poste-sql.context")
     local parts = {}; for word in args.args:gmatch("%S+") do parts[#parts + 1] = word end
     context.switch_context(parts)
   end, { nargs = "*", desc = "Switch SQL execution context" })
 
-  vim.api.nvim_create_user_command("PosteSQLRunFile", function(args)
+  vim.api.nvim_create_user_command("PosteDbRunFile", function(args)
     require("poste-sql.file_exec").run({ filepath = args.args, mode = "greedy" })
   end, { nargs = 1, complete = "file", desc = "Execute a SQL file" })
 
   if vim.g.poste_sql_debug then
-    vim.api.nvim_create_user_command("PosteSQLAutoTrigger", function()
+    vim.api.nvim_create_user_command("PosteDbAutoTrigger", function()
       local group = vim.api.nvim_create_augroup("PosteSQLAutoComplete", { clear = true })
       vim.api.nvim_create_autocmd("TextChangedI", {
         group = group, buffer = 0,
@@ -188,7 +188,7 @@ function M.setup()
       vim.notify("SQL auto-trigger installed for current buffer", vim.log.levels.INFO)
     end, { desc = "Install SQL auto-trigger (debug)" })
 
-    vim.api.nvim_create_user_command("PosteSQLDiag", function()
+    vim.api.nvim_create_user_command("PosteDbDiag", function()
       local sql_comp = require("poste-sql.completion")
       local buf = vim.api.nvim_get_current_buf()
       local cursor = vim.api.nvim_win_get_cursor(0)
@@ -219,12 +219,12 @@ function M.setup()
       end)
     end, { desc = "Diagnose SQL completion (debug)" })
 
-    vim.api.nvim_create_user_command("PosteSQLDebugSpace", function()
+    vim.api.nvim_create_user_command("PosteDbDebugSpace", function()
       local line = vim.api.nvim_get_current_line()
       local col = vim.api.nvim_win_get_cursor(0)[2]
       local before = line:sub(1, col)
       local adapter = require("poste-sql.completion.adapter")
-      local msg = { "PosteSQLDebugSpace:", "  line_before: '" .. before .. "'", "  blink loaded: " .. tostring(adapter.is_available()),
+      local msg = { "PosteDbDebugSpace:", "  line_before: '" .. before .. "'", "  blink loaded: " .. tostring(adapter.is_available()),
         "  menu open: " .. tostring(adapter.is_menu_open()) }
       if adapter.is_available() then
         vim.notify(table.concat(msg, "\n") .. "\n  → calling blink.show()...", vim.log.levels.WARN)
@@ -234,7 +234,7 @@ function M.setup()
       end
     end, { desc = "Debug space completion trigger (debug)" })
 
-    vim.api.nvim_create_user_command("PosteSQLCmpTest", function()
+    vim.api.nvim_create_user_command("PosteDbCmpTest", function()
       local sql_comp = require("poste-sql.completion")
       local buf = vim.api.nvim_get_current_buf()
       local cursor = vim.api.nvim_win_get_cursor(0)
@@ -260,7 +260,7 @@ function M.setup()
       end
     end, { desc = "Test SQL completion at cursor (debug)" })
 
-    vim.api.nvim_create_user_command("PosteSQLCmpDebug", function()
+    vim.api.nvim_create_user_command("PosteDbCmpDebug", function()
       require("poste-sql.completion.debug").toggle()
     end, { desc = "Toggle completion debug window (debug)" })
   end

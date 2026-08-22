@@ -129,7 +129,7 @@ function M.toggle()
   end
 end
 
-vim.api.nvim_create_user_command("PosteSQLBoundary", function()
+vim.api.nvim_create_user_command("PosteDbBoundary", function()
   require("poste-sql.statement_indicator").toggle()
 end, { desc = "Toggle SQL statement boundary highlight" })
 

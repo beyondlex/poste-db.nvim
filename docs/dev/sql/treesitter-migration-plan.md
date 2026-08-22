@@ -347,6 +347,6 @@ If Tree-sitter boundary detection fails for any buffer:
 
 1. `statement.lua` still has the Rust fallback path (`try_rust_stmt_span`, `try_rust_stmt_ranges`)
 2. `statement_indicator.lua` can fall back to Rust async if `ts_stmt` returns nil
-3. `init.lua` can re-register `__poste_sql_disabled__` via `:PosteSQLToggleTS` command
+3. `init.lua` can re-register `__poste_sql_disabled__` via `:PosteDbToggleTS` command
 
 This means zero risk of regression — the new TS path is additive, not a replacement. Rust stays as a working fallback.
