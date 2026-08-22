@@ -42,6 +42,7 @@ function M.show_float(lines, title, ft)
   end
 
   show_float_win = win
+  vim.api.nvim_set_current_win(win)
 
   vim.wo[win].linebreak = true
   vim.wo[win].scrolloff = 1
