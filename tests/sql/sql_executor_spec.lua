@@ -2,10 +2,10 @@
 --- Verifies that session_conn.execute receives the correct SQL
 --- (stmt_sql_raw, not buf_content with directives/### markers).
 
-local saved_session_conn = package.loaded["poste-sql.session_conn"]
-local saved_exec_run = package.loaded["poste-sql.exec_run"]
+local saved_session_conn = package.loaded["poste-db.session_conn"]
+local saved_exec_run = package.loaded["poste-db.exec_run"]
 local saved_state = package.loaded["poste.state"]
-local saved_log = package.loaded["poste-sql.log"]
+local saved_log = package.loaded["poste-db.log"]
 
 local session_sql = nil
 local session_callbacks = nil
@@ -20,7 +20,7 @@ local state_stub = {
 }
 
 package.loaded["poste.state"] = state_stub
-package.loaded["poste-sql.log"] = {
+package.loaded["poste-db.log"] = {
   info = function() end,
   warn = function() end,
   error = function() end,
@@ -31,20 +31,20 @@ package.loaded["poste-sql.log"] = {
   redact_cmd_str = function(s) return s end,
   redact_url = function(s) return s end,
 }
-package.loaded["poste-sql.session_conn"] = {
+package.loaded["poste-db.session_conn"] = {
   execute = function(conn_url, sql, callbacks, bufnr, database)
     session_sql = sql
     session_callbacks = callbacks
     return session_result
   end,
 }
-package.loaded["poste-sql.exec_run"] = {
+package.loaded["poste-db.exec_run"] = {
   run_async = function() return 1 end,
 }
 
 local function fresh_executor()
-  package.loaded["poste-sql.executor"] = nil
-  return require("poste-sql.executor")
+  package.loaded["poste-db.executor"] = nil
+  return require("poste-db.executor")
 end
 
 describe("executor session routing", function()
@@ -52,7 +52,7 @@ describe("executor session routing", function()
     session_sql = nil
     session_callbacks = nil
     session_result = "dispatched"
-    package.loaded["poste-sql.executor"] = nil
+    package.loaded["poste-db.executor"] = nil
   end)
 
   it("passes raw SQL to session_conn.execute (not buffer content with directives)", function()
@@ -86,8 +86,8 @@ describe("executor session routing", function()
     local executor = fresh_executor()
     local call_count = 0
     local captured_db = nil
-    local orig = package.loaded["poste-sql.session_conn"].execute
-    package.loaded["poste-sql.session_conn"].execute = function(conn_url, sql, callbacks, bufnr, database)
+    local orig = package.loaded["poste-db.session_conn"].execute
+    package.loaded["poste-db.session_conn"].execute = function(conn_url, sql, callbacks, bufnr, database)
       captured_db = database
       call_count = call_count + 1
       return "dispatched"
@@ -100,7 +100,7 @@ describe("executor session routing", function()
     })
     assert.equals(1, call_count)
     assert.equals("inventory", captured_db)
-    package.loaded["poste-sql.session_conn"].execute = orig
+    package.loaded["poste-db.session_conn"].execute = orig
   end)
 
   it("provides on_sql_error callback that forwards to on_error", function()
@@ -122,7 +122,7 @@ describe("executor session routing", function()
     local executor = fresh_executor()
     session_result = "start_failed"
     local exec_file_called = false
-    package.loaded["poste-sql.exec_run"].run_async = function() exec_file_called = true; return 1 end
+    package.loaded["poste-db.exec_run"].run_async = function() exec_file_called = true; return 1 end
     executor.execute({
       sql = "SELECT 1;",
       conn_url = "mysql://root:pass@localhost:3306/blog",
@@ -135,7 +135,7 @@ describe("executor session routing", function()
     local executor = fresh_executor()
     session_result = "start_failed"
     local exec_file_count = 0
-    package.loaded["poste-sql.exec_run"].run_async = function() exec_file_count = exec_file_count + 1; return 1 end
+    package.loaded["poste-db.exec_run"].run_async = function() exec_file_count = exec_file_count + 1; return 1 end
     executor.execute({
       sql = "SELECT 1;",
       conn_url = "mysql://root:pass@localhost:3306/blog",
@@ -148,7 +148,7 @@ describe("executor session routing", function()
     local executor = fresh_executor()
     local exec_run_called = false
     local exec_run_sql = nil
-    package.loaded["poste-sql.exec_run"].run_async = function(sql, opts, callbacks)
+    package.loaded["poste-db.exec_run"].run_async = function(sql, opts, callbacks)
       exec_run_called = true
       exec_run_sql = sql
       return 1
@@ -165,7 +165,7 @@ describe("executor session routing", function()
   it("calls exec_run directly when no conn_url even with prefer_session=true", function()
     local executor = fresh_executor()
     local exec_run_called = false
-    package.loaded["poste-sql.exec_run"].run_async = function() exec_run_called = true; return 1 end
+    package.loaded["poste-db.exec_run"].run_async = function() exec_run_called = true; return 1 end
     executor.execute({
       sql = "SELECT 1;",
       conn_url = nil,
@@ -175,9 +175,9 @@ describe("executor session routing", function()
   end)
 
   after_each(function()
-    package.loaded["poste-sql.session_conn"] = saved_session_conn
-    package.loaded["poste-sql.exec_run"] = saved_exec_run
+    package.loaded["poste-db.session_conn"] = saved_session_conn
+    package.loaded["poste-db.exec_run"] = saved_exec_run
     package.loaded["poste.state"] = saved_state
-    package.loaded["poste-sql.log"] = saved_log
+    package.loaded["poste-db.log"] = saved_log
   end)
 end)

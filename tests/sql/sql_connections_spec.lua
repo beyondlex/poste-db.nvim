@@ -2,8 +2,8 @@ local saved_cli = package.loaded["poste.cli"]
 local saved_state = package.loaded["poste.state"]
 local saved_util = package.loaded["poste.util"]
 local saved_select = package.loaded["poste.select"]
-local saved_const = package.loaded["poste-sql.constants"]
-local saved_toml = package.loaded["poste-sql.toml"]
+local saved_const = package.loaded["poste-db.constants"]
+local saved_toml = package.loaded["poste-db.toml"]
 
 local cli_stub = {}
 local state_stub = { sql = { context = { connection = nil, database = nil } } }
@@ -14,10 +14,10 @@ package.loaded["poste.cli"] = cli_stub
 package.loaded["poste.state"] = state_stub
 package.loaded["poste.util"] = util_stub
 package.loaded["poste.select"] = select_stub
-package.loaded["poste-sql.constants"] = require("poste-sql.constants")
+package.loaded["poste-db.constants"] = require("poste-db.constants")
 
 local toml_parse_calls = {}
-package.loaded["poste-sql.toml"] = {
+package.loaded["poste-db.toml"] = {
   parse_file = function(path)
     table.insert(toml_parse_calls, path)
     if path:match("found") then
@@ -27,7 +27,7 @@ package.loaded["poste-sql.toml"] = {
   end,
 }
 
-local connections = require("poste-sql.connections")
+local connections = require("poste-db.connections")
 
 describe("connections find_connections_toml", function()
   local tmpdir
@@ -87,7 +87,7 @@ describe("connections resolve_connection_url", function()
   end)
 
   it("returns nil when connection not in config", function()
-    package.loaded["poste-sql.toml"].parse_file = function()
+    package.loaded["poste-db.toml"].parse_file = function()
       return { other = { dialect = "sqlite" } }
     end
     local url, err = connections.resolve_connection_url("missing")
@@ -96,7 +96,7 @@ describe("connections resolve_connection_url", function()
   end)
 
   it("builds postgres URL from fields", function()
-    package.loaded["poste-sql.toml"].parse_file = function()
+    package.loaded["poste-db.toml"].parse_file = function()
       return { primary = { dialect = "postgres", host = "pg.example.com", port = 5432, database = "blog", user = "alice" } }
     end
     local url = connections.resolve_connection_url("primary")
@@ -104,7 +104,7 @@ describe("connections resolve_connection_url", function()
   end)
 
   it("builds postgres URL with password", function()
-    package.loaded["poste-sql.toml"].parse_file = function()
+    package.loaded["poste-db.toml"].parse_file = function()
       return { primary = { dialect = "postgres", host = "localhost", port = 5432, database = "blog", user = "alice", password = "secret" } }
     end
     local url = connections.resolve_connection_url("primary")
@@ -112,7 +112,7 @@ describe("connections resolve_connection_url", function()
   end)
 
   it("percent-encodes special chars in user and password", function()
-    package.loaded["poste-sql.toml"].parse_file = function()
+    package.loaded["poste-db.toml"].parse_file = function()
       return { primary = { dialect = "postgres", host = "localhost", port = 5432, database = "blog", user = "alice", password = "p@ss:w/rd%" } }
     end
     local url = connections.resolve_connection_url("primary")
@@ -120,7 +120,7 @@ describe("connections resolve_connection_url", function()
   end)
 
   it("percent-encodes user when it contains special chars", function()
-    package.loaded["poste-sql.toml"].parse_file = function()
+    package.loaded["poste-db.toml"].parse_file = function()
       return { primary = { dialect = "postgres", host = "localhost", port = 5432, database = "blog", user = "user@example.com", password = "pw" } }
     end
     local url = connections.resolve_connection_url("primary")
@@ -128,7 +128,7 @@ describe("connections resolve_connection_url", function()
   end)
 
   it("builds mysql URL", function()
-    package.loaded["poste-sql.toml"].parse_file = function()
+    package.loaded["poste-db.toml"].parse_file = function()
       return { primary = { dialect = "mysql", host = "db.example.com", port = 3306, database = "shop", user = "root" } }
     end
     local url = connections.resolve_connection_url("primary")
@@ -136,7 +136,7 @@ describe("connections resolve_connection_url", function()
   end)
 
   it("builds sqlite URL from path", function()
-    package.loaded["poste-sql.toml"].parse_file = function()
+    package.loaded["poste-db.toml"].parse_file = function()
       return { localdb = { dialect = "sqlite", path = "/data/test.db" } }
     end
     local url = connections.resolve_connection_url("localdb")
@@ -144,7 +144,7 @@ describe("connections resolve_connection_url", function()
   end)
 
   it("builds sqlite :memory: URL", function()
-    package.loaded["poste-sql.toml"].parse_file = function()
+    package.loaded["poste-db.toml"].parse_file = function()
       return { mem = { dialect = "sqlite" } }
     end
     local url = connections.resolve_connection_url("mem")
@@ -152,7 +152,7 @@ describe("connections resolve_connection_url", function()
   end)
 
   it("uses url field directly when present", function()
-    package.loaded["poste-sql.toml"].parse_file = function()
+    package.loaded["poste-db.toml"].parse_file = function()
       return { custom = { dialect = "postgres", url = "postgres://custom@localhost/mydb" } }
     end
     local url = connections.resolve_connection_url("custom")
@@ -183,14 +183,14 @@ describe("connections get_connection_config", function()
   end)
 
   it("returns nil when toml parse fails", function()
-    package.loaded["poste-sql.toml"].parse_file = function()
+    package.loaded["poste-db.toml"].parse_file = function()
       return nil, "parse error"
     end
     assert.is_nil(connections.get_connection_config("missing"))
   end)
 
   it("returns connection config when found", function()
-    package.loaded["poste-sql.toml"].parse_file = function()
+    package.loaded["poste-db.toml"].parse_file = function()
       return { primary = { dialect = "postgres", host = "localhost", port = 5432, database = "blog", user = "alice" } }
     end
     local config = connections.get_connection_config("primary")
@@ -198,7 +198,7 @@ describe("connections get_connection_config", function()
   end)
 
   it("converts mariadb to mysql dialect", function()
-    package.loaded["poste-sql.toml"].parse_file = function()
+    package.loaded["poste-db.toml"].parse_file = function()
       return { primary = { dialect = "mariadb" } }
     end
     local config = connections.get_connection_config("primary")
@@ -234,7 +234,7 @@ describe("connections list_connections", function()
     local config_path = tmpdir .. "/connections.toml"
     vim.fn.writefile({ "[primary]", "dialect = \"postgres\"" }, config_path)
     util_stub.find_file_upwards = function() return config_path end
-    package.loaded["poste-sql.toml"].parse_file = function()
+    package.loaded["poste-db.toml"].parse_file = function()
       return { primary = { dialect = "postgres" } }
     end
     local captured
@@ -283,7 +283,7 @@ describe("connections env var resolution", function()
 
   it("resolves {{VAR}} from .env in connection config", function()
     vim.fn.writefile({ "POSTE_TEST_DB_PASS=supersecret" }, tmpdir .. "/.env")
-    package.loaded["poste-sql.toml"].parse_file = function()
+    package.loaded["poste-db.toml"].parse_file = function()
       return { primary = { dialect = "postgres", host = "localhost", port = 5432, database = "blog", user = "alice", password = "{{POSTE_TEST_DB_PASS}}" } }
     end
     local config = connections.get_connection_config("primary")
@@ -292,7 +292,7 @@ describe("connections env var resolution", function()
 
   it("resolves {{VAR}} from .env in resolved URL", function()
     vim.fn.writefile({ "POSTE_TEST_DB_PASS=supersecret" }, tmpdir .. "/.env")
-    package.loaded["poste-sql.toml"].parse_file = function()
+    package.loaded["poste-db.toml"].parse_file = function()
       return { primary = { dialect = "postgres", host = "localhost", port = 5432, database = "blog", user = "alice", password = "{{POSTE_TEST_DB_PASS}}" } }
     end
     local url = connections.resolve_connection_url("primary")
@@ -300,7 +300,7 @@ describe("connections env var resolution", function()
   end)
 
   it("keeps unresolved {{VAR}} literal when .env is missing", function()
-    package.loaded["poste-sql.toml"].parse_file = function()
+    package.loaded["poste-db.toml"].parse_file = function()
       return { primary = { dialect = "postgres", host = "localhost", port = 5432, database = "blog", user = "alice", password = "{{DB_PASS}}" } }
     end
     local url = connections.resolve_connection_url("primary")

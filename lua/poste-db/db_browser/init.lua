@@ -1,0 +1,653 @@
+local state = require("poste.state")
+local tree = require("poste-db.db_browser.tree")
+local async = require("poste-db.db_browser.async")
+local actions = require("poste-db.db_browser.actions")
+local HEADER_LINES = require("poste-db.db_browser.icons").HEADER_LINES
+
+local M = {}
+
+local browser_buf = nil
+local browser_win = nil
+local root_nodes = {}
+local line_to_node = {}
+local source_buf = nil
+
+local multi_select = {
+  active = false,
+  source_db = nil,
+  selected = {},
+}
+
+local function render_tree()
+  if not browser_buf or not vim.api.nvim_buf_is_valid(browser_buf) then return end
+  local conn_label = state.sql.db_browser.connection or "No connection"
+  local new_map = tree.render_tree(browser_buf, line_to_node, root_nodes, conn_label, multi_select)
+  line_to_node = new_map
+end
+
+local function exit_multi_select()
+  if not multi_select.active then return end
+  multi_select.active = false
+  multi_select.source_db = nil
+  multi_select.selected = {}
+  render_tree()
+end
+
+local function find_db_parent(node)
+  while node do
+    if node.node_type == "database" then return node end
+    node = node.parent
+  end
+  return nil
+end
+
+local function toggle_multi_select_on_table(buf_line)
+  local node = tree.get_node_at_line(line_to_node, buf_line)
+  if not node or node.node_type ~= "table" then return end
+
+  local db_parent = find_db_parent(node)
+  if not db_parent then return end
+
+  if not multi_select.active then
+    multi_select.active = true
+    multi_select.source_db = db_parent
+    multi_select.selected = {}
+  elseif multi_select.source_db ~= db_parent then
+    return
+  end
+
+  if multi_select.selected[node] then
+    multi_select.selected[node] = nil
+  else
+    multi_select.selected[node] = true
+  end
+
+  render_tree()
+
+  local total_lines = vim.api.nvim_buf_line_count(browser_buf)
+  local next_line = buf_line + 1
+  if next_line <= total_lines then
+    vim.api.nvim_win_set_cursor(browser_win or 0, { next_line, 0 })
+  end
+end
+
+local function get_selected_table_names()
+  local names = {}
+  for node, _ in pairs(multi_select.selected) do
+    table.insert(names, node.name)
+  end
+  table.sort(names)
+  return names
+end
+
+local function find_target_db(buf_line)
+  local idx = buf_line - HEADER_LINES
+  for i = idx, 1, -1 do
+    local n = line_to_node[i]
+    if n and n.node_type == "database" then return n end
+    if n and n.node_type == "connection" then return nil end
+  end
+  return nil
+end
+
+local function get_search_dir()
+  return vim.fn.getcwd()
+end
+M.get_search_dir = get_search_dir
+
+local function start_copy(buf_line)
+  if not multi_select.active or not next(multi_select.selected) then
+    vim.notify("No tables selected. Use <Tab> to select tables first.", vim.log.levels.INFO)
+    return
+  end
+
+  local target_db = find_target_db(buf_line)
+  if not target_db then
+    vim.notify("Move cursor to a target database", vim.log.levels.INFO)
+    return
+  end
+
+  if target_db == multi_select.source_db then
+    vim.notify("Target database is the same as source. Select a different database.", vim.log.levels.WARN)
+    return
+  end
+
+  local source_conn_name = multi_select.source_db.meta and multi_select.source_db.meta.connection
+  local target_conn_name = target_db.meta and target_db.meta.connection
+
+  local function get_dialect(conn_name)
+    for _, root in ipairs(root_nodes) do
+      if root.name == conn_name then
+        return root.meta and root.meta.dialect or "postgres"
+      end
+    end
+    return "postgres"
+  end
+
+  local src_dialect = get_dialect(source_conn_name)
+  local tgt_dialect = get_dialect(target_conn_name)
+
+  if src_dialect ~= tgt_dialect then
+    vim.notify(string.format(
+      "Cannot copy: dialect mismatch (%s → %s). Both must be the same dialect.",
+      src_dialect, tgt_dialect
+    ), vim.log.levels.ERROR)
+    return
+  end
+
+  local table_names = get_selected_table_names()
+  local copy_mod = require("poste-db.db_browser.copy")
+  copy_mod.copy_tables({
+    conn = source_conn_name,
+    db = multi_select.source_db.name,
+    dialect = src_dialect,
+  }, {
+    conn = target_conn_name,
+    db = target_db.name,
+    dialect = tgt_dialect,
+  }, table_names, function()
+    exit_multi_select()
+    if target_db then
+      target_db.children = nil
+      target_db.expanded = false
+      target_db.loading = true
+      render_tree()
+      async.fetch_children(target_db, function()
+        target_db.expanded = true
+        vim.schedule(function()
+          render_tree()
+        end)
+      end, get_search_dir())
+    end
+  end)
+end
+
+local function make_context()
+  local conn_label = state.sql.db_browser.connection or "No connection"
+  return {
+    browser_buf = browser_buf,
+    line_to_node = line_to_node,
+    root_nodes = root_nodes,
+    source_buf = source_buf,
+    conn_label = conn_label,
+    multi_select = multi_select,
+  }
+end
+
+local function setup_browser_buffer()
+  if browser_buf and vim.api.nvim_buf_is_valid(browser_buf) then return browser_buf end
+
+  browser_buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_set_option_value("buftype", "nofile", { buf = browser_buf })
+  vim.api.nvim_set_option_value("bufhidden", "hide", { buf = browser_buf })
+  vim.api.nvim_set_option_value("swapfile", false, { buf = browser_buf })
+  vim.api.nvim_set_option_value("modifiable", false, { buf = browser_buf })
+  vim.api.nvim_buf_set_name(browser_buf, "poste://db_browser")
+
+  local opts = { buffer = browser_buf, noremap = true, silent = true }
+  local k = state.get_keymap("sql_db_browser", "toggle_node", "<CR>")
+  if k then
+    vim.keymap.set("n", k, function()
+      actions.toggle_node(vim.fn.line("."), make_context())
+    end, opts)
+  end
+  k = state.get_keymap("sql_db_browser", "move_left", "h")
+  if k then
+    vim.keymap.set("n", k, function()
+      actions.collapse_or_parent(vim.fn.line("."), make_context())
+    end, opts)
+  end
+  k = state.get_keymap("sql_db_browser", "move_right", "l")
+  if k then
+    vim.keymap.set("n", k, function()
+      actions.expand_or_child(vim.fn.line("."), make_context())
+    end, opts)
+  end
+  k = state.get_keymap("sql_db_browser", "refresh_node", "r")
+  if k then
+    vim.keymap.set("n", k, function()
+      actions.refresh_node(vim.fn.line("."), make_context())
+    end, opts)
+  end
+  k = state.get_keymap("sql_db_browser", "search_filter", "/")
+  if k then
+    vim.keymap.set("n", k, function()
+      actions.search_filter(vim.fn.line("."), make_context())
+    end, opts)
+  end
+  k = state.get_keymap("sql_db_browser", "select_query", "s")
+  if k then
+    vim.keymap.set("n", k, function()
+      actions.generate_select_query(vim.fn.line("."), make_context())
+    end, opts)
+  end
+  k = state.get_keymap("sql_db_browser", "close", "q")
+  if k then
+    vim.keymap.set("n", k, function() M.close() end, opts)
+  end
+  k = state.get_keymap("sql_db_browser", "search_next", "n")
+  if k then
+    vim.keymap.set("n", k, function() actions.search_next() end, opts)
+  end
+  k = state.get_keymap("sql_db_browser", "search_prev", "N")
+  if k then
+    vim.keymap.set("n", k, function() actions.search_prev() end, opts)
+  end
+
+  k = state.get_keymap("sql_db_browser", "context_menu", "x")
+  if k then
+    local context_menu = require("poste-db.db_browser.context_menu")
+    vim.keymap.set("n", k, function()
+      local node = tree.get_node_at_line(line_to_node, vim.fn.line("."))
+      context_menu.open(node, make_context())
+    end, opts)
+  end
+
+  k = state.get_keymap("sql_db_browser", "help", "g?")
+  if k then
+    vim.keymap.set("n", k, function() require("poste-db.help").open() end, opts)
+  end
+
+  -- Multi-select: Tab toggles selection on table nodes
+  k = state.get_keymap("sql_db_browser", "multi_select_toggle", "<Tab>")
+  if k then
+    vim.keymap.set("n", k, function()
+      toggle_multi_select_on_table(vim.fn.line("."))
+    end, opts)
+  end
+
+  -- Esc: exit multi-select and/or clear search
+  k = state.get_keymap("sql_db_browser", "multi_select_exit", "<Esc>")
+  if k then
+    vim.keymap.set("n", k, function()
+      exit_multi_select()
+      actions.search_clear(make_context())
+    end, opts)
+  end
+
+  -- Info: i shows table or column metadata based on cursor position
+  k = state.get_keymap("sql_db_browser", "table_info", "i")
+  if k then
+    vim.keymap.set("n", k, function()
+      local buf_line = vim.fn.line(".")
+      local node = tree.get_node_at_line(line_to_node, buf_line)
+      if node and node.node_type == "column" then
+        actions.show_column_info(buf_line, make_context())
+      else
+        actions.show_table_info(buf_line, make_context())
+      end
+    end, opts)
+  end
+
+  -- Copy: p triggers copy to target database
+  k = state.get_keymap("sql_db_browser", "copy_tables", "p")
+  if k then
+    vim.keymap.set("n", k, function()
+      start_copy(vim.fn.line("."))
+    end, opts)
+  end
+
+  -- Create object: a on connection → create database, a on database → create schema
+  k = state.get_keymap("sql_db_browser", "create_object", "a")
+  if k then
+    vim.keymap.set("n", k, function()
+      local node = tree.get_node_at_line(line_to_node, vim.fn.line("."))
+      if node and node.node_type == "connection" then
+        require("poste-db.db_browser.db_create").open(node, make_context())
+      elseif node and node.node_type == "database" then
+        require("poste-db.db_browser.schema_create").open(node, make_context())
+      end
+    end, opts)
+  end
+
+  local table_ops = require("poste-db.table_ops")
+  table_ops.register_keymaps(browser_buf, function()
+    local buf_line = vim.fn.line(".")
+    local idx = buf_line - HEADER_LINES
+    local node = nil
+    for i = idx, 1, -1 do
+      local n = line_to_node[i]
+      if n and n.node_type == "table" then node = n; break end
+      if n and (n.node_type == "database" or n.node_type == "schema" or n.node_type == "connection") then break end
+    end
+    if not node then return nil end
+    local dialect = "postgres"
+    for _, root in ipairs(root_nodes) do
+      if root.name == (node.meta and node.meta.connection) then
+        dialect = root.meta and root.meta.dialect or dialect; break end
+    end
+    return { table_name = node.name, dialect = dialect, source_buf = source_buf }
+  end)
+
+  return browser_buf
+end
+
+local function open_window()
+  if browser_win and vim.api.nvim_win_is_valid(browser_win) then return browser_win end
+
+  local cfg = state.config.db_browser or {}
+  local pos = cfg.split_position or "right"
+  local width = cfg.split_width or 40
+  local dir = pos == "right" and "botright" or "topleft"
+  vim.cmd(dir .. " " .. width .. "vsplit")
+  browser_win = vim.api.nvim_get_current_win()
+  vim.api.nvim_win_set_buf(browser_win, browser_buf)
+  vim.api.nvim_set_option_value("winfixwidth", true, { win = browser_win })
+  vim.api.nvim_set_option_value("number", false, { win = browser_win })
+  vim.api.nvim_set_option_value("relativenumber", false, { win = browser_win })
+  vim.api.nvim_set_option_value("signcolumn", "no", { win = browser_win })
+  vim.api.nvim_set_option_value("wrap", false, { win = browser_win })
+  vim.api.nvim_set_option_value("cursorline", true, { win = browser_win })
+  vim.api.nvim_set_option_value("conceallevel", 2, { win = browser_win })
+  vim.api.nvim_set_option_value("spell", false, { win = browser_win })
+  vim.api.nvim_set_option_value("winbar", " DB Browser", { win = browser_win })
+
+  return browser_win
+end
+
+function M.navigate_to(conn_name, db_name)
+  source_buf = vim.api.nvim_get_current_buf()
+  setup_browser_buffer()
+  open_window()
+
+  local search_dir = get_search_dir()
+  async.load_connections(function(nodes)
+    root_nodes = nodes
+    if #root_nodes > 0 then
+      state.sql.db_browser.connection = root_nodes[1].name
+    end
+
+    local conn_node = nil
+    for _, node in ipairs(root_nodes) do
+      if node.name == conn_name then conn_node = node; break end
+    end
+    if not conn_node then
+      render_tree()
+      vim.notify("Connection '" .. conn_name .. "' not found in connections.toml", vim.log.levels.WARN)
+      return
+    end
+
+    conn_node.loading = true
+    render_tree()
+    async.fetch_children(conn_node, function()
+      conn_node.expanded = true
+
+      local db_node = nil
+      for _, child in ipairs(conn_node.children or {}) do
+        if child.node_type == "database" and child.name == db_name then
+          db_node = child; break
+        end
+      end
+      if not db_node then
+        vim.schedule(function()
+          render_tree()
+          vim.notify("Database '" .. db_name .. "' not found under '" .. conn_name .. "'", vim.log.levels.WARN)
+        end)
+        return
+      end
+
+      db_node.loading = true
+      vim.schedule(function() render_tree() end)
+      async.fetch_children(db_node, function()
+        db_node.expanded = true
+        vim.schedule(function()
+          render_tree()
+          for i, node in ipairs(line_to_node) do
+            if node == db_node then
+              local target_line = i + HEADER_LINES
+              if vim.api.nvim_win_is_valid(browser_win) then
+                vim.api.nvim_set_current_win(browser_win)
+                vim.api.nvim_win_set_cursor(browser_win, { target_line, 0 })
+              end
+              break
+            end
+          end
+        end)
+      end, search_dir)
+    end, search_dir)
+  end, search_dir)
+end
+
+function M.navigate_to_table(conn_name, db_name, table_name, column_name)
+  source_buf = vim.api.nvim_get_current_buf()
+  setup_browser_buffer()
+  open_window()
+
+  local schema_name = nil
+  local bare_table = table_name
+  local dot_idx = table_name:find("%.")
+  if dot_idx then
+    schema_name = table_name:sub(1, dot_idx - 1)
+    bare_table = table_name:sub(dot_idx + 1)
+  end
+
+  local search_dir = get_search_dir()
+  async.load_connections(function(nodes)
+    root_nodes = nodes
+    if #root_nodes > 0 then
+      state.sql.db_browser.connection = root_nodes[1].name
+    end
+
+    local conn_node = nil
+    for _, node in ipairs(root_nodes) do
+      if node.name == conn_name then conn_node = node; break end
+    end
+    if not conn_node then
+      render_tree()
+      vim.notify("Connection '" .. conn_name .. "' not found", vim.log.levels.WARN)
+      return
+    end
+
+    local dialect = conn_node.meta and conn_node.meta.dialect or "postgres"
+
+    local function position_on_table(table_node, col_name)
+      vim.schedule(function()
+        render_tree()
+        local target_node = table_node
+        if col_name and table_node.children then
+          for _, child in ipairs(table_node.children) do
+            if child.node_type == "column" and child.name == col_name then
+              target_node = child; break
+            end
+          end
+        end
+        for i, n in ipairs(line_to_node) do
+          if n == target_node then
+            local target_line = i + HEADER_LINES
+            if vim.api.nvim_win_is_valid(browser_win) then
+              vim.api.nvim_set_current_win(browser_win)
+              vim.api.nvim_win_set_cursor(browser_win, { target_line, 0 })
+            end
+            break
+          end
+        end
+      end)
+    end
+
+    if dialect == "sqlite" then
+      conn_node.loading = true
+      render_tree()
+      async.fetch_children(conn_node, function()
+        conn_node.expanded = true
+        local found = nil
+        for _, child in ipairs(conn_node.children or {}) do
+          if child.node_type == "table" and child.name == bare_table then
+            found = child; break
+          end
+        end
+        if not found then vim.schedule(function() render_tree() end); return end
+        found.loading = true
+        vim.schedule(function() render_tree() end)
+        async.fetch_children(found, function()
+          found.expanded = true
+          position_on_table(found, column_name)
+        end, search_dir)
+      end, search_dir)
+      return
+    end
+
+    conn_node.loading = true
+    render_tree()
+    async.fetch_children(conn_node, function()
+      conn_node.expanded = true
+      local db_node = nil
+      for _, child in ipairs(conn_node.children or {}) do
+        if child.node_type == "database" and child.name == db_name then
+          db_node = child; break
+        end
+      end
+      if not db_node then
+        vim.schedule(function() render_tree(); vim.notify("Database '" .. (db_name or "?") .. "' not found", vim.log.levels.WARN) end)
+        return
+      end
+
+      if dialect == "postgres" then
+        local target_schema = schema_name or "public"
+        db_node.loading = true
+        vim.schedule(function() render_tree() end)
+        async.fetch_children(db_node, function()
+          db_node.expanded = true
+          local schema_node = nil
+          for _, child in ipairs(db_node.children or {}) do
+            if child.node_type == "schema" and child.name == target_schema then
+              schema_node = child; break
+            end
+          end
+          if not schema_node then
+            vim.schedule(function() render_tree(); vim.notify("Schema '" .. target_schema .. "' not found", vim.log.levels.WARN) end)
+            return
+          end
+          schema_node.loading = true
+          vim.schedule(function() render_tree() end)
+          async.fetch_children(schema_node, function()
+            schema_node.expanded = true
+            local table_node = nil
+            for _, child in ipairs(schema_node.children or {}) do
+              if child.node_type == "table" and child.name == bare_table then
+                table_node = child; break
+              end
+            end
+            if not table_node then
+              vim.schedule(function() render_tree(); vim.notify("Table '" .. bare_table .. "' not found", vim.log.levels.WARN) end)
+              return
+            end
+            table_node.loading = true
+            vim.schedule(function() render_tree() end)
+            async.fetch_children(table_node, function()
+              table_node.expanded = true
+              position_on_table(table_node, column_name)
+            end, search_dir)
+          end, search_dir)
+        end, search_dir)
+      else
+        db_node.loading = true
+        vim.schedule(function() render_tree() end)
+        async.fetch_children(db_node, function()
+          db_node.expanded = true
+          local table_node = nil
+          for _, child in ipairs(db_node.children or {}) do
+            if child.node_type == "table" and child.name == bare_table then
+              table_node = child; break
+            end
+          end
+          if not table_node then
+            vim.schedule(function() render_tree(); vim.notify("Table not found", vim.log.levels.WARN) end)
+            return
+          end
+          table_node.loading = true
+          vim.schedule(function() render_tree() end)
+          async.fetch_children(table_node, function()
+            table_node.expanded = true
+            position_on_table(table_node, column_name)
+          end, search_dir)
+        end, search_dir)
+      end
+    end, search_dir)
+  end, search_dir)
+end
+
+function M.open()
+  source_buf = vim.api.nvim_get_current_buf()
+  setup_browser_buffer()
+  open_window()
+
+  local search_dir = get_search_dir()
+  async.load_connections(function(nodes)
+    root_nodes = nodes
+    if #root_nodes > 0 then
+      state.sql.db_browser.connection = root_nodes[1].name
+    end
+    render_tree()
+    -- Focus cursor on first connection
+    for i, node in ipairs(line_to_node) do
+      if node.node_type == "connection" then
+        local target_line = i + HEADER_LINES
+        if vim.api.nvim_win_is_valid(browser_win) then
+          vim.api.nvim_set_current_win(browser_win)
+          vim.api.nvim_win_set_cursor(browser_win, { target_line, 0 })
+        end
+        break
+      end
+    end
+  end, search_dir)
+end
+
+function M.close()
+  exit_multi_select()
+  if browser_win and vim.api.nvim_win_is_valid(browser_win) then
+    vim.api.nvim_win_close(browser_win, true)
+    browser_win = nil
+  end
+end
+
+function M.is_open()
+  return browser_win and vim.api.nvim_win_is_valid(browser_win)
+end
+
+local function find_refresh_node(root_nodes, conn_name, db_name)
+  for _, conn_node in ipairs(root_nodes) do
+    if conn_node.name == conn_name then
+      if db_name then
+        if not conn_node.children then return nil end
+        for _, db_node in ipairs(conn_node.children) do
+          if db_node.name == db_name then
+            return db_node
+          end
+        end
+      end
+      return conn_node
+    end
+  end
+  return nil
+end
+
+function M.refresh_by_conn(conn_name, db_name)
+  if not M.is_open() then return end
+  local node = find_refresh_node(root_nodes, conn_name, db_name)
+  if not node then return end
+
+  node.children = nil
+  node.expanded = false
+  node.loading = true
+  local new_map = tree.render_tree(browser_buf, line_to_node, root_nodes, state.sql.db_browser.connection or "No connection", multi_select)
+  line_to_node = new_map
+
+  local search_dir = M.get_search_dir()
+  async.fetch_children(node, function()
+    node.expanded = true
+    vim.schedule(function()
+      local nm = tree.render_tree(browser_buf, line_to_node, root_nodes, state.sql.db_browser.connection or "No connection", multi_select)
+      line_to_node = nm
+    end)
+  end, search_dir)
+end
+
+function M.toggle()
+  if M.is_open() then
+    M.close()
+  else
+    M.open()
+  end
+end
+
+return M

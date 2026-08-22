@@ -3,7 +3,7 @@
 --- the renderer must display the exact digits and keep the column
 --- right-aligned like any numeric column.
 
-local format = require("poste-sql.format")
+local format = require("poste-db.format")
 
 describe("format bigint precision", function()
   it("renders the exact bigint string in a dataset cell", function()

@@ -1,6 +1,6 @@
-local D = require("poste-sql.dataset")
+local D = require("poste-db.dataset")
 local state = require("poste.state")
-local raw = require("poste-sql.buffer.nav_raw")
+local raw = require("poste-db.buffer.nav_raw")
 
 describe("buffer_nav_raw", function()
   local saved_T = nil
@@ -14,7 +14,7 @@ describe("buffer_nav_raw", function()
     saved_win_is_valid = vim.api.nvim_win_is_valid
     saved_enter = raw.enter
     saved_exit = raw.exit
-    saved_buffer_page = package.loaded["poste-sql.buffer.page"]
+    saved_buffer_page = package.loaded["poste-db.buffer.page"]
     D.dataset_buffer = 11
     D.dataset_window = 22
     state.sql._raw_mode = false
@@ -26,12 +26,12 @@ describe("buffer_nav_raw", function()
     vim.api.nvim_win_is_valid = saved_win_is_valid
     raw.enter = saved_enter
     raw.exit = saved_exit
-    package.loaded["poste-sql.buffer.page"] = saved_buffer_page
+    package.loaded["poste-db.buffer.page"] = saved_buffer_page
   end)
 
   it("builds raw lines from the formatter", function()
-    local saved_format = package.loaded["poste-sql.format"]
-    package.loaded["poste-sql.format"] = {
+    local saved_format = package.loaded["poste-db.format"]
+    package.loaded["poste-db.format"] = {
       render_page = function()
         return { "one", "two" }, {}
       end,
@@ -39,7 +39,7 @@ describe("buffer_nav_raw", function()
 
     local lines = raw.build_raw_lines({ layout = { rows = { 1, 2 } } })
 
-    package.loaded["poste-sql.format"] = saved_format
+    package.loaded["poste-db.format"] = saved_format
     assert.same({ "one", "two" }, lines)
   end)
 
@@ -54,16 +54,16 @@ describe("buffer_nav_raw", function()
       win_is_valid = vim.api.nvim_win_is_valid,
       buf_delete = vim.api.nvim_buf_delete,
       keymap_set = vim.keymap.set,
-      header_close = require("poste-sql.buffer.header").close,
+      header_close = require("poste-db.buffer.header").close,
       get_keymap = state.get_keymap,
-      format = package.loaded["poste-sql.format"],
+      format = package.loaded["poste-db.format"],
     }
 
     local calls = {}
     local deleted_buf = nil
     local restored_buf = nil
 
-    package.loaded["poste-sql.format"] = {
+    package.loaded["poste-db.format"] = {
       render_page = function()
         return { "raw-1", "raw-2" }, {}
       end,
@@ -97,7 +97,7 @@ describe("buffer_nav_raw", function()
     vim.keymap.set = function(mode, lhs, rhs, opts)
       calls[#calls + 1] = { kind = "keymap", lhs = lhs, opts = opts }
     end
-    require("poste-sql.buffer.header").close = function()
+    require("poste-db.buffer.header").close = function()
       calls[#calls + 1] = "close_header_float"
     end
     state.get_keymap = function(_, _, default)
@@ -129,9 +129,9 @@ describe("buffer_nav_raw", function()
     vim.api.nvim_win_is_valid = saved.win_is_valid
     vim.api.nvim_buf_delete = saved.buf_delete
     vim.keymap.set = saved.keymap_set
-    require("poste-sql.buffer.header").close = saved.header_close
+    require("poste-db.buffer.header").close = saved.header_close
     state.get_keymap = saved.get_keymap
-    package.loaded["poste-sql.format"] = saved.format
+    package.loaded["poste-db.format"] = saved.format
 
     assert.is_true(ok, err)
     local saw_keymap = false
@@ -150,7 +150,7 @@ describe("buffer_nav_raw", function()
     local enter_calls = 0
     local exit_calls = 0
 
-    package.loaded["poste-sql.buffer.page"] = {
+    package.loaded["poste-db.buffer.page"] = {
       refresh_page = function()
         refresh_calls = refresh_calls + 1
       end,

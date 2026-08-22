@@ -1,4 +1,4 @@
-local ident = require("poste-sql.ident")
+local ident = require("poste-db.ident")
 
 describe("ident.quote", function()
   it("quotes a simple name with double quotes for postgres", function()

@@ -2,7 +2,7 @@ local saved_cli = package.loaded["poste.cli"]
 local cli_stub = {}
 package.loaded["poste.cli"] = cli_stub
 
-local exec = require("poste-sql.introspect.exec")
+local exec = require("poste-db.introspect.exec")
 
 describe("introspect exec helpers", function()
   local saved_schedule = vim.schedule
@@ -36,7 +36,7 @@ describe("introspect exec helpers", function()
 
     local seen = nil
     exec.run_json_items_job({ "binary", "introspect" }, {
-      title = "Poste SQL",
+      title = "PosteDb",
       failure_message = "bad json",
       empty_message = "no rows",
       exit_kind = "Thing",
@@ -56,7 +56,7 @@ describe("introspect exec helpers", function()
     assert.same({
       msg = "Thing exited with code 2\nerr one\nerr two",
       level = vim.log.levels.ERROR,
-      opts = { title = "Poste SQL" },
+      opts = { title = "PosteDb" },
     }, notified)
   end)
 
@@ -72,7 +72,7 @@ describe("introspect exec helpers", function()
     end
 
     exec.run_json_items_job({ "binary", "introspect" }, {
-      title = "Poste SQL",
+      title = "PosteDb",
       empty_message = "no rows",
       on_items = function()
         error("should not be called")
@@ -83,7 +83,7 @@ describe("introspect exec helpers", function()
     assert.same({
       msg = "no rows",
       level = vim.log.levels.WARN,
-      opts = { title = "Poste SQL" },
+      opts = { title = "PosteDb" },
     }, notified)
   end)
 end)

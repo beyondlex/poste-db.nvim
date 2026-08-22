@@ -1,7 +1,7 @@
 --- Tests for ts_stmt.lua — Tree-sitter-based statement boundary detection.
 
-local has_sql_parser = require("poste-sql.ts_stmt").check_parser()
-local ts_stmt = require("poste-sql.ts_stmt")
+local has_sql_parser = require("poste-db.ts_stmt").check_parser()
+local ts_stmt = require("poste-db.ts_stmt")
 
 local function make_buf(lines)
   local buf = vim.api.nvim_create_buf(false, true)
@@ -212,7 +212,7 @@ describe("find_error_nodes", function()
   end)
 end)
 
-local sem_ok, sem = pcall(require, "poste-sql.semantic_diagnostics")
+local sem_ok, sem = pcall(require, "poste-db.semantic_diagnostics")
 if sem_ok and sem._test and sem._test.extract_references_from_node then
   describe("semantic reference extraction (digit-leading identifiers)", function()
     local extract = sem._test.extract_references_from_node
@@ -275,7 +275,7 @@ if sem_ok and sem._test and sem._test.extract_references_from_node then
 end
 
 describe("digit-fragment highlight (syntax.highlight_digit_prefix_fragments)", function()
-  local syntax = require("poste-sql.syntax")
+  local syntax = require("poste-db.syntax")
   --- Byte spans (from, to) covered by digit-fragment extmarks in a buffer.
   local function fragment_spans(buf)
     local ns = vim.api.nvim_create_namespace("poste_sql_digit_fragment")

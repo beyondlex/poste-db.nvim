@@ -1,8 +1,8 @@
 --- Tests for SQL dataset editor: value conversion, validation, edit state, DML generation.
 --- Covers UT1-UT11 from dataset-ui-edit-impl.md §5.
 
-local editor = require("poste-sql.editor")
-local edit_commit = require("poste-sql.edit_commit")
+local editor = require("poste-db.editor")
+local edit_commit = require("poste-db.edit_commit")
 
 ---------------------------------------------------------------------------
 -- UT1: parse_value — various input → value conversions

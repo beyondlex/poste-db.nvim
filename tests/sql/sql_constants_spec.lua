@@ -1,4 +1,4 @@
-local const = require("poste-sql.constants")
+local const = require("poste-db.constants")
 
 describe("constants helpers", function()
   it("detects section markers", function()

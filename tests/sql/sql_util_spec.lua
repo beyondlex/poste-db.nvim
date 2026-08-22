@@ -1,4 +1,4 @@
-local util = require("poste-sql.util")
+local util = require("poste-db.util")
 
 describe("util utf8 helpers", function()
   it("utf8_char_bytes returns correct byte widths", function()

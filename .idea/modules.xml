@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/poste-sql.nvim.iml" filepath="$PROJECT_DIR$/.idea/poste-sql.nvim.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/poste-db.nvim.iml" filepath="$PROJECT_DIR$/.idea/poste-db.nvim.iml" />
     </modules>
   </component>
 </project>

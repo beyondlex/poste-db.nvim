@@ -2,7 +2,7 @@
 --- Lua heuristic (detect_context / extract_from_tables) removed in P3.
 --- Remaining tests cover non-heuristic paths like resolve_current_context.
 
-local sql_comp = require("poste-sql.completion")
+local sql_comp = require("poste-db.completion")
 local resolve_current_context = sql_comp._test.resolve_current_context
 local conn_key = sql_comp._test.conn_key
 

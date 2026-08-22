@@ -1,4 +1,4 @@
-local route = require("poste-sql.nav.route")
+local route = require("poste-db.nav.route")
 
 describe("nav_route", function()
   it("routes connection directives", function()

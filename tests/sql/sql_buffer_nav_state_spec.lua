@@ -1,17 +1,17 @@
-local state = require("poste-sql.buffer.nav_state")
-local D = require("poste-sql.dataset")
+local state = require("poste-db.buffer.nav_state")
+local D = require("poste-db.dataset")
 
 describe("buffer_nav_state", function()
   local saved_T = nil
 
   before_each(function()
-    saved_T = require("poste-sql.dataset").T
+    saved_T = require("poste-db.dataset").T
     D.tabs = {}
     D.active_tab_idx = 0
   end)
 
   after_each(function()
-    require("poste-sql.dataset").T = saved_T
+    require("poste-db.dataset").T = saved_T
   end)
 
   it("returns nil helpers for missing tabs", function()

@@ -35,8 +35,8 @@ Goal: define correctness before adding more fixes.
 
 Add documentation:
 
-- `completion/poste-sql-file-syntax.zh.md`
-- `completion/poste-sql-file-syntax.en.md`
+- `completion/poste-db-file-syntax.zh.md`
+- `completion/poste-db-file-syntax.en.md`
 
 Minimum content:
 

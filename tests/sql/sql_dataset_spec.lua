@@ -1,4 +1,4 @@
-local D = require("poste-sql.dataset")
+local D = require("poste-db.dataset")
 
 describe("dataset compute_view_indices", function()
   before_each(function()

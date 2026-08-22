@@ -54,7 +54,7 @@
 
 ## 议程 1：回顾（5 分钟）
 
-**主持人**：P0 的核心目标是"定义契约，不动代码"。当前系统存在双重真实源的问题（Lua 启发式 + Rust 上下文），P0 文档已经起草了 `poste-sql-file-syntax.zh.md` 和 `design-decisions.zh.md`。本次会议决定 P1-P4 的规则。
+**主持人**：P0 的核心目标是"定义契约，不动代码"。当前系统存在双重真实源的问题（Lua 启发式 + Rust 上下文），P0 文档已经起草了 `poste-db-file-syntax.zh.md` 和 `design-decisions.zh.md`。本次会议决定 P1-P4 的规则。
 
 **三方共识**：
 - P0 文档内容完整，覆盖了文件结构、指令规则、语句边界、JSON 契约、上下文类型语义。
@@ -339,7 +339,7 @@ Agent C 调和："保留在 Rust 让方言和函数列表保持在一起，架�
 
 ### 确认 P0 文档定稿
 
-- `poste-sql-file-syntax.zh.md` 和 `poste-sql-file-syntax.en.md` ⚠️ **需要修订**：移除"Lua 预提取 `###` 块"作为补全管道假设；`###` 降级为执行层可选分隔符
+- `poste-db-file-syntax.zh.md` 和 `poste-db-file-syntax.en.md` ⚠️ **需要修订**：移除"Lua 预提取 `###` 块"作为补全管道假设；`###` 降级为执行层可选分隔符
 - `design-decisions.zh.md` 和 `design-decisions.en.md` ⚠️ **需要修订**：D1（不再移除）、D2（改为选项 3）、D5（加速移除）、D6（`###` 非补全概念）
 - `plan.zh.md` 和 `plan.en.md` ⚠️ **需要修订**：P2 不再需要推迟到 P1 后的"移除空行边界"步骤；调整描述以匹配无 `###` 预提取的架构
 - **本次会议记录**：`meeting-minutes.zh.md` ✅ 已完成（v2.0）

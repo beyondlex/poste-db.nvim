@@ -16,12 +16,12 @@ Unlike existing operations (which generate SQL into source buffer), database/sch
 
 | File | Status | Role |
 |------|--------|------|
-| `lua/poste-sql/db_browser/forms_advanced.lua` | **NEW** | Reusable advanced form UI component |
-| `lua/poste-sql/db_browser/db_create.lua` | **NEW** | Create Database: fields, SQL generation, execution |
-| `lua/poste-sql/db_browser/schema_create.lua` | **NEW** | Create Schema: fields, SQL generation, execution |
-| `lua/poste-sql/db_browser/init.lua` | MODIFY | Add one contextual `a` keymap binding |
-| `lua/poste-sql/db_browser/context_menu.lua` | MODIFY | Add "Create Database" / "Create Schema" menu items |
-| `lua/poste-sql/db_browser/operations.lua` | MODIFY | Add `create_database` / `create_schema` dispatch stubs |
+| `lua/poste-db/db_browser/forms_advanced.lua` | **NEW** | Reusable advanced form UI component |
+| `lua/poste-db/db_browser/db_create.lua` | **NEW** | Create Database: fields, SQL generation, execution |
+| `lua/poste-db/db_browser/schema_create.lua` | **NEW** | Create Schema: fields, SQL generation, execution |
+| `lua/poste-db/db_browser/init.lua` | MODIFY | Add one contextual `a` keymap binding |
+| `lua/poste-db/db_browser/context_menu.lua` | MODIFY | Add "Create Database" / "Create Schema" menu items |
+| `lua/poste-db/db_browser/operations.lua` | MODIFY | Add `create_database` / `create_schema` dispatch stubs |
 | `lua/poste/state.lua` (poste.nvim) | MODIFY | Add `create_database` / `create_schema` default keymaps |
 
 ---
@@ -203,7 +203,7 @@ end
 
 ```lua
 function M.execute_sql(sql, conn_name, context, opts)
-  local connections = require("poste-sql.connections")
+  local connections = require("poste-db.connections")
   local url, err = connections.resolve_connection_url(conn_name)
   if not url then
     vim.notify("Database create failed: " .. (err or "unknown"), vim.log.levels.ERROR)
@@ -326,7 +326,7 @@ GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA "my_schema" TO "readonly";
 
 ```lua
 function M.execute_sql(sql, conn_name, context, opts)
-  local connections = require("poste-sql.connections")
+  local connections = require("poste-db.connections")
   local url, err = connections.resolve_connection_url(conn_name)
   if not url then
     vim.notify("Schema create failed: " .. (err or "unknown"), vim.log.levels.ERROR)
@@ -419,12 +419,12 @@ function refresh_database(target_node, context)
   parent.expanded = false
   parent.loading = true
 
-  local tree = require("poste-sql.db_browser.tree")
+  local tree = require("poste-db.db_browser.tree")
   local nm = tree.render_tree(context.browser_buf, context.line_to_node,
     context.root_nodes, context.conn_label)
   for i, n in ipairs(nm) do context.line_to_node[i] = n end
 
-  local async = require("poste-sql.db_browser.async")
+  local async = require("poste-db.db_browser.async")
   async.fetch_children(parent, function()
     parent.expanded = true
     vim.schedule(function()
@@ -452,9 +452,9 @@ if k then
   vim.keymap.set("n", k, function()
     local node = tree.get_node_at_line(line_to_node, vim.fn.line("."))
     if node and node.node_type == "connection" then
-      require("poste-sql.db_browser.db_create").open(node, make_context())
+      require("poste-db.db_browser.db_create").open(node, make_context())
     elseif node and node.node_type == "database" then
-      require("poste-sql.db_browser.schema_create").open(node, make_context())
+      require("poste-db.db_browser.schema_create").open(node, make_context())
     end
   end, opts)
 end
@@ -487,11 +487,11 @@ database = {
 
 ```lua
 function M.create_database(node, context)
-  require("poste-sql.db_browser.db_create").open(node, context)
+  require("poste-db.db_browser.db_create").open(node, context)
 end
 
 function M.create_schema(node, context)
-  require("poste-sql.db_browser.schema_create").open(node, context)
+  require("poste-db.db_browser.schema_create").open(node, context)
 end
 ```
 
@@ -508,7 +508,7 @@ The `forms_advanced.lua` component is designed to be reused for:
 | Alter Table (advanced) | columns (add/drop/modify), constraints | `ALTER TABLE ...` |
 | Table rename + migrate | old name, new name, cascade | `ALTER TABLE ... RENAME TO ...` |
 
-Each new feature would be a separate `lua/poste-sql/db_browser/<feature>.lua` file following the same pattern: build sections → generate SQL → execute.
+Each new feature would be a separate `lua/poste-db/db_browser/<feature>.lua` file following the same pattern: build sections → generate SQL → execute.
 
 ---
 

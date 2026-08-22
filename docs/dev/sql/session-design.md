@@ -101,7 +101,7 @@ session::execute()
   ├─ 3. stdin EOF → 关闭连接 → 退出（exit 0）
 ```
 
-## Lua 侧: `lua/poste-sql/session_conn.lua`
+## Lua 侧: `lua/poste-db/session_conn.lua`
 
 ### 接口
 
@@ -189,9 +189,9 @@ end
 |------|---------|
 | `crates/poste-cli/src/session.rs` | **新文件**: session 守护进程 |
 | `crates/poste-cli/src/main.rs` | 注册 `Session` 子命令 |
-| `lua/poste-sql/session_conn.lua` | **新文件**: session 池管理 + 发送/接收 |
-| `lua/poste-sql/sql_runner.lua` | `run_sql_request()` 集成 session 路径 |
-| `lua/poste-sql/init.lua` | `setup()` 中注册 `BufUnload` 自动清理 |
+| `lua/poste-db/session_conn.lua` | **新文件**: session 池管理 + 发送/接收 |
+| `lua/poste-db/sql_runner.lua` | `run_sql_request()` 集成 session 路径 |
+| `lua/poste-db/init.lua` | `setup()` 中注册 `BufUnload` 自动清理 |
 
 ## 未来可扩展
 

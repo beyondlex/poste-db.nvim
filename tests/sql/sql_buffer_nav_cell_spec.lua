@@ -1,4 +1,4 @@
-local cell = require("poste-sql.buffer.nav_cell")
+local cell = require("poste-db.buffer.nav_cell")
 local state = require("poste.state")
 
 describe("buffer_nav_cell", function()
@@ -106,7 +106,7 @@ describe("buffer_nav_cell", function()
   end)
 
   it("applies or clears cell highlights", function()
-    local highlights = package.loaded["poste-sql.highlights"]
+    local highlights = package.loaded["poste-db.highlights"]
     local saved_highlight = highlights.highlight_cell
     local saved_clear = highlights.clear_cell_highlight
     local calls = {}
@@ -131,7 +131,7 @@ describe("buffer_nav_cell", function()
   end)
 
   it("toggles cell highlight state and applies it", function()
-    local highlights = package.loaded["poste-sql.highlights"]
+    local highlights = package.loaded["poste-db.highlights"]
     local saved_highlight = highlights.highlight_cell
     local saved_clear = highlights.clear_cell_highlight
     local calls = {}

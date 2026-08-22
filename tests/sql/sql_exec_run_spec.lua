@@ -1,4 +1,4 @@
-local exec_run = require("poste-sql.exec_run")
+local exec_run = require("poste-db.exec_run")
 
 describe("exec_run", function()
   describe("build_response", function()

@@ -1,4 +1,4 @@
-# poste-sql.nvim 代码审查报告
+# poste-db.nvim 代码审查报告
 
 > 审查方式：核心链路逐文件通读（init / sql_runner / session_conn / exec_run / context / connections / toml / format 等）+ 五个并行深度审查（dataset buffer/UI 层、DB Browser 层、补全/上下文层、执行/导入导出/连接层、测试与工程基建）+ 亲自运行测试套件验证。
 >
@@ -222,7 +222,7 @@ local ok, parsed = pcall(vim.json.decode, output)   -- output 从未定义！
 
 ### P2-5 状态管理碎片化与双真相源
 
-`poste-sql.state`（`state.lua`）+ `poste.state.sql` 懒加载 `__index`（poste.nvim `state.lua:100-107`）+ `session.lua` 模块级 `active` + `dataset.lua` 模块级 `D`。`state.last_response`/`state.sql.cell`/`state.sql.pagination` 被多处直接读写；tab 光标同时存于 `D.tabs[].cursor` 与全局 `state.sql.cell`——**两处真相源**，漏同步即错位（如 `find_column` 只改 cell 不回写 tab.cursor）。
+`poste-db.state`（`state.lua`）+ `poste.state.sql` 懒加载 `__index`（poste.nvim `state.lua:100-107`）+ `session.lua` 模块级 `active` + `dataset.lua` 模块级 `D`。`state.last_response`/`state.sql.cell`/`state.sql.pagination` 被多处直接读写；tab 光标同时存于 `D.tabs[].cursor` 与全局 `state.sql.cell`——**两处真相源**，漏同步即错位（如 `find_column` 只改 cell 不回写 tab.cursor）。
 
 ### P2-6 `init.lua setup()` 上帝函数与调试残留
 
@@ -265,7 +265,7 @@ local ok, parsed = pcall(vim.json.decode, output)   -- output 从未定义！
 ### P3-3 测试环境不隔离
 
 - `tests/run.sh:14-20` 启动 nvim **无 `-u NONE`/`-u minimal_init`**，加载用户真实 `~/.config/nvim/init.lua`；`minimal_init.lua` 只作为 plenary 选项追加 rtp，**从未替代 vimrc**。用户插件（mini.statusline/blink.cmp 等）会真实影响被测行为。
-- `tests/run.sh:6` `PLENARY_PATH` 硬编码 lazy 安装路径，未安装直接 `exit 1`；`:17` 依赖兄弟目录 `../poste.nvim`；`:19` `runtime plugin/poste-sql.lua` 会执行 `setup()`——约 20 个命令/autocmd 副作用进测试进程。
+- `tests/run.sh:6` `PLENARY_PATH` 硬编码 lazy 安装路径，未安装直接 `exit 1`；`:17` 依赖兄弟目录 `../poste.nvim`；`:19` `runtime plugin/poste-db.lua` 会执行 `setup()`——约 20 个命令/autocmd 副作用进测试进程。
 - 无 tree-sitter SQL parser 时 TS 相关测试**静默 `pending()`**（`sql_multi_stmt_spec.lua:410-450`），`make_buf` 还 `vim.wait(500)` 空等——诊断/语义诊断断言永不执行。
 - 48 个 spec 在同一进程顺序执行，共享 `D.tabs`/`state.sql`/`vim.g`/`package.loaded` 全局状态（如 `sql_connections_spec.lua:19-28` 桩掉整个 toml 模块）。
 - `tests/diag/diag_sql.lua` 是孤立脚本，未接入 run.sh，头部注释路径与实际不符。
@@ -292,9 +292,9 @@ local ok, parsed = pcall(vim.json.decode, output)   -- output 从未定义！
 
 - **README 数据集编辑键位表错误**（`README.md:117-121`）：声称 `i`/`a` 编辑、`o`/`O` 插入行、`u` 撤销——实际只绑 `i`/`cc`/`dd`/`o`/`<leader>w`（`buffer/init.lua:122-131`），**`a`、`O`、`u` 从未绑定**。
 - **README 集成测试路径错误**（`README.md:201-212`）：`cd tests/sql && docker compose up -d` 与 `tests/sql/queries/postgres.sql` 不存在；真实 compose/queries 在 `playground/sql/`。
-- **补全设计文档路径全部过期**（`docs/dev/sql/completion/README.en.md:17-21`）：引用 `lua/poste/sql/`（实际 `lua/poste-sql/`）与 `crates/poste-core/`（本仓库无 crates/，已迁至 poste.nvim）。
+- **补全设计文档路径全部过期**（`docs/dev/sql/completion/README.en.md:17-21`）：引用 `lua/poste/sql/`（实际 `lua/poste-db/`）与 `crates/poste-core/`（本仓库无 crates/，已迁至 poste.nvim）。
 - **docs/dev/sql/README.md 索引不全**：只列 4/10 篇；"Last updated: 2026-08-01" 为未来日期。
-- **AGENTS.md 引用不存在文件**：`lua/poste/help.lua`（poste.nvim 无此文件，实际在本仓库 `lua/poste-sql/help.lua`）；`LEARNINGS.md` 不存在。
+- **AGENTS.md 引用不存在文件**：`lua/poste/help.lua`（poste.nvim 无此文件，实际在本仓库 `lua/poste-db/help.lua`）；`LEARNINGS.md` 不存在。
 - **测试残留**：`minimal_init.lua:8` 引用不存在的 `tests/helpers/` 目录；`sql_tab_spec.lua:8` 注释 "Multi-statement execution is not yet implemented" 早已过期。
 - **仓库卫生（合格项）**：`.gitignore` 忽略 `.env`/`.env.*`；`connections.toml` 提交的均为 `{{VAR}}` 占位符；磁盘 `.env` 无真实凭据。小瑕疵：`playground/sql/env.json` 提交了 dev 凭据形状；`syntax/*.vim` 头部 "Latest Revision: 2026-06-09" 为未来日期。
 
@@ -312,7 +312,7 @@ local ok, parsed = pcall(vim.json.decode, output)   -- output 从未定义！
 
 ## 7. 附录 A：模块 × 测试覆盖矩阵
 
-**零测试模块**（`grep -r 'poste-sql.<mod>' tests/sql/` 无命中）：
+**零测试模块**（`grep -r 'poste-db.<mod>' tests/sql/` 无命中）：
 
 `health.lua`、`help.lua`、`statusline.lua`、`insert_hint.lua`、`source_format.lua`、`syntax.lua`、`session.lua`、`session_conn.lua`、`export.lua`、`context_client.lua`、`snippets.lua`、`semantic_diagnostics.lua`、`diagnostics.lua`、`toml.lua`（被测试桩绕过）、`buffer/search.lua`、`buffer/page.lua`、`buffer/header.lua`（仅切片助手）、`completion/adapter.lua`、`completion/debug.lua`、`db_browser/{operations, copy, forms, forms_advanced, async, context_menu, db_create, schema_create, completion}.lua`、`editor/nav.lua`、`editor/column.lua`、`import/{execute, mapping}.lua`、`highlights/theme.lua`。
 

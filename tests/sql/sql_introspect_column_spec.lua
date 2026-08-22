@@ -1,24 +1,24 @@
-local saved_connections = package.loaded["poste-sql.connections"]
-local saved_exec = package.loaded["poste-sql.introspect.exec"]
-local saved_ui = package.loaded["poste-sql.introspect.ui"]
+local saved_connections = package.loaded["poste-db.connections"]
+local saved_exec = package.loaded["poste-db.introspect.exec"]
+local saved_ui = package.loaded["poste-db.introspect.ui"]
 
 local connections_stub = {}
 local exec_stub = {}
 local ui_stub = {}
 
-package.loaded["poste-sql.connections"] = connections_stub
-package.loaded["poste-sql.introspect.exec"] = exec_stub
-package.loaded["poste-sql.introspect.ui"] = ui_stub
+package.loaded["poste-db.connections"] = connections_stub
+package.loaded["poste-db.introspect.exec"] = exec_stub
+package.loaded["poste-db.introspect.ui"] = ui_stub
 
-local column = require("poste-sql.introspect.column")
+local column = require("poste-db.introspect.column")
 
 describe("introspect column helper", function()
   local saved_schedule = vim.schedule
 
   before_each(function()
-    package.loaded["poste-sql.connections"] = connections_stub
-    package.loaded["poste-sql.introspect.exec"] = exec_stub
-    package.loaded["poste-sql.introspect.ui"] = ui_stub
+    package.loaded["poste-db.connections"] = connections_stub
+    package.loaded["poste-db.introspect.exec"] = exec_stub
+    package.loaded["poste-db.introspect.ui"] = ui_stub
     vim.schedule = function(fn)
       fn()
     end
@@ -26,9 +26,9 @@ describe("introspect column helper", function()
 
   after_each(function()
     vim.schedule = saved_schedule
-    package.loaded["poste-sql.connections"] = saved_connections
-    package.loaded["poste-sql.introspect.exec"] = saved_exec
-    package.loaded["poste-sql.introspect.ui"] = saved_ui
+    package.loaded["poste-db.connections"] = saved_connections
+    package.loaded["poste-db.introspect.exec"] = saved_exec
+    package.loaded["poste-db.introspect.ui"] = saved_ui
   end)
 
   it("builds column introspection args and forwards items", function()

@@ -1,7 +1,7 @@
 -- Diagnostic tests for SQL completion
 -- Focus: does "SELECT * FROM authors WHERE " trigger column completions?
 
-local sql_comp = require("poste-sql.completion")
+local sql_comp = require("poste-db.completion")
 local get_items = sql_comp._test.get_items
 
 -- ── 3. get_items integration (no real DB needed) ─────────────────────────────
@@ -516,7 +516,7 @@ describe("get_items table context", function()
     state.sql.context = { connection = "test-conn", database = "blog" }
     sql_comp.cache_tables({ { name = "authors" }, { name = "posts" } })
     -- Pre-cache databases so ensure_databases doesn't start async job with binary
-    local data_mod = require("poste-sql.completion.data")
+    local data_mod = require("poste-db.completion.data")
     local cache = data_mod.get_cache()
     cache["test-conn/__databases__"] = { "blog" }
   end)
@@ -634,7 +634,7 @@ end)
 -- Requires Rust binary. Skip if not found.
 -- Authoritative drift tests are in Rust: test_lua_fallback_functions_are_subset,
 -- test_lua_keywords_recognized_by_rust.
-local data = require("poste-sql.completion.data")
+local data = require("poste-db.completion.data")
 describe("Rust/Lua function drift", function()
   it("every Lua SQL_FUNCTIONS entry exists in Rust known_functions()", function()
     local binary = data.find_binary()
@@ -678,13 +678,13 @@ describe("completion mode integration", function()
   end
 
   local function mock_find_binary()
-    _G._saved_find_binary = require("poste-sql.completion.data").find_binary
-    require("poste-sql.completion.data").find_binary = function() return nil end
+    _G._saved_find_binary = require("poste-db.completion.data").find_binary
+    require("poste-db.completion.data").find_binary = function() return nil end
   end
 
   local function restore_find_binary()
     if _G._saved_find_binary then
-      require("poste-sql.completion.data").find_binary = _G._saved_find_binary
+      require("poste-db.completion.data").find_binary = _G._saved_find_binary
       _G._saved_find_binary = nil
     end
   end
@@ -740,7 +740,7 @@ describe("completion mode integration", function()
 
   -- Mode: "rust" (Rust strict) — Rust path only, no Lua fallback
   describe("legacy_completion = 'rust' (Rust strict)", function()
-    local data_mod = require("poste-sql.completion.data")
+    local data_mod = require("poste-db.completion.data")
     local has_binary = data_mod.find_binary() ~= nil
 
     local function skip_or_run(assert_fn)
@@ -782,7 +782,7 @@ describe("completion mode integration", function()
 
   -- Conditional: Rust binary integration tests
   describe("Rust binary integration", function()
-    local data_mod = require("poste-sql.completion.data")
+    local data_mod = require("poste-db.completion.data")
     local binary = data_mod.find_binary()
     local has_binary = binary ~= nil
 

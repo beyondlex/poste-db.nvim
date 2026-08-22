@@ -1,4 +1,4 @@
-local dml = require("poste-sql.dml")
+local dml = require("poste-db.dml")
 
 describe("dml generation", function()
   local columns = {

@@ -1,5 +1,5 @@
-local statement = require("poste-sql.statement")
-local D = require("poste-sql.dataset")
+local statement = require("poste-db.statement")
+local D = require("poste-db.dataset")
 
 describe("statement extract_label", function()
   it("takes the comment directly above the statement", function()
@@ -181,7 +181,7 @@ describe("dataset history sidebar keymaps", function()
   -- Regression for the `refresh` global-nil bug in activate()/delete_current()
   -- and for the floating-window sweep in header.close()/clear_panel() that
   -- used to close the sidebar. Runs against real headless windows.
-  local buffer_mod = require("poste-sql.buffer")
+  local buffer_mod = require("poste-db.buffer")
   local history
 
   local function make_env()
@@ -195,7 +195,7 @@ describe("dataset history sidebar keymaps", function()
     D.dataset_window = vim.api.nvim_get_current_win()
     vim.api.nvim_win_set_buf(D.dataset_window, D.dataset_buffer)
     D.dataset_tabpage = vim.api.nvim_get_current_tabpage()
-    history = require("poste-sql.buffer.history")
+    history = require("poste-db.buffer.history")
   end
 
   local function add_entry(label)
@@ -298,7 +298,7 @@ describe("dataset history sidebar keymaps", function()
     assert.is_true(history.is_open())
     buffer_mod.clear_panel(1)
     assert.is_true(history.is_open())
-    require("poste-sql.buffer.header").close()
+    require("poste-db.buffer.header").close()
     assert.is_true(history.is_open())
   end)
 end)

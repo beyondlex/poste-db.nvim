@@ -1,4 +1,4 @@
-# poste-sql.nvim
+# poste-db.nvim
 
 **SQL execution, dataset browser, and schema introspection for Neovim.** Part of the [Poste](https://github.com/beyondlex/poste.nvim) family.
 
@@ -21,13 +21,13 @@
 ```lua
 -- lazy.nvim
 {
-  "beyondlex/poste-sql.nvim",
+  "beyondlex/poste-db.nvim",
   dependencies = {
     "beyondlex/poste.nvim",
     "saghen/blink.cmp",
   },
   config = function()
-    require("poste-sql.init").setup()
+    require("poste-db.init").setup()
   end,
 }
 ```
@@ -157,7 +157,7 @@ Press `<Tab>` to jump between placeholders, `<S-Tab>` to go back.
 - **Functions** — Aggregate and scalar functions per dialect
 - **Connection-aware** — Completions reflect the actual schema
 
-Requires **blink.cmp**. Auto-registers as `poste_sql` source.
+Requires **blink.cmp**. Auto-registers as `poste_db` source.
 
 ### SQL Snippets
 
@@ -183,7 +183,7 @@ All snippets use **LSP-style syntax** (`${1:placeholder}`, `$0` for exit, `$$` f
 **Custom snippets** via `setup()`:
 
 ```lua
-require("poste-sql").setup({
+require("poste-db").setup({
   snippets = {
     -- Simple: trigger word → snippet body
     myq = "SELECT * FROM ${1:table} WHERE ${2:condition};",

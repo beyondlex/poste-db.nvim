@@ -1,5 +1,5 @@
-local ts_stmt = require("poste-sql.ts_stmt")
-local statement_indicator = require("poste-sql.statement_indicator")
+local ts_stmt = require("poste-db.ts_stmt")
+local statement_indicator = require("poste-db.statement_indicator")
 
 describe("statement_indicator toggle", function()
   after_each(function()

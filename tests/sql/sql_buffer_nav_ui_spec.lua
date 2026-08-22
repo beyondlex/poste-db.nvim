@@ -1,4 +1,4 @@
-local ui = require("poste-sql.buffer.nav_ui")
+local ui = require("poste-db.buffer.nav_ui")
 local state = require("poste.state")
 
 describe("buffer_nav_ui", function()

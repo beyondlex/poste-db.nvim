@@ -47,7 +47,7 @@ syn match PosteDbDatasetMeta '^\d\+ row.*affected.*$'
 
 " ─── Highlight group links ──────────────────────────
 " These groups are defined with explicit theme-aware colors in
-" lua/poste-sql/highlights/theme.lua setup(). The syntax group names
+" lua/poste-db/highlights/theme.lua setup(). The syntax group names
 " match them directly, so no links are needed.
 
 let b:current_syntax = "poste_dataset"

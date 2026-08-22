@@ -1,6 +1,6 @@
-local state = require("poste-sql.state")
+local state = require("poste-db.state")
 
-describe("poste-sql.state defaults", function()
+describe("poste-db.state defaults", function()
   it("exposes default context", function()
     assert.same({ connection = nil, database = nil }, state.context)
   end)

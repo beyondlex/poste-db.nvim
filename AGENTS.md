@@ -1,12 +1,12 @@
-# poste-sql.nvim
+# poste-db.nvim
 
 Independent SQL plugin for Poste. Depends on [poste.nvim](https://github.com/beyondlex/poste.nvim) for shared infra (state.lua, select.lua, indicators.lua, cli.lua, etc.) and the poste Rust binary.
 
 ## Key Facts
 
-- All SQL Lua code lives under `lua/poste-sql/`
+- All SQL Lua code lives under `lua/poste-db/`
 - Requires `poste.nvim` on rtp — `require("poste.state")` must succeed
-- `plugin/poste-sql.lua` calls `require("poste-sql.init").setup()`
+- `plugin/poste-db.lua` calls `require("poste-db.init").setup()`
 - `ftdetect/poste_sql.vim` sets filetypes for `.sql` and `.sqlite`
 - Uses same `poste` Rust binary from poste.nvim
 - `.opencode/skills/sql/` and `.opencode/skills/sql-completion/` for agent context
@@ -24,8 +24,8 @@ See `docs/dev/sql/README.md` for detailed file index.
 ## Design Principles
 
 - Zero coupling to HTTP modules — no `require("poste.http.*")`
-- State lives in `lua/poste-sql/state.lua` (accessed via `require("poste-sql.state")`)
-- Help in `lua/poste-sql/help.lua` (filetype-aware dispatch, sits in this repo)
+- State lives in `lua/poste-db/state.lua` (accessed via `require("poste-db.state")`)
+- Help in `lua/poste-db/help.lua` (filetype-aware dispatch, sits in this repo)
 
 ## Lua Pitfalls
 

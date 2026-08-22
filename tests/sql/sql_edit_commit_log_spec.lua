@@ -1,4 +1,4 @@
-local log = require("poste-sql.edit_commit.log")
+local log = require("poste-db.edit_commit.log")
 
 describe("edit_commit_log", function()
   after_each(function()

@@ -2,7 +2,7 @@
 
 **Goal**: Align on Poste SQL file syntax contract, context JSON contract, and implementation priorities before P1-P4 execution.
 
-**Prep**: Read `poste-sql-file-syntax.en.md` + `design-decisions.en.md` before meeting.
+**Prep**: Read `poste-db-file-syntax.en.md` + `design-decisions.en.md` before meeting.
 
 ---
 
@@ -14,7 +14,7 @@
 
 ## 2. File Syntax Contract (15 min)
 
-Walk through these sections of `poste-sql-file-syntax.en.md`:
+Walk through these sections of `poste-db-file-syntax.en.md`:
 
 | Section | Key questions |
 |---------|--------------|
