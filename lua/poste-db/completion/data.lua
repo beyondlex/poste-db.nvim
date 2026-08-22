@@ -569,7 +569,7 @@ function M.ensure_columns(tbl, schema, callback)
     local ok_conn, conn_mod = pcall(require, "poste-db.connections")
     if ok_conn then
       local conn = conn_mod.get_connection_config(ctx.connection)
-      if conn and conn.dialect == "mysql" then
+      if conn and (conn.dialect == "mysql" or conn.dialect == "mariadb") then
         db_override = schema
         schema = nil
       end

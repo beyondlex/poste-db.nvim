@@ -94,7 +94,7 @@ local function build_pk_query(dialect, table_name, db)
   local template = METADATA_QUERIES.primary_keys[dialect]
   if not template then return nil end
   local safe_table = table_name:gsub("'", "''")
-  if dialect == "mysql" then
+  if dialect == "mysql" or dialect == "mariadb" then
     local sql = string.format(template, safe_table)
     if db and db ~= "" then
       sql = sql .. string.format(" AND c.TABLE_SCHEMA = '%s'", db:gsub("'", "''"))
@@ -113,7 +113,7 @@ local function build_enum_query(dialect, table_name, db)
   local template = METADATA_QUERIES.enums[dialect]
   if not template then return nil end
   local safe_table = table_name:gsub("'", "''")
-  if dialect == "mysql" then
+  if dialect == "mysql" or dialect == "mariadb" then
     local sql = string.format(template, safe_table)
     if db and db ~= "" then
       sql = sql .. string.format(" AND TABLE_SCHEMA = '%s'", db:gsub("'", "''"))
@@ -169,7 +169,7 @@ end
 local function parse_pk_results(body, layout, dialect)
   local defaults = {}
   local pk_names = {}
-  local is_pk_col_idx = (dialect == "mysql" and 4) or 3
+  local is_pk_col_idx = ((dialect == "mysql" or dialect == "mariadb") and 4) or 3
   for _, res in ipairs(body.results) do
     if res.rows then
       for _, row in ipairs(res.rows) do
@@ -242,7 +242,7 @@ local function parse_postgres_enum_body(body, layout)
 end
 
 local function parse_enum_results(body, layout, dialect)
-  if dialect == "mysql" then
+  if dialect == "mysql" or dialect == "mariadb" then
     parse_mysql_enum_body(body, layout)
   elseif dialect == "postgres" then
     parse_postgres_enum_body(body, layout)

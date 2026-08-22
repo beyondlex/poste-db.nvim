@@ -28,7 +28,7 @@ function M.show_column_info(conn, db, table_name, col_name, schema, show_float)
 
   local cc = connections.get_connection_config(conn)
   local dialect = cc and cc.dialect or ""
-  if dialect == "mysql" and schema and schema ~= "" then
+  if (dialect == "mysql" or dialect == "mariadb") and schema and schema ~= "" then
     db = schema
     schema = nil
   end

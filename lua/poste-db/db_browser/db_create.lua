@@ -62,7 +62,7 @@ local function build_sections(dialect, roles)
     { key = "name", label = "Name", kind = "text", value = "" },
   }
 
-  if dialect == "mysql" then
+  if dialect == "mysql" or dialect == "mariadb" then
     local charset_choices = { "utf8", "utf8mb4", "latin1", "ascii", "utf16" }
     local collation_choices = {
       "utf8_general_ci", "utf8_unicode_ci", "utf8mb4_general_ci",
@@ -96,7 +96,7 @@ local function generate_sql(fields, dialect)
   if not fields.name or fields.name == "" then
     return { "--- Enter a database name ---" }
   end
-  if dialect == "mysql" then
+  if dialect == "mysql" or dialect == "mariadb" then
     return { mysql_create_database(fields) }
   end
   return { postgres_create_database(fields) }

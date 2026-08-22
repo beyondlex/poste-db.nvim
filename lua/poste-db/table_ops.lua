@@ -38,7 +38,7 @@ end
 
 --- Quote an identifier based on dialect.
 local function quote(name, dialect)
-  if dialect == "mysql" then
+  if dialect == "mysql" or dialect == "mariadb" then
     return "`" .. name:gsub("`", "``") .. "`"
   else
     return '"' .. name:gsub('"', '""') .. '"'

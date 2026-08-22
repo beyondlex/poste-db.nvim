@@ -35,7 +35,7 @@ local function quote_val(val, dialect)
       end
       return tostring(num)
     end
-    if dialect == "mysql" then
+    if dialect == "mysql" or dialect == "mariadb" then
       val = val:gsub("^(%d%d%d%d%-%d%d%-%d%d)T(%d%d:%d%d:%d%d%.%d+)[%+%-]%d%d:%d%d$", "%1 %2")
       val = val:gsub("^(%d%d%d%d%-%d%d%-%d%d)T(%d%d:%d%d:%d%d)[%+%-]%d%d:%d%d$", "%1 %2")
       val = val:gsub("^(%d%d%d%d%-%d%d%-%d%d)T(%d%d:%d%d:%d%d%.%d+)Z$", "%1 %2")

@@ -18,7 +18,7 @@ setup_highlights()
 vim.api.nvim_create_autocmd("ColorScheme", { callback = setup_highlights })
 
 local function quote(name, dialect)
-  if dialect == "mysql" then
+  if dialect == "mysql" or dialect == "mariadb" then
     return "`" .. name:gsub("`", "``") .. "`"
   else
     return '"' .. name:gsub('"', '""') .. '"'
@@ -71,7 +71,7 @@ local function check_result_error(decoded)
 end
 
 local function extract_schema_from_ddl(ddl, table_name, dialect)
-  if dialect == "mysql" then
+  if dialect == "mysql" or dialect == "mariadb" then
     return nil
   end
   local quoted = '"' .. table_name .. '"'
@@ -146,7 +146,7 @@ local function prepare_table_ddl(ddl, target_table_name, table_name, schema, dia
 end
 
 local function dialect_table_exists_sql(dialect)
-  if dialect == "mysql" then
+  if dialect == "mysql" or dialect == "mariadb" then
     return "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '%s'"
   elseif dialect == "postgres" then
     return "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = '%s')"

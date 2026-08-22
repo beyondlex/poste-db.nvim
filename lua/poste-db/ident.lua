@@ -22,7 +22,7 @@ function M.quote(name, dialect, depth)
       return table.concat(parts, ".")
     end
   end
-  if dialect == "mysql" then
+  if dialect == "mysql" or dialect == "mariadb" then
     return "`" .. name:gsub("`", "``") .. "`"
   end
   return '"' .. name:gsub('"', '""') .. '"'
@@ -40,7 +40,7 @@ function M.quote_literal(val, dialect)
   if type(val) == "boolean" then return val and "TRUE" or "FALSE" end
   if type(val) == "number" then return tostring(val) end
   local s = tostring(val):gsub("'", "''")
-  if dialect == "mysql" then
+  if dialect == "mysql" or dialect == "mariadb" then
     s = s:gsub("\\", "\\\\")
   end
   return "'" .. s .. "'"

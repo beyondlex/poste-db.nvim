@@ -109,7 +109,7 @@ local function build_alter_column_sql(table_node, node, values, dialect)
       table.insert(lines, "COMMENT ON COLUMN " .. ident.quote(table_node.name, dialect) .. "." .. col_ref .. " IS '" .. tostring(comment_val):gsub("'", "''") .. "';")
     end
     return lines
-  elseif dialect == "mysql" then
+  elseif dialect == "mysql" or dialect == "mariadb" then
     local parts = { "ALTER TABLE " .. ident.quote(table_node.name, dialect) .. " MODIFY COLUMN " .. col_ref .. " " .. col_type }
     if not nullable then table.insert(parts, " NOT NULL") end
     if default_val ~= nil and default_val ~= "" then table.insert(parts, " DEFAULT " .. default_val)
@@ -443,7 +443,7 @@ function M.set_default(node, context)
   elseif node.node_type == "schema" then
     if dialect == "postgres" then
       table.insert(lines, "SET search_path TO " .. ident.quote(node.name, dialect) .. ";")
-    elseif dialect == "mysql" then
+    elseif dialect == "mysql" or dialect == "mariadb" then
       table.insert(lines, "USE " .. ident.quote(node.name, dialect) .. ";")
     else
       table.insert(lines, "-- schema: " .. node.name)
