@@ -149,7 +149,7 @@ For dialect-specific completion:
 ### Hybrid Override (Fixed in P1)
 
 Lua no longer overrides Rust. When debugging, test with
-`vim.g.poste_sql_legacy_completion = "rust"` to isolate Rust behavior.
+`vim.g.poste_db_legacy_completion = "rust"` to isolate Rust behavior.
 Fix missing detection in Rust rather than adding Lua heuristics.
 
 ### Schema Loss Produces Wrong Columns

@@ -18,7 +18,7 @@ local LABEL_COL_WIDTH = 18
 
 local buf = nil
 local win = nil
-local hl_ns = vim.api.nvim_create_namespace("poste_sql_history")
+local hl_ns = vim.api.nvim_create_namespace("poste_db_history")
 
 local update_sql_statusline  -- forward declaration (refresh ⇢ update_sql_statusline)
 

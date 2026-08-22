@@ -109,8 +109,8 @@ Implementation steps:
      4. Call `completion_ctx.detect_context()` only when Rust is unavailable.
 
 2. Tighten legacy switch semantics
-   - `vim.g.poste_sql_legacy_completion = true`: Lua-only fallback for debug or no-binary environments.
-   - `vim.g.poste_sql_legacy_completion = "rust"`: Rust-only, no fallback, for regression testing.
+   - `vim.g.poste_db_legacy_completion = true`: Lua-only fallback for debug or no-binary environments. (Deprecated alias: `vim.g.poste_sql_legacy_completion`.)
+   - `vim.g.poste_db_legacy_completion = "rust"`: Rust-only, no fallback, for regression testing.
    - Default `nil`: Rust first; Lua heuristic must not override Rust for non-directive SQL.
 
 3. Clarify `_test` exports
@@ -147,7 +147,7 @@ Acceptance criteria:
 
 - Default completion is no longer overridden by Lua heuristic when Rust context exists.
 - Basic keyword/table/directive completion still works in degraded mode when the Rust binary is missing.
-- `vim.g.poste_sql_legacy_completion = "rust"` can reproduce Rust-only behavior.
+- `vim.g.poste_db_legacy_completion = "rust"` can reproduce Rust-only behavior.
 
 ## P2: Add Cursor-Marker Golden Tests
 

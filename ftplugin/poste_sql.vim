@@ -37,8 +37,8 @@ if ok then
   pcall(source_format.setup_conform)
 
   -- Set up autocmd to auto-format on save if user opts in via config
-  -- (disabled by default; user must set g:poste_sql_autoformat = true)
-  if vim.g.poste_sql_autoformat then
+  -- (disabled by default; user must set g:poste_db_autoformat = true)
+  if require("poste-db.compat").opt("autoformat") then
     local group = vim.api.nvim_create_augroup("PosteDbFormatOnSave", { clear = true })
     vim.api.nvim_create_autocmd("BufWritePre", {
       group = group,

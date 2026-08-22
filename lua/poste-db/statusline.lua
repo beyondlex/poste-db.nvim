@@ -52,7 +52,7 @@ local function get_ctx_color(conn_name)
 end
 
 local function fmt_ctx(ctx)
-  local conn_name = vim.b.poste_sql_conn
+  local conn_name = vim.b.poste_db_conn
   if conn_name then
     local hl_name = get_ctx_color(conn_name)
     if hl_name then
@@ -68,7 +68,7 @@ function M.setup()
     if ok_mini then
       local orig_fileinfo = statusline.section_fileinfo
       statusline.section_fileinfo = function(...)
-        local ctx = vim.b.poste_sql_context
+        local ctx = vim.b.poste_db_context
         if ctx and ctx ~= "" then
           return ctx
         end
@@ -76,7 +76,7 @@ function M.setup()
       end
 
       statusline.config.content.active = function()
-        local ctx = vim.b.poste_sql_context
+        local ctx = vim.b.poste_db_context
         local ctx_hl = nil
         if ctx and ctx ~= "" then
           local conn_name = ctx:match("^(.-)[/]") or ctx
@@ -138,7 +138,7 @@ function M.setup_lualine()
 end
 
 function M.get_context()
-  local ctx = vim.b.poste_sql_context
+  local ctx = vim.b.poste_db_context
   if ctx and ctx ~= "" then
     return fmt_ctx(ctx)
   end
@@ -147,13 +147,13 @@ end
 
 --- Plain text for lualine components.
 function M.get_context_text()
-  return vim.b.poste_sql_context or ""
+  return vim.b.poste_db_context or ""
 end
 
 --- Highlight group name for lualine's color option, per-connection.
 --- Returns nil when no context, so lualine falls back to default highlight.
 function M.get_context_hl()
-  local ctx = vim.b.poste_sql_context
+  local ctx = vim.b.poste_db_context
   if not ctx or ctx == "" then return nil end
   local conn_name = ctx:match("^(.-)[/]") or ctx
   return get_ctx_color(conn_name)

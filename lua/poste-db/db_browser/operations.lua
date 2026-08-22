@@ -9,6 +9,7 @@ local forms = require("poste-db.db_browser.forms")
 local select_mod = require("poste.select")
 local ident = require("poste-db.ident")
 local util = require("poste-db.db_browser.util")
+local compat = require("poste-db.compat")
 
 local HEADER_LINES = icons.HEADER_LINES
 local M = {}
@@ -457,7 +458,7 @@ function M.modify_col(node, context)
     { label = "Comment",  key = "comment",  value = safe_str(node.meta and node.meta.comment), kind = "text" },
   }
 
-  vim.g.poste_sql_dialect = dialect
+  compat.set("dialect", dialect)
 
   forms.open("Modify Column: " .. table_node.name .. "." .. node.name, fields, function(updated)
     local col_type = updated[1].value
@@ -644,7 +645,7 @@ function M.new_column(node, context)
     { label = "Default",  key = "default",   value = "",     kind = "text" },
   }
 
-  vim.g.poste_sql_dialect = dialect
+  compat.set("dialect", dialect)
 
   forms.open("New Column: " .. table_node.name, fields, function(updated)
     local col_name = updated[1].value

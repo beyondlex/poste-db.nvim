@@ -5,7 +5,7 @@
 --- internal modules directly.
 ---
 --- Supported operations:
----   register_source(config)    — register poste_sql provider
+---   register_source(config)    — register poste_db provider
 ---   register_filetype(ft, src) — map filetype → source
 ---   show(opts)                 — force-show completion menu
 ---   is_menu_open() → bool      — check if menu is visible

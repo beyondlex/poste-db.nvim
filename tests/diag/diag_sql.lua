@@ -1,6 +1,6 @@
 -- Standalone diagnostic: run with
 --   nvim --headless -u NONE -l tests/diag/diag_sql.lua
--- Writes results to /tmp/poste_sql_diag.txt
+-- Writes results to /tmp/poste_db_diag.txt
 
 vim.opt.runtimepath:prepend(".")
 
@@ -10,7 +10,7 @@ local function log(s) table.insert(out, s) end
 local ok, sql_comp = pcall(require, "poste-db.completion")
 if not ok then
   log("FAIL: could not load sql.completion: " .. tostring(sql_comp))
-  vim.fn.writefile(out, "/tmp/poste_sql_diag.txt")
+vim.fn.writefile(out, "/tmp/poste_db_diag.txt")
   os.exit(1)
 end
 
@@ -47,8 +47,8 @@ sql_comp.cache_columns("authors", {
 })
 
 -- Use Rust strict mode to force Rust binary path
-local prev_mode = vim.g.poste_sql_legacy_completion
-vim.g.poste_sql_legacy_completion = "rust"
+local prev_mode = vim.g.poste_db_legacy_completion
+vim.g.poste_db_legacy_completion = "rust"
 
 do
   local buf = make_buf({ "###", "SELECT * FROM authors WHERE " })
@@ -123,7 +123,7 @@ do
 end
 
 -- Restore
-vim.g.poste_sql_legacy_completion = prev_mode
+vim.g.poste_db_legacy_completion = prev_mode
 
 log(string.format("\n=== RESULT: %d passed, %d failed ===", pass, fail))
 vim.fn.writefile(out, "/tmp/poste_sql_diag.txt")

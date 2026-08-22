@@ -151,7 +151,7 @@ local ok, parsed = pcall(vim.json.decode, output)   -- output 从未定义！
 
 ### P1-5 statusline 按连接着色是死代码
 
-`statusline.lua:54-66` 从 `vim.b.poste_sql_context` 提取连接名，但该变量存的是 `nav_ui.lua:17-42` 生成的**展示串**（`"localhost:5432  🗄 blog"`，不含连接名）→ `get_connection_config(name)` 精确查表恒 nil → **README 宣传的 per-connection 颜色从未生效**。
+`statusline.lua:54-66` 从 `vim.b.poste_db_context` 提取连接名，但该变量存的是 `nav_ui.lua:17-42` 生成的**展示串**（`"localhost:5432  🗄 blog"`，不含连接名）→ `get_connection_config(name)` 精确查表恒 nil → **README 宣传的 per-connection 颜色从未生效**。
 
 ### P1-6 配置发现不一致：cwd vs buffer 目录
 
@@ -190,7 +190,7 @@ local ok, parsed = pcall(vim.json.decode, output)   -- output 从未定义！
 | `export.lua:384-401` | `export.M.run` 忽略 `path` 参数——`:PosteDbExport csv file /x/y.csv` 仍弹交互选择器 |
 | `file_exec.lua:300-301` vs `sql_runner.lua:498,533` | `max_rows` 不一致：文件执行截断 1000 行，手动执行 0 不限 |
 | `exec_run.lua:40-52` | 临时 SQL 文件写进**源文件目录**（`.poste_sql_*.sql`），崩溃残留、污染 git 状态；`strftime+math.random` 同秒碰撞 |
-| `completion/data.lua:537` | `vim.notify("DEBUG: binary not found!", ERROR)` **无条件触发**（同文件其余 496-529 行都有 `vim.g.poste_sql_debug` 门控，唯独此处漏）——缺 binary 时每次列补全弹 ERROR |
+| `completion/data.lua:537` | `vim.notify("DEBUG: binary not found!", ERROR)` **无条件触发**（同文件其余 496-529 行都有 `vim.g.poste_db_debug` 门控，唯独此处漏）——缺 binary 时每次列补全弹 ERROR |
 | `sql_runner.lua:223-225` | `first_line` 回退有运算符优先级 bug（纯外观） |
 | `context.lua:19-56` | 每次光标移动读全文件 + 扫 `1..cursor_line`，O(文件大小) |
 

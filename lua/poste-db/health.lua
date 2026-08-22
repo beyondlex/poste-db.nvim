@@ -1,5 +1,7 @@
 local M = {}
 
+local compat = require("poste-db.compat")
+
 local start = vim.health.start or vim.health.report_start
 local ok = vim.health.ok or vim.health.report_ok
 local warn = vim.health.warn or vim.health.report_warn
@@ -67,12 +69,12 @@ function M.check()
         table.insert(providers, id)
       end
     end
-    local has_poste_sql = vim.tbl_contains(providers, "poste_sql")
+    local has_poste_db = vim.tbl_contains(providers, "poste_db")
     ok("blink.cmp loaded")
-    if has_poste_sql then
-      ok("  poste_sql provider registered")
+    if has_poste_db then
+      ok("  poste_db provider registered")
     else
-      warn("  poste_sql provider not registered — completion may not work")
+      warn("  poste_db provider not registered — completion may not work")
     end
   else
     local cmp_ok = pcall(require, "cmp")
@@ -112,8 +114,9 @@ function M.check()
   end
 
   -- Legacy completion mode
-  if vim.g.poste_sql_legacy_completion then
-    ok("legacy completion mode: " .. vim.g.poste_sql_legacy_completion)
+  local legacy = compat.opt("legacy_completion")
+  if legacy then
+    ok("legacy completion mode: " .. tostring(legacy))
   end
 end
 

@@ -697,11 +697,11 @@ describe("completion mode integration", function()
     sql_comp.cache_columns("authors", {
       { name = "id" }, { name = "username" }, { name = "email" }, { name = "bio" },
     })
-    _G._saved_legacy = vim.g.poste_sql_legacy_completion
+    _G._saved_legacy = vim.g.poste_db_legacy_completion
   end)
 
   after_each(function()
-    vim.g.poste_sql_legacy_completion = _G._saved_legacy
+    vim.g.poste_db_legacy_completion = _G._saved_legacy
     restore_find_binary()
   end)
 
@@ -711,7 +711,7 @@ describe("completion mode integration", function()
     before_each(function() mock_find_binary() end)
 
     it("returns keywords after WHERE (heuristic removed)", function()
-      vim.g.poste_sql_legacy_completion = true
+      vim.g.poste_db_legacy_completion = true
       local buf = make_buf({ "###", "SELECT * FROM authors WHERE " })
       local items = nil
       get_items(buf, "SELECT * FROM authors WHERE ", 2, function(r) items = r end)
@@ -725,7 +725,7 @@ describe("completion mode integration", function()
     end)
 
     it("uses Lua fallback SQL_FUNCTIONS for keyword context", function()
-      vim.g.poste_sql_legacy_completion = true
+      vim.g.poste_db_legacy_completion = true
       local buf = make_buf({ "###", "CO" })
       local items = nil
       get_items(buf, "CO", 2, function(r) items = r end)
@@ -754,7 +754,7 @@ describe("completion mode integration", function()
 
     it("returns columns after WHERE", function()
       skip_or_run(function()
-        vim.g.poste_sql_legacy_completion = "rust"
+        vim.g.poste_db_legacy_completion = "rust"
         local buf = make_buf({ "###", "SELECT * FROM authors WHERE " })
         local items = nil
         get_items(buf, "SELECT * FROM authors WHERE ", 2, function(r) items = r end)
@@ -768,7 +768,7 @@ describe("completion mode integration", function()
 
     it("returns tables after FROM", function()
       skip_or_run(function()
-        vim.g.poste_sql_legacy_completion = "rust"
+        vim.g.poste_db_legacy_completion = "rust"
         local buf = make_buf({ "###", "SELECT * FROM " })
         local items = nil
         get_items(buf, "SELECT * FROM ", 2, function(r) items = r end)
@@ -898,25 +898,25 @@ describe("completion mode integration", function()
   -- Mode toggle function
   describe("toggle_legacy cycles through modes", function()
     before_each(function()
-      vim.g.poste_sql_legacy_completion = nil
+      vim.g.poste_db_legacy_completion = nil
     end)
 
     it("first call sets to true (Lua-only)", function()
       sql_comp.toggle_legacy()
-      assert.is_true(vim.g.poste_sql_legacy_completion)
+      assert.is_true(vim.g.poste_db_legacy_completion)
     end)
 
     it("second call sets to 'rust' (Rust strict)", function()
       sql_comp.toggle_legacy()
       sql_comp.toggle_legacy()
-      assert.equals("rust", vim.g.poste_sql_legacy_completion)
+      assert.equals("rust", vim.g.poste_db_legacy_completion)
     end)
 
     it("third call resets to nil (default hybrid)", function()
       sql_comp.toggle_legacy()
       sql_comp.toggle_legacy()
       sql_comp.toggle_legacy()
-      assert.is_nil(vim.g.poste_sql_legacy_completion)
+      assert.is_nil(vim.g.poste_db_legacy_completion)
     end)
   end)
 end)

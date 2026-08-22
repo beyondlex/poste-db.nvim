@@ -4,10 +4,10 @@ local const = require("poste-db.constants")
 
 local M = {}
 
-local ns = vim.api.nvim_create_namespace("poste_sql_dataset")
-local ns_cell = vim.api.nvim_create_namespace("poste_sql_dataset_cell")
-local ns_cursorline = vim.api.nvim_create_namespace("poste_sql_dataset_cursorline")
-local ns_edit = vim.api.nvim_create_namespace("poste_sql_dataset_edit")
+local ns = vim.api.nvim_create_namespace("poste_db_dataset")
+local ns_cell = vim.api.nvim_create_namespace("poste_db_dataset_cell")
+local ns_cursorline = vim.api.nvim_create_namespace("poste_db_dataset_cursorline")
+local ns_edit = vim.api.nvim_create_namespace("poste_db_dataset_edit")
 
 local function row_nums_hidden()
   return state.sql._hide_row_numbers

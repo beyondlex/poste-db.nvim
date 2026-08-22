@@ -44,11 +44,11 @@ describe("sql_runner ensure_sql_keymaps", function()
       return default
     end
     runner.ensure_sql_keymaps(buf)
-    assert.is_true(vim.b[buf].poste_sql_keymaps_installed)
+    assert.is_true(vim.b[buf].poste_db_keymaps_installed)
   end)
 
   it("skips if already installed", function()
-    vim.b[buf].poste_sql_keymaps_installed = true
+    vim.b[buf].poste_db_keymaps_installed = true
     local get_keymap_calls = 0
     state_stub.get_keymap = function()
       get_keymap_calls = get_keymap_calls + 1

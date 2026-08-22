@@ -45,8 +45,8 @@ end
 --- Install keymaps for this SQL buffer (one-time setup).
 function M.ensure_sql_keymaps(buf)
   if buf == 0 then buf = vim.api.nvim_get_current_buf() end
-  if vim.b[buf].poste_sql_keymaps_installed then return end
-  vim.b[buf].poste_sql_keymaps_installed = true
+  if vim.b[buf].poste_db_keymaps_installed then return end
+  vim.b[buf].poste_db_keymaps_installed = true
 
   local keymap_opts = { buffer = buf, noremap = true, silent = true }
 
@@ -144,7 +144,7 @@ function M.ensure_sql_keymaps(buf)
         if ok and ctx_mod then
           local ok2, text = pcall(ctx_mod.get_cursor_status_text, buf)
           if ok2 and text then
-            vim.b[buf].poste_sql_context = text
+            vim.b[buf].poste_db_context = text
             vim.cmd("redrawstatus")
           end
         end

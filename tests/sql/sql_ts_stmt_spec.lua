@@ -278,7 +278,7 @@ describe("digit-fragment highlight (syntax.highlight_digit_prefix_fragments)", f
   local syntax = require("poste-db.syntax")
   --- Byte spans (from, to) covered by digit-fragment extmarks in a buffer.
   local function fragment_spans(buf)
-    local ns = vim.api.nvim_create_namespace("poste_sql_digit_fragment")
+    local ns = vim.api.nvim_create_namespace("poste_db_digit_fragment")
     local spans = {}
     for _, m in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true })) do
       local details = m[4] or {}

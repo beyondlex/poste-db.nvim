@@ -13,8 +13,8 @@ local state = require("poste.state")
 
 local M = {}
 
-local ns = vim.api.nvim_create_namespace("poste_sql_semantic_diagnostics")
-local ns_hl = vim.api.nvim_create_namespace("poste_sql_semantic_highlight")
+local ns = vim.api.nvim_create_namespace("poste_db_semantic_diagnostics")
+local ns_hl = vim.api.nvim_create_namespace("poste_db_semantic_highlight")
 local _pending_checks = {}
 local _updating = false
 local _schema_cache = {}

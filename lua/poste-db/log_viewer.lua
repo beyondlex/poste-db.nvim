@@ -4,7 +4,7 @@ local M = {}
 
 local const = require("poste-db.constants")
 local syntax = require("poste-db.syntax")
-local ns = vim.api.nvim_create_namespace("poste_sql_log")
+local ns = vim.api.nvim_create_namespace("poste_db_log")
 local buf = nil
 local win = nil
 local entries = {}
@@ -570,7 +570,7 @@ function M.toggle()
   filter_text = ""
   buf = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_buf_set_option(buf, "buftype", "nofile")
-  vim.api.nvim_buf_set_option(buf, "filetype", "poste_sql_log")
+  vim.api.nvim_buf_set_option(buf, "filetype", "poste_db_log")
   vim.api.nvim_buf_set_option(buf, "bufhidden", "wipe")
   vim.api.nvim_buf_set_name(buf, "poste://sql-log")
   win = vim.api.nvim_open_win(buf, true, {

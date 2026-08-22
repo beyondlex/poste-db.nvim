@@ -24,7 +24,7 @@ M.buf_label_count = {}   -- [bufnr] = n, for fallback labels like test_1, test_2
 
 M.scroll_autocmd_id = nil
 M.resize_autocmd_id = nil
-M.search_ns = vim.api.nvim_create_namespace("poste_sql_search")
+M.search_ns = vim.api.nvim_create_namespace("poste_db_search")
 
 function M.history_count()
   return #M.history

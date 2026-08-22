@@ -21,6 +21,18 @@ Independent SQL plugin for Poste. Depends on [poste.nvim](https://github.com/bey
 
 See `docs/dev/sql/README.md` for detailed file index.
 
+## Naming Conventions
+
+`poste-db` / `poste_db` = the plugin (modules, config keys, namespaces, provider).
+`poste_sql` / `poste_sqlite` = ONLY the SQL **filetype** and the file/hook names
+derived from it (`ftdetect/poste_sql.vim`, `after/queries/poste_sql/`, `au FileType poste_sql`).
+
+There is no `lua/poste-sql/` and the plugin is NOT named `poste-sql` anymore.
+Never write a new `poste_sql_*` global/namespace/provider — the remaining
+`poste_sql_*` globals are deprecated aliases handled by `lua/poste-db/compat.lua`.
+The filetype name `poste_sql` itself stays. See
+`docs/dev/sql/README.md#naming-conventions--poste-db-vs-poste_sql` for the full table.
+
 ## Design Principles
 
 - Zero coupling to HTTP modules — no `require("poste.http.*")`

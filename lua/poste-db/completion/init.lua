@@ -10,6 +10,7 @@ local ctx = require("poste-db.completion.ctx")
 local debug = require("poste-db.completion.debug")
 local const = require("poste-db.constants")
 local handlers = require("poste-db.completion.handlers")
+local compat = require("poste-db.compat")
 
 local M = {}
 
@@ -115,7 +116,7 @@ local function try_rust_context_async(bufnr, line_before, cursor_line, callback)
   local sql_text, offset = extract_sql_block(bufnr, line_before, cursor_line)
   if not sql_text then callback(nil); return end
 
-  if vim.g.poste_sql_debug then
+  if compat.opt("debug") then
     local char_at_cursor = offset <= #sql_text and sql_text:sub(offset + 1, offset + 1) or "N/A"
     local ctx_start = math.max(1, offset - 4)
     local ctx_end = math.min(#sql_text, offset + 6)
@@ -153,7 +154,7 @@ local function try_rust_context_async(bufnr, line_before, cursor_line, callback)
   _ctx_cache[ckey] = parsed
   table.insert(_ctx_cache_keys, ckey)
   trim_ctx_cache()
-  if vim.g.poste_sql_debug then
+  if compat.opt("debug") then
     state.log("INFO", string.format("Rust context: type=%s, prefix='%s', tables=%d",
       tostring(parsed.ctx_type), tostring(parsed.prefix or ""),
       parsed.tables and #parsed.tables or 0))
@@ -170,7 +171,7 @@ end
 ---   - ctx_type/ctx_data come from Rust (preferred) or Lua fallback
 ---   - rust_ctx is the raw Rust response (nil if Rust was not used/failed)
 local function detect_context_async(bufnr, line_before, cursor_line, callback)
-  if vim.g.poste_sql_legacy_completion == true then
+  if compat.opt("legacy_completion") == true then
     callback("keyword", nil, nil)
     return
   end
@@ -178,7 +179,7 @@ local function detect_context_async(bufnr, line_before, cursor_line, callback)
   try_rust_context_async(bufnr, line_before, cursor_line, function(rust_ctx_raw)
     if rust_ctx_raw then
       callback(rust_ctx_raw.ctx_type, rust_ctx_raw.ctx_data, rust_ctx_raw)
-    elseif vim.g.poste_sql_legacy_completion ~= "rust" then
+    elseif compat.opt("legacy_completion") ~= "rust" then
       callback("keyword", nil, nil)
     else
       callback(nil, nil, nil)
@@ -207,7 +208,7 @@ local function get_items(bufnr, line_before, cursor_line, callback)
   detect_context_async(bufnr, line_before, cursor_line, function(ctx_type, ctx_data, rust_ctx)
     local rust_functions = (rust_ctx and rust_ctx.functions) or nil
 
-    if vim.g.poste_sql_debug then
+    if compat.opt("debug") then
       state.log("INFO", string.format("DEBUG get_items: ctx=%s, prefix='%s', line='%s'",
         ctx_type, prefix, line_before))
     end
@@ -275,7 +276,7 @@ function M:get_completions(blink_ctx, callback)
   -- No normalization needed — already 1-indexed.
   local line_before = line:sub(1, cursor_col)
 
-  if vim.g.poste_sql_debug then
+  if compat.opt("debug") then
     state.log("INFO", string.format("SQL completion triggered: line_before='%s'", line_before))
   end
 
@@ -313,7 +314,7 @@ function M:get_completions(blink_ctx, callback)
         end
       end
     end
-    if vim.g.poste_sql_debug then
+    if compat.opt("debug") then
       state.log("INFO", string.format("SQL completion: %d items (deduped from %d)", #deduped, #items))
     end
     debug.set("blink_items", #deduped)
@@ -431,15 +432,15 @@ M.resolve_current_context = data.resolve_current_context
 ---------------------------------------------------------------------------
 
 function M.toggle_legacy()
-  local current = vim.g.poste_sql_legacy_completion
+  local current = compat.opt("legacy_completion")
   if current == nil then
-    vim.g.poste_sql_legacy_completion = true
+    compat.set("legacy_completion", true)
     vim.notify("PosteDb completion: Legacy Lua-only mode (Rust disabled)", vim.log.levels.WARN)
   elseif current == true then
-    vim.g.poste_sql_legacy_completion = "rust"
+    compat.set("legacy_completion", "rust")
     vim.notify("PosteDb completion: Rust strict mode (no Lua fallback)", vim.log.levels.WARN)
   else
-    vim.g.poste_sql_legacy_completion = nil
+    compat.set("legacy_completion", nil)
     vim.notify("PosteDb completion: Rust first, Lua never overrides (default)", vim.log.levels.INFO)
   end
 end

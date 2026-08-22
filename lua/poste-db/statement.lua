@@ -7,6 +7,7 @@ local cli = require("poste.cli")
 local state = require("poste.state")
 local ts_stmt = require("poste-db.ts_stmt")
 local const = require("poste-db.constants")
+local compat = require("poste-db.compat")
 
 local M = {}
 
@@ -63,7 +64,7 @@ function M.try_rust_stmt_span(buf_lines, cursor_line)
 
   local abs_start = block_start + rust_start
   local abs_end = block_start + rust_end
-  if vim.g.poste_sql_debug then
+  if compat.opt("debug") then
     vim.notify(string.format("[poste] Rust stmt span: relative=(%d,%d) absolute=(%d,%d)",
       rust_start, rust_end, abs_start, abs_end), vim.log.levels.INFO)
   end
@@ -193,7 +194,8 @@ function M.extract_stmt_at_cursor(buf_lines, cursor_line, buf)
     stmt_end = ts_result[2]
   else
     -- Try Rust as fallback
-    local use_rust = not vim.g.poste_sql_legacy_completion or vim.g.poste_sql_legacy_completion == "rust"
+    local legacy = compat.opt("legacy_completion")
+    local use_rust = not legacy or legacy == "rust"
     if use_rust then
       local rust_ok, rust_result = pcall(M.try_rust_stmt_span, buf_lines, cursor_line)
       if rust_ok and rust_result then

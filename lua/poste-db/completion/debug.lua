@@ -26,7 +26,7 @@ local function open_win(b)
   vim.api.nvim_set_option_value("wrap", true, { win = 0 })
   vim.api.nvim_set_option_value("cursorline", false, { win = 0 })
   vim.api.nvim_win_set_option(0, "winfixheight", true)
-  vim.bo[b].filetype = "poste_sql_cmp_debug"
+  vim.bo[b].filetype = "poste_db_cmp_debug"
   local w = vim.api.nvim_get_current_win()
   vim.api.nvim_set_current_win(prev)
   return w

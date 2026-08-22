@@ -83,9 +83,9 @@ function M.update_dataset_statusline(meta)
   local buf = D.dataset_buffer
   if not buf or not vim.api.nvim_buf_is_valid(buf) then return end
   local ctx = M.build_statusline_context(meta)
-  vim.b[buf].poste_sql_context = ctx or ""
+  vim.b[buf].poste_db_context = ctx or ""
   if meta and meta.connection then
-    vim.b[buf].poste_sql_conn = meta.connection
+    vim.b[buf].poste_db_conn = meta.connection
   end
   M.update_dataset_sql_statusline()
   vim.cmd("redrawstatus")

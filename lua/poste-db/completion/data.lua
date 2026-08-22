@@ -2,6 +2,7 @@
 --- Provides keyword tables, connection context resolution, lazy-fetch
 --- (tables/columns/databases via the Rust CLI), and binary helpers.
 local state = require("poste.state")
+local compat = require("poste-db.compat")
 
 local M = {}
 
@@ -62,7 +63,7 @@ local COLUMN_CTX = {
 
 --- Fallback-only SQL function list.
 --- Rust `functions.rs` is the authoritative source. This list is only used
---- when the Rust binary is unavailable (`vim.g.poste_sql_legacy_completion = true`).
+--- when the Rust binary is unavailable (`vim.g.poste_db_legacy_completion = true`).
 --- MUST be a subset of Rust's `known_functions()`. See drift tests in
 --- `tests/sql_completion_spec.lua`.
 local SQL_FUNCTIONS = {
@@ -213,7 +214,7 @@ function M.conn_key()
   if ctx and ctx.connection then
     return ctx.connection .. "/" .. (ctx.database or "")
   end
-  if vim.g.poste_sql_debug then
+  if compat.opt("debug") then
     state.log("WARN", "SQL completion: no connection context found")
   end
   return nil
@@ -503,13 +504,13 @@ function M.ensure_columns(tbl, schema, callback)
   local ctx = M.resolve_current_context()
   local cache_tbl_key = schema and (schema .. "." .. tbl) or tbl
 
-  if vim.g.poste_sql_debug then
+  if compat.opt("debug") then
     vim.notify(string.format("DEBUG: ensure_columns(%s, %s) key=%s, conn=%s",
       tbl, tostring(schema), tostring(key), tostring(ctx and ctx.connection)), vim.log.levels.INFO)
   end
 
   if not key or not ctx or not ctx.connection then
-    if vim.g.poste_sql_debug then
+    if compat.opt("debug") then
       vim.notify("DEBUG: ensure_columns - NO CONNECTION, returning", vim.log.levels.ERROR)
     end
     callback()
@@ -517,7 +518,7 @@ function M.ensure_columns(tbl, schema, callback)
   end
 
   if cache[key] and cache[key].columns[cache_tbl_key] then
-    if vim.g.poste_sql_debug then
+    if compat.opt("debug") then
       vim.notify(string.format("DEBUG: cache hit for %s, %d columns",
         cache_tbl_key, #cache[key].columns[cache_tbl_key]), vim.log.levels.INFO)
     end
@@ -528,7 +529,7 @@ function M.ensure_columns(tbl, schema, callback)
   local fkey = key .. "/" .. cache_tbl_key
 
   if fetching_cols[fkey] then
-    if vim.g.poste_sql_debug then
+    if compat.opt("debug") then
       vim.notify(string.format("DEBUG: already fetching %s, queuing callback", cache_tbl_key), vim.log.levels.WARN)
     end
     cols_callbacks[fkey] = cols_callbacks[fkey] or {}
@@ -536,7 +537,7 @@ function M.ensure_columns(tbl, schema, callback)
     return
   end
 
-  if vim.g.poste_sql_debug then
+  if compat.opt("debug") then
     vim.notify(string.format("DEBUG: starting fetch for %s", cache_tbl_key), vim.log.levels.WARN)
   end
 
@@ -545,7 +546,7 @@ function M.ensure_columns(tbl, schema, callback)
 
   local binary = M.find_binary()
   if not binary then
-    if vim.g.poste_sql_debug then vim.notify("DEBUG: binary not found!", vim.log.levels.ERROR) end
+    if compat.opt("debug") then vim.notify("DEBUG: binary not found!", vim.log.levels.ERROR) end
     fetching_cols[fkey] = false
     for _, cb in ipairs(cols_callbacks[fkey] or {}) do cb() end
     cols_callbacks[fkey] = nil

@@ -5,7 +5,7 @@ function M.register()
   if not adapter.is_available() then return end
 
   adapter.register_source({
-    name = "poste_sql",
+    name = "poste_db",
     module = "poste-db.completion",
     label = "PosteDb",
     async = true,
@@ -13,8 +13,8 @@ function M.register()
     min_keyword_length = 0,
     should_show_items = true,
   })
-  adapter.register_filetype("poste_sql", "poste_sql")
-  adapter.register_filetype("poste_sqlite", "poste_sql")
+  adapter.register_filetype("poste_sql", "poste_db")
+  adapter.register_filetype("poste_sqlite", "poste_db")
 end
 
 return M

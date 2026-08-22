@@ -205,7 +205,7 @@
 
 ### F2-5 修 statusline 连接着色
 
-- `nav_ui` 在写 `vim.b.poste_sql_context` 展示串的同时写 `vim.b.poste_sql_conn`（原始连接名）；`statusline.lua:54-66` 改读后者。
+- `nav_ui` 在写 `vim.b.poste_db_context` 展示串的同时写 `vim.b.poste_db_conn`（原始连接名）；`statusline.lua:54-66` 改读后者。
 - **涉及**：`lua/poste-db/buffer/nav_ui.lua`、`lua/poste-db/statusline.lua`
 - **验收**：配置 `color`/`link` 的连接在状态栏正确着色（`get_connection_config` 命中）。
 
@@ -278,7 +278,7 @@
 - `export.M.run` 的 `path` 参数生效（`export.lua:384-401`）。
 - `max_rows` 统一（`file_exec.lua:300-301` 与 `sql_runner` 对齐，或经 `state.config` 配置）。
 - 临时文件：`exec_run.lua:40-52` 改用 `vim.fn.tempname()`（评估删除"放源目录"的旧理由——连接发现已走 URL 直传，不再需要）；同秒碰撞消除。
-- `completion/data.lua:537` 加 `vim.g.poste_sql_debug` 门控。
+- `completion/data.lua:537` 加 `vim.g.poste_db_debug` 门控。
 - `sql_runner.lua:223-225` 优先级修正。
 - **验收**：各自补最小测试或手动验证清单。
 
@@ -424,12 +424,12 @@
 
 - **问题**：审查报告 P2-6。
 - **设计（建议）**：`init.lua` 的 626 行拆为注册模块：
-  - `lua/poste-db/commands.lua`：全部 `nvim_create_user_command`（保留调试命令但加 `vim.g.poste_sql_debug` 门控，默认不注册 `PosteDbDiag/PosteDbDebugSpace/PosteDbCmpTest` 等；`PosteDbCmpReload/PosteDbCmpStatus` 保留为运维命令）。
+  - `lua/poste-db/commands.lua`：全部 `nvim_create_user_command`（保留调试命令但加 `vim.g.poste_db_debug` 门控，默认不注册 `PosteDbDiag/PosteDbDebugSpace/PosteDbCmpTest` 等；`PosteDbCmpReload/PosteDbCmpStatus` 保留为运维命令）。
   - `lua/poste-db/autocmds.lua`：全部 autocmd（FileType/BufRead/BufNewFile/BufUnload/ColorScheme），收敛文件类型 4 条路径为一条（ftdetect 负责检测、setup 只注册一次 FileType 回调 + 存量 buffer 循环）。
   - `lua/poste-db/completion/register.lua`：`register_sql_completion` 与 `PosteDbCmpReload` 共用（消除重复注册代码）。
   - `setup()` 变为组装调用。
 - **涉及文件**：`lua/poste-db/init.lua`、新增 `lua/poste-db/{commands,autocmds}.lua`、`lua/poste-db/completion/register.lua`
-- **验收标准**：`setup()` 行数显著下降；调试命令默认不注册（`vim.g.poste_sql_debug` 时注册）；现有行为（键位/命令/自动注册）回归通过。
+- **验收标准**：`setup()` 行数显著下降；调试命令默认不注册（`vim.g.poste_db_debug` 时注册）；现有行为（键位/命令/自动注册）回归通过。
 
 ### F3-7 DB Browser 收敛（单一 introspect 封装 + helpers 去重）
 
@@ -511,7 +511,7 @@
 
 ### F5-3 版本声明与兼容性
 
-- `health.lua:12` 改 `nvim-0.10.0`（或对 `vim.treesitter.language` 做 0.9 兼容保护 + 明确降级路径）；`health` 增加 `connections.toml` 查找/解析检查；补 `vim.g.poste_sql_legacy_completion` 检查。
+- `health.lua:12` 改 `nvim-0.10.0`（或对 `vim.treesitter.language` 做 0.9 兼容保护 + 明确降级路径）；`health` 增加 `connections.toml` 查找/解析检查；补 `vim.g.poste_db_legacy_completion` 检查。
 - **涉及**：`lua/poste-db/health.lua`
 
 ---

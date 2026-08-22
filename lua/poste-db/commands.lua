@@ -1,6 +1,7 @@
 local state = require("poste.state")
 local connections = require("poste-db.connections")
 local log = require("poste-db.log")
+local compat = require("poste-db.compat")
 
 local M = {}
 
@@ -75,7 +76,7 @@ function M.setup()
       end
       parts[#parts + 1] = "blink.cmp: loaded"
       parts[#parts + 1] = "  providers:  " .. (#providers > 0 and table.concat(providers, ", ") or "(none)")
-      parts[#parts + 1] = "  poste_sql:  " .. (vim.tbl_contains(providers, "poste_sql") and "yes" or "no")
+      parts[#parts + 1] = "  poste_db:  " .. (vim.tbl_contains(providers, "poste_db") and "yes" or "no")
     else
       parts[#parts + 1] = "blink.cmp: not loaded"
     end
@@ -96,7 +97,7 @@ function M.setup()
     local adapter = require("poste-db.completion.adapter")
     status[#status + 1] = "  blink.cmp loaded: " .. tostring(adapter.is_available())
     if adapter.is_available() then
-      status[#status + 1] = "  poste_sql provider registered: " .. tostring(adapter.has_provider("poste_sql"))
+      status[#status + 1] = "  poste_db provider registered: " .. tostring(adapter.has_provider("poste_db"))
     end
     local ctx_mod = require("poste-db.context")
     local ctx = ctx_mod.resolve_context(buf)
@@ -118,10 +119,10 @@ function M.setup()
       vim.notify("blink.cmp not loaded, cannot re-register", vim.log.levels.WARN)
       return
     end
-    adapter.register_source({ name = "poste_sql", module = "poste-db.completion", label = "PosteDb",
+    adapter.register_source({ name = "poste_db", module = "poste-db.completion", label = "PosteDb",
       score_offset = 1000, min_keyword_length = 0, should_show_items = true })
-    adapter.register_filetype("poste_sql", "poste_sql")
-    adapter.register_filetype("poste_sqlite", "poste_sql")
+    adapter.register_filetype("poste_sql", "poste_db")
+    adapter.register_filetype("poste_sqlite", "poste_db")
     vim.notify("SQL completion reloaded and re-registered with blink.cmp", vim.log.levels.INFO)
   end, { desc = "Reload SQL completion provider" })
 
@@ -165,7 +166,7 @@ function M.setup()
     require("poste-db.file_exec").run({ filepath = args.args, mode = "greedy" })
   end, { nargs = 1, complete = "file", desc = "Execute a SQL file" })
 
-  if vim.g.poste_sql_debug then
+  if compat.opt("debug") then
     vim.api.nvim_create_user_command("PosteDbAutoTrigger", function()
       local group = vim.api.nvim_create_augroup("PosteDbAutoComplete", { clear = true })
       vim.api.nvim_create_autocmd("TextChangedI", {

@@ -92,7 +92,7 @@ end
 function M:enabled() return true end
 
 function M:get_completions(context, callback)
-  local dialect = vim.g.poste_sql_dialect or "postgres"
+  local dialect = require("poste-db.compat").opt("dialect") or "postgres"
   local keyword = context:get_keyword() or ""
   local items = filter_types(keyword, dialect)
   callback({ items = items, is_incomplete_forward = false, is_incomplete_backward = false })

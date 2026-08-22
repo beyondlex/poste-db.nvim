@@ -6,6 +6,7 @@ local data = require("poste-db.completion.data")
 local ctx = require("poste-db.completion.ctx")
 local const = require("poste-db.constants")
 local state = require("poste.state")
+local compat = require("poste-db.compat")
 
 local M = {}
 
@@ -192,7 +193,7 @@ local function handle_column(bufnr, line_before, cursor_line, prefix, dialect, r
     end
   end
 
-  if vim.g.poste_sql_debug then
+  if compat.opt("debug") then
     state.log("INFO", string.format("DEBUG: column context, %d tables: %s",
       #real_tbls, vim.inspect(real_tbls)))
   end
@@ -212,7 +213,7 @@ local function handle_column(bufnr, line_before, cursor_line, prefix, dialect, r
     done = true
     local items = ctx.filter(all, prefix)
     local funcs = ctx.func_items(prefix, rust_functions)
-    if vim.g.poste_sql_debug then
+    if compat.opt("debug") then
       state.log("INFO", string.format("DEBUG flush: prefix='%s', %d cols, %d funcs (rust_functions=%s)",
         prefix, #items, #funcs, tostring(rust_functions ~= nil)))
     end
@@ -298,7 +299,7 @@ function M.dispatch(opts, ctx_type, ctx_data, rust_ctx, callback)
   local dialect = opts.dialect
   local rust_functions = opts.rust_functions
 
-  if vim.g.poste_sql_debug then
+  if compat.opt("debug") then
     state.log("INFO", string.format("DEBUG get_items: ctx=%s, prefix='%s', line='%s'",
       tostring(ctx_type), prefix, line_before))
   end
@@ -343,7 +344,7 @@ function M.dispatch(opts, ctx_type, ctx_data, rust_ctx, callback)
     return flush_items(callback, {})
   end
 
-  if vim.g.poste_sql_legacy_completion == true then
+  if compat.opt("legacy_completion") == true then
     data.ensure_tables(function()
       local key = data.conn_key()
       local cache = data.get_cache()

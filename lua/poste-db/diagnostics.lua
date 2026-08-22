@@ -12,8 +12,8 @@ local M = {}
 
 local _timer = nil
 local DEBOUNCE_MS = 300
-local ns = vim.api.nvim_create_namespace("poste_sql_diagnostics")
-local ns_hl = vim.api.nvim_create_namespace("poste_sql_diagnostics_highlight")
+local ns = vim.api.nvim_create_namespace("poste_db_diagnostics")
+local ns_hl = vim.api.nvim_create_namespace("poste_db_diagnostics_highlight")
 
 --- Resolve the connection dialect for a buffer (lowercase), or nil.
 --- Mirrors completion's dialect flag: buffer context → runtime connection.

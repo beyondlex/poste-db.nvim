@@ -109,8 +109,8 @@
      4. Rust 不可用时才调用 `completion_ctx.detect_context()`。
 
 2. 收紧 legacy 开关语义
-   - `vim.g.poste_sql_legacy_completion = true`：纯 Lua fallback，仅用于 debug 或无 binary 环境。
-   - `vim.g.poste_sql_legacy_completion = "rust"`：纯 Rust，不允许 fallback，回归测试使用。
+   - `vim.g.poste_db_legacy_completion = true`：纯 Lua fallback，仅用于 debug 或无 binary 环境。（已废弃别名：`vim.g.poste_sql_legacy_completion`。）
+   - `vim.g.poste_db_legacy_completion = "rust"`：纯 Rust，不允许 fallback，回归测试使用。
    - 默认 `nil`：Rust 优先；非 directive 的 Lua heuristic 不应覆盖 Rust result。
 
 3. 让 `_test` 暴露区分清楚
@@ -147,7 +147,7 @@ tests/run.sh
 
 - 默认 completion 不再因为 Lua heuristic 覆盖 Rust context。
 - Rust binary 不存在时，基础 keyword/table/directive completion 仍可 degraded 工作。
-- `vim.g.poste_sql_legacy_completion = "rust"` 能用于复现 Rust-only 行为。
+- `vim.g.poste_db_legacy_completion = "rust"` 能用于复现 Rust-only 行为。
 
 ## P2：建立 cursor-marker golden tests
 

@@ -19,7 +19,7 @@ local function ensure_hl()
   vim.api.nvim_set_hl(0, "PosteDbSqlDirectiveComment", { link = "Special" })
 end
 
-local DIRECTIVE_NS = vim.api.nvim_create_namespace("poste_sql_directive")
+local DIRECTIVE_NS = vim.api.nvim_create_namespace("poste_db_directive")
 local DIRECTIVE_KEYWORDS = {
   const.DIRECTIVE_CONNECTION,
   const.DIRECTIVE_DATABASE,
@@ -57,7 +57,7 @@ function M.highlight_directive_comments(buf)
   end
 end
 
-local DIGIT_PREFIX_NS = vim.api.nvim_create_namespace("poste_sql_digit_fragment")
+local DIGIT_PREFIX_NS = vim.api.nvim_create_namespace("poste_db_digit_fragment")
 
 --- Resolve the connection dialect for a buffer (lowercase), or nil.
 --- Mirrors diagnostics.get_dialect: buffer context → runtime connection.
