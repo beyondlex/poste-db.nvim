@@ -324,6 +324,10 @@ function M.apply_highlights(buf, line_count, count_ranges, line_to_node, multi_s
           end
           vim.api.nvim_buf_add_highlight(buf, hl_ns, "PosteDbBrowserType",
             i - 1, name_end, type_end)
+          if type_end < #text then
+            vim.api.nvim_buf_add_highlight(buf, hl_ns, "PosteDbBrowserCount",
+              i - 1, type_end, -1)
+          end
         end
       end
     end
