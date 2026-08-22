@@ -1,11 +1,5 @@
--- ============================================================
--- Database: blog
--- ============================================================
-
 CREATE DATABASE IF NOT EXISTS blog CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE blog;
-
--- Schema
 
 CREATE TABLE categories (
     id          INT AUTO_INCREMENT PRIMARY KEY,
@@ -25,17 +19,17 @@ CREATE TABLE authors (
 
 CREATE TABLE posts (
     id          INT AUTO_INCREMENT PRIMARY KEY,
-    author_id   INT NOT NULL COMMENT 'References authors.id',
-    category_id INT NOT NULL COMMENT 'References categories.id',
-    title       VARCHAR(300) NOT NULL COMMENT 'Post title (SEO)',
-    slug        VARCHAR(300) NOT NULL UNIQUE COMMENT 'URL-friendly identifier',
-    body        TEXT NOT NULL COMMENT 'Post content in Markdown',
-    status      ENUM('draft','published','archived') NOT NULL DEFAULT 'draft' COMMENT 'Publication status',
-    published_at TIMESTAMP NULL COMMENT 'When the post was published',
-    created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'Record creation timestamp',
+    author_id   INT NOT NULL,
+    category_id INT NOT NULL,
+    title       VARCHAR(300) NOT NULL,
+    slug        VARCHAR(300) NOT NULL UNIQUE,
+    body        TEXT NOT NULL,
+    status      ENUM('draft','published','archived') NOT NULL DEFAULT 'draft',
+    published_at TIMESTAMP NULL,
+    created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (author_id)   REFERENCES authors(id),
     FOREIGN KEY (category_id) REFERENCES categories(id)
-) ENGINE=InnoDB COMMENT='Blog posts with SEO metadata';
+) ENGINE=InnoDB;
 
 CREATE TABLE tags (
     id   INT AUTO_INCREMENT PRIMARY KEY,
@@ -67,8 +61,6 @@ CREATE INDEX idx_posts_author   ON posts(author_id);
 CREATE INDEX idx_posts_category ON posts(category_id);
 CREATE INDEX idx_posts_status   ON posts(status);
 
--- Seed data
-
 INSERT INTO categories (name, slug, description) VALUES
   ('Technology',  'technology',  'Software, hardware, and everything in between'),
   ('Design',      'design',      'UI/UX, graphic design, and visual arts'),
@@ -79,6 +71,21 @@ INSERT INTO authors (username, email, bio) VALUES
   ('alice_dev',   'alice@example.com',   'Full-stack developer, open source enthusiast'),
   ('bob_design',  'bob@example.com',     'Product designer with 10 years experience'),
   ('carol_ops',   'carol@example.com',   'SRE at a fintech startup');
+
+INSERT INTO authors (username, email, bio)
+WITH RECURSIVE seq (i) AS (
+    SELECT 1 UNION ALL SELECT i + 1 FROM seq WHERE i < 50
+)
+SELECT
+  CONCAT('author', i),
+  CONCAT('author', i, '@example.com'),
+  ELT(1 + (i % 5),
+    'Full-stack developer',
+    'Backend engineer',
+    'Frontend specialist',
+    'DevOps engineer',
+    'Data scientist')
+FROM seq;
 
 INSERT INTO posts (author_id, category_id, title, slug, body, status, published_at) VALUES
   (1, 1, 'Getting Started with Rust',       'getting-started-with-rust',
@@ -96,18 +103,43 @@ INSERT INTO posts (author_id, category_id, title, slug, body, status, published_
   (3, 3, 'GitOps with ArgoCD',              'gitops-with-argocd',
    'Declarative continuous delivery for Kubernetes using Git as source of truth...','archived',  NOW() - INTERVAL 60 DAY);
 
+INSERT INTO posts (author_id, category_id, title, slug, body, status, published_at)
+WITH RECURSIVE seq (i) AS (
+    SELECT 1 UNION ALL SELECT i + 1 FROM seq WHERE i < 200
+)
+SELECT
+  1 + (i % 53),
+  1 + (i % 4),
+  CONCAT('Post Title ', i),
+  CONCAT('post-', i),
+  CONCAT('Content for post number ', i),
+  ELT(1 + (i % 3), 'draft', 'published', 'archived'),
+  CASE WHEN i % 3 != 1 THEN NOW() - INTERVAL (i * 2) DAY ELSE NULL END
+FROM seq;
+
 INSERT INTO tags (name) VALUES
   ('rust'), ('neovim'), ('lua'), ('design-system'), ('figma'),
   ('kubernetes'), ('docker'), ('prometheus'), ('gitops'), ('accessibility');
 
+INSERT INTO tags (name)
+WITH RECURSIVE seq (i) AS (
+    SELECT 1 UNION ALL SELECT i + 1 FROM seq WHERE i < 20
+)
+SELECT CONCAT('tag-', i) FROM seq;
+
 INSERT INTO post_tags (post_id, tag_id) VALUES
-  (1, 1),
-  (2, 2), (2, 3),
-  (3, 4), (3, 5),
-  (4, 6), (4, 7), (4, 8),
-  (5, 1),
-  (6, 5), (6, 10),
-  (7, 9), (7, 6);
+  (1, 1), (2, 2), (2, 3), (3, 4), (3, 5),
+  (4, 6), (4, 7), (4, 8), (5, 1), (6, 5), (6, 10), (7, 9), (7, 6);
+
+INSERT INTO post_tags (post_id, tag_id)
+WITH RECURSIVE seq (i) AS (
+    SELECT 1 UNION ALL SELECT i + 1 FROM seq WHERE i < 200
+)
+SELECT
+  8 + (i % 200),
+  1 + (i % 30)
+FROM seq
+WHERE i % 3 != 0;
 
 INSERT INTO comments (post_id, author, email, body, approved) VALUES
   (1, 'reader42',    'reader42@mail.com',    'Great intro to Rust! The borrow checker section was especially helpful.',  TRUE),
@@ -118,3 +150,16 @@ INSERT INTO comments (post_id, author, email, body, approved) VALUES
   (4, 'sre_pro',     'sre@mail.com',         'We use Grafana + Loki + Tempo for our stack. Works well.',                  TRUE),
   (4, 'newbie',      'newbie@mail.com',      'What is the difference between logging and tracing?',                       FALSE),
   (6, 'a11y_adv',    'a11y@mail.com',        'Glad to see accessibility being discussed. WCAG 2.2 is a must-read.',        TRUE);
+
+INSERT INTO comments (post_id, author, email, body, approved)
+WITH RECURSIVE seq (i) AS (
+    SELECT 1 UNION ALL SELECT i + 1 FROM seq WHERE i < 50
+)
+SELECT
+  1 + (a.i + (b.i - 1) * 50) % 207,
+  CONCAT('reader', a.i + (b.i - 1) * 50),
+  CONCAT('reader', a.i + (b.i - 1) * 50, '@mail.com'),
+  CONCAT('Comment body number ', a.i + (b.i - 1) * 50),
+  RAND() < 0.7
+FROM seq a CROSS JOIN seq b
+WHERE a.i + (b.i - 1) * 50 <= 500;

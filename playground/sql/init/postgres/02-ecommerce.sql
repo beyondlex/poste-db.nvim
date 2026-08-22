@@ -1,9 +1,5 @@
 \c ecommerce
 
--- ============================================================
--- Schema
--- ============================================================
-
 CREATE TABLE users (
     id          SERIAL PRIMARY KEY,
     email       VARCHAR(255) NOT NULL UNIQUE,
@@ -48,11 +44,7 @@ CREATE INDEX idx_orders_status  ON orders(status);
 CREATE INDEX idx_order_items_order_id ON order_items(order_id);
 CREATE INDEX idx_products_category    ON products(category);
 
--- ============================================================
--- Seed data
--- ============================================================
-
--- 5 hand-crafted users + 50 generated users
+-- 5 hand-crafted users
 INSERT INTO users (email, name, status) VALUES
   ('alice@example.com',   'Alice Chen',    'active'),
   ('bob@example.com',     'Bob Wang',      'active'),
@@ -60,15 +52,16 @@ INSERT INTO users (email, name, status) VALUES
   ('dave@example.com',    'Dave Zhang',    'active'),
   ('eve@example.com',     'Eve Liu',       'active');
 
+-- 495 generated users
 INSERT INTO users (email, name, status, created_at)
 SELECT
   'user' || i || '@example.com',
   'User ' || i,
   CASE WHEN i % 7 = 0 THEN 'inactive' WHEN i % 11 = 0 THEN 'suspended' ELSE 'active' END,
   NOW() - (i || ' hours')::interval
-FROM generate_series(1, 50) AS i;
+FROM generate_series(1, 495) AS i;
 
--- 20 hand-crafted products across categories
+-- 20 hand-crafted products
 INSERT INTO products (name, price, stock, category, created_at) VALUES
   ('Mechanical Keyboard',   129.99,  50,  'peripherals', NOW() - INTERVAL '180 days'),
   ('Wireless Mouse',         49.99, 120,  'peripherals', NOW() - INTERVAL '170 days'),
@@ -91,26 +84,41 @@ INSERT INTO products (name, price, stock, category, created_at) VALUES
   ('Webcam Light',           24.99,  80,  'peripherals', NOW() - INTERVAL '45 days'),
   ('DAC Amplifier',         159.99,  18,  'audio',       NOW() - INTERVAL '40 days');
 
--- 50 orders with varied statuses
+-- 80 generated products
+INSERT INTO products (name, price, stock, category, created_at)
+SELECT
+  (ARRAY['Ergonomic','Portable','Premium','Ultra','Compact','Pro','Mini','Smart','Heavy-duty','Slim',
+         'Adjustable','Foldable','Wireless','Bluetooth','Solar','Waterproof','Rugged','Lightweight','Eco','Industrial'])[1 + (random()*19)::int]
+    || ' ' ||
+    (ARRAY['Keyboard','Mouse','Monitor','Cable','Charger','Speaker','Stand','Hub','Pad','Light',
+           'Adapter','Scanner','Router','Switch','Camera','Mic','Arm','Desk','Chair','Shelf',
+           'Bracket','Holder','Mat','Sleeve','Bag','Strap','Clip','Mount','Case','Cover'])[1 + (random()*29)::int],
+  round((random() * 500 + 5)::numeric, 2),
+  (random() * 500 + 10)::int,
+  (ARRAY['peripherals','accessories','furniture','audio','storage','displays'])[1 + (random()*5)::int],
+  NOW() - (i || ' days')::interval
+FROM generate_series(21, 100) AS i;
+
+-- 500 orders with varied statuses
 INSERT INTO orders (user_id, status, total, created_at)
 SELECT
-  (random() * 54 + 1)::int,                          -- user_id 1..55
+  (random() * 499 + 1)::int,
   (ARRAY['pending','shipped','completed','cancelled','refunded'])[1 + (random()*4)::int],
   round((random() * 500 + 10)::numeric, 2),
   NOW() - (i * 6 || ' hours')::interval
-FROM generate_series(1, 50) AS i;
+FROM generate_series(1, 500) AS i;
 
--- ~100 order items (1-3 per order)
+-- ~2000 order items (1-8 per order)
 INSERT INTO order_items (order_id, product_id, quantity, unit_price)
 SELECT
   oid,
-  (random() * 19 + 1)::int,                          -- product_id 1..20
-  (random() * 4 + 1)::int,                           -- quantity 1..5
+  (random() * 99 + 1)::int,
+  (random() * 8 + 1)::int,
   round((random() * 400 + 5)::numeric, 2)
 FROM (
   SELECT oid, generate_series(1, items) AS n
   FROM (
-    SELECT i AS oid, 1 + (random() * 2)::int AS items
-    FROM generate_series(1, 50) AS i
+    SELECT i AS oid, 1 + (random() * 7)::int AS items
+    FROM generate_series(1, 500) AS i
   ) sub
 ) expanded;

@@ -68,7 +68,7 @@ CREATE TABLE web_vitals (
     INDEX idx_vitals_time (measured_at)
 ) ENGINE=InnoDB COMMENT='Web performance metrics with 54 columns for testing';
 
--- 2000 page performance readings (using cross-join CTE to stay within recursion limit)
+-- 10000 page performance readings (using cross-join CTE to stay within recursion limit)
 INSERT INTO web_vitals (
     page_id, url, measured_at,
     metric_01, metric_02, metric_03, metric_04, metric_05,
@@ -85,7 +85,7 @@ INSERT INTO web_vitals (
 WITH RECURSIVE seq (i) AS (
     SELECT 1
     UNION ALL
-    SELECT i + 1 FROM seq WHERE i < 50
+    SELECT i + 1 FROM seq WHERE i < 100
 )
 SELECT
     (a.i + (b.i - 1) * 50) % 20 + 1,
@@ -120,4 +120,4 @@ SELECT
     ROUND(RAND() * 50, 4),      ROUND(RAND() * 50, 4),
     ROUND(RAND() * 200, 4),     ROUND(RAND() * 3000, 4)
 FROM seq a CROSS JOIN seq b
-WHERE a.i + (b.i - 1) * 50 <= 2000;
+WHERE a.i + (b.i - 1) * 50 <= 10000;

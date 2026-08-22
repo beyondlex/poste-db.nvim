@@ -1,158 +1,140 @@
 -- @connection my-blog
--- @database inventory
-
-ALTER TABLE table_name ADD COLUMN column_name INTEGER NOT NULL DEFAULT 0 COMMENT '';
-
-select * from poste_test_metrics ;
-select * from poste_test_events;
-
-show tables;
-
-select 1;
-
-set @a = 3;
-SELECT * FROM items  where id = @a ;
-set @a = 4;
-SELECT * FROM items  where id = @a ;
-
-SELECT * FROM items  ;
-
-SELECT count(1) FROM items ;
-
-SELECT * FROM blog.authors ;
-
-select id, slug FROM blog.posts ;
-
--- SELECT p.slug, a. FROM posts p LEFT JOIN authors a on a.id = p.author_id;
-
--- SELECT p.slug, a.bio  FROM posts p LEFT JOIN authors a on a.id = p.author_id;
-
--- UPDATE posts SET bio = '' AFTERE id i
-
-
-select * from poste_test_metrics;
-select * from poste_test_events;;
-
-select id, slug FROM blog.posts ;
-
--- drop table poste_test_events;
--- drop table poste_test_metrics;
--- drop table poste_test_users;
--- drop table shipments;
-
 -- @database blog
-SELECT id, page_id, url, measured_at, metric_01 from web_vitals  ;
-SELECT * from web_vitals ;
 
+-- ============================================================
+-- Blog: basic queries
+-- ============================================================
+SELECT * FROM authors LIMIT 5;
+SELECT * FROM posts ORDER BY created_at DESC LIMIT 10;
+SELECT * FROM comments WHERE approved = TRUE ORDER BY created_at DESC LIMIT 10;
 
-SELECT p.slug, a.bio FROM posts p LEFT JOIN authors a on a.id = p.author_id;
-
-SELECT * from comments;
-SELECT * FROM posts;
-
--- ALTER TABLE authors
--- ADD COLUMN name   ;
-
-SELECT * FROM categories;
-
-SELECT * FROM authors a LEFT JOIN posts p on p.author_id = a.id;
-
-use inventory;
-select * from warehouses ;
-SELECT * FROM shipments;
-SELECT * FROM  items;
-SELECT * FROM  suppliers;
-SELECT * FROM  stock;
-
-
-show tables;
-
-use blog;
-
-select * from posts;
-
-use inventory;
-
-SELECT w.name AS warehouse,
-       w.city,
-       COUNT(s.item_id) AS item_types,
-       SUM(s.quantity) AS total_units
-FROM warehouses w
-LEFT JOIN stock s ON s.warehouse_id = w.id
-GROUP BY w.id, w.name, w.city
-ORDER BY total_units DESC;
-
-
-SELECT s.*, p.title FROM authors s LEFT JOIN posts p on p.author_id = s.id;
-
-update posts SET title = CONCAT(title, '.') WHERE id = 1;
-
-
-SELECT s.*, p.title FROM authors s LEFT JOIN posts p on p.author_id = s.id;
-
-USE blog;
--- show tables;
-
-select * from posts;
-desc posts;
-select body from posts;
-
-select s.*, c.* from posts s left join comments c on c.post_id = c.id;
-
-select * from comments;
-
-SELECT p.title,
-       a.username AS author,
-       c.name AS category,
-       p.status,
-       p.published_at
+-- JOIN aggregations
+SELECT p.title, a.username AS author, c.name AS category, p.status, p.published_at
 FROM posts p
-JOIN authors a    ON a.id = p.author_id
+JOIN authors a ON a.id = p.author_id
 JOIN categories c ON c.id = p.category_id
-ORDER BY p.created_at DESC;
+ORDER BY p.created_at DESC LIMIT 20;
 
-SELECT p.title,
-       GROUP_CONCAT(t.name SEPARATOR ', ') AS tags
+SELECT p.title, GROUP_CONCAT(t.name SEPARATOR ', ') AS tags
 FROM posts p
 JOIN post_tags pt ON pt.post_id = p.id
-JOIN tags t       ON t.id = pt.tag_id
-GROUP BY p.id, p.title;
+JOIN tags t ON t.id = pt.tag_id
+GROUP BY p.id, p.title ORDER BY p.id LIMIT 20;
 
-SELECT p.title,
-       COUNT(c.id) AS total_comments,
-       SUM(c.approved) AS approved,
-       COUNT(c.id) - SUM(c.approved) AS pending
-FROM posts p
-LEFT JOIN comments c ON c.post_id = p.id
-GROUP BY p.id, p.title
-HAVING total_comments > 0;
+SELECT p.title, COUNT(c.id) AS total_comments, SUM(c.approved) AS approved
+FROM posts p LEFT JOIN comments c ON c.post_id = p.id
+GROUP BY p.id, p.title HAVING total_comments > 0 ORDER BY total_comments DESC LIMIT 10;
 
-use inventory;
+-- Subqueries
+SELECT * FROM posts WHERE author_id IN (SELECT id FROM authors WHERE id > 10) LIMIT 10;
+SELECT title, (SELECT COUNT(*) FROM comments WHERE post_id = posts.id) AS comment_count
+FROM posts ORDER BY comment_count DESC LIMIT 10;
 
-SELECT w.name AS warehouse,
-       w.city,
-       COUNT(s.item_id) AS item_types,
-       SUM(s.quantity) AS total_units
-FROM warehouses w
-LEFT JOIN stock s ON s.warehouse_id = w.id
-GROUP BY w.id, w.name, w.city
-ORDER BY total_units DESC;
+-- UNION
+SELECT 'active' AS status, COUNT(*) FROM authors WHERE id <= 3
+UNION ALL
+SELECT 'generated', COUNT(*) FROM authors WHERE id > 3;
 
-SELECT i.sku,
-       i.name,
-       s.quantity,
-       w.name AS warehouse
+-- Window functions (MySQL 8.0+)
+SELECT title, author_id, created_at,
+  ROW_NUMBER() OVER (PARTITION BY author_id ORDER BY created_at) AS rn,
+  RANK() OVER (PARTITION BY author_id ORDER BY created_at) AS rk
+FROM posts LIMIT 20;
+
+-- ENUM
+SELECT DISTINCT status FROM posts;
+SELECT status, COUNT(*) FROM posts GROUP BY status;
+
+-- String functions
+SELECT CONCAT('Hello, ', username) AS greeting, LENGTH(bio) AS bio_len FROM authors LIMIT 5;
+SELECT UPPER(title), LOWER(slug) FROM posts LIMIT 5;
+SELECT SUBSTRING(email, 1, 5) AS email_prefix FROM authors LIMIT 5;
+
+-- Date functions
+SELECT title, published_at, DATE_FORMAT(published_at, '%Y-%m-%d') AS fmt_date
+FROM posts WHERE published_at IS NOT NULL LIMIT 10;
+
+SELECT DATEDIFF(NOW(), published_at) AS days_ago FROM posts WHERE published_at IS NOT NULL LIMIT 10;
+SELECT DATE_ADD(NOW(), INTERVAL 7 DAY) AS next_week, NOW(), CURDATE(), CURTIME();
+
+-- Conditional functions
+SELECT title, status,
+  CASE status
+    WHEN 'published' THEN 'published'
+    WHEN 'draft' THEN 'draft'
+    ELSE 'other'
+  END AS status_label
+FROM posts LIMIT 10;
+
+-- Metadata
+SHOW TABLES;
+DESC posts;
+SHOW CREATE TABLE posts\G
+SHOW TABLE STATUS LIKE 'posts'\G
+
+-- System functions
+SELECT VERSION(), DATABASE(), USER(), CONNECTION_ID();
+SELECT CHARSET('hello'), COLLATION('hello');
+
+-- WITH RECURSIVE
+INSERT INTO authors (username, email, bio)
+WITH RECURSIVE seq (i) AS (
+  SELECT 1 UNION ALL SELECT i + 1 FROM seq WHERE i < 3
+)
+SELECT CONCAT('demo_', i), CONCAT('demo_', i, '@test.com'), 'demo bio' FROM seq;
+DELETE FROM authors WHERE username LIKE 'demo_%';
+
+-- Wide table (web_vitals: 54 cols)
+SELECT * FROM web_vitals LIMIT 5;
+SELECT url, COUNT(*), AVG(metric_01) AS avg_load, MAX(metric_05) AS max_ttfb
+FROM web_vitals WHERE url != '/' GROUP BY url ORDER BY avg_load DESC LIMIT 10;
+
+-- Performance analysis
+SELECT url,
+  ROUND(AVG(metric_01), 2) AS avg_load_time,
+  ROUND(AVG(metric_05), 2) AS avg_ttfb,
+  ROUND(AVG(metric_14), 4) AS avg_cls,
+  ROUND(AVG(metric_08), 2) AS avg_lcp,
+  ROUND(AVG(metric_13), 2) AS avg_fid
+FROM web_vitals GROUP BY url ORDER BY avg_load_time DESC;
+
+-- ============================================================
+-- MySQL generic syntax (no table dependency)
+-- ============================================================
+SELECT JSON_OBJECT('key', 'value') AS obj;
+SELECT JSON_ARRAY(1, 2, 3) AS arr;
+SELECT JSON_EXTRACT('{"a":1,"b":2}', '$.a') AS val;
+SELECT GROUP_CONCAT('a', 'b', 'c' SEPARATOR '-') AS concat_test;
+SELECT ELT(1 + FLOOR(RAND() * 3), 'low', 'medium', 'high') AS priority;
+SELECT FIELD('b', 'a', 'b', 'c') AS pos;
+SELECT RAND(), ROUND(3.14159, 2), FLOOR(4.7), CEILING(4.3), ABS(-5), POWER(2, 3);
+SELECT COALESCE(NULL, 'default') AS val, IFNULL(NULL, 'fallback') AS fb;
+SELECT IF(1 > 0, 'true', 'false') AS bool_test;
+
+-- Full-text search (requires FULLTEXT index)
+-- SELECT * FROM posts WHERE MATCH(title, body) AGAINST('Rust' IN BOOLEAN MODE) LIMIT 10;
+
+-- @connection my-inventory
+-- @database inventory
+
+-- ============================================================
+-- Inventory: stock queries
+-- ============================================================
+SELECT * FROM warehouses;
+SELECT * FROM suppliers ORDER BY rating DESC;
+
+SELECT w.name, w.city, COUNT(s.item_id) AS item_types, SUM(s.quantity) AS total_units
+FROM warehouses w LEFT JOIN stock s ON s.warehouse_id = w.id
+GROUP BY w.id, w.name, w.city ORDER BY total_units DESC;
+
+SELECT i.sku, i.name, s.quantity, w.name AS warehouse
 FROM stock s
-JOIN items i      ON i.id = s.item_id
+JOIN items i ON i.id = s.item_id
 JOIN warehouses w ON w.id = s.warehouse_id
-WHERE s.quantity < 100
-ORDER BY s.quantity ASC;
+WHERE s.quantity < 100 ORDER BY s.quantity ASC;
 
--- Active shipments
-SELECT sh.id AS shipment_id,
-       wf.name AS `from`,
-       wt.name AS `to`,
-       sh.status,
+-- Shipment tracking
+SELECT sh.id, wf.name AS `from`, wt.name AS `to`, sh.status,
        GROUP_CONCAT(CONCAT(i.name, ' x', si.quantity) SEPARATOR ', ') AS items
 FROM shipments sh
 JOIN warehouses wf ON wf.id = sh.from_warehouse
@@ -161,12 +143,3 @@ LEFT JOIN shipment_items si ON si.shipment_id = sh.id
 LEFT JOIN items i ON i.id = si.item_id
 WHERE sh.status != 'delivered'
 GROUP BY sh.id, wf.name, wt.name, sh.status;
-
-
-
--- @connection pg-ecommerce
-create table table_name (
-  column_name INTEGER NOT NULL
-);
-
-

@@ -1,9 +1,5 @@
 \c analytics
 
--- ============================================================
--- Schema
--- ============================================================
-
 CREATE TABLE events (
     id          BIGSERIAL PRIMARY KEY,
     event_type  VARCHAR(50)  NOT NULL,
@@ -40,10 +36,7 @@ CREATE INDEX idx_events_created   ON events(created_at);
 CREATE INDEX idx_sessions_user_id ON sessions(user_id);
 CREATE INDEX idx_page_views_session ON page_views(session_id);
 
--- ============================================================
--- Seed data
--- ============================================================
-
+-- 5 hand-crafted sessions
 INSERT INTO sessions (id, user_id, ip, user_agent, started_at, ended_at) VALUES
   ('a0000000-0000-0000-0000-000000000001', 1, '192.168.1.10',  'Mozilla/5.0 Chrome/120', NOW() - INTERVAL '7 days',  NOW() - INTERVAL '7 days'  + INTERVAL '25 minutes'),
   ('a0000000-0000-0000-0000-000000000002', 2, '10.0.0.5',      'Mozilla/5.0 Firefox/121', NOW() - INTERVAL '5 days',  NOW() - INTERVAL '5 days'  + INTERVAL '12 minutes'),
@@ -51,6 +44,7 @@ INSERT INTO sessions (id, user_id, ip, user_agent, started_at, ended_at) VALUES
   ('a0000000-0000-0000-0000-000000000004', 4, '172.16.0.22',   'Mozilla/5.0 Safari/17',   NOW() - INTERVAL '1 day',   NOW() - INTERVAL '1 day'   + INTERVAL '8 minutes'),
   ('a0000000-0000-0000-0000-000000000005', 5, '10.0.0.100',    'Mozilla/5.0 Chrome/120',  NOW() - INTERVAL '3 hours', NULL);
 
+-- 15 hand-crafted events
 INSERT INTO events (event_type, user_id, payload, created_at) VALUES
   ('page_view',  1, '{"url": "/products", "duration_ms": 3200}',  NOW() - INTERVAL '7 days'),
   ('add_cart',   1, '{"product_id": 1, "price": 129.99}',         NOW() - INTERVAL '7 days'  + INTERVAL '3 minutes'),
@@ -68,6 +62,7 @@ INSERT INTO events (event_type, user_id, payload, created_at) VALUES
   ('signup',     3, '{"method": "email"}',                        NOW() - INTERVAL '30 days'),
   ('login',      3, '{"method": "email"}',                        NOW() - INTERVAL '20 days');
 
+-- 9 hand-crafted page_views
 INSERT INTO page_views (session_id, url, referrer, duration_ms, viewed_at) VALUES
   ('a0000000-0000-0000-0000-000000000001', '/',              NULL,                  1200, NOW() - INTERVAL '7 days'),
   ('a0000000-0000-0000-0000-000000000001', '/products',      '/',                  3200, NOW() - INTERVAL '7 days'  + INTERVAL '1 minute'),
@@ -78,3 +73,45 @@ INSERT INTO page_views (session_id, url, referrer, duration_ms, viewed_at) VALUE
   ('a0000000-0000-0000-0000-000000000003', '/orders/1',      '/orders',            2300, NOW() - INTERVAL '2 days'  + INTERVAL '6 minutes'),
   ('a0000000-0000-0000-0000-000000000004', '/',              NULL,                   900, NOW() - INTERVAL '1 day'),
   ('a0000000-0000-0000-0000-000000000005', '/products',      NULL,                  4500, NOW() - INTERVAL '3 hours');
+
+-- 500 generated sessions
+WITH s AS (
+  INSERT INTO sessions (user_id, ip, user_agent, started_at, ended_at)
+  SELECT
+    (random() * 499 + 1)::int,
+    ((ARRAY['192.168.','10.0.','172.16.','192.168.'])[1 + (random()*3)::int] || (random()*254)::int || '.' || (random()*254)::int)::inet,
+    (ARRAY[
+      'Mozilla/5.0 Chrome/120',
+      'Mozilla/5.0 Firefox/121',
+      'Mozilla/5.0 Safari/17',
+      'Mozilla/5.0 Edge/120',
+      'Mozilla/5.0 Chrome/119'
+    ])[1 + (random()*4)::int],
+    NOW() - (random() * 30 || ' days')::interval,
+    CASE WHEN random() < 0.9
+      THEN NOW() - (random() * 30 || ' days')::interval + (random() * 60 || ' minutes')::interval
+      ELSE NULL
+    END
+  FROM generate_series(1, 500)
+  RETURNING id
+)
+INSERT INTO page_views (session_id, url, referrer, duration_ms, viewed_at)
+SELECT
+  s.id,
+  (ARRAY['/','/products','/orders','/about','/contact','/settings','/profile','/search'])[1 + (random()*7)::int],
+  CASE WHEN random() < 0.3 THEN (ARRAY['https://google.com','https://github.com','https://reddit.com'])[1 + (random()*2)::int] ELSE NULL END,
+  (random() * 10000)::int,
+  NOW() - (random() * 30 || ' days')::interval
+FROM s, generate_series(1, 10) AS n;
+
+-- 2000 generated events
+INSERT INTO events (event_type, user_id, payload, created_at)
+SELECT
+  (ARRAY['page_view','page_view','page_view','add_cart','purchase','login','signup'])[1 + (random()*6)::int],
+  (random() * 499 + 1)::int,
+  jsonb_build_object(
+    'url', CASE WHEN random() < 0.5 THEN '/' ELSE '/products' END,
+    'duration_ms', (random() * 5000)::int
+  ),
+  NOW() - (random() * 30 || ' days')::interval
+FROM generate_series(1, 2000);

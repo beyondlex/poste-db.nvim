@@ -1,175 +1,143 @@
 -- @connection pg-ecommerce
 -- @database ecommerce
 
-alter table table_name add column column_name INTEGER NOT NULL DEFAULT 0 COMMENT '';
+-- ============================================================
+-- Ecommerce: basic queries
+-- ============================================================
+SELECT * FROM users LIMIT 5;
+SELECT id, name, email, created_at FROM users WHERE status = 'active' ORDER BY created_at DESC LIMIT 10;
+SELECT COUNT(*) AS total, status, COUNT(*) AS cnt FROM users GROUP BY status ORDER BY cnt DESC;
+SELECT DISTINCT category FROM products ORDER BY category;
 
-select * from events ;
+-- JOIN aggregations
+SELECT p.name, SUM(oi.quantity * oi.unit_price) AS revenue, SUM(oi.quantity) AS units_sold
+FROM order_items oi JOIN products p ON p.id = oi.product_id
+GROUP BY p.name ORDER BY revenue DESC LIMIT 10;
 
-SELECT 1;
+SELECT o.id, u.name AS customer, o.status, o.total, COUNT(oi.id) AS item_count
+FROM orders o JOIN users u ON u.id = o.user_id LEFT JOIN order_items oi ON oi.order_id = o.id
+GROUP BY o.id, u.name, o.status, o.total ORDER BY o.id DESC LIMIT 10;
 
-use ecommerce;
+-- Subqueries
+SELECT * FROM products WHERE id IN (SELECT product_id FROM order_items GROUP BY product_id HAVING COUNT(*) > 10);
+SELECT id, name, (SELECT COUNT(*) FROM orders WHERE user_id = users.id) AS order_count FROM users ORDER BY order_count DESC LIMIT 10;
 
-show tables;
-desc users;
+-- Window functions
+SELECT id, user_id, total, created_at,
+  RANK() OVER (PARTITION BY user_id ORDER BY created_at) AS rank,
+  LAG(total) OVER (PARTITION BY user_id ORDER BY created_at) AS prev_total,
+  LEAD(total) OVER (PARTITION BY user_id ORDER BY created_at) AS next_total
+FROM orders WHERE status = 'completed' ORDER BY user_id, created_at LIMIT 20;
 
-SELECT * FROM users;
+-- PG-specific: GROUPING SETS / PERCENTILE / generate_series
+SELECT user_id, status, COUNT(*) FROM orders
+GROUP BY GROUPING SETS ((user_id), (status), ()) ORDER BY user_id, status LIMIT 15;
 
-SELECT id, name, email, created_at
-FROM users
-WHERE status = 'active'
-ORDER BY created_at DESC;
+SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY total) AS median_total FROM orders;
+SELECT percentile_disc(0.5) WITHIN GROUP (ORDER BY total) AS median_disc FROM orders;
 
-select * from products;
-
-SELECT p.name AS product,
-       SUM(oi.quantity * oi.unit_price) AS revenue,
-       SUM(oi.quantity) AS units_sold
-FROM order_items oi
-JOIN products p ON p.id = oi.product_id
-GROUP BY p.name
-ORDER BY revenue DESC;
-
-select quantity, unit_price from order_items;
-
-SELECT o.id AS order_id,
-       u.name AS customer,
-       o.status,
-       o.total,
-       COUNT(oi.id) AS item_count
-FROM orders o
-JOIN users u ON u.id = o.user_id
-LEFT JOIN order_items oi ON oi.order_id = o.id
-GROUP BY o.id, u.name, o.status, o.total
-ORDER BY o.created_at DESC;
-
--- === PostgreSQL-specific features ===
-
--- DISTINCT ON
-SELECT DISTINCT ON (user_id) id, user_id, status, created_at
-FROM orders
-ORDER BY user_id, created_at DESC;
-
--- RETURNING 
-INSERT INTO users (name, email) VALUES ('Lex', 'lex@test.com') RETURNING id, created_at;
-
-UPDATE users SET status = 'inactive' WHERE id = 1 RETURNING id, status, updated_at;
-
-DELETE FROM users WHERE id = 99 RETURNING *;
-
--- ON CONFLICT / UPSERT 
-INSERT INTO users (id, name, email) VALUES (1, 'Lex', 'lex@test.com')
-ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, created_at = now()
-RETURNING *;
-
-SELECT * FROM users WHERE name ILIKE 'lex%';
-
-SELECT p.id, p.name, ARRAY_AGG(t.name) AS tags
-FROM products p
-LEFT JOIN product_tags t ON t.product_id = p.id
-GROUP BY p.id, p.name;
-
--- STRING_AGG 
-SELECT p.id, p.name, STRING_AGG(t.name, ', ') AS tags_csv
-FROM products p
-LEFT JOIN product_tags t ON t.product_id = p.id
-GROUP BY p.id, p.name;
-
--- generate_series 
-SELECT generate_series(1, 10) AS num;
-
-SELECT d::date AS dt
-FROM generate_series('2024-01-01'::date, '2024-01-10'::date, '1 day') d;
-
+SELECT generate_series(1, 5) AS num;
+SELECT d::date FROM generate_series('2024-01-01'::date, '2024-01-05'::date, '1 day') AS d;
 SELECT unnest(ARRAY['a', 'b', 'c']) AS letter;
 
-SELECT id, payload->>'url' AS url, payload ? 'utm_source' AS has_utm
-FROM events;
+-- Time functions
+SELECT id, user_id, created_at,
+  EXTRACT(YEAR FROM created_at) AS yr,
+  EXTRACT(MONTH FROM created_at) AS mon,
+  date_trunc('hour', created_at) AS hour_bucket
+FROM orders LIMIT 10;
 
-SELECT id, jsonb_array_elements(payload->'items') AS item
-FROM events;
+-- ILIKE / SIMILAR TO / SPLIT_PART
+SELECT * FROM users WHERE name ILIKE 'alice%' OR email ILIKE '%@example.com';
+SELECT * FROM users WHERE email SIMILAR TO '%@(example|gmail)\.com' LIMIT 10;
+SELECT name, split_part(email, '@', 1) AS local_part FROM users LIMIT 10;
 
--- LATERAL join
-SELECT u.id, u.name, recent.order_id, recent.total
+-- LATERAL
+SELECT u.id, recent.order_id, recent.total
 FROM users u
 LEFT JOIN LATERAL (
-  SELECT id AS order_id, total
-  FROM orders
-  WHERE user_id = u.id
-  ORDER BY created_at DESC
-  LIMIT 3
-) recent ON true;
+  SELECT id AS order_id, total FROM orders WHERE user_id = u.id ORDER BY created_at DESC LIMIT 3
+) recent ON true
+WHERE u.id <= 5 ORDER BY u.id;
 
--- WINDOW clause 
-SELECT id, user_id, total,
-  RANK() OVER w AS rank,
-  LAG(total, 1) OVER w AS prev_total,
-  LEAD(total, 1) OVER w AS next_total
-FROM orders
-WHERE status = 'completed'
-WINDOW w AS (PARTITION BY user_id ORDER BY created_at);
+-- WITH RECURSIVE
+WITH RECURSIVE t(n) AS (
+  SELECT 1 UNION ALL SELECT n + 1 FROM t WHERE n < 5
+) SELECT * FROM t;
 
--- GROUPING SETS / CUBE / ROLLUP 
-SELECT user_id, status, COUNT(*) AS cnt
-FROM orders
-GROUP BY GROUPING SETS ((user_id), (status), ());
+-- DML with RETURNING
+BEGIN;
+INSERT INTO users (name, email) VALUES ('Test User', 'test@test.com') RETURNING id, created_at;
+ROLLBACK;
 
--- PERCENTILE_CONT 
-SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY total) AS median_total
-FROM orders;
+BEGIN;
+UPDATE users SET status = 'active' WHERE id = 1 RETURNING id, status;
+ROLLBACK;
 
--- SIMILAR TO
-SELECT * FROM users WHERE email SIMILAR TO '%@(gmail|yahoo)\.com';
+BEGIN;
+DELETE FROM users WHERE id = 999 RETURNING *;
+ROLLBACK;
 
--- SPLIT_PART
-SELECT split_part('a,b,c,d', ',', 2) AS part2;
+-- ON CONFLICT (UPSERT)
+INSERT INTO users (id, name, email) VALUES (1, 'Updated Alice', 'alice@new.com')
+ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, created_at = now()
+RETURNING *;
 
 -- FOR UPDATE SKIP LOCKED
 BEGIN;
 SELECT * FROM orders WHERE status = 'pending' ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED;
-COMMIT;
+ROLLBACK;
 
--- NOTIFY / LISTEN
-NOTIFY order_shipped, 'order 42 shipped';
+-- @connection pg-analytics
+-- @database analytics
 
-TABLE users;
+-- ============================================================
+-- Analytics: event analysis
+-- ============================================================
+SELECT * FROM events LIMIT 10;
+SELECT event_type, COUNT(*) FROM events GROUP BY event_type ORDER BY COUNT(*) DESC;
 
--- EXPLAIN ANALYZE 
-EXPLAIN ANALYZE SELECT * FROM orders WHERE status = 'active';
+-- JSONB
+SELECT id, event_type, payload->>'url' AS url, payload ? 'product_id' AS has_product
+FROM events ORDER BY created_at DESC LIMIT 20;
 
--- pg_catalog 
-SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = 'public';
+SELECT id, payload->'order_id' AS order_id FROM events WHERE payload ? 'order_id' LIMIT 10;
 
--- lock
-SELECT pid, locktype, mode, granted
-FROM pg_catalog.pg_locks
-WHERE NOT granted;
+-- DISTINCT ON
+SELECT DISTINCT ON (user_id) id, user_id, event_type, created_at
+FROM events ORDER BY user_id, created_at DESC LIMIT 10;
 
-SELECT pid, query, state, query_start
-FROM pg_catalog.pg_stat_activity
-WHERE state = 'active';
-
-USE analytics;
-
-SELECT event_type, user_id, payload->>'url' AS url, created_at
-FROM events
-ORDER BY created_at DESC
-LIMIT 20;
-
-select * from events;
-
-SELECT s.id,
-       s.user_id,
-       EXTRACT(EPOCH FROM (s.ended_at - s.started_at)) / 60 AS duration_min,
-       COUNT(pv.id) AS pages_viewed
-FROM sessions s
-LEFT JOIN page_views pv ON pv.session_id = s.id
-GROUP BY s.id, s.user_id, s.started_at, s.ended_at
-ORDER BY duration_min DESC NULLS LAST;
-
+-- FILTER aggregation
 SELECT
-  COUNT(*) FILTER (WHERE event_type = 'page_view') AS views,
-  COUNT(*) FILTER (WHERE event_type = 'add_cart')  AS add_to_cart,
-  COUNT(*) FILTER (WHERE event_type = 'purchase')  AS purchases
-
+  COUNT(*) FILTER (WHERE event_type = 'page_view') AS page_views,
+  COUNT(*) FILTER (WHERE event_type = 'add_cart') AS add_carts,
+  COUNT(*) FILTER (WHERE event_type = 'purchase') AS purchases,
+  COUNT(*) FILTER (WHERE event_type = 'login') AS logins
 FROM events;
 
+-- ARRAY_AGG
+SELECT event_type, ARRAY_AGG(DISTINCT user_id ORDER BY user_id) AS user_ids
+FROM events GROUP BY event_type;
+
+-- Sessions analysis
+SELECT id, user_id, ip, started_at, ended_at FROM sessions LIMIT 10;
+
+-- INET type
+SELECT * FROM sessions WHERE ip << '192.168.0.0/16'::inet LIMIT 10;
+
+-- Time intervals
+SELECT id, user_id,
+  EXTRACT(EPOCH FROM (COALESCE(ended_at, NOW()) - started_at)) / 60 AS duration_min
+FROM sessions ORDER BY duration_min DESC NULLS LAST LIMIT 10;
+
+-- Wide table (sensor_readings: 52 cols)
+SELECT * FROM sensor_readings LIMIT 5;
+SELECT device_id, COUNT(*), AVG(temp_01) AS avg_temp, MAX(vibration_01) AS max_vib
+FROM sensor_readings GROUP BY device_id ORDER BY avg_temp DESC LIMIT 10;
+
+-- System queries
+SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = 'public' ORDER BY tablename;
+SELECT pid, query, state FROM pg_catalog.pg_stat_activity WHERE state = 'active';
+
+-- EXPLAIN ANALYZE
+EXPLAIN ANALYZE SELECT * FROM events WHERE event_type = 'page_view';

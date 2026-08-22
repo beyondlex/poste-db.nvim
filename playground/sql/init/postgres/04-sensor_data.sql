@@ -61,7 +61,7 @@ COMMENT ON COLUMN sensor_readings.status IS 'normal, warning, or critical';
 CREATE INDEX idx_sensor_device ON sensor_readings(device_id);
 CREATE INDEX idx_sensor_time   ON sensor_readings(recorded_at);
 
--- 2000 sensor readings across 50 devices
+-- 10000 sensor readings across 100 devices
 INSERT INTO sensor_readings (
     device_id, recorded_at, status,
     temp_01, temp_02, temp_03, temp_04, temp_05, temp_06, temp_07, temp_08,
@@ -75,7 +75,7 @@ INSERT INTO sensor_readings (
     conductivity_01, conductivity_02, conductivity_03
 )
 SELECT
-    'sensor-' || LPAD((i % 50 + 1)::text, 3, '0'),
+    'sensor-' || LPAD((i % 100 + 1)::text, 3, '0'),
     NOW() - (i * interval '1 minute'),
     CASE WHEN random() < 0.9 THEN 'normal' WHEN random() < 0.5 THEN 'warning' ELSE 'critical' END,
 
@@ -112,4 +112,4 @@ SELECT
 
     round((random() * 500)::numeric, 2),       round((random() * 500)::numeric, 2),
     round((random() * 500)::numeric, 2)
-FROM generate_series(1, 2000) AS i;
+FROM generate_series(1, 10000) AS i;

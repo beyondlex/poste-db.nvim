@@ -1,71 +1,101 @@
 -- @connection sqlite-dev
 -- @database main
 
--- SQLite Features
+-- ============================================================
+-- Basic queries
+-- ============================================================
+SELECT * FROM users LIMIT 5;
+SELECT * FROM products ORDER BY price DESC LIMIT 10;
+SELECT * FROM orders ORDER BY created_at DESC LIMIT 10;
+
+-- JOIN
+SELECT u.name, o.status, o.total, oi.quantity, p.name AS product
+FROM users u
+JOIN orders o ON o.user_id = u.id
+JOIN order_items oi ON oi.order_id = o.id
+JOIN products p ON p.id = oi.product_id
+LIMIT 20;
+
+-- Aggregations
+SELECT u.name, COUNT(o.id) AS order_count, SUM(o.total) AS total_spent
+FROM users u LEFT JOIN orders o ON o.user_id = u.id
+GROUP BY u.id, u.name ORDER BY total_spent DESC LIMIT 10;
+
+-- Subqueries
+SELECT id, name, (SELECT COUNT(*) FROM orders WHERE user_id = users.id) AS order_count
+FROM users ORDER BY order_count DESC LIMIT 10;
+
+-- Window functions (SQLite 3.25+)
+SELECT name, status, total,
+  ROW_NUMBER() OVER (PARTITION BY status ORDER BY total DESC) AS rn,
+  RANK() OVER (ORDER BY total DESC) AS rank
+FROM (
+  SELECT u.name, o.status, o.total FROM users u JOIN orders o ON o.user_id = u.id
+) LIMIT 20;
+
+-- ============================================================
+-- SQLite-specific syntax
+-- ============================================================
 
 -- PRAGMA
-PRAGMA journal_mode = WAL;
-PRAGMA synchronous = NORMAL;
-PRAGMA cache_size = -8000;
-PRAGMA foreign_keys = ON;
-
--- table structure
+PRAGMA journal_mode;
+PRAGMA synchronous;
+PRAGMA cache_size;
+PRAGMA foreign_keys;
 PRAGMA table_info(users);
 PRAGMA index_list(users);
 PRAGMA foreign_key_list(orders);
 
--- CREATE TABLE 选项
-CREATE TABLE posts (
-  id    INTEGER PRIMARY KEY ,
-  title TEXT NOT NULL,
-  body  TEXT,
-  created_at TEXT DEFAULT (datetime('now'))
-) WITHOUT ROWID;
+-- INSERT OR conflict handling
+INSERT OR IGNORE INTO users (name, email) VALUES ('DupUser', 'dupe@test.com');
+INSERT OR REPLACE INTO users (name, email) VALUES ('DupUser', 'replaced@test.com');
+DELETE FROM users WHERE name = 'DupUser';
 
--- INSERT OR 冲突处理 (SQLite 特有冲突子句)
-INSERT OR IGNORE INTO users (email) VALUES ('dupe@test.com');
-INSERT OR REPLACE INTO users (id, name) VALUES (1, 'overwritten');
-INSERT OR ROLLBACK INTO products (id, name) VALUES (99, 'fail');
-INSERT OR ABORT INTO products (id, name) VALUES (100, 'abort');
-INSERT OR FAIL INTO products (id, name) VALUES (101, 'fail');
+-- REPLACE INTO
+REPLACE INTO users (id, name, email) VALUES (1, 'Alice', 'alice@new.com');
+-- Restore original data
+UPDATE users SET name = 'Alice', email = 'alice@gmail.com' WHERE id = 1;
 
--- REPLACE INTO (MySQL 兼容, SQLite 也支持)
-REPLACE INTO users (id, email) VALUES (1, 'new@test.com');
-
--- 日期/时间函数
+-- Date/time functions
 SELECT date('now') AS today;
 SELECT time('now') AS now;
 SELECT datetime('now') AS now_iso;
 SELECT strftime('%Y-%m-%d %H:%M:%S', 'now') AS formatted;
 SELECT julianday('now') - julianday('2024-01-01') AS days_since;
+SELECT datetime('now', '-3 days', '+2 hours') AS computed;
 
--- JSON 函数 (SQLite 内置, 无需扩展)
+-- JSON functions (built-in, no extension needed)
 SELECT json_extract('{"a":1}', '$.a') AS val;
-SELECT * from json_each('["a","b","c"]');
+SELECT * FROM json_each('["a","b","c"]');
 SELECT json_set('{"a":1}', '$.b', 2) AS updated;
 SELECT json_type('{"a":1}', '$.a') AS typ;
+SELECT json_object('name', 'Alice', 'age', 30) AS obj;
 
--- 聚合函数 (SQLite 特有)
-SELECT COUNT(*) AS total, TOTAL(amount) AS sum_float, AVG(amount) AS avg
+-- Aggregate functions
+SELECT COUNT(*) AS total, TOTAL(amount) AS sum_float, AVG(amount) AS avg_amount
 FROM orders;
+SELECT status, COUNT(*), TOTAL(total), AVG(total) FROM orders GROUP BY status;
 
--- 字符串函数
+-- String functions
 SELECT instr('hello world', 'world') AS pos;
 SELECT substr('hello', 2, 3) AS part;
-SELECT printf('Hello %s, you are %d', name, age) AS greeting
-FROM users;
+SELECT printf('Hello %s, you are %d', name, COALESCE(age, 0)) AS greeting
+FROM users LIMIT 5;
 
--- 类型函数
-SELECT typeof(42) AS t1, typeof('hello') AS t2, typeof(1.5) AS t3;
+-- Type functions
+SELECT typeof(42) AS t1, typeof('hello') AS t2, typeof(1.5) AS t3, typeof(x'0102') AS t4;
 
--- GLOB (类似 LIKE 但用通配符, SQLite 特有)
+-- GLOB (SQLite-specific, similar to LIKE with wildcards)
 SELECT * FROM users WHERE email GLOB '*@gmail.com';
+SELECT * FROM users WHERE email GLOB '*@???.com' LIMIT 5;
 
--- CREATE VIRTUAL TABLE (FTS5 全文搜索)
--- CREATE VIRTUAL TABLE posts_fts USING fts5(title, body, content=posts);
--- SELECT * FROM posts_fts WHERE posts_fts MATCH 'search term';
+-- LIKE
+SELECT * FROM users WHERE name LIKE '%a%' LIMIT 10;
 
--- SAVEPOINT (嵌套事务)
+-- NATURAL JOIN
+SELECT * FROM orders NATURAL JOIN order_items LIMIT 10;
+
+-- SAVEPOINT (nested transactions)
 BEGIN;
 SAVEPOINT sp1;
 UPDATE accounts SET balance = balance - 100 WHERE id = 1;
@@ -73,22 +103,37 @@ SAVEPOINT sp2;
 UPDATE accounts SET balance = balance + 100 WHERE id = 2;
 RELEASE SAVEPOINT sp2;
 RELEASE SAVEPOINT sp1;
-COMMIT;
+ROLLBACK;
 
--- EXPLAIN (SQLite 有 EXPLAIN, 没有 ANALYZE)
+-- EXPLAIN
 EXPLAIN SELECT * FROM users WHERE id = 1;
-EXPLAIN QUERY PLAN SELECT * FROM users WHERE id = 1;
+EXPLAIN QUERY PLAN SELECT * FROM orders WHERE status = 'pending';
 
--- LIMIT 和 OFFSET (SQLite 语法)
-SELECT * FROM products ORDER BY id LIMIT 10 OFFSET 20;
+-- LIMIT and OFFSET
+SELECT * FROM products ORDER BY id LIMIT 5 OFFSET 10;
 
--- NATURAL JOIN
-SELECT * FROM orders NATURAL JOIN order_items;
+-- WITH RECURSIVE
+WITH RECURSIVE seq(n) AS (
+  SELECT 1 UNION ALL SELECT n + 1 FROM seq WHERE n < 5
+) SELECT * FROM seq;
 
--- 子查询作为表达式
-SELECT id, name, (SELECT COUNT(*) FROM orders WHERE user_id = users.id) AS order_count
-FROM users;
+-- VALUES clause
+VALUES (1, 'a'), (2, 'b'), (3, 'c');
 
--- 查看系统信息
-SELECT sql AS ddl FROM sqlite_master WHERE type = 'table';
-SELECT * FROM sqlite_master WHERE type = 'index';
+-- COALESCE / IFNULL / NULLIF
+SELECT COALESCE(NULL, NULL, 'fallback') AS coalesced;
+SELECT IFNULL(NULL, 'default') AS ifnull_val;
+SELECT NULLIF(1, 1) AS nullif_eq, NULLIF(1, 2) AS nullif_neq;
+
+-- UNION / INTERSECT / EXCEPT
+SELECT name FROM users WHERE id <= 3
+UNION ALL
+SELECT name FROM users WHERE id <= 3 AND status = 'active';
+
+-- System information
+SELECT sql AS ddl FROM sqlite_master WHERE type = 'table' ORDER BY name;
+SELECT name, type, tbl_name FROM sqlite_master WHERE type = 'index';
+
+-- Wide table (events)
+SELECT event_type, COUNT(*) AS cnt FROM events GROUP BY event_type ORDER BY cnt DESC;
+SELECT * FROM events ORDER BY created_at DESC LIMIT 10;
