@@ -130,6 +130,13 @@ function M.get_dataset_buffer()
   k = state.get_keymap("sql_dataset", "commit_edits", "<leader>w")
   if k then vim.keymap.set("n", k, function() require("poste-db.edit_commit").commit_edits() end, opts) end
 
+  k = state.get_keymap("sql_dataset", "show_sql", "gs")
+  if k then
+    vim.keymap.set("n", k, function()
+      require("poste-db.buffer.nav_ui").show_dataset_sql()
+    end, opts)
+  end
+
   k = state.get_keymap("sql_dataset", "help", "g?")
   if k then
     vim.keymap.set("n", k, function() require("poste-db.help").open() end, opts)

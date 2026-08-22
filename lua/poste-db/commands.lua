@@ -152,6 +152,10 @@ function M.setup()
   end, { nargs = "*", complete = function(a, l) return require("poste-db.export").complete(a, l) end,
     desc = "Export dataset — :PosteDbExport [format] [destination] [path]" })
 
+  vim.api.nvim_create_user_command("PosteDbShowSql", function()
+    require("poste-db.buffer.nav_ui").show_dataset_sql()
+  end, { desc = "Show the SQL of the active dataset request in a floating window" })
+
   vim.api.nvim_create_user_command("PosteDbLog", function()
     require("poste-db.log_viewer").toggle()
   end, { desc = "Toggle SQL execution log viewer" })

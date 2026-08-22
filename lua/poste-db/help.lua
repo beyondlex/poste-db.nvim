@@ -53,6 +53,11 @@ local DESCRIPTIONS = {
     delete_row = "Delete row",
     insert_row = "Insert row",
     export = "Export dataset (format → destination)",
+    show_sql = "Show SQL in floating window",
+    help = "Show keymap help",
+    history_next = "Next history entry",
+    history_prev = "Previous history entry",
+    history_toggle = "Toggle request history sidebar",
   },
   sql_table_ops = {
     select_all = "SELECT * from table",

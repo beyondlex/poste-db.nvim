@@ -216,4 +216,31 @@ function M.update_dataset_sql_statusline(entry)
   vim.cmd("redrawstatus")
 end
 
+--- Show the active history entry's SQL in a floating dialog window.
+function M.show_dataset_sql()
+  local entry = D.active_entry()
+  if not entry then
+    vim.notify("No active request", vim.log.levels.WARN, { title = "PosteDb" })
+    return
+  end
+  local sql = entry.sql
+  if not sql or sql == "" then
+    vim.notify("No SQL for this request", vim.log.levels.INFO, { title = "PosteDb" })
+    return
+  end
+  local lines = vim.split(sql, "\n")
+  local width = math.min(120, vim.o.columns - 4)
+  local height = math.min(#lines + 2, vim.o.lines - 6)
+  local dialog = require("poste.dialog")
+  local d = dialog.open({
+    title = " Dataset SQL ",
+    width = width,
+    height = height,
+    border = "rounded",
+  })
+  d:update(lines)
+  vim.bo[d.buf].filetype = "sql"
+  vim.bo[d.buf].syntax = "ON"
+end
+
 return M
