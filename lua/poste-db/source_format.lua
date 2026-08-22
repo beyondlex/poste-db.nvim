@@ -155,6 +155,26 @@ function M.best(dialect)
   return nil
 end
 
+--- Build the formatter CLI args, replacing the `__DIALECT__` sentinel with the
+--- resolved (or default) dialect.
+--- @param fmt table FORMATTERS entry
+--- @param dialect string resolved dialect ("" when unknown)
+--- @return string[]
+local function build_formatter_args(fmt, dialect)
+  local has_dialect = dialect ~= ""
+  local args = {}
+  for _, arg in ipairs(fmt.args) do
+    if arg == "__DIALECT__" then
+      local dm = fmt.dialect_map or {}
+      local d = has_dialect and dialect or (fmt.default_dialect or "ansi")
+      table.insert(args, dm[d] or d)
+    else
+      table.insert(args, arg)
+    end
+  end
+  return args
+end
+
 --- List all detected (available) formatters.
 --- @return string[]
 function M.list_available()
@@ -255,20 +275,7 @@ function M.format_text(text, opts)
     if not fmt then
       last_err = string.format("Unknown formatter: %s", formatter)
     else
-      -- Build arguments, replacing __DIALECT__ sentinel with actual dialect.
-      -- If no dialect was resolved, use the formatter's default dialect.
-      local has_dialect = dialect ~= ""
-      local args = {}
-      for _, arg in ipairs(fmt.args) do
-        if arg == "__DIALECT__" then
-          local dm = fmt.dialect_map or {}
-          local d = has_dialect and dialect or (fmt.default_dialect or "ansi")
-          local mapped = dm[d] or d
-          table.insert(args, mapped)
-        else
-          table.insert(args, arg)
-        end
-      end
+      local args = build_formatter_args(fmt, dialect)
 
       -- Run the formatter
       local cmd = fmt.bin
@@ -547,5 +554,16 @@ function M.auto_format_on_save(bufnr)
     async = false,
   })
 end
+
+M._test = {
+  _get_priority = M._get_priority,
+  best = M.best,
+  build_formatter_args = build_formatter_args,
+  resolve_dialect = M.resolve_dialect,
+  format_text = M.format_text,
+  -- Override the detection cache so availability is deterministic in tests.
+  set_detected = function(map) _detected = map or {} end,
+  rediscover = M.rediscover,
+}
 
 return M

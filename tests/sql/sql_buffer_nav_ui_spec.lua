@@ -66,8 +66,8 @@ describe("buffer_nav_ui", function()
     assert.is_falsy(text:find("localhost:5432/blog", 1, true))
     -- connection/db context moved onto the winbar; table name is omitted
     assert.truthy(text:find("localhost:5432", 1, true))
-    assert.truthy(text:find("🄳 blog", 1, true))
-    assert.is_falsy(text:find("🃎 posts", 1, true))
+    assert.truthy(text:find("\239\135\128 blog", 1, true))
+    assert.is_falsy(text:find("posts", 1, true))
   end)
 
   it("builds the statusline context", function()
@@ -164,7 +164,7 @@ describe("buffer_nav_ui", function()
 
   it("escapes % in SQL statusline", function()
     local text = ui.build_sql_statusline("SELECT 100% AS rate", 60)
-    assert.truthy(text:find("100%%%% AS rate", 1, true))
+    assert.truthy(text:find("100%% AS rate", 1, true))
     -- after stripping highlight tags, every % must be part of an escaped pair
     local body = text:gsub("%%#PosteDbDatasetMeta#", "")
     assert.is_falsy((body:gsub("%%%%", "")):find("%%", 1, true))

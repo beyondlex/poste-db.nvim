@@ -127,8 +127,8 @@ local function format_csv(data_result)
   table.insert(lines, table.concat(header, ","))
   for _, row in ipairs(rows) do
     local vals = {}
-    for _, v in ipairs(row) do
-      table.insert(vals, csv_escape(v))
+    for i = 1, #cols do
+      table.insert(vals, csv_escape(row[i]))
     end
     table.insert(lines, table.concat(vals, ","))
   end
@@ -146,8 +146,8 @@ local function format_tsv(data_result)
   table.insert(lines, table.concat(header, "\t"))
   for _, row in ipairs(rows) do
     local vals = {}
-    for _, v in ipairs(row) do
-      table.insert(vals, (export_val(v):gsub("[\t\n]", " ")))
+    for i = 1, #cols do
+      table.insert(vals, (export_val(row[i]):gsub("[\t\n]", " ")))
     end
     table.insert(lines, table.concat(vals, "\t"))
   end
@@ -184,8 +184,8 @@ local function format_markdown(data_result)
   table.insert(lines, "| " .. table.concat(sep_parts, " | ") .. " |")
   for _, row in ipairs(rows) do
     local vals = {}
-    for _, v in ipairs(row) do
-      table.insert(vals, (export_val(v):gsub("|", "\\|")))
+    for i = 1, #cols do
+      table.insert(vals, (export_val(row[i]):gsub("|", "\\|")))
     end
     table.insert(lines, "| " .. table.concat(vals, " | ") .. " |")
   end
@@ -220,8 +220,8 @@ local function format_sql_insert(data_result)
   local lines = {}
   for _, row in ipairs(rows) do
     local vals = {}
-    for _, v in ipairs(row) do
-      table.insert(vals, sql_escape_val(v))
+    for i = 1, #cols do
+      table.insert(vals, sql_escape_val(row[i]))
     end
     table.insert(lines, string.format("INSERT INTO %s (%s) VALUES (%s);",
       qualified, col_names_str, table.concat(vals, ", ")))
@@ -429,5 +429,16 @@ function M.complete(ArgLead, CmdLine)
   end
   return vim.fn.getcompletion(ArgLead, "file")
 end
+
+M._test = {
+  format_csv = format_csv,
+  format_tsv = format_tsv,
+  format_json = format_json,
+  format_markdown = format_markdown,
+  format_sql_insert = format_sql_insert,
+  sql_escape_val = sql_escape_val,
+  csv_escape = csv_escape,
+  generate_filename = generate_filename,
+}
 
 return M

@@ -33,14 +33,10 @@ local function get_dialect(buf)
   return nil
 end
 
---- Update diagnostics for a buffer using Tree-sitter ERROR nodes.
---- @param buf number  buffer handle
-function M.update_diagnostics(buf)
-  if not vim.api.nvim_buf_is_valid(buf) then return end
-  local ft = vim.bo[buf].filetype
-  if ft ~= "poste_sql" and ft ~= "poste_sqlite" and ft ~= "sql" then return end
-
-  local errors = ts_stmt.find_error_nodes(buf, get_dialect(buf))
+--- Convert Tree-sitter ERROR nodes to vim.diagnostic entries (0-based).
+--- @param errors table[]  error nodes from ts_stmt.find_error_nodes
+--- @return table[]  vim.diagnostic-compatible entries
+local function to_diag_entries(errors)
   local diags = {}
   for _, err in ipairs(errors) do
     diags[#diags + 1] = {
@@ -53,6 +49,18 @@ function M.update_diagnostics(buf)
       message = err.text,
     }
   end
+  return diags
+end
+
+--- Update diagnostics for a buffer using Tree-sitter ERROR nodes.
+--- @param buf number  buffer handle
+function M.update_diagnostics(buf)
+  if not vim.api.nvim_buf_is_valid(buf) then return end
+  local ft = vim.bo[buf].filetype
+  if ft ~= "poste_sql" and ft ~= "poste_sqlite" and ft ~= "sql" then return end
+
+  local errors = ts_stmt.find_error_nodes(buf, get_dialect(buf))
+  local diags = to_diag_entries(errors)
   vim.diagnostic.set(ns, buf, diags, { priority = 200 })
   vim.api.nvim_buf_clear_namespace(buf, ns_hl, 0, -1)
   for _, d in ipairs(diags) do
@@ -135,5 +143,10 @@ function M.setup(buf)
 
   M.update_diagnostics(buf)
 end
+
+M._test = {
+  to_diag_entries = to_diag_entries,
+  get_dialect = get_dialect,
+}
 
 return M
