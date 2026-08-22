@@ -300,6 +300,17 @@ local function setup_browser_buffer()
     end, opts)
   end
 
+  -- Go to definition: gd on connection opens connections.toml at the entry
+  k = state.get_keymap("sql_db_browser", "goto_definition", "gd")
+  if k then
+    vim.keymap.set("n", k, function()
+      local node = tree.get_node_at_line(line_to_node, vim.fn.line("."))
+      if node and node.node_type == "connection" then
+        require("poste-db.db_browser.operations").edit_conn(node, make_context())
+      end
+    end, opts)
+  end
+
   local table_ops = require("poste-db.table_ops")
   table_ops.register_keymaps(browser_buf, function()
     local buf_line = vim.fn.line(".")
