@@ -52,6 +52,7 @@ local function extract_references_from_node(stmt_node, buf)
   local columns = {}
   local alias_map = {}
   local from_tables = {}
+  local select_aliases = {}
   local seen_tables = {}
   local seen_cols = {}
 
@@ -231,6 +232,24 @@ local function extract_references_from_node(stmt_node, buf)
       end
     end
 
+    if nt == "term" then
+      -- Detect SELECT aliases: term → invocation + keyword_as + identifier
+      -- e.g. AVG(metric_01) AS avg_load  → alias "avg_load"
+      for c in node:iter_children() do
+        if c:type() == "keyword_as" then
+          local alias_node = c:next_sibling()
+          if alias_node and alias_node:type() == "identifier" then
+            local alias_name = vim.treesitter.get_node_text(alias_node, buf)
+            if alias_name ~= "" then
+              select_aliases[alias_name:lower()] = true
+            end
+          end
+        end
+        walk(c, context_stack)
+      end
+      return
+    end
+
     if nt == "field" then
       local parts = {}
       for c in node:iter_children() do
@@ -268,7 +287,7 @@ local function extract_references_from_node(stmt_node, buf)
   end
 
   walk(stmt_node)
-  return { tables = tables, columns = columns, alias_map = alias_map, from_tables = from_tables }
+  return { tables = tables, columns = columns, alias_map = alias_map, from_tables = from_tables, select_aliases = select_aliases }
 end
 
 --- Resolve connection URL from a connection name.
@@ -466,6 +485,8 @@ function M.update(buf)
       end
 
       for _, col in ipairs(refs.columns) do
+        -- Skip columns that match a SELECT alias (e.g. ORDER BY alias ref)
+        if refs.select_aliases and refs.select_aliases[col.name:lower()] then goto continue_col end
         if col.table then
           if schema.known_tables[col.table:lower()] then
             local cols = schema.columns[col.table]
@@ -506,6 +527,7 @@ function M.update(buf)
             end
           end
         end
+        ::continue_col::
       end
 
       ::continue::
