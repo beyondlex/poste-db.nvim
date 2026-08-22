@@ -271,6 +271,38 @@ if sem_ok and sem._test and sem._test.extract_references_from_node then
       local names = extract_tables("select * from 23_tablename join 2024_log l on l.id = x.id;")
       assert.same({ "23_tablename", "2024_log" }, names)
     end)
+
+    it("detects SELECT aliases from AS keyword", function()
+      local _, refs = extract_tables("SELECT AVG(metric_01) AS avg_load FROM web_vitals;")
+      assert.is_true(refs.select_aliases["avg_load"], "avg_load should be in select_aliases")
+    end)
+
+    it("detects multiple SELECT aliases", function()
+      local _, refs = extract_tables("SELECT AVG(metric_01) AS avg_load, MAX(metric_05) AS max_ttfb FROM web_vitals;")
+      assert.is_true(refs.select_aliases["avg_load"], "avg_load should be in select_aliases")
+      assert.is_true(refs.select_aliases["max_ttfb"], "max_ttfb should be in select_aliases")
+    end)
+
+    it("does not flag bare column names as SELECT aliases", function()
+      local _, refs = extract_tables("SELECT url, COUNT(*) FROM web_vitals;")
+      assert.is_nil(refs.select_aliases["url"], "bare column url should not be in select_aliases")
+      assert.is_nil(refs.select_aliases["count"], "COUNT should not be in select_aliases")
+    end)
+
+    it("records SELECT aliases case-insensitively", function()
+      local _, refs = extract_tables("SELECT AVG(metric_01) AS AVG_LOAD FROM web_vitals;")
+      assert.is_true(refs.select_aliases["avg_load"], "avg_load (lowercase) should match")
+    end)
+
+    it("includes column refs from ORDER BY for SELECT aliases (for validation skip)", function()
+      local _, refs = extract_tables("SELECT AVG(metric_01) AS avg_load FROM web_vitals ORDER BY avg_load;")
+      local found = false
+      for _, col in ipairs(refs.columns) do
+        if col.name:lower() == "avg_load" then found = true; break end
+      end
+      assert.is_true(found, "avg_load should appear in columns (from ORDER BY)")
+      assert.is_true(refs.select_aliases["avg_load"], "avg_load should be in select_aliases")
+    end)
   end)
 end
 
