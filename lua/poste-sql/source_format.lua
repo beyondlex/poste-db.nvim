@@ -168,7 +168,7 @@ function M.list_available()
 end
 
 --- Resolve the dialect for the current buffer.
---- Checks ### dialect header, then filetype (poste_sqlite → sqlite).
+--- Checks ### dialect header, then connection config, then filetype.
 --- @param bufnr number|nil Buffer handle (0 = current)
 --- @return string Dialect name (lowercase)
 function M.resolve_dialect(bufnr)
@@ -184,12 +184,20 @@ function M.resolve_dialect(bufnr)
     if d then return d:lower() end
   end
 
-  -- Use context dialect if available
+  -- Resolve dialect from the connection config
   local ok, ctx = pcall(require, "poste-sql.context")
   if ok then
     local resolved = ctx.resolve_context(bufnr)
-    if resolved and resolved.dialect and resolved.dialect ~= "" then
-      return resolved.dialect:lower()
+    local conn = resolved.connection
+    if not conn then
+      conn = state.sql and state.sql.context and state.sql.context.connection
+    end
+    if conn then
+      local connections = require("poste-sql.connections")
+      local cfg = connections.get_connection_config(conn)
+      if cfg and cfg.dialect and cfg.dialect ~= "" then
+        return cfg.dialect:lower()
+      end
     end
   end
 
