@@ -1,11 +1,5 @@
--- ============================================================
--- Database: inventory
--- ============================================================
-
 CREATE DATABASE IF NOT EXISTS inventory CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE inventory;
-
--- Schema
 
 CREATE TABLE warehouses (
     id          INT AUTO_INCREMENT PRIMARY KEY,
@@ -25,15 +19,15 @@ CREATE TABLE suppliers (
 ) ENGINE=InnoDB;
 
 CREATE TABLE items (
-    id            INT AUTO_INCREMENT PRIMARY KEY COMMENT 'Primary key',
-    sku           VARCHAR(50)  NOT NULL UNIQUE COMMENT 'Stock keeping unit code',
-    name          VARCHAR(200) NOT NULL COMMENT 'Display name',
-    unit_price    DECIMAL(10,2) NOT NULL COMMENT 'Price per unit in CNY',
-    weight_kg     DECIMAL(8,3) COMMENT 'Weight in kilograms',
-    supplier_id   INT COMMENT 'References suppliers.id',
-    created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'Record creation timestamp',
+    id            INT AUTO_INCREMENT PRIMARY KEY,
+    sku           VARCHAR(50)  NOT NULL UNIQUE,
+    name          VARCHAR(200) NOT NULL,
+    unit_price    DECIMAL(10,2) NOT NULL,
+    weight_kg     DECIMAL(8,3),
+    supplier_id   INT,
+    created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
-) ENGINE=InnoDB COMMENT='Product inventory items';
+) ENGINE=InnoDB;
 
 CREATE TABLE stock (
     id            INT AUTO_INCREMENT PRIMARY KEY,
@@ -68,19 +62,38 @@ CREATE TABLE shipment_items (
     FOREIGN KEY (item_id)     REFERENCES items(id)
 ) ENGINE=InnoDB;
 
--- Seed data
-
 INSERT INTO warehouses (name, city, capacity) VALUES
   ('East Hub',     'Shanghai',  10000),
   ('West Hub',     'Chengdu',    8000),
   ('South Hub',    'Shenzhen',  12000),
   ('Central Hub',  'Wuhan',      6000);
 
+INSERT INTO warehouses (name, city, capacity)
+WITH RECURSIVE seq (i) AS (
+    SELECT 1 UNION ALL SELECT i + 1 FROM seq WHERE i < 20
+)
+SELECT
+  CONCAT(ELT(1 + (i % 6), 'North','South','East','West','Central','Coastal'), ' Hub ', i),
+  ELT(1 + (i % 10), 'Beijing','Guangzhou','Hangzhou','Nanjing','Xian','Chongqing','Kunming','Dalian','Qingdao','Suzhou'),
+  5000 + (i * 500)
+FROM seq;
+
 INSERT INTO suppliers (name, contact, phone, rating) VALUES
   ('Shenzhen Electronics Co.',  'Li Wei',     '+86-755-1234-5678', 4.50),
   ('Shanghai Parts Ltd.',       'Zhang Min',  '+86-21-8765-4321',  3.80),
   ('Beijing Materials Inc.',    'Wang Fang',  '+86-10-1111-2222',  4.20),
   ('Guangzhou Supply Chain',    'Chen Jie',   '+86-20-3333-4444',  4.70);
+
+INSERT INTO suppliers (name, contact, phone, rating)
+WITH RECURSIVE seq (i) AS (
+    SELECT 1 UNION ALL SELECT i + 1 FROM seq WHERE i < 30
+)
+SELECT
+  CONCAT('Supplier ', i, ' Co.'),
+  CONCAT('Contact ', i),
+  CONCAT('+86-', LPAD(FLOOR(RAND() * 100), 3, '0'), '-', LPAD(FLOOR(RAND() * 90000000), 8, '0')),
+  ROUND(RAND() * 5, 2)
+FROM seq;
 
 INSERT INTO items (sku, name, unit_price, weight_kg, supplier_id) VALUES
   ('ELEC-001', 'Circuit Board A',      12.50,  0.150, 1),
@@ -94,6 +107,18 @@ INSERT INTO items (sku, name, unit_price, weight_kg, supplier_id) VALUES
   ('SUPP-001', 'Thermal Paste',         6.00,  0.100, 4),
   ('SUPP-002', 'Cable Tie (1000pc)',    8.50,  1.000, 4);
 
+INSERT INTO items (sku, name, unit_price, weight_kg, supplier_id)
+WITH RECURSIVE seq (i) AS (
+    SELECT 1 UNION ALL SELECT i + 1 FROM seq WHERE i < 100
+)
+SELECT
+  CONCAT(ELT(1 + (i % 5), 'ELEC','PART','MAT','SUPP','TOOL'), '-', LPAD(100 + i, 3, '0')),
+  CONCAT(ELT(1 + (i % 10), 'Component','Module','Assembly','Part','Material','Tool','Kit','Adapter','Panel','Unit'), ' ', i),
+  ROUND(RAND() * 200 + 1, 2),
+  ROUND(RAND() * 10, 3),
+  1 + (i % 34)
+FROM seq;
+
 INSERT INTO stock (item_id, warehouse_id, quantity) VALUES
   (1,  1, 500),  (1,  2, 200),  (1,  3, 350),
   (2,  1, 2000), (2,  3, 1500),
@@ -106,6 +131,17 @@ INSERT INTO stock (item_id, warehouse_id, quantity) VALUES
   (9,  1, 800),  (9,  3, 500),
   (10, 2, 300),  (10, 4, 250);
 
+INSERT IGNORE INTO stock (item_id, warehouse_id, quantity)
+WITH RECURSIVE seq (i) AS (
+    SELECT 1 UNION ALL SELECT i + 1 FROM seq WHERE i < 50
+)
+SELECT
+  1 + (a.i + (b.i - 1) * 50) % 110,
+  1 + (a.i + (b.i - 1) * 50) % 24,
+  FLOOR(RAND() * 5000 + 10)
+FROM seq a CROSS JOIN seq b
+WHERE a.i + (b.i - 1) * 50 <= 500;
+
 INSERT INTO shipments (from_warehouse, to_warehouse, status, shipped_at, delivered_at) VALUES
   (1, 2, 'delivered',  NOW() - INTERVAL 10 DAY, NOW() - INTERVAL 8 DAY),
   (1, 4, 'delivered',  NOW() - INTERVAL 7 DAY,  NOW() - INTERVAL 5 DAY),
@@ -113,13 +149,32 @@ INSERT INTO shipments (from_warehouse, to_warehouse, status, shipped_at, deliver
   (2, 3, 'pending',    NULL,                    NULL),
   (1, 3, 'delivered',  NOW() - INTERVAL 20 DAY, NOW() - INTERVAL 18 DAY);
 
+INSERT INTO shipments (from_warehouse, to_warehouse, status, shipped_at, delivered_at)
+WITH RECURSIVE seq (i) AS (
+    SELECT 1 UNION ALL SELECT i + 1 FROM seq WHERE i < 100
+)
+SELECT
+  1 + (i % 24),
+  1 + ((i + 5) % 24),
+  ELT(1 + (i % 4), 'pending', 'in_transit', 'delivered', 'cancelled'),
+  CASE WHEN i % 4 != 0 THEN NOW() - INTERVAL (i * 2) DAY ELSE NULL END,
+  CASE WHEN i % 4 = 2 THEN NOW() - INTERVAL (i * 2 - 5) DAY ELSE NULL END
+FROM seq;
+
 INSERT INTO shipment_items (shipment_id, item_id, quantity) VALUES
-  (1, 1,  100),
-  (1, 3,   50),
-  (2, 7,   30),
-  (2, 8,   50),
-  (3, 2,  500),
-  (3, 9,  200),
-  (4, 4,  150),
-  (4, 5,  300),
+  (1, 1,  100),  (1, 3,   50),
+  (2, 7,   30),  (2, 8,   50),
+  (3, 2,  500),  (3, 9,  200),
+  (4, 4,  150),  (4, 5,  300),
   (5, 6, 2000);
+
+INSERT INTO shipment_items (shipment_id, item_id, quantity)
+WITH RECURSIVE seq (i) AS (
+    SELECT 1 UNION ALL SELECT i + 1 FROM seq WHERE i < 50
+)
+SELECT
+  6 + (a.i + (b.i - 1) * 50) % 100,
+  1 + (a.i + (b.i - 1) * 50) % 110,
+  FLOOR(RAND() * 500 + 10)
+FROM seq a CROSS JOIN seq b
+WHERE a.i + (b.i - 1) * 50 <= 500;

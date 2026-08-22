@@ -1,59 +1,73 @@
 # SQL Integration Test Environment
 
-Poste SQL 集成测试环境，使用 Docker Compose 启动 PostgreSQL 和 MySQL 实例。
+Docker Compose environment for testing SQL queries across PostgreSQL, MySQL, MariaDB, and SQLite.
 
-## 快速启动
+## Quick Start
 
 ```bash
-cd tests/sql
+cd playground/sql
 docker compose up -d
 ```
 
-等待数据库初始化完成（约 5-10 秒），验证服务状态：
+Wait 10-20 seconds for initialization, then verify:
 
 ```bash
 docker compose ps
 ```
 
-## 数据库
+## Reinitialize
+
+```bash
+docker compose down -v
+docker compose up -d
+```
+
+## Databases
 
 ### PostgreSQL (port 15432)
 
-| Database    | Tables                                    | Description         |
-|-------------|-------------------------------------------|---------------------|
-| `ecommerce` | users, products, orders, order_items      | 电商订单系统        |
-| `analytics` | events, sessions, page_views              | 用户行为分析        |
+| Database    | Tables                                    | Rows               |
+|-------------|-------------------------------------------|--------------------|
+| `ecommerce` | users, products, orders, order_items      | 500 / 100 / 500 / 2.3k |
+| `analytics` | events, sessions, page_views              | 2k / 505 / 5k      |
+| `analytics` | sensor_readings (52-col wide table)       | 10k                |
 
 - User: `poste` / Password: `poste_test`
 
 ### MySQL (port 13306)
 
-| Database    | Tables                                                        | Description       |
-|-------------|---------------------------------------------------------------|-------------------|
-| `blog`      | authors, categories, posts, tags, post_tags, comments         | 博客平台          |
-| `inventory` | warehouses, suppliers, items, stock, shipments, shipment_items | 仓库库存管理      |
+| Database    | Tables                                                         | Rows             |
+|-------------|----------------------------------------------------------------|------------------|
+| `blog`      | authors, categories, posts, tags, post_tags, comments          | 53 / 4 / 207 / 30 / 508 |
+| `blog`      | web_vitals (54-col wide table)                                 | 10k              |
+| `inventory` | warehouses, suppliers, items, stock, shipments, shipment_items | 24 / 34 / 110 / 523 / 105 |
 
 - User: `root` / Password: `poste_test`
 
-## 使用 Poste 测试
+### MariaDB (port 13307)
 
-`connections.json` 预配置了 4 个连接：
+| Database    | Tables                                                         | Rows             |
+|-------------|----------------------------------------------------------------|------------------|
+| `blog`      | users, authors, categories, posts, tags, post_tags, comments   | 53 / 53 / 4 / 207 / 30 / 506 |
 
-- `pg-ecommerce` → PostgreSQL ecommerce 库
-- `pg-analytics` → PostgreSQL analytics 库
-- `my-blog`      → MySQL blog 库
-- `my-inventory` → MySQL inventory 库
+- User: `root` / Password: `poste_test`
 
-在 Neovim 中打开 `queries/postgres.sql` 或 `queries/mysql.sql`，使用 poste 执行查询。
+## Sample Queries
 
-## 端口映射
+The `queries/` directory contains dialect-specific query files covering each database's syntax:
 
-使用非标准端口避免与本地数据库冲突：
+| File              | Dialect      | Connection      | Features Covered |
+|-------------------|-------------|-----------------|------------------|
+| `postgres.sql`    | PostgreSQL  | pg-ecommerce    | JSONB, DISTINCT ON, RETURNING, LATERAL, window functions, FILTER, ARRAY_AGG, generate_series, INET, full-text search, GROUPING SETS |
+| `mysql.sql`       | MySQL       | my-blog         | GROUP_CONCAT, ELT, JSON functions, window functions, WITH RECURSIVE, wide tables, date functions |
+| `mariadb.sql`     | MariaDB     | maria-dev       | Sequences, RETURNING, INVISIBLE columns, virtual columns, AES encryption, CTE |
+| `sqlite.sql`      | SQLite      | sqlite-dev      | PRAGMA, INSERT OR, GLOB, NATURAL JOIN, SAVEPOINT, JSON functions, WITHOUT ROWID |
 
-- PostgreSQL: **15432** (host) → 5432 (container)
-- MySQL:      **13306** (host) → 3306 (container)
+## Data Generation Strategy
 
-## 清理
+All SQL files stay under 8KB. Hand-crafted demo data (3-7 rows) is kept for realistic samples; the rest is generated via `generate_series()` / `WITH RECURSIVE` + `random()`. No external dependencies, no file bloat.
+
+## Cleanup
 
 ```bash
 docker compose down -v
