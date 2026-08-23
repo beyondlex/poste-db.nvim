@@ -5,6 +5,34 @@ local log = require("poste-db.log")
 
 local M = {}
 
+--- Render hook fired after a prefetch completes, so counts become visible
+--- without the user expanding the node. Set by db_browser.init.
+--- @type function|nil
+M.render_hook = nil
+
+--- Node types whose children are prefetched one level after the node itself
+--- is fetched. Connection → databases, database → schemas/tables,
+--- schema → tables, table → columns.
+local PREFETCH_TYPES = {
+  connection = true,
+  database = true,
+  schema = true,
+  table = true,
+}
+
+local prefetch_timer = nil
+
+local function schedule_render()
+  if prefetch_timer then
+    pcall(prefetch_timer.stop, prefetch_timer)
+    pcall(prefetch_timer.close, prefetch_timer)
+  end
+  prefetch_timer = vim.defer_fn(function()
+    prefetch_timer = nil
+    if M.render_hook then M.render_hook() end
+  end, 50)
+end
+
 function M.run_introspect(conn_name, introspect_type, schema, table_name, database, callback, search_dir)
   local connections = require("poste-db.connections")
   local url, err = connections.resolve_connection_url(conn_name)
@@ -76,10 +104,24 @@ function M.run_introspect(conn_name, introspect_type, schema, table_name, databa
   })
 end
 
-function M.fetch_children(node, callback, search_dir)
+function M.fetch_children(node, callback, search_dir, opts)
+  opts = opts or {}
   node.epoch = (node.epoch or 0) + 1
   local epoch = node.epoch
-  node.loading = true
+  if not opts.quiet then
+    node.loading = true
+  end
+
+  local user_callback = callback
+  callback = function()
+    user_callback()
+    if not opts.quiet then
+      -- One-level prefetch: after this node's children are loaded, fetch the
+      -- children of each child quietly so counts (tables per db, columns per
+      -- table) become visible without further expands.
+      M.prefetch_children(node, search_dir)
+    end
+  end
 
   local conn = node.node_type == "connection" and node.name
     or (node.meta and node.meta.connection) or state.sql.db_browser.connection
@@ -352,6 +394,23 @@ function M.fetch_children(node, callback, search_dir)
   else
     node.loading = false
     callback()
+  end
+end
+
+--- Prefetch the children of each child of `node` (one level), quietly.
+--- Called automatically after a node's own children finish loading, so the
+--- child counts (tables per db, columns per table) are populated without the
+--- user expanding each node. Rendering is deferred via `schedule_render`.
+--- @param node table
+--- @param search_dir string
+function M.prefetch_children(node, search_dir)
+  if not node.children then return end
+  for _, child in ipairs(node.children) do
+    if PREFETCH_TYPES[child.node_type] and not child.children and not child.loading then
+      M.fetch_children(child, function()
+        schedule_render()
+      end, search_dir, { quiet = true })
+    end
   end
 end
 

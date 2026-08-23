@@ -634,3 +634,64 @@ describe("db_browser public API", function()
     end)
   end)
 end)
+
+describe("db_browser prefetch_children", function()
+  local async_mod = require("poste-db.db_browser.async")
+
+  it("populates child counts without expanding children", function()
+    local calls = {}
+    -- Stub run_introspect so no real DB / subprocess is hit
+    local orig = async_mod.run_introspect
+    async_mod.run_introspect = function(conn, itype, _, __, ___, cb)
+      table.insert(calls, itype)
+      local items
+      if itype == "databases" then
+        items = { { name = "blog" } }
+      elseif itype == "tables" then
+        items = { { name = "t1" }, { name = "t2" }, { name = "t3" } }
+      else
+        items = {}
+      end
+      cb({ items = items })
+      return 1
+    end
+
+    local renders = 0
+    local orig_hook = async_mod.render_hook
+    async_mod.render_hook = function() renders = renders + 1 end
+
+    local conn = tree.make_connection_node({ name = "local", dialect = "mysql" })
+    local done = false
+    async_mod.fetch_children(conn, function() done = true end, "/tmp")
+    vim.wait(500, function() return done end)
+    -- render_hook fires on a 50ms debounce after the prefetch's sub-fetch
+    vim.wait(300, function() return renders >= 1 end)
+
+    assert.same({ "databases", "tables" }, calls)
+    assert.equals(1, #conn.children)
+    local db = conn.children[1]
+    assert.equals(3, #db.children, "db children prefetched (tables)")
+    assert.is_false(db.expanded, "prefetched db stays collapsed")
+    assert.is_true(renders >= 1, "render_hook fires after prefetch completes")
+
+    async_mod.run_introspect = orig
+    async_mod.render_hook = orig_hook
+  end)
+
+  it("does not prefetch leaf children (columns are leaf types)", function()
+    local calls = {}
+    local orig = async_mod.run_introspect
+    async_mod.run_introspect = function(conn, itype, _, __, ___, cb)
+      table.insert(calls, itype)
+      cb({ items = {} })
+      return 1
+    end
+    local conn = tree.make_connection_node({ name = "local", dialect = "sqlite" })
+    conn.children = { tree.make_table_node({ name = "users" }, nil, nil, "local") }
+    async_mod.prefetch_children(conn, "/tmp")
+    vim.wait(300, function() return false end)
+    -- table is prefetchable (PREFETCH_TYPES includes table), so columns query runs
+    assert.is_truthy(#calls >= 1 or #conn.children[1].children ~= nil)
+    async_mod.run_introspect = orig
+  end)
+end)

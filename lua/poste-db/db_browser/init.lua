@@ -177,6 +177,10 @@ end
 local function setup_browser_buffer()
   if browser_buf and vim.api.nvim_buf_is_valid(browser_buf) then return browser_buf end
 
+  -- Re-render after background prefetch completes so node counts show
+  -- without the user expanding each node.
+  async.render_hook = render_tree
+
   browser_buf = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_set_option_value("buftype", "nofile", { buf = browser_buf })
   vim.api.nvim_set_option_value("bufhidden", "hide", { buf = browser_buf })
