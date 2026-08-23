@@ -161,33 +161,31 @@ Requires **blink.cmp**. Auto-registers as `poste_db` source.
 
 ### SQL Snippets
 
-Built-in snippets appear as completion items when the prefix matches a trigger word:
+Built-in snippets are organized as **categories**, each with per-dialect
+templates picked from the current connection's dialect
+(mysql / mariadb / postgres / sqlite, falling back to a `default` template).
+A trigger routes to a category: `trigger -> category -> [dialect] -> template`.
 
-| Trigger | Template |
-|---------|----------|
-| `ct` | `create table` (id column varies by dialect) |
-| `tab` | `create table` with `updated_at`/`created_at` timestamps |
-| `cdb` | `create database` (varies by dialect) |
-| `col` / `colv` | column / varchar column |
-| `sf` | `select * from ... limit 100` |
-| `cnt` | `select count(*)` |
-| `ins` | `insert into ... values` |
-| `upd` | `update ... set ... where` |
-| `del` | `delete from ... where` |
-| `cola` | `alter table add column` |
-| `colu` | `alter table modify column` |
-| `cte` | `with ... as` |
-| `idx` | `create index` |
-| `uni` | `union all` |
+Every built-in snippet appears as a completion item when the prefix matches
+its trigger word:
 
-Triggers route to a **category** with per-dialect templates picked from the
-current connection's dialect (mysql / mariadb / postgres / sqlite, falling
-back to a `default` template):
-
-| Category | Example dialect differences |
-|----------|----------------------------|
-| `create_table` | `AUTO_INCREMENT` (mysql) vs `SERIAL` (postgres) vs `AUTOINCREMENT` (sqlite) |
-| `create_database` | `CHARACTER SET`/`COLLATE` (mysql) vs `ENCODING`/`LC_COLLATE` (postgres) vs `ATTACH DATABASE` (sqlite) |
+| Trigger | Category | Template | Dialect variants |
+|---------|----------|----------|------------------|
+| `ct` | `create_table` | `create table` | mysql `AUTO_INCREMENT`, postgres `SERIAL`, sqlite `AUTOINCREMENT` |
+| `tab` | `create_table_timestamp` | `create table` + `updated_at`/`created_at` | postgres/sqlite drop `ON UPDATE CURRENT_TIMESTAMP` |
+| `cdb` | `create_database` | `create database` | mysql `CHARACTER SET`+`COLLATE`, postgres `ENCODING`/`LC_COLLATE`, sqlite `ATTACH DATABASE` |
+| `col` | `column` | integer column | postgres/sqlite drop `COMMENT` |
+| `colv` | `column_varchar` | varchar column | postgres/sqlite drop `COMMENT`, sqlite uses `TEXT` |
+| `sf` | `select_from` | `select * from ... limit 100` | default only |
+| `cnt` | `select_count` | `select count(*)` | default only |
+| `ins` | `insert` | `insert into ... values` | default only |
+| `upd` | `update` | `update ... set ... where` | default only |
+| `del` | `delete` | `delete from ... where` | default only |
+| `cte` | `cte` | `with ... as` | default only |
+| `idx` | `create_index` | `create index` | default only |
+| `cola` | `alter_add_column` | `alter table add column` | postgres/sqlite drop `COMMENT` |
+| `colu` | `alter_modify_column` | `alter table modify column` | postgres uses `ALTER COLUMN ... SET` |
+| `uni` | `union_all` | `union all` | default only |
 
 All snippets use **LSP-style syntax** (`${1:placeholder}`, `$0` for exit, `$$` for literal `$`). See `:help vim.snippet` or the [LSP spec](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#snippet_syntax) for details.
 
