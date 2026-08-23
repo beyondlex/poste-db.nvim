@@ -176,6 +176,39 @@ function M.find_error_nodes(buf, dialect)
       end
     end
 
+    -- Filter MySQL/MariaDB numeric INTERVAL quantities that the parser only
+    -- accepts as quoted strings (`INTERVAL '7' DAY`): `INTERVAL 7 DAY` is a
+    -- legal MySQL/MariaDB date arithmetic value. Keep the error for dialects
+    -- that require the quoted form (postgres, sqlite, unknown).
+    if (dialect == "mysql" or dialect == "mariadb")
+      and upper:match("^INTERVAL%s+%d+") then
+      goto continue
+    end
+
+    -- Filter MySQL/MariaDB GROUP_CONCAT ... SEPARATOR which the parser
+    -- does not recognize (`... SEPARATOR '-'`). SEPARATOR is MySQL-specific.
+    if (dialect == "mysql" or dialect == "mariadb")
+      and upper:match("^SEPARATOR%s+") then
+      goto continue
+    end
+
+    -- Filter the mysql-client `\G`/`\g` statement terminator (vertical
+    -- output). It is stripped by the client and never sent to the server,
+    -- so a residual `\G` (or a `posts\G` fragment on parsers that merge
+    -- it into the statement) is not a SQL error.
+    if (dialect == "mysql" or dialect == "mariadb")
+      and upper:match("\\[Gg]$") then
+      goto continue
+    end
+
+    -- Filter MySQL/MariaDB SHOW statements the grammar doesn't know
+    -- (SHOW TABLE STATUS, SHOW COLUMNS, SHOW DATABASES, ...). Only a few
+    -- forms (SHOW CREATE ...) are recognized.
+    if (dialect == "mysql" or dialect == "mariadb")
+      and upper:match("^SHOW[%s;]") then
+      goto continue
+    end
+
     -- Filter table option continuations (e.g. `= InnoDB` after `ENGINE`)
     if text:match("^%s*=") then
       goto continue

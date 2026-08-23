@@ -66,11 +66,11 @@ SELECT title, status,
   END AS status_label
 FROM posts LIMIT 10;
 
--- Metadata
+-- Metadataj
 SHOW TABLES;
 DESC posts;
-SHOW CREATE TABLE posts\G
-SHOW TABLE STATUS LIKE 'posts'\G
+SHOW CREATE TABLE posts;
+SHOW TABLE STATUS LIKE 'posts';
 
 -- System functions
 SELECT VERSION(), DATABASE(), USER(), CONNECTION_ID();

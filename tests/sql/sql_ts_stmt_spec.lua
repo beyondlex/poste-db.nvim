@@ -210,6 +210,78 @@ describe("find_error_nodes", function()
     local errors = ts_stmt.find_error_nodes(buf, "mysql")
     assert.is_true(#errors > 0, "digit fragment is standalone here")
   end)
+
+  it("suppresses numeric INTERVAL quantity for mysql", function()
+    -- tree-sitter-sql only parses quoted `INTERVAL '7' DAY`; the numeric form
+    -- is legal MySQL date arithmetic.
+    local buf = make_buf({ "SELECT DATE_ADD(NOW(), INTERVAL 7 DAY) AS next_week, NOW(), CURDATE(), CURTIME();" })
+    local errors = ts_stmt.find_error_nodes(buf, "mysql")
+    assert.same({}, errors, "INTERVAL 7 DAY must not be flagged for mysql")
+  end)
+
+  it("suppresses numeric INTERVAL quantity for mariadb", function()
+    local buf = make_buf({ "SELECT DATE_ADD(NOW(), INTERVAL 1 WEEK);" })
+    local errors = ts_stmt.find_error_nodes(buf, "mariadb")
+    assert.same({}, errors, "INTERVAL 1 WEEK must not be flagged for mariadb")
+  end)
+
+  it("keeps numeric INTERVAL quantity flagged for postgres", function()
+    -- PostgreSQL requires the quoted form (INTERVAL '7 days').
+    local buf = make_buf({ "SELECT NOW() + INTERVAL 7 DAY;" })
+    local errors = ts_stmt.find_error_nodes(buf, "postgres")
+    assert.is_true(#errors > 0, "numeric INTERVAL is invalid in postgres")
+  end)
+
+  it("keeps numeric INTERVAL quantity flagged when dialect is unknown", function()
+    local buf = make_buf({ "SELECT DATE_ADD(NOW(), INTERVAL 7 DAY);" })
+    local errors = ts_stmt.find_error_nodes(buf)
+    assert.is_true(#errors > 0, "numeric INTERVAL must remain flagged when dialect is unknown")
+  end)
+
+  it("suppresses GROUP_CONCAT SEPARATOR for mysql", function()
+    -- tree-sitter-sql does not parse `... SEPARATOR '-'` (MySQL-specific).
+    local buf = make_buf({ "SELECT GROUP_CONCAT('a', 'b', 'c' SEPARATOR '-') AS concat_test;" })
+    local errors = ts_stmt.find_error_nodes(buf, "mysql")
+    assert.same({}, errors, "SEPARATOR must not be flagged for mysql")
+  end)
+
+  it("suppresses GROUP_CONCAT SEPARATOR for mariadb", function()
+    local buf = make_buf({ "SELECT GROUP_CONCAT('a', 'b', 'c' SEPARATOR '-');" })
+    local errors = ts_stmt.find_error_nodes(buf, "mariadb")
+    assert.same({}, errors, "SEPARATOR must not be flagged for mariadb")
+  end)
+
+  it("keeps GROUP_CONCAT SEPARATOR flagged for postgres", function()
+    -- PostgreSQL's string_agg is not expressed with SEPARATOR.
+    local buf = make_buf({ "SELECT GROUP_CONCAT('a', 'b', 'c' SEPARATOR '-');" })
+    local errors = ts_stmt.find_error_nodes(buf, "postgres")
+    assert.is_true(#errors > 0, "SEPARATOR is invalid in postgres")
+  end)
+
+  it("suppresses mysql \\G terminator after a recognized statement", function()
+    local buf = make_buf({ "SHOW CREATE TABLE posts\\G" })
+    local errors = ts_stmt.find_error_nodes(buf, "mysql")
+    assert.same({}, errors, "trailing \\G is a client terminator, not SQL")
+  end)
+
+  it("suppresses mysql \\G terminator merged into an unknown statement", function()
+    local buf = make_buf({ "SHOW TABLE STATUS LIKE 'posts'\\G" })
+    local errors = ts_stmt.find_error_nodes(buf, "mysql")
+    assert.same({}, errors, "SHOW TABLE STATUS ... \\G must not be flagged for mysql")
+  end)
+
+  it("suppresses unknown SHOW variants for mysql", function()
+    local buf = make_buf({ "SHOW COLUMNS FROM posts;" })
+    local errors = ts_stmt.find_error_nodes(buf, "mysql")
+    assert.same({}, errors, "SHOW COLUMNS must not be flagged for mysql")
+  end)
+
+  it("keeps SHOW flagged for postgres", function()
+    -- SHOW is MySQL-only; the same text is invalid in PostgreSQL.
+    local buf = make_buf({ "SHOW TABLE STATUS LIKE 'posts';" })
+    local errors = ts_stmt.find_error_nodes(buf, "postgres")
+    assert.is_true(#errors > 0, "SHOW must remain flagged for postgres")
+  end)
 end)
 
 local sem_ok, sem = pcall(require, "poste-db.semantic_diagnostics")
