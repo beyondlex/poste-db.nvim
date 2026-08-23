@@ -294,6 +294,8 @@ function M.highlight_known_error_constructs(buf, dialect)
       end
       -- value-fragment cascades from a misparsed VALUES clause (`1, 'a'),`)
       if not known and lower:match("^%d+%s*,") then known = true end
+      -- statement-terminator cascades (e.g. `; USE` after a CREATE DATABASE)
+      if not known and lower:match("^%s*;") then known = true end
       if known then
           local sr, sc, er, ec = node:range()
           pcall(vim.api.nvim_buf_set_extmark, buf, ERROR_CONSTRUCT_NS, sr, sc, {

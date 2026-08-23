@@ -173,6 +173,16 @@ function M.find_error_nodes(buf, dialect)
       goto continue
     end
 
+    -- Filter statement-terminator cascades. A `;` legally ends the previous
+    -- statement, so an ERROR node *starting* with `;` is always a recovery
+    -- fragment. E.g. `CREATE DATABASE ... COLLATE x;` followed by `USE y`
+    -- (tree-sitter-sql has no USE rule): the create_database `name value`
+    -- listing greedily keeps extending and its ERROR swallows `; USE`.
+    -- e.g. text = ";\nUSE". A real syntax error never starts with `;`.
+    if upper:match("^%s*;") then
+      goto continue
+    end
+
     -- Filter bare-word fragments nested inside the fake `GROUP (...)` call
     -- tree-sitter-sql produces for `WITHIN GROUP (ORDER BY ...)`: the ERROR
     -- head is consumed earlier and the ORDER BY target survives as a

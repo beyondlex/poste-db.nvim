@@ -142,6 +142,19 @@ describe("find_error_nodes", function()
     assert.same({}, errors, "USE is a false positive, should be filtered")
   end)
 
+  it("does not flag CREATE DATABASE with charset/collate followed by USE", function()
+    -- Regression: tree-sitter-sql has no USE rule, so after
+    -- `CREATE DATABASE ... COLLATE utf8mb4_unicode_ci;` the create_database
+    -- `name value` listing swallows `; USE` into a statement-terminator
+    -- cascade ERROR node. It must be filtered, not reported as an error.
+    local buf = make_buf({
+      "CREATE DATABASE IF NOT EXISTS blog CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;",
+      "USE blog;",
+    })
+    local errors = ts_stmt.find_error_nodes(buf)
+    assert.same({}, errors, "; USE cascade from create_database should be filtered")
+  end)
+
   it("does not flag SET statement as error", function()
     local buf = make_buf({ "SET NAMES utf8;", "SELECT 1;" })
     local errors = ts_stmt.find_error_nodes(buf)
