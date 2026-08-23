@@ -56,6 +56,17 @@ function M.is_pg_catalog_name(name)
   return type(name) == "string" and name:lower():match("^pg_[%w_]*$") ~= nil
 end
 
+--- True when `name` is a SQLite internal table (sqlite_master,
+--- sqlite_sequence, sqlite_stat1..4, ...). These live in the `main` schema and
+--- are never returned by introspection. The `sqlite_` prefix is reserved by
+--- SQLite (user tables cannot use it), so the check is case-insensitive and
+--- needs no dialect gate.
+--- @param name string|nil
+--- @return boolean
+function M.is_sqlite_system_name(name)
+  return type(name) == "string" and name:lower():match("^sqlite_%w+$") ~= nil
+end
+
 --- Static list of commonly referenced PostgreSQL pg_catalog relations (tables
 --- and views), used to complete unqualified references (`FROM pg_tab`).
 --- Version-specific and dynamic ones (pg_toast_*, pg_temp_*) are omitted.

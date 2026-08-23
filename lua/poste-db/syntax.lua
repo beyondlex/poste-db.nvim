@@ -193,4 +193,122 @@ function M.highlight_line(buf, ns, line_idx, text, offset)
   end
 end
 
+------------------------------------------------------------------------
+--- Re-highlight constructs tree-sitter-sql can't parse.
+------------------------------------------------------------------------
+
+local ERROR_CONSTRUCT_NS = vim.api.nvim_create_namespace("poste_db_error_construct")
+
+--- Lowercased markers identifying ERROR nodes that are known false positives
+--- (constructs tree-sitter-sql doesn't parse but the user's SQL is valid).
+--- Kept in sync with ts_stmt.find_error_nodes' filter list.
+local KNOWN_CONSTRUCT_MARKERS = {
+  "pragma", "glob", "natural join", "savepoint", "release",
+  "explain query plan", "query plan", "values", "or replace", "or ignore",
+  "or abort", "or fail", "or rollback", "percentile_", "within group",
+  "interval", "separator", "show ",
+}
+
+local CONSTRUCT_KEYWORDS = {
+  PRAGMA = true, GLOB = true, SAVEPOINT = true, RELEASE = true,
+  NATURAL = true, EXPLAIN = true, QUERY = true, PLAN = true,
+  VALUES = true, INSERT = true, OR = true, INTO = true, BY = true,
+  REPLACE = true, ROLLBACK = true, ABORT = true, FAIL = true, IGNORE = true,
+  WITHIN = true, GROUP = true, ORDER = true, SELECT = true, FROM = true,
+  WHERE = true, JOIN = true, LIMIT = true, AS = true, ASC = true, DESC = true,
+  INTERVAL = true, SEPARATOR = true, SHOW = true,
+  PERCENTILE_CONT = true, PERCENTILE_DISC = true,
+}
+
+local function hl_err_tokens(buf, row, from_col, to_col)
+  local line = vim.api.nvim_buf_get_lines(buf, row, row + 1, false)[1] or ""
+  if to_col <= from_col then return end
+  local seg = line:sub(from_col + 1, to_col)
+  local base = from_col
+  local i = 1
+  while i <= #seg do
+    local c = seg:sub(i, i)
+    if c == "'" then
+      local close = seg:find("'", i + 1, true)
+      if close then
+        pcall(vim.api.nvim_buf_set_extmark, buf, ERROR_CONSTRUCT_NS, row, base + i - 1, {
+          end_col = base + close, hl_group = "String", priority = 300,
+        })
+        i = close + 1
+      else
+        i = i + 1
+      end
+    else
+      local ws, we = seg:find("[%w_]+", i)
+      if not ws then break end
+      local word = seg:sub(ws, we):upper()
+      if CONSTRUCT_KEYWORDS[word] then
+        vim.api.nvim_buf_set_extmark(buf, ERROR_CONSTRUCT_NS, row, base + ws - 1, {
+          end_col = base + we, hl_group = "Statement", priority = 300,
+        })
+      elseif word:match("^%d") then
+        vim.api.nvim_buf_set_extmark(buf, ERROR_CONSTRUCT_NS, row, base + ws - 1, {
+          end_col = base + we, hl_group = "Number", priority = 300,
+        })
+      end
+      i = we + 1
+    end
+  end
+end
+
+--- Recolors ERROR nodes that are known tree-sitter false positives so they
+--- render like normal SQL instead of @error red. nvim's TS highlighter marks
+--- every ERROR node red by default; these constructs are valid in their
+--- dialect despite not being parseable. A neutral base kills the redness and
+--- keywords/strings/numbers inside get their usual groups.
+--- Mirrors ts_stmt.find_error_nodes' known-false-positive list.
+--- @param buf number  Buffer handle
+--- @param dialect string|nil  Optional dialect override (unused, kept for symmetry)
+function M.highlight_known_error_constructs(buf, dialect)
+  ensure_hl()
+  buf = buf or 0
+  if buf == 0 then buf = vim.api.nvim_get_current_buf() end
+  vim.api.nvim_buf_clear_namespace(buf, ERROR_CONSTRUCT_NS, 0, -1)
+
+  local ok_lang, lang = pcall(vim.treesitter.language.get_lang, "sql")
+  if not (ok_lang and lang) then return end
+  local ok_parse, parser = pcall(vim.treesitter.get_parser, buf, "sql")
+  if not ok_parse or not parser then return end
+  local ok_trees, trees = pcall(parser.parse, parser)
+  if not ok_trees or not trees or #trees == 0 then return end
+
+  local stack = { trees[1]:root() }
+  while #stack > 0 do
+    local node = table.remove(stack)
+    if node:type() == "ERROR" then
+      local text = vim.treesitter.get_node_text(node, buf) or ""
+      local lower = text:lower()
+      local known = false
+      for _, marker in ipairs(KNOWN_CONSTRUCT_MARKERS) do
+        if lower:find(marker, 1, true) then known = true break end
+      end
+      -- value-fragment cascades from a misparsed VALUES clause (`1, 'a'),`)
+      if not known and lower:match("^%d+%s*,") then known = true end
+      if known then
+          local sr, sc, er, ec = node:range()
+          pcall(vim.api.nvim_buf_set_extmark, buf, ERROR_CONSTRUCT_NS, sr, sc, {
+            end_row = er, end_col = ec, hl_group = "Normal", priority = 250,
+          })
+          if er == sr then
+            hl_err_tokens(buf, sr, sc, ec)
+          else
+            hl_err_tokens(buf, sr, sc, #((vim.api.nvim_buf_get_lines(buf, sr, sr + 1, false)[1] or "")))
+            for row = sr + 1, er - 1 do
+              hl_err_tokens(buf, row, 0, #((vim.api.nvim_buf_get_lines(buf, row, row + 1, false)[1] or "")))
+            end
+            hl_err_tokens(buf, er, 0, ec)
+        end
+      end
+    end
+    for i = node:child_count() - 1, 0, -1 do
+      stack[#stack + 1] = node:child(i)
+    end
+  end
+end
+
 return M

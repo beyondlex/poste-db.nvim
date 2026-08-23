@@ -31,12 +31,14 @@ function M.setup()
     callback = function(args)
       sql_syntax.highlight_directive_comments(args.buf)
       sql_syntax.highlight_digit_prefix_fragments(args.buf)
+      sql_syntax.highlight_known_error_constructs(args.buf)
       local group = vim.api.nvim_create_augroup("PosteDbDirectiveHL_" .. args.buf, { clear = true })
       vim.api.nvim_create_autocmd({ "TextChanged", "TextChangedI" }, {
         group = group, buffer = args.buf,
         callback = function()
           sql_syntax.highlight_directive_comments(args.buf)
           sql_syntax.highlight_digit_prefix_fragments(args.buf)
+          sql_syntax.highlight_known_error_constructs(args.buf)
         end,
       })
     end,

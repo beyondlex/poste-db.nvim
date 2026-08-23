@@ -44,4 +44,13 @@ describe("constants helpers", function()
       assert.is_true(const.is_pg_catalog_name(t), t .. " must satisfy the pg_ predicate")
     end
   end)
+
+  it("recognizes SQLite internal table names", function()
+    assert.is_true(const.is_sqlite_system_name("sqlite_master"))
+    assert.is_true(const.is_sqlite_system_name("sqlite_sequence"))
+    assert.is_true(const.is_sqlite_system_name("sqlite_stat1"))
+    assert.is_true(const.is_sqlite_system_name("SQLITE_MASTER"), "case-insensitive, reserved prefix")
+    assert.is_false(const.is_sqlite_system_name("users"))
+    assert.is_false(const.is_sqlite_system_name("sqlite-ish_table"))
+  end)
 end)

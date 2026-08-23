@@ -983,4 +983,26 @@ describe("completion mode integration", function()
       assert.is_nil(labels["pg_tables"])
     end)
   end)
+
+  describe("keyword completion for tree-sitter-unsupported constructs", function()
+    local ctx = require("poste-db.completion.ctx")
+
+    it("offers sqlite dialect keywords", function()
+      local labels = {}
+      for _, it in ipairs(ctx.kw_items("GLO", "sqlite")) do labels[it.label] = true end
+      assert.is_true(labels["GLOB"], "GLOB should be offered for sqlite")
+    end)
+
+    it("offers standard keywords in any dialect", function()
+      local labels = {}
+      for _, it in ipairs(ctx.kw_items("SAVE", nil)) do labels[it.label] = true end
+      assert.is_true(labels["SAVEPOINT"], "SAVEPOINT should be offered")
+    end)
+
+    it("does not offer sqlite-only keywords for mysql", function()
+      local labels = {}
+      for _, it in ipairs(ctx.kw_items("PRAGMA", "mysql")) do labels[it.label] = true end
+      assert.is_nil(labels["PRAGMA"], "PRAGMA is sqlite-only")
+    end)
+  end)
 end)

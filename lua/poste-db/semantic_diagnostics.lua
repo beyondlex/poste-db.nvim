@@ -69,9 +69,10 @@ local function extract_references_from_node(stmt_node, buf)
   local cte_names = {}
   do
     local function scan_ctes(node)
+      if node == nil then return end
       if node:type() == "cte" then
         for c in node:iter_children() do
-          if c:type() == "identifier" then
+          if c ~= nil and c:type() == "identifier" then
             cte_names[vim.treesitter.get_node_text(c, buf):lower()] = true
             break
           end
@@ -132,6 +133,7 @@ local function extract_references_from_node(stmt_node, buf)
 
   local function walk(node, context_stack)
     context_stack = context_stack or {}
+    if node == nil then return end
     local nt = node:type()
 
     if nt == "from" then
@@ -339,6 +341,9 @@ end
 local function is_catalog_ref(db_prefix, name, dialect)
   if db_prefix and const.SYSTEM_SCHEMAS[db_prefix:lower()] then return true end
   if not db_prefix and const.is_pg_catalog_name(name) and dialect == "postgres" then
+    return true
+  end
+  if not db_prefix and const.is_sqlite_system_name(name) then
     return true
   end
   return false

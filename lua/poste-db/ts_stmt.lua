@@ -161,6 +161,12 @@ function M.find_error_nodes(buf, dialect)
       goto continue
     end
 
+    -- Filter value-fragment cascades from a misparsed VALUES clause
+    -- (`VALUES (1, 'a'), ...` → residuals like `1, 'a'),`).
+    if upper:match("^%d+%s*,") then
+      goto continue
+    end
+
     -- Filter bare-word fragments nested inside the fake `GROUP (...)` call
     -- tree-sitter-sql produces for `WITHIN GROUP (ORDER BY ...)`: the ERROR
     -- head is consumed earlier and the ORDER BY target survives as a
@@ -245,6 +251,18 @@ function M.find_error_nodes(buf, dialect)
       goto continue
     end
 
+    -- Filter PRAGMA statements and their merged cascade fragments:
+    -- tree-sitter-sql has no PRAGMA grammar (SQLite), so both the whole
+    -- statement and residuals like `users); PRAGMA index_list` parse as ERROR.
+    if upper:match("PRAGMA") then
+      goto continue
+    end
+
+    -- Filter the SQLite GLOB operator (LIKE-like), unknown to the grammar.
+    if upper:match("^GLOB") then
+      goto continue
+    end
+
     -- Filter known non-standard statements
     local stmt_kw = upper:match("^(%w+)%s") or upper:match("^(%w+);")
     local known_false_positives = {
@@ -255,6 +273,8 @@ function M.find_error_nodes(buf, dialect)
         BEGIN = true, SETS = true, PERCENTILE_CONT = true,
         COMMENT = true, ENGINE = true, CHARSET = true,
         CHARACTER = true,
+        NATURAL = true, SAVEPOINT = true, RELEASE = true,
+        QUERY = true, VALUES = true,
       }
     -- Filter single-word false positives (e.g. `engine` alone as an ERROR node)
     if not stmt_kw then
@@ -271,10 +291,12 @@ function M.find_error_nodes(buf, dialect)
       goto continue
     end
 
-    -- Filter SQLite-specific INSERT OR conflict clauses
-    if upper:match("^OR%s+REPLACE%s+INTO") or upper:match("^OR%s+ROLLBACK%s+INTO")
-      or upper:match("^OR%s+ABORT%s+INTO") or upper:match("^OR%s+FAIL%s+INTO")
-      or upper:match("^OR%s+IGNORE%s+INTO") then
+    -- Filter OR-conflict clauses of SQLite INSERT OR x INTO
+    -- (`INSERT OR REPLACE INTO ...`). tree-sitter-sql splits off the
+    -- `OR REPLACE` fragment (with or without the following INTO).
+    if upper:match("^OR%s+REPLACE") or upper:match("^OR%s+ROLLBACK")
+      or upper:match("^OR%s+ABORT") or upper:match("^OR%s+FAIL")
+      or upper:match("^OR%s+IGNORE") then
       goto continue
     end
 

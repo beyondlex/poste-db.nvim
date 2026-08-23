@@ -283,6 +283,61 @@ describe("find_error_nodes", function()
     assert.is_true(#errors > 0, "SHOW must remain flagged for postgres")
   end)
 
+  it("suppresses SQLite PRAGMA statements and their cascades", function()
+    local stmts = {
+      "PRAGMA journal_mode;",
+      "PRAGMA table_info(users);",
+      "PRAGMA table_info(users); PRAGMA index_list(users);",
+    }
+    for _, sql in ipairs(stmts) do
+      local buf = make_buf({ sql })
+      local errors = ts_stmt.find_error_nodes(buf, "sqlite")
+      assert.same({}, errors, sql)
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end
+  end)
+
+  it("suppresses SQLite INSERT OR conflict fragments", function()
+    local stmts = {
+      "INSERT OR REPLACE INTO users (name, email) VALUES ('a', 'b');",
+      "INSERT OR IGNORE INTO t (a) VALUES (1);",
+    }
+    for _, sql in ipairs(stmts) do
+      local buf = make_buf({ sql })
+      local errors = ts_stmt.find_error_nodes(buf, "sqlite")
+      assert.same({}, errors, sql)
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end
+  end)
+
+  it("suppresses SQLite GLOB operator", function()
+    local buf = make_buf({ "SELECT * FROM users WHERE email GLOB '*@gmail.com';" })
+    local errors = ts_stmt.find_error_nodes(buf, "sqlite")
+    assert.same({}, errors, "GLOB must not be flagged")
+  end)
+
+  it("suppresses NATURAL JOIN, SAVEPOINT/RELEASE, EXPLAIN QUERY PLAN, VALUES", function()
+    local stmts = {
+      "SELECT * FROM orders NATURAL JOIN order_items LIMIT 10;",
+      "SAVEPOINT sp1;",
+      "RELEASE SAVEPOINT sp1;",
+      "EXPLAIN QUERY PLAN SELECT * FROM orders WHERE status = 'pending';",
+      "VALUES (1, 'a'), (2, 'b');",
+    }
+    for _, sql in ipairs(stmts) do
+      local buf = make_buf({ sql })
+      local errors = ts_stmt.find_error_nodes(buf, "sqlite")
+      assert.same({}, errors, sql)
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end
+  end)
+
+  it("keeps real syntax errors intact", function()
+    local buf = make_buf({ "SELECT * FORM users;" })
+    local errors = ts_stmt.find_error_nodes(buf, "sqlite")
+    assert.is_true(#errors > 0, "FORM typo must still be flagged")
+  end)
+
   it("suppresses WITHIN GROUP head for PERCENTILE_CONT", function()
     local buf = make_buf({ "SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY total) AS median_total FROM orders;" })
     local errors = ts_stmt.find_error_nodes(buf, "postgres")
@@ -491,6 +546,12 @@ if sem_ok and sem._test and sem._test.extract_references_from_node then
       assert.is_false(is_catalog_ref(nil, "orders", "mysql"))
       assert.is_false(is_catalog_ref("blog", "orders", "postgres"))
     end)
+
+    it("exempts SQLite internal tables without needing a dialect", function()
+      assert.is_true(is_catalog_ref(nil, "sqlite_master", "sqlite"))
+      assert.is_true(is_catalog_ref(nil, "sqlite_stat1", nil))
+      assert.is_false(is_catalog_ref(nil, "users", "sqlite"))
+    end)
   end)
 end
 
@@ -565,6 +626,46 @@ describe("digit-fragment highlight (syntax.highlight_digit_prefix_fragments)", f
     assert.is_true(#fragment_spans(buf) > 0)
     syntax.highlight_digit_prefix_fragments(buf, "postgres")
     assert.same({}, fragment_spans(buf))
+  end)
+end)
+
+describe("known-error-construct re-highlight (syntax.highlight_known_error_constructs)", function()
+  local syntax = require("poste-db.syntax")
+  local ns = vim.api.nvim_create_namespace("poste_db_error_construct")
+
+  local function construct_marks(buf)
+    local marks = vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true })
+    local kinds = {}
+    for _, m in ipairs(marks) do
+      kinds[#kinds + 1] = (m[4] or {}).hl_group
+    end
+    return kinds
+  end
+
+  it("recolors a PRAGMA error region as normal + keyword", function()
+    local buf = make_buf({ "PRAGMA journal_mode;" })
+    syntax.highlight_known_error_constructs(buf)
+    local kinds = construct_marks(buf)
+    assert.is_true(vim.tbl_contains(kinds, "Normal"), "base must clear the @error red")
+    assert.is_true(vim.tbl_contains(kinds, "Statement"), "PRAGMA keyword must be highlighted")
+  end)
+
+  it("recolors EXPLAIN QUERY PLAN and a string INSIDE a VALUES cascade", function()
+    local buf = make_buf({ "EXPLAIN QUERY PLAN SELECT * FROM o;" })
+    syntax.highlight_known_error_constructs(buf)
+    local kinds = construct_marks(buf)
+    assert.is_true(vim.tbl_contains(kinds, "Normal"))
+    assert.is_true(vim.tbl_contains(kinds, "Statement"), "QUERY/PLAN keywords must be highlighted")
+  end)
+
+  it("clears marks on re-run when the construct disappears", function()
+    local buf = make_buf({ "PRAGMA journal_mode;" })
+    syntax.highlight_known_error_constructs(buf)
+    assert.is_true(#construct_marks(buf) > 0)
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "SELECT 1;" })
+    vim.wait(500, function() return #(vim.treesitter.get_parser(buf, "sql"):parse()[1]:root():named_children()) > 0 end)
+    syntax.highlight_known_error_constructs(buf)
+    assert.same({}, construct_marks(buf))
   end)
 end)
 
