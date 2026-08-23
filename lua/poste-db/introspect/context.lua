@@ -1,6 +1,11 @@
 --- Introspection --- context resolver for connection/database fallback.
 local M = {}
 
+local SKIP_KEYWORDS = {
+  ["if"] = true, ["exists"] = true, ["else"] = true, ["then"] = true,
+  ["when"] = true, ["case"] = true, ["end"] = true,
+}
+
 local function strip_q(s)
   if not s then return "" end
   return s:gsub("^`", ""):gsub("`$", ""):gsub('^"', ''):gsub('"$', '')
@@ -13,11 +18,11 @@ local function pick_table_match(parsed_tables, word_lower)
     local tn = strip_q(t.name):lower()
     local ta = strip_q(t.alias):lower()
     local ts = t.schema and t.schema:lower() or ""
-    if tn == word_lower then
+    if tn == word_lower and not SKIP_KEYWORDS[tn] then
       matched = t
       break
     end
-    if ta == word_lower then
+    if ta == word_lower and not SKIP_KEYWORDS[ta] then
       matched = t
       break
     end
@@ -85,11 +90,14 @@ function M.resolve_detected_target(parsed, cword, db, after_dot_col)
         table_name = matched.name or matched.alias or cword,
       }
     end
-    return {
-      kind = "ddl",
-      db = db,
-      table_name = cword,
-    }
+    if not SKIP_KEYWORDS[cword_lower] then
+      return {
+        kind = "ddl",
+        db = db,
+        table_name = cword,
+      }
+    end
+    return nil
   end
 
   if ct == "column" or ct == "keyword" then
@@ -99,7 +107,7 @@ function M.resolve_detected_target(parsed, cword, db, after_dot_col)
       local tn = strip_q(t.name):lower()
       local ta = strip_q(t.alias):lower()
       local ts = t.schema and t.schema:lower() or ""
-      if tn == cword_lower or ta == cword_lower then
+      if (tn == cword_lower or ta == cword_lower) and not SKIP_KEYWORDS[tn] then
         is_table = true
         break
       end
