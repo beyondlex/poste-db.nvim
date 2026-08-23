@@ -219,7 +219,7 @@ local CONSTRUCT_KEYWORDS = {
   WHERE = true, JOIN = true, LIMIT = true, AS = true, ASC = true, DESC = true,
   INTERVAL = true, SEPARATOR = true, SHOW = true,
   PERCENTILE_CONT = true, PERCENTILE_DISC = true,
-  CREATE = true, TABLE = true, INVISIBLE = true, INT = true,
+  CREATE = true, TABLE = true, SEQUENCE = true, INVISIBLE = true, INT = true,
   PRIMARY = true, KEY = true, AUTO_INCREMENT = true, VARCHAR = true,
   CHAR = true, COLLATE = true, CHARACTER = true,
   IF = true, EXISTS = true,
