@@ -1,4 +1,4 @@
-CREATE DATABASE IF NOT EXISTS inventory CHARACTER SET utf8mb4 ;
+CREATE DATABASE IF NOT EXISTS inventory CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE inventory;
 
 CREATE TABLE warehouses (
