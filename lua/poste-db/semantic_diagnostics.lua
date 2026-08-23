@@ -253,6 +253,22 @@ local function extract_references_from_node(stmt_node, buf)
       end
     end
 
+    if nt == "invocation" then
+      -- tree-sitter-sql misparses `WITHIN GROUP (ORDER BY ...)` (ordered-set
+      -- aggregates) as a call to a fake GROUP() function. GROUP is not a SQL
+      -- function, so skip its argument list — otherwise ORDER/total inside
+      -- it get extracted as phantom columns.
+      for c in node:iter_children() do
+        if c:type() == "object_reference" then
+          local name = vim.treesitter.get_node_text(c, buf)
+          if name and name:lower() == "group" then return end
+          break
+        end
+      end
+      for c in node:iter_children() do walk(c, context_stack) end
+      return
+    end
+
     if nt == "term" then
       -- Detect SELECT aliases: term → invocation + keyword_as + identifier
       -- e.g. AVG(metric_01) AS avg_load  → alias "avg_load"

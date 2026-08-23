@@ -282,6 +282,18 @@ describe("find_error_nodes", function()
     local errors = ts_stmt.find_error_nodes(buf, "postgres")
     assert.is_true(#errors > 0, "SHOW must remain flagged for postgres")
   end)
+
+  it("suppresses WITHIN GROUP head for PERCENTILE_CONT", function()
+    local buf = make_buf({ "SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY total) AS median_total FROM orders;" })
+    local errors = ts_stmt.find_error_nodes(buf, "postgres")
+    assert.same({}, errors, "PERCENTILE_CONT ... WITHIN GROUP must not be flagged")
+  end)
+
+  it("suppresses WITHIN GROUP head and ORDER BY fragment when dialect is unknown", function()
+    local buf = make_buf({ "SELECT percentile_disc(0.5) WITHIN GROUP (ORDER BY total) AS median_disc FROM orders;" })
+    local errors = ts_stmt.find_error_nodes(buf)
+    assert.same({}, errors, "neither the WITHIN GROUP head nor the bare total fragment may be flagged")
+  end)
 end)
 
 local sem_ok, sem = pcall(require, "poste-db.semantic_diagnostics")
@@ -412,6 +424,40 @@ if sem_ok and sem._test and sem._test.extract_references_from_node then
         "WITH a AS (SELECT 1 AS n), b AS (SELECT n FROM a) SELECT n FROM b;"
       )
       assert.same({}, names, "a and b are CTEs, no real tables in this statement")
+    end)
+  end)
+
+  describe("semantic reference extraction (ordered-set aggregates)", function()
+    local extract = sem._test.extract_references_from_node
+
+    local function extract_refs(sql)
+      local buf = make_buf({ sql })
+      local parser = assert(vim.treesitter.get_parser(buf, "sql"))
+      local root = parser:parse()[1]:root()
+      local stmt = nil
+      for child in root:iter_children() do
+        if child:type() == "statement" then stmt = child break end
+      end
+      return extract(stmt, buf)
+    end
+
+    it("does not extract phantom columns from WITHIN GROUP (ORDER BY ...)", function()
+      local refs = extract_refs(
+        "SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY total) AS median_total FROM orders;"
+      )
+      local col_names = {}
+      for _, c in ipairs(refs.columns) do col_names[#col_names + 1] = c.name end
+      local tbl_names = {}
+      for _, t in ipairs(refs.tables) do tbl_names[#tbl_names + 1] = t.name end
+      assert.same({ "orders" }, tbl_names, "only the real FROM table may be extracted")
+      assert.same({}, col_names, "ORDER/total inside WITHIN GROUP must not become columns")
+    end)
+
+    it("still records the SELECT alias of the aggregate", function()
+      local refs = extract_refs(
+        "SELECT percentile_disc(0.5) WITHIN GROUP (ORDER BY total) AS median_disc FROM orders;"
+      )
+      assert.is_true(refs.select_aliases["median_disc"], "median_disc should be recorded as an alias")
     end)
   end)
 end

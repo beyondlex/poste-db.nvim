@@ -161,6 +161,28 @@ function M.find_error_nodes(buf, dialect)
       goto continue
     end
 
+    -- Filter bare-word fragments nested inside the fake `GROUP (...)` call
+    -- tree-sitter-sql produces for `WITHIN GROUP (ORDER BY ...)`: the ERROR
+    -- head is consumed earlier and the ORDER BY target survives as a
+    -- standalone word (e.g. `total`) which is not an error by itself.
+    if upper:match("^[%w_]+$") then
+      local anc = node:parent()
+      while anc do
+        if anc:type() == "invocation" then
+          for c in anc:iter_children() do
+            if c:type() == "object_reference" then
+              if (vim.treesitter.get_node_text(c, buf) or ""):lower() == "group" then
+                goto continue
+              end
+              break
+            end
+          end
+          break
+        end
+        anc = anc:parent()
+      end
+    end
+
     -- Filter digit-leading identifiers that the parser splits in half:
     -- `select * from 23_tablename` parses as ERROR[23] + relation[_tablename].
     -- MySQL/MariaDB legally allow unquoted identifiers beginning with a digit
@@ -192,7 +214,16 @@ function M.find_error_nodes(buf, dialect)
       goto continue
     end
 
-    -- Filter the mysql-client `\G`/`\g` statement terminator (vertical
+    -- Filter the WITHIN GROUP tail of ordered-set aggregates
+  -- (PERCENTILE_CONT/DISC). tree-sitter-sql can't express it and misparses
+  -- the head as `percentile_cont(0.5) WITHIN`. PERCENTILE_CONT is listed in
+  -- known_false_positives below, but that matcher only catches word-initial
+  -- ERROR nodes; a function-call head needs its own check.
+  if upper:match("^PERCENTILE_[A-Z_]+%(") then
+    goto continue
+  end
+
+  -- Filter the mysql-client `\G`/`\g` statement terminator (vertical
     -- output). It is stripped by the client and never sent to the server,
     -- so a residual `\G` (or a `posts\G` fragment on parsers that merge
     -- it into the statement) is not a SQL error.
