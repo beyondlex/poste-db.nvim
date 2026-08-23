@@ -447,6 +447,12 @@
   (keyword_object_id)
 ] @sqlFunction
 
+; CREATE DATABASE identifier nodes (CHARACTER, SET, utf8mb4, COLLATE, etc.)
+; tree-sitter-sql grammar parses mysql-specific options as bare identifiers,
+; not keyword_* nodes. Give them all consistent highlighting.
+(create_database
+  (identifier) @sqlStatement)
+
 ; Directive comment overrides for poste
 (
   (comment) @PosteDbSqlDirectiveComment
