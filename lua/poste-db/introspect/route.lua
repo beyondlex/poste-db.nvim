@@ -20,6 +20,7 @@ local KEYWORDS = {
   create = true,
   modify = true,
   table = true,
+  sequence = true,
   index = true,
   drop = true,
   alter = true,
