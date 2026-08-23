@@ -253,6 +253,7 @@ execute_table_select = function(node, context)
       meta = meta or {}
       meta.table_name = node.name
       sql_buffer.render_dataset(lines, meta, {
+        data = parsed,
         layout = layout,
         original_sql = sql,
         src_file = "poste://db_browser",
