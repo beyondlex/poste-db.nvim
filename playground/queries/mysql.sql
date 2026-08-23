@@ -111,6 +111,31 @@ SELECT RAND(), ROUND(3.14159, 2), FLOOR(4.7), CEILING(4.3), ABS(-5), POWER(2, 3)
 SELECT COALESCE(NULL, 'default') AS val, IFNULL(NULL, 'fallback') AS fb;
 SELECT IF(1 > 0, 'true', 'false') AS bool_test;
 
+-- JSON column (posts.metadata)
+SELECT id, title, metadata FROM posts WHERE metadata IS NOT NULL LIMIT 10;
+
+-- JSON path extraction (-> / ->>)
+SELECT id, title,
+  metadata->'$.reading_time' AS reading_time,
+  JSON_UNQUOTE(metadata->'$.tags[0]') AS first_tag
+FROM posts WHERE metadata IS NOT NULL ORDER BY id LIMIT 10;
+
+-- JSON existence / containment
+SELECT id, title FROM posts
+WHERE metadata IS NOT NULL AND JSON_CONTAINS(metadata->'$.tags', '"rust"')
+LIMIT 10;
+
+SELECT id, title, JSON_EXTRACT(metadata, '$.views') AS views
+FROM posts WHERE metadata IS NOT NULL ORDER BY JSON_EXTRACT(metadata, '$.views') DESC
+LIMIT 10;
+
+-- JSON aggregation over elements
+SELECT JSON_ARRAYAGG(title) AS titles FROM posts WHERE metadata IS NOT NULL;
+
+-- JSON key membership check (reading_time is a numeric member)
+SELECT id, title, JSON_CONTAINS_PATH(metadata, 'one', '$.views', '$.tags') AS has_views_or_tags
+FROM posts WHERE metadata IS NOT NULL LIMIT 10;
+
 -- Full-text search (requires FULLTEXT index)
 -- SELECT * FROM posts WHERE MATCH(title, body) AGAINST('Rust' IN BOOLEAN MODE) LIMIT 10;
 

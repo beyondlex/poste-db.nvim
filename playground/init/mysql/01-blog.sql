@@ -26,6 +26,7 @@ CREATE TABLE posts (
     body        TEXT NOT NULL,
     status      ENUM('draft','published','archived') NOT NULL DEFAULT 'draft',
     published_at TIMESTAMP NULL,
+    metadata    JSON,
     created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (author_id)   REFERENCES authors(id),
     FOREIGN KEY (category_id) REFERENCES categories(id)
@@ -87,21 +88,28 @@ SELECT
     'Data scientist')
 FROM seq;
 
-INSERT INTO posts (author_id, category_id, title, slug, body, status, published_at) VALUES
+INSERT INTO posts (author_id, category_id, title, slug, body, status, published_at, metadata) VALUES
   (1, 1, 'Getting Started with Rust',       'getting-started-with-rust',
-   'Rust is a systems programming language focused on safety and performance...', 'published', NOW() - INTERVAL 20 DAY),
+   'Rust is a systems programming language focused on safety and performance...', 'published', NOW() - INTERVAL 20 DAY,
+   JSON_OBJECT('views', 1450, 'reading_time', 8, 'tags', JSON_ARRAY('rust', 'tutorial'))),
   (1, 1, 'Neovim as an IDE',                'neovim-as-an-ide',
-   'With the right plugins, Neovim can rival any modern IDE...',                  'published', NOW() - INTERVAL 15 DAY),
+   'With the right plugins, Neovim can rival any modern IDE...',                  'published', NOW() - INTERVAL 15 DAY,
+   JSON_OBJECT('views', 980, 'reading_time', 6, 'tags', JSON_ARRAY('neovim', 'ide'))),
   (2, 2, 'Design Systems at Scale',         'design-systems-at-scale',
-   'Building and maintaining a design system across multiple product teams...',   'published', NOW() - INTERVAL 10 DAY),
+   'Building and maintaining a design system across multiple product teams...',   'published', NOW() - INTERVAL 10 DAY,
+   JSON_OBJECT('views', 720, 'reading_time', 12, 'tags', JSON_ARRAY('design', 'systems'))),
   (3, 3, 'Kubernetes Observability',        'kubernetes-observability',
-   'Logs, metrics, and traces: the three pillars of observability...',             'published', NOW() - INTERVAL 7 DAY),
+   'Logs, metrics, and traces: the three pillars of observability...',             'published', NOW() - INTERVAL 7 DAY,
+   JSON_OBJECT('views', 1120, 'reading_time', 9, 'tags', JSON_ARRAY('kubernetes', 'observability'))),
   (1, 1, 'Async Rust in Production',        'async-rust-in-production',
-   'Lessons learned running Tokio-based services in production...',                'draft',     NULL),
+   'Lessons learned running Tokio-based services in production...',                'draft',     NULL,
+   JSON_OBJECT('views', 0, 'reading_time', 10, 'tags', JSON_ARRAY('rust', 'async'))),
   (2, 2, 'Color Theory for Developers',     'color-theory-for-developers',
-   'Understanding color spaces, contrast ratios, and accessibility...',            'published', NOW() - INTERVAL 3 DAY),
+   'Understanding color spaces, contrast ratios, and accessibility...',            'published', NOW() - INTERVAL 3 DAY,
+   JSON_OBJECT('views', 540, 'reading_time', 5, 'tags', JSON_ARRAY('design', 'color'))),
   (3, 3, 'GitOps with ArgoCD',              'gitops-with-argocd',
-   'Declarative continuous delivery for Kubernetes using Git as source of truth...','archived',  NOW() - INTERVAL 60 DAY);
+   'Declarative continuous delivery for Kubernetes using Git as source of truth...','archived',  NOW() - INTERVAL 60 DAY,
+   JSON_OBJECT('views', 310, 'reading_time', 7, 'tags', JSON_ARRAY('gitops', 'argocd')));
 
 INSERT INTO posts (author_id, category_id, title, slug, body, status, published_at)
 WITH RECURSIVE seq (i) AS (

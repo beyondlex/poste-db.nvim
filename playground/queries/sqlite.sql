@@ -71,6 +71,29 @@ SELECT json_set('{"a":1}', '$.b', 2) AS updated;
 SELECT json_type('{"a":1}', '$.a') AS typ;
 SELECT json_object('name', 'Alice', 'age', 30) AS obj;
 
+-- JSON column (users.metadata, stored as TEXT)
+SELECT id, name, metadata FROM users WHERE metadata IS NOT NULL LIMIT 10;
+
+-- JSON path extraction
+SELECT id, name,
+  json_extract(metadata, '$.plan') AS plan,
+  json_extract(metadata, '$.score') AS score
+FROM users WHERE metadata IS NOT NULL ORDER BY id LIMIT 10;
+
+-- Filter by a JSON member value / membership in array
+SELECT id, name, json_extract(metadata, '$.plan') AS plan
+FROM users WHERE metadata IS NOT NULL AND json_extract(metadata, '$.plan') = 'pro'
+LIMIT 10;
+
+SELECT id, name FROM users
+WHERE metadata IS NOT NULL AND json_extract(metadata, '$.tags[0]') IS NOT NULL
+LIMIT 10;
+
+-- Expand JSON array members into rows (json_each)
+SELECT u.id, u.name, tag.value AS tag
+FROM users u, json_each(u.metadata, '$.tags') AS tag
+WHERE u.id <= 3;
+
 -- Aggregate functions
 SELECT COUNT(*) AS total, TOTAL(amount) AS sum_float, AVG(amount) AS avg_amount
 FROM orders;

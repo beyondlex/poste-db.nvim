@@ -79,6 +79,27 @@ SELECT title, author_id, created_at,
   ROW_NUMBER() OVER (PARTITION BY author_id ORDER BY created_at) AS rn
 FROM posts LIMIT 20;
 
+-- ============================================================
+-- JSON column (posts.metadata)
+-- ============================================================
+
+-- Raw JSON + path extraction
+SELECT id, title, metadata,
+  JSON_EXTRACT(metadata, '$.reading_time') AS reading_time,
+  JSON_VALUE(metadata, '$.tags[0]') AS first_tag
+FROM posts WHERE metadata IS NOT NULL LIMIT 10;
+
+-- JSON key membership / type checks (MariaDB)
+SELECT id, title,
+  JSON_EXISTS(metadata, '$.views') AS has_views,
+  JSON_TYPE(JSON_EXTRACT(metadata, '$.tags')) AS tags_type
+FROM posts WHERE metadata IS NOT NULL LIMIT 10;
+
+-- Sort by a numeric JSON member and filter on array containment
+SELECT id, title, JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.tags[0]')) AS first_tag
+FROM posts WHERE metadata IS NOT NULL AND JSON_SEARCH(metadata, 'one', 'rust') IS NOT NULL
+LIMIT 10;
+
 -- CTE for complex queries
 WITH author_stats AS (
   SELECT a.id, a.username, COUNT(p.id) AS post_count

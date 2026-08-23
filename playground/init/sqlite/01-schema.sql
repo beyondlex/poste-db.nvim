@@ -6,6 +6,8 @@ CREATE TABLE IF NOT EXISTS users (
   email TEXT NOT NULL UNIQUE,
   age   INTEGER,
   status TEXT DEFAULT 'active',
+  -- JSON stored as TEXT; uses the built-in JSON1 extension functions
+  metadata TEXT,
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT
 );
@@ -49,21 +51,23 @@ CREATE TABLE IF NOT EXISTS events (
 );
 
 -- 3 hand-crafted users
-INSERT INTO users (name, email, age) VALUES
-  ('Alice', 'alice@gmail.com', 30),
-  ('Bob', 'bob@yahoo.com', 25),
-  ('Charlie', 'charlie@outlook.com', 35);
+INSERT INTO users (name, email, age, metadata) VALUES
+  ('Alice', 'alice@gmail.com', 30, '{"plan": "pro", "tags": ["power-user", "beta"]}'),
+  ('Bob', 'bob@yahoo.com', 25, '{"plan": "free", "tags": []}'),
+  ('Charlie', 'charlie@outlook.com', 35, '{"plan": "team", "tags": ["admin"]}');
 
 -- 1000 generated users
 WITH RECURSIVE seq(i) AS (
     SELECT 1 UNION ALL SELECT i + 1 FROM seq WHERE i < 1000
 )
-INSERT INTO users (name, email, age, status, created_at)
+INSERT INTO users (name, email, age, status, metadata, created_at)
 SELECT
   'User_' || i,
   'user' || i || '@example.com',
   abs(random()) % 50 + 18,
   CASE WHEN i % 7 = 0 THEN 'inactive' ELSE 'active' END,
+  json_object('plan', CASE WHEN i % 5 = 0 THEN 'pro' WHEN i % 3 = 0 THEN 'team' ELSE 'free' END,
+              'score', abs(random()) % 100),
   datetime('now', '-' || (abs(random()) % 365) || ' days')
 FROM seq;
 
