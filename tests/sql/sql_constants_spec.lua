@@ -20,4 +20,28 @@ describe("constants helpers", function()
     assert.equals(1000, const.LOG_MAX_ENTRIES)
     assert.equals(50, const.YANK_PREVIEW_CHARS)
   end)
+
+  it("lists built-in system schemas exempt from schema validation", function()
+    assert.is_true(const.SYSTEM_SCHEMAS["pg_catalog"])
+    assert.is_true(const.SYSTEM_SCHEMAS["information_schema"])
+    assert.is_true(const.SYSTEM_SCHEMAS["mysql"])
+    assert.is_true(const.SYSTEM_SCHEMAS["performance_schema"])
+    assert.is_true(const.SYSTEM_SCHEMAS["sys"])
+    assert.is_nil(const.SYSTEM_SCHEMAS["blog"], "regular databases are not exempt")
+  end)
+
+  it("recognizes PostgreSQL catalog relation names", function()
+    assert.is_true(const.is_pg_catalog_name("pg_tables"))
+    assert.is_true(const.is_pg_catalog_name("pg_stat_activity"))
+    assert.is_true(const.is_pg_catalog_name("PG_TABLES"), "unquoted refs fold to lowercase in postgres")
+    assert.is_false(const.is_pg_catalog_name("users"))
+    assert.is_false(const.is_pg_catalog_name("orders"))
+  end)
+
+  it("lists static postgres catalog relations for unqualified completion", function()
+    assert.is_true(#const.PG_CATALOG_TABLES > 50, "expected a substantial catalog list")
+    for _, t in ipairs(const.PG_CATALOG_TABLES) do
+      assert.is_true(const.is_pg_catalog_name(t), t .. " must satisfy the pg_ predicate")
+    end
+  end)
 end)

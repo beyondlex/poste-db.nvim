@@ -919,4 +919,68 @@ describe("completion mode integration", function()
       assert.is_nil(vim.g.poste_db_legacy_completion)
     end)
   end)
+
+  describe("tables_db_flag scopes db/schema prefixes per dialect", function()
+    local comp_data = require("poste-db.completion.data")
+
+    it("scopes postgres/sqlite prefixes by schema", function()
+      assert.equals("--schema", comp_data.tables_db_flag("postgres"))
+      assert.equals("--schema", comp_data.tables_db_flag("PostgreSQL"))
+      assert.equals("--schema", comp_data.tables_db_flag("sqlite"))
+    end)
+
+    it("scopes mysql/mariadb (and unknown) prefixes by database", function()
+      assert.equals("--database", comp_data.tables_db_flag("mysql"))
+      assert.equals("--database", comp_data.tables_db_flag("mariadb"))
+      assert.equals("--database", comp_data.tables_db_flag(nil))
+      assert.equals("--database", comp_data.tables_db_flag("clickhouse"))
+    end)
+  end)
+
+  describe("handle_table postgres pg_catalog completion", function()
+    local handlers = require("poste-db.completion.handlers")
+    local data_mod = require("poste-db.completion.data")
+    local orig_ensure_tables, orig_ensure_databases
+
+    before_each(function()
+      orig_ensure_tables = data_mod.ensure_tables
+      orig_ensure_databases = data_mod.ensure_databases
+      data_mod.ensure_tables = function(cb) cb() end
+      data_mod.ensure_databases = function(cb) cb() end
+    end)
+
+    after_each(function()
+      data_mod.ensure_tables = orig_ensure_tables
+      data_mod.ensure_databases = orig_ensure_databases
+    end)
+
+    local function dispatch_table(prefix, dialect)
+      local buf = vim.api.nvim_create_buf(false, true)
+      local items = nil
+      handlers.dispatch(
+        { bufnr = buf, line_before = "SELECT * FROM " .. prefix, prefix = prefix, dialect = dialect },
+        "table", nil, nil, function(r) items = r end)
+      return items
+    end
+
+    it("offers pg_catalog relations for a 'pg' prefix on postgres", function()
+      local labels = {}
+      for _, it in ipairs(dispatch_table("pg", "postgres") or {}) do labels[it.label] = true end
+      assert.is_true(labels["pg_tables"], "pg_tables should be offered")
+      assert.is_true(labels["pg_stat_activity"], "pg_stat_activity should be offered")
+      assert.is_true(labels["pg_class"], "pg_class should be offered")
+    end)
+
+    it("does not offer pg_catalog relations for a non-pg prefix", function()
+      local labels = {}
+      for _, it in ipairs(dispatch_table("au", "postgres") or {}) do labels[it.label] = true end
+      assert.is_nil(labels["pg_tables"])
+    end)
+
+    it("does not offer pg_catalog relations for mysql", function()
+      local labels = {}
+      for _, it in ipairs(dispatch_table("pg", "mysql") or {}) do labels[it.label] = true end
+      assert.is_nil(labels["pg_tables"])
+    end)
+  end)
 end)

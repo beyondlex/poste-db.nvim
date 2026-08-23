@@ -162,6 +162,21 @@ local function handle_table(prefix, dialect, callback)
     end
     flush_items(callback, ctx.filter(all_items, prefix))
   end
+
+  -- For postgres, offer pg_catalog relations when the user types an
+  -- unqualified `pg_` prefix (`FROM pg_tab`): pg_catalog is implicitly in the
+  -- search path, but those tables are never part of the user-schema table
+  -- list. Restricted to a `pg` prefix so they don't crowd the full table menu.
+  if (dialect == "postgres" or dialect == "postgresql")
+    and prefix:match("^[pP][gG]") then
+    for _, t in ipairs(const.PG_CATALOG_TABLES) do
+      table.insert(all_items, {
+        label = t, kind = 7, insertText = t,
+        documentation = "table: pg_catalog." .. t,
+      })
+    end
+  end
+
   data.ensure_tables(function()
     local key = data.conn_key()
     local cache = data.get_cache()

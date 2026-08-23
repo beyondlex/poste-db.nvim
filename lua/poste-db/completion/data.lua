@@ -345,6 +345,19 @@ function M.ensure_tables(callback)
   })
 end
 
+--- CLI flag used to scope a table list to a `db.`/`schema.` prefix such as
+--- `FROM order_catalog.` or `FROM pg_catalog.`. postgres/sqlite scope by
+--- schema; mysql/mariadb (and unknown dialects) by database.
+--- @param dialect string|nil
+--- @return string "--schema" or "--database"
+function M.tables_db_flag(dialect)
+  dialect = dialect and dialect:lower() or ""
+  if dialect == "postgres" or dialect == "postgresql" or dialect == "sqlite" then
+    return "--schema"
+  end
+  return "--database"
+end
+
 --- Fetch tables for a specific database/schema (e.g. `FROM inventory.`)
 function M.ensure_tables_for_db(db_name, callback)
   local key = M.conn_key()
@@ -383,8 +396,17 @@ function M.ensure_tables_for_db(db_name, callback)
     return
   end
 
+  local flag = M.tables_db_flag(nil)
+  if ctx.connection then
+    local ok_conn, conn_mod = pcall(require, "poste-db.connections")
+    if ok_conn then
+      local conn = conn_mod.get_connection_config(ctx.connection)
+      if conn and conn.dialect then flag = M.tables_db_flag(conn.dialect) end
+    end
+  end
+
   local args = { binary, "introspect", "--connection-url", url,
-    "--type", "tables", "--database", db_name }
+    "--type", "tables", flag, db_name }
 
   local epoch = cache_epoch
   vim.fn.jobstart(args, {

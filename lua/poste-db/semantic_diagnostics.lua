@@ -10,6 +10,7 @@
 local context = require("poste-db.context")
 local connections = require("poste-db.connections")
 local state = require("poste.state")
+local const = require("poste-db.constants")
 
 local M = {}
 
@@ -327,6 +328,22 @@ local function extract_references_from_node(stmt_node, buf)
   return { tables = tables, columns = columns, alias_map = alias_map, from_tables = from_tables, select_aliases = select_aliases, ctes = cte_names }
 end
 
+--- True when a table reference points at a built-in system schema or (for
+--- postgres) an unqualified pg_catalog relation. Such refs are exempt from
+--- schema validation: their contents are version-specific and never returned
+--- by ordinary introspection.
+--- @param db_prefix string|nil  schema/database prefix in the reference
+--- @param name string  table name
+--- @param dialect string|nil  connection dialect (lowercase)
+--- @return boolean
+local function is_catalog_ref(db_prefix, name, dialect)
+  if db_prefix and const.SYSTEM_SCHEMAS[db_prefix:lower()] then return true end
+  if not db_prefix and const.is_pg_catalog_name(name) and dialect == "postgres" then
+    return true
+  end
+  return false
+end
+
 --- Resolve connection URL from a connection name.
 local function resolve_conn_url(conn)
   if not conn or conn == "" then return nil end
@@ -461,6 +478,17 @@ function M.update(buf)
     local pending_column_fetches = {}
     local last_conn, last_db = nil, nil
     local schema = nil
+    local dialect_for = {}
+
+    local function get_dialect(conn)
+      if conn == nil or conn == "" then return nil end
+      if dialect_for[conn] == nil then
+        local cfg = connections.get_connection_config(conn)
+        dialect_for[conn] = (cfg and cfg.dialect and cfg.dialect ~= "")
+          and cfg.dialect:lower() or false
+      end
+      return dialect_for[conn] or nil
+    end
 
     for _, stmt_node in ipairs(stmt_nodes) do
       local stmt_line = stmt_node:start() + 1
@@ -499,6 +527,13 @@ function M.update(buf)
       if #refs.tables == 0 and #refs.columns == 0 then goto continue end
 
       for _, tbl in ipairs(refs.tables) do
+        -- Built-in system schemas (pg_catalog, information_schema, mysql, ...)
+        -- hold version-specific tables that introspection never returns; in
+        -- postgres pg_catalog relations also resolve without a prefix
+        -- (`FROM pg_tables`). Either way this is not a schema error.
+        if is_catalog_ref(tbl.db_prefix, tbl.name, get_dialect(conn)) then
+          goto continue_table
+        end
         local target_db = tbl.db_prefix or schema.db
         local target_schema = schema
         if tbl.db_prefix and tbl.db_prefix ~= schema.db then
@@ -519,6 +554,7 @@ function M.update(buf)
             message = string.format("Table '%s' not found in database '%s'", tbl.name, target_db),
           })
         end
+        ::continue_table::
       end
 
       for _, col in ipairs(refs.columns) do
@@ -605,6 +641,7 @@ end
 
 M._test = {
   extract_references_from_node = extract_references_from_node,
+  is_catalog_ref = is_catalog_ref,
 }
 
 return M

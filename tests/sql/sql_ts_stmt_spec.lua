@@ -351,6 +351,14 @@ if sem_ok and sem._test and sem._test.extract_references_from_node then
       assert.same({ "users" }, names)
     end)
 
+    it("extracts schema-qualified catalog tables with their prefix", function()
+      local names, refs = extract_tables(
+        "SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = 'public';"
+      )
+      assert.same({ "pg_tables" }, names)
+      assert.equal("pg_catalog", refs.tables[1].db_prefix)
+    end)
+
     it("rejoins both sides of a JOIN", function()
       local names = extract_tables("select * from 23_tablename join 2024_log l on l.id = x.id;")
       assert.same({ "23_tablename", "2024_log" }, names)
@@ -458,6 +466,30 @@ if sem_ok and sem._test and sem._test.extract_references_from_node then
         "SELECT percentile_disc(0.5) WITHIN GROUP (ORDER BY total) AS median_disc FROM orders;"
       )
       assert.is_true(refs.select_aliases["median_disc"], "median_disc should be recorded as an alias")
+    end)
+  end)
+
+  describe("semantic catalog exemption", function()
+    local is_catalog_ref = sem._test.is_catalog_ref
+
+    it("exempts prefixed built-in system schemas for any dialect", function()
+      assert.is_true(is_catalog_ref("pg_catalog", "pg_tables", "postgres"))
+      assert.is_true(is_catalog_ref("information_schema", "tables", nil))
+      assert.is_true(is_catalog_ref("mysql", "user", "mysql"))
+      assert.is_true(is_catalog_ref("performance_schema", "events", "mysql"))
+    end)
+
+    it("exempts unqualified pg_catalog relations only for postgres", function()
+      assert.is_true(is_catalog_ref(nil, "pg_tables", "postgres"))
+      assert.is_true(is_catalog_ref(nil, "PG_STAT_ACTIVITY", "postgres"))
+      assert.is_false(is_catalog_ref(nil, "pg_tables", "mysql"))
+      assert.is_false(is_catalog_ref(nil, "pg_tables", nil), "unknown dialect stays conservative")
+    end)
+
+    it("keeps regular user tables validatable", function()
+      assert.is_false(is_catalog_ref(nil, "users", "postgres"))
+      assert.is_false(is_catalog_ref(nil, "orders", "mysql"))
+      assert.is_false(is_catalog_ref("blog", "orders", "postgres"))
     end)
   end)
 end
