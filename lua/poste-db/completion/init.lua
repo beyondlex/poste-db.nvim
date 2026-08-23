@@ -294,7 +294,7 @@ function M:get_completions(blink_ctx, callback)
     local prefix = line_before:match("[%w_]*$") or ""
     if #prefix > 0 then
       local snippets = require("poste-db.snippets")
-      for _, sitem in ipairs(snippets.get_completion_items(prefix)) do
+      for _, sitem in ipairs(snippets.get_completion_items(prefix, get_dialect_flag())) do
         if not seen[sitem.label] then
           seen[sitem.label] = true
           table.insert(deduped, sitem)

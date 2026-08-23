@@ -165,18 +165,29 @@ Built-in snippets appear as completion items when the prefix matches a trigger w
 
 | Trigger | Template |
 |---------|----------|
-| `ct` | `create table` |
-| `sf` / `sl` | `select * from ... limit 100` |
+| `ct` | `create table` (id column varies by dialect) |
+| `tab` | `create table` with `updated_at`/`created_at` timestamps |
+| `cdb` | `create database` (varies by dialect) |
+| `col` / `colv` | column / varchar column |
+| `sf` | `select * from ... limit 100` |
 | `cnt` | `select count(*)` |
 | `ins` | `insert into ... values` |
 | `upd` | `update ... set ... where` |
 | `del` | `delete from ... where` |
-| `wh` | `where` clause |
 | `cola` | `alter table add column` |
 | `colu` | `alter table modify column` |
 | `cte` | `with ... as` |
 | `idx` | `create index` |
 | `uni` | `union all` |
+
+Triggers route to a **category** with per-dialect templates picked from the
+current connection's dialect (mysql / mariadb / postgres / sqlite, falling
+back to a `default` template):
+
+| Category | Example dialect differences |
+|----------|----------------------------|
+| `create_table` | `AUTO_INCREMENT` (mysql) vs `SERIAL` (postgres) vs `AUTOINCREMENT` (sqlite) |
+| `create_database` | `CHARACTER SET`/`COLLATE` (mysql) vs `ENCODING`/`LC_COLLATE` (postgres) vs `ATTACH DATABASE` (sqlite) |
 
 All snippets use **LSP-style syntax** (`${1:placeholder}`, `$0` for exit, `$$` for literal `$`). See `:help vim.snippet` or the [LSP spec](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#snippet_syntax) for details.
 
@@ -192,6 +203,16 @@ require("poste-db").setup({
     myf = {
       label = "my custom query",
       snippet = "with ${1:cte} as (\n  ${2:select_query}\n)\nselect * from ${1:cte};",
+    },
+
+    -- Route a trigger to a built-in category (or override one)
+    mkct = "create_table",          -- new trigger for create_table category
+    -- ct  = "create_database",     -- override built-in ct
+
+    -- Custom category with per-dialect variants
+    mkb = {
+      default  = "CREATE DATABASE ${1:db};",
+      postgres = "CREATE DATABASE ${1:db} ENCODING 'UTF8';",
     },
   },
 })

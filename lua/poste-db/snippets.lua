@@ -1,115 +1,216 @@
 --- SQL snippet definitions for blink.cmp integration.
---- Built-in snippets appear as completion items when prefix matches trigger word.
---- Custom snippets via setup({ snippets = { ct = "snippet body ${1:...}" } }).
+--- Built-in snippets are organized as *categories* (e.g. create_table) with
+--- per-dialect template variants (mysql/mariadb/postgres/sqlite + default).
+--- Triggers map to a category; the active template is chosen by dialect at
+--- completion time:
+---
+---   trigger -> category -> [dialect] -> template
+---
+--- User overrides via setup({ snippets = { ... } }):
+---   * { key = "create_database" }         -> route/override trigger to a built-in category
+---   * { key = "CREATE TABLE ..." }        -> custom raw template (legacy behavior)
+---   * { key = { snippet = "...", label=... } }  -> custom raw template (legacy)
+---   * { key = { default=..., postgres=... } }    -> custom category with dialect variants
 
 local M = {}
 
-local DEFAULT_SNIPPETS = {
-  ct = {
-    trigger = "ct",
+--- @type table<string, {label:string, default:string, mysql?:string, mariadb?:string, postgres?:string, sqlite?:string}>
+local CATEGORIES = {
+  create_table = {
     label = "create table template",
-    snippet = "CREATE TABLE ${1:table_name} (\n  ${2:column_name} ${3:INTEGER} ${4:NOT NULL}\n);",
+    default = "CREATE TABLE ${1:table_name} (\n  ${2:column_name} ${3:INTEGER} ${4:NOT NULL}\n);",
+    mysql = "CREATE TABLE ${1:table_name} (\n  id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,\n  ${2:column_name} ${3:INTEGER} ${4:NOT NULL}\n);",
+    mariadb = "CREATE TABLE ${1:table_name} (\n  id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,\n  ${2:column_name} ${3:INTEGER} ${4:NOT NULL}\n);",
+    postgres = "CREATE TABLE ${1:table_name} (\n  id SERIAL PRIMARY KEY,\n  ${2:column_name} ${3:INTEGER} ${4:NOT NULL}\n);",
+    sqlite = "CREATE TABLE ${1:table_name} (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  ${2:column_name} ${3:INTEGER} ${4:NOT NULL}\n);",
   },
-  tab = {
-    trigger = "tab",
-    label = "create table with timesamp template",
-    snippet = "CREATE TABLE ${1:table_name} (\n  id INTEGER NOT NULL PRIMARY KEY AUTO_INCREMENT,\n  ${2:-- columns}\n  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP\n);",
+  create_table_timestamp = {
+    label = "create table with timestamp template",
+    default = "CREATE TABLE ${1:table_name} (\n  id INTEGER NOT NULL PRIMARY KEY AUTO_INCREMENT,\n  ${2:-- columns}\n  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP\n);",
+    postgres = "CREATE TABLE ${1:table_name} (\n  id SERIAL PRIMARY KEY,\n  ${2:-- columns}\n  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP\n);",
+    sqlite = "CREATE TABLE ${1:table_name} (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  ${2:-- columns}\n  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP\n);",
   },
-  col = {
-    trigger = "col",
+  create_database = {
+    label = "create database",
+    default = "CREATE DATABASE ${1:db_name};",
+    mysql = "CREATE DATABASE IF NOT EXISTS ${1:db_name} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;",
+    mariadb = "CREATE DATABASE IF NOT EXISTS ${1:db_name} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;",
+    postgres = "CREATE DATABASE ${1:db_name} ENCODING 'UTF8' LC_COLLATE '${2:en_US.UTF-8}' LC_CTYPE '${3:en_US.UTF-8}';",
+    sqlite = "ATTACH DATABASE '${1:/path/to/db.sqlite}' AS ${2:db_name};",
+  },
+  column = {
     label = "column",
-    snippet = "${1:col_name} ${2:INT} NOT NULL DEFAULT ${3:0} COMMENT '${4}' ${5:,}",
+    default = "${1:col_name} ${2:INT} NOT NULL DEFAULT ${3:0} COMMENT '${4}' ${5:,}",
+    postgres = "${1:col_name} ${2:INT} NOT NULL DEFAULT ${3:0} ${5:,}",
+    sqlite = "${1:col_name} ${2:INTEGER} ${3:NOT NULL} DEFAULT ${4:0} ${5:,}",
   },
-  colv = {
-    trigger = "colv",
+  column_varchar = {
     label = "column varchar",
-    snippet = "${1:col_name} VARCHAR(${2:255}) NOT NULL DEFAULT '${3}' COMMENT '${4}' ${5:,}",
+    default = "${1:col_name} VARCHAR(${2:255}) NOT NULL DEFAULT '${3}' COMMENT '${4}' ${5:,}",
+    postgres = "${1:col_name} VARCHAR(${2:255}) NOT NULL DEFAULT '${3}' ${5:,}",
+    sqlite = "${1:col_name} TEXT ${3:NOT NULL} DEFAULT '${4}' ${5:,}",
   },
-  sf = {
-    trigger = "sf",
+  select_from = {
     label = "select * from",
-    snippet = "SELECT * FROM ${1:table_name} LIMIT 100;",
+    default = "SELECT * FROM ${1:table_name} LIMIT 100;",
   },
-  cnt = {
-    trigger = "cnt",
+  select_count = {
     label = "select count(*)",
-    snippet = "SELECT COUNT(*) FROM ${1:table_name};",
+    default = "SELECT COUNT(*) FROM ${1:table_name};",
   },
-  ins = {
-    trigger = "ins",
+  insert = {
     label = "insert into template",
-    snippet = "INSERT INTO ${1:table_name} (${2:columns}) VALUES (${3:values});",
+    default = "INSERT INTO ${1:table_name} (${2:columns}) VALUES (${3:values});",
   },
-  upd = {
-    trigger = "upd",
+  update = {
     label = "update template",
-    snippet = "UPDATE ${1:table_name} SET ${2:column} = ${3:value} WHERE ${4:condition};",
+    default = "UPDATE ${1:table_name} SET ${2:column} = ${3:value} WHERE ${4:condition};",
   },
-  del = {
-    trigger = "del",
+  delete = {
     label = "delete template",
-    snippet = "DELETE FROM ${1:table_name} WHERE ${2:condition};",
+    default = "DELETE FROM ${1:table_name} WHERE ${2:condition};",
   },
   cte = {
-    trigger = "cte",
     label = "with cte",
-    snippet = "WITH ${1:cte_name} AS (\n  ${2:select_query}\n)\n${3:final_query};",
+    default = "WITH ${1:cte_name} AS (\n  ${2:select_query}\n)\n${3:final_query};",
   },
-  idx = {
-    trigger = "idx",
+  create_index = {
     label = "create index",
-    snippet = "CREATE INDEX ${1:idx_name} ON ${2:table_name} (${3:column});",
+    default = "CREATE INDEX ${1:idx_name} ON ${2:table_name} (${3:column});",
   },
-  cola = {
-    trigger = "cola",
+  alter_add_column = {
     label = "alter table add column",
-    snippet = "ALTER TABLE ${1:table_name} ADD COLUMN ${2:column_name} ${3:INTEGER} ${4:NOT NULL} DEFAULT ${5:0} COMMENT '${6}';",
+    default = "ALTER TABLE ${1:table_name} ADD COLUMN ${2:column_name} ${3:INTEGER} ${4:NOT NULL} DEFAULT ${5:0} COMMENT '${6}';",
+    postgres = "ALTER TABLE ${1:table_name} ADD COLUMN ${2:column_name} ${3:INTEGER} ${4:NOT NULL} DEFAULT ${5:0};",
+    sqlite = "ALTER TABLE ${1:table_name} ADD COLUMN ${2:column_name} ${3:INTEGER} ${4:NOT NULL} DEFAULT ${5:0};",
   },
-  colu = {
-    trigger = "colu",
+  alter_modify_column = {
     label = "alter table modify column",
-    snippet = "ALTER TABLE ${1:table_name} MODIFY COLUMN ${2:column_name} ${3:INTEGER} ${4:NOT NULL} DEFAULT ${5:0} COMMENT '${6}';",
+    default = "ALTER TABLE ${1:table_name} MODIFY COLUMN ${2:column_name} ${3:INTEGER} ${4:NOT NULL} DEFAULT ${5:0} COMMENT '${6}';",
+    postgres = "ALTER TABLE ${1:table_name} ALTER COLUMN ${2:column_name} SET ${3:INTEGER} ${4:NOT NULL} DEFAULT ${5:0};",
+    sqlite = "ALTER TABLE ${1:table_name} MODIFY COLUMN ${2:column_name} ${3:INTEGER} ${4:NOT NULL} DEFAULT ${5:0};",
   },
-  uni = {
-    trigger = "uni",
+  union_all = {
     label = "union all",
-    snippet = "UNION ALL\n${1:select_query}",
+    default = "UNION ALL\n${1:select_query}",
   },
 }
 
-M.snippets = vim.deepcopy(DEFAULT_SNIPPETS)
+--- @type table<string,string> trigger -> category name
+local DEFAULT_TRIGGERS = {
+  ct = "create_table",
+  tab = "create_table_timestamp",
+  cdb = "create_database",
+  col = "column",
+  colv = "column_varchar",
+  sf = "select_from",
+  cnt = "select_count",
+  ins = "insert",
+  upd = "update",
+  del = "delete",
+  cte = "cte",
+  idx = "create_index",
+  cola = "alter_add_column",
+  colu = "alter_modify_column",
+  uni = "union_all",
+}
+
+--- @type table<string,{category?:string, raw?:true, label?:string, snippet?:string}>
+--- trigger -> route. route either points at a category or is a raw template.
+M.snippets = {}
+
+M.categories = vim.deepcopy(CATEGORIES)
 
 function M.setup(opts)
   opts = opts or {}
+  M.categories = vim.deepcopy(CATEGORIES)
+  M.snippets = {}
+  for trigger, category in pairs(DEFAULT_TRIGGERS) do
+    M.snippets[trigger] = { category = category }
+  end
+
   if opts.snippets then
     for trigger, config in pairs(opts.snippets) do
       if type(config) == "string" then
-        M.snippets[trigger] = { trigger = trigger, label = trigger, snippet = config }
-      else
-        config.trigger = trigger
-        M.snippets[trigger] = config
+        if M.categories[config] then
+          -- route (or override) this trigger to a built-in category
+          M.snippets[trigger] = { category = config }
+        else
+          -- legacy: raw template
+          M.snippets[trigger] = { raw = true, trigger = trigger, label = trigger, snippet = config }
+        end
+      elseif type(config) == "table" then
+        if config.category and M.categories[config.category] then
+          M.snippets[trigger] = { category = config.category }
+        elseif config.snippet then
+          M.snippets[trigger] = { raw = true, trigger = trigger, label = config.label or trigger, snippet = config.snippet }
+        elseif config.default then
+          -- user-provided per-dialect variants → register as a new category
+          local cat_name = "custom_" .. trigger
+          local cat = {}
+          for k, v in pairs(config) do cat[k] = v end
+          cat.label = config.label or trigger
+          M.categories[cat_name] = cat
+          M.snippets[trigger] = { category = cat_name }
+        else
+          M.snippets[trigger] = { raw = true, trigger = trigger, label = trigger, snippet = "" }
+        end
       end
     end
   end
 end
 
---- Return blink.cmp-compatible completion items for the given prefix.
+--- Pick a category template for a dialect (lowercased), falling back
+--- mariadb -> mysql -> default.
+--- @param cat {default:string, mysql?:string, mariadb?:string, postgres?:string, sqlite?:string}
+--- @param dialect string|nil
+--- @return string
+local function pick_template(cat, dialect)
+  if dialect then
+    local d = dialect:lower()
+    local v = cat[d]
+    if v == nil and d == "mariadb" then v = cat.mysql end
+    if v then return v end
+  end
+  return cat.default
+end
+
+--- Resolve a trigger to its {label, snippet} for the given dialect.
+--- @param trigger string
+--- @param dialect string|nil
+--- @return {label:string, snippet:string}|nil
+function M.resolve(trigger, dialect)
+  local route = M.snippets[trigger]
+  if not route then return nil end
+  if route.raw then
+    return { label = route.label or trigger, snippet = route.snippet }
+  end
+  local cat = M.categories[route.category]
+  if not cat then return nil end
+  return { label = cat.label or route.category, snippet = pick_template(cat, dialect) }
+end
+
+--- Return blink.cmp-compatible completion items for the given prefix,
+--- routed through the active dialect.
 --- Items have data.snippet = true so the execute handler can expand them.
-function M.get_completion_items(prefix)
+--- @param prefix string
+--- @param dialect string|nil  connection dialect (postgres/mysql/mariadb/sqlite)
+function M.get_completion_items(prefix, dialect)
   local items = {}
   local seen = {}
-  for _, s in pairs(M.snippets) do
-    if not seen[s.trigger] then
-      seen[s.trigger] = true
-      if s.trigger:find("^" .. prefix) then
+  for trigger, route in pairs(M.snippets) do
+    if not seen[trigger] and trigger:find("^" .. prefix) then
+      seen[trigger] = true
+      local resolved = M.resolve(trigger, dialect)
+      if resolved then
         table.insert(items, {
-          label = s.label,
-          insertText = s.trigger,
-          filterText = s.trigger,
-          sortText = "zzz" .. s.trigger,
+          label = resolved.label,
+          insertText = trigger,
+          filterText = trigger,
+          sortText = "zzz" .. trigger,
           kind = 14,
-          documentation = s.snippet,
-          data = { snippet = true, trigger = s.trigger, body = s.snippet },
+          documentation = resolved.snippet,
+          data = { snippet = true, trigger = trigger, body = resolved.snippet },
         })
       end
     end
