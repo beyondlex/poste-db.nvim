@@ -37,7 +37,7 @@ password = "{{MYSQL_INVENTORY_PASSWORD}}"
 
 [sqlite-dev]
 dialect = "sqlite"
-path = "./playground/sql/init/sqlite/test.db"
+path = "./playground/init/sqlite/test.db"
 
 [maria-dev]
 dialect = "mariadb"

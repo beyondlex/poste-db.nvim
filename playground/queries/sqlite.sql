@@ -118,7 +118,7 @@ WITH RECURSIVE seq(n) AS (
 ) SELECT * FROM seq;
 
 -- VALUES clause
-VALUES (1, 'a'), (2, 'b'), (3, 'c');
+-- VALUES (1, 'a'), (2, 'b'), (3, 'c');
 
 -- COALESCE / IFNULL / NULLIF
 SELECT COALESCE(NULL, NULL, 'fallback') AS coalesced;

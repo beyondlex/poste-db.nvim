@@ -138,6 +138,5 @@ FROM sensor_readings GROUP BY device_id ORDER BY avg_temp DESC LIMIT 10;
 -- System queries
 SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = 'public' ORDER BY tablename;
 SELECT pid, query, state FROM pg_catalog.pg_stat_activity WHERE state = 'active';
-
 -- EXPLAIN ANALYZE
 EXPLAIN ANALYZE SELECT * FROM events WHERE event_type = 'page_view';
