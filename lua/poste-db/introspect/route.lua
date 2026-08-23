@@ -52,6 +52,7 @@ local KEYWORDS = {
   ["all"] = true,
   distinct = true,
   exists = true,
+  ["if"] = true,
   ["in"] = true,
   like = true,
   between = true,
