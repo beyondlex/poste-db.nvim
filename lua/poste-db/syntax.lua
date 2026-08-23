@@ -207,6 +207,7 @@ local KNOWN_CONSTRUCT_MARKERS = {
   "explain query plan", "query plan", "values", "or replace", "or ignore",
   "or abort", "or fail", "or rollback", "percentile_", "within group",
   "interval", "separator", "show ",
+  "create or replace", "invisible", "collate", "character set",
 }
 
 local CONSTRUCT_KEYWORDS = {
@@ -218,6 +219,9 @@ local CONSTRUCT_KEYWORDS = {
   WHERE = true, JOIN = true, LIMIT = true, AS = true, ASC = true, DESC = true,
   INTERVAL = true, SEPARATOR = true, SHOW = true,
   PERCENTILE_CONT = true, PERCENTILE_DISC = true,
+  CREATE = true, TABLE = true, INVISIBLE = true, INT = true,
+  PRIMARY = true, KEY = true, AUTO_INCREMENT = true, VARCHAR = true,
+  CHAR = true, COLLATE = true, CHARACTER = true,
 }
 
 local function hl_err_tokens(buf, row, from_col, to_col)

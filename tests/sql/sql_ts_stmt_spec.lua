@@ -226,10 +226,17 @@ describe("find_error_nodes", function()
   end)
 
   it("keeps numeric INTERVAL quantity flagged for postgres", function()
-    -- PostgreSQL requires the quoted form (INTERVAL '7 days').
+    -- The numeric form `INTERVAL 7 DAY` is MySQL-specific and invalid in postgres.
     local buf = make_buf({ "SELECT NOW() + INTERVAL 7 DAY;" })
     local errors = ts_stmt.find_error_nodes(buf, "postgres")
     assert.is_true(#errors > 0, "numeric INTERVAL is invalid in postgres")
+  end)
+
+  it("suppresses parenthesized INTERVAL (expr) regardless of dialect", function()
+    -- `INTERVAL (i * 2) DAY` is a tree-sitter parser limitation, not a real error.
+    local buf = make_buf({ "SELECT NOW() - INTERVAL (i * 2) DAY FROM seq;" })
+    local errors = ts_stmt.find_error_nodes(buf, "postgres")
+    assert.same({}, errors, "INTERVAL (expr) is a parser limitation, suppressed for all dialects")
   end)
 
   it("keeps numeric INTERVAL quantity flagged when dialect is unknown", function()
@@ -336,6 +343,24 @@ describe("find_error_nodes", function()
     local buf = make_buf({ "SELECT * FORM users;" })
     local errors = ts_stmt.find_error_nodes(buf, "sqlite")
     assert.is_true(#errors > 0, "FORM typo must still be flagged")
+  end)
+
+  it("suppresses MariaDB INTERVAL (expr) for mariadb", function()
+    local buf = make_buf({ "SELECT NOW() - INTERVAL (i * 2) DAY FROM seq;" })
+    local errors = ts_stmt.find_error_nodes(buf, "mariadb")
+    assert.same({}, errors, "INTERVAL (expr) must not be flagged for mariadb")
+  end)
+
+  it("suppresses MariaDB CREATE OR REPLACE TABLE", function()
+    local buf = make_buf({ "CREATE OR REPLACE TABLE test_mariadb (id INT PRIMARY KEY AUTO_INCREMENT, name VARCHAR(100));" })
+    local errors = ts_stmt.find_error_nodes(buf, "mariadb")
+    assert.same({}, errors, "CREATE OR REPLACE TABLE must not be flagged for mariadb")
+  end)
+
+  it("suppresses MariaDB column attribute INVISIBLE", function()
+    local buf = make_buf({ "CREATE TABLE t (id INT, c VARCHAR(50) INVISIBLE);" })
+    local errors = ts_stmt.find_error_nodes(buf, "mariadb")
+    assert.same({}, errors, "INVISIBLE must not be flagged for mariadb")
   end)
 
   it("suppresses WITHIN GROUP head for PERCENTILE_CONT", function()
@@ -666,6 +691,22 @@ describe("known-error-construct re-highlight (syntax.highlight_known_error_const
     vim.wait(500, function() return #(vim.treesitter.get_parser(buf, "sql"):parse()[1]:root():named_children()) > 0 end)
     syntax.highlight_known_error_constructs(buf)
     assert.same({}, construct_marks(buf))
+  end)
+
+  it("recolors CREATE OR REPLACE TABLE", function()
+    local buf = make_buf({ "CREATE OR REPLACE TABLE test_mariadb (id INT PRIMARY KEY AUTO_INCREMENT, name VARCHAR(100));" })
+    syntax.highlight_known_error_constructs(buf)
+    local kinds = construct_marks(buf)
+    assert.is_true(vim.tbl_contains(kinds, "Normal"))
+    assert.is_true(vim.tbl_contains(kinds, "Statement"), "CREATE/OR/REPLACE/TABLE/INT/PRIMARY etc must be highlighted")
+  end)
+
+  it("recolors INVISIBLE column attribute", function()
+    local buf = make_buf({ "CREATE TABLE t (id INT, c VARCHAR(50) INVISIBLE);" })
+    syntax.highlight_known_error_constructs(buf)
+    local kinds = construct_marks(buf)
+    assert.is_true(vim.tbl_contains(kinds, "Normal"))
+    assert.is_true(vim.tbl_contains(kinds, "Statement"), "INVISIBLE keyword must be highlighted")
   end)
 end)
 

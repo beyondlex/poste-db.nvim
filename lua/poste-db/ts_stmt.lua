@@ -167,6 +167,12 @@ function M.find_error_nodes(buf, dialect)
       goto continue
     end
 
+    -- Filter bare-word cascades ending in `;` (e.g. `utf8mb4_unicode_ci;`
+    -- from a `CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci` clause).
+    if upper:match("^%w+;$") then
+      goto continue
+    end
+
     -- Filter bare-word fragments nested inside the fake `GROUP (...)` call
     -- tree-sitter-sql produces for `WITHIN GROUP (ORDER BY ...)`: the ERROR
     -- head is consumed earlier and the ORDER BY target survives as a
@@ -204,12 +210,21 @@ function M.find_error_nodes(buf, dialect)
       end
     end
 
+    -- Filter INTERVAL followed by a parenthesized expression, e.g.
+    -- `INTERVAL (i * 2) DAY`. tree-sitter-sql can't parse this form in any
+    -- dialect — the ERROR node is a parser limitation, not a real error.
+    -- Also catches the bare `INTERVAL` word which is a cascade fragment from
+    -- the same misparse.
+    if upper:match("^INTERVAL%s+%(") or upper == "INTERVAL" then
+      goto continue
+    end
+
     -- Filter MySQL/MariaDB numeric INTERVAL quantities that the parser only
-    -- accepts as quoted strings (`INTERVAL '7' DAY`): `INTERVAL 7 DAY` is a
-    -- legal MySQL/MariaDB date arithmetic value. Keep the error for dialects
-    -- that require the quoted form (postgres, sqlite, unknown).
+    -- accepts as quoted strings (`INTERVAL '7' DAY`): `INTERVAL 7 DAY` and
+    -- `INTERVAL (expr) UNIT` forms are legal MySQL/MariaDB date arithmetic.
+    -- Keep the error for dialects that require the quoted form (postgres, sqlite).
     if (dialect == "mysql" or dialect == "mariadb")
-      and upper:match("^INTERVAL%s+%d+") then
+      and upper:match("^INTERVAL") then
       goto continue
     end
 
@@ -260,6 +275,18 @@ function M.find_error_nodes(buf, dialect)
 
     -- Filter the SQLite GLOB operator (LIKE-like), unknown to the grammar.
     if upper:match("^GLOB") then
+      goto continue
+    end
+
+    -- Filter MySQL/MariaDB CREATE OR REPLACE TABLE, which tree-sitter-sql
+    -- does not recognize (the grammar only knows `CREATE [TEMPORARY] TABLE`).
+    if (dialect == "mysql" or dialect == "mariadb")
+      and upper:match("^CREATE%s+OR%s+REPLACE") then
+      goto continue
+    end
+
+    -- Filter MariaDB column attribute INVISIBLE, unknown to the grammar.
+    if upper == "INVISIBLE" then
       goto continue
     end
 
