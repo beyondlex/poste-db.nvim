@@ -26,6 +26,18 @@ local function link_if_empty(name, target)
 end
 
 function M.setup()
+  -- Pre-define SQL highlight groups used by tree-sitter queries.
+  -- Must be set before nvim-treesitter's FileType autocmd fires, otherwise
+  -- tree-sitter applies highlights before these groups are registered.
+  link_if_empty("sqlStatement", "Statement")
+  link_if_empty("sqlKeyword", "Keyword")
+  link_if_empty("sqlType", "Type")
+  link_if_empty("sqlFunction", "Function")
+  link_if_empty("sqlSpecial", "Special")
+  link_if_empty("sqlString", "String")
+  link_if_empty("sqlNumber", "Number")
+  link_if_empty("PosteDbSqlDirectiveComment", "Special")
+
   link_if_empty("PosteDbDatasetModified", "DiffChange")
   link_if_empty("PosteDbDatasetDeleted", "DiffDelete")
   link_if_empty("PosteDbDatasetAdded", "DiffAdd")
