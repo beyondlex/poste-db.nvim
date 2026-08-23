@@ -61,6 +61,26 @@ local function extract_references_from_node(stmt_node, buf)
     return start_row + 1, start_col + 1, end_row + 1, end_col + 1
   end
 
+  -- CTE names (WITH a AS (...) SELECT ... FROM a) are scoped aliases, not
+  -- real tables. Collect them so references to a CTE are never validated
+  -- against the schema — including recursive self-references and references
+  -- from a later CTE's body (chained CTEs).
+  local cte_names = {}
+  do
+    local function scan_ctes(node)
+      if node:type() == "cte" then
+        for c in node:iter_children() do
+          if c:type() == "identifier" then
+            cte_names[vim.treesitter.get_node_text(c, buf):lower()] = true
+            break
+          end
+        end
+      end
+      for c in node:iter_children() do scan_ctes(c) end
+    end
+    scan_ctes(stmt_node)
+  end
+
   --- tree-sitter splits digit-leading identifiers (`123_abc`) into
   --- ERROR[123] + relation/object_reference[_abc]. Rejoin the fragment
   --- when its text is pure digits and it runs directly into the
@@ -86,6 +106,7 @@ local function extract_references_from_node(stmt_node, buf)
   local function add_table(name, node, db_prefix, start_node)
     name = name:gsub("^[`\"'\\[]+", ""):gsub("[]`\"'\\]+$", "")
     if name == "" then return end
+    if cte_names[name:lower()] then return end
     local key = name:lower() .. ":" .. node:start() .. ":" .. node:end_()
     if seen_tables[key] then return end
     seen_tables[key] = true
@@ -287,7 +308,7 @@ local function extract_references_from_node(stmt_node, buf)
   end
 
   walk(stmt_node)
-  return { tables = tables, columns = columns, alias_map = alias_map, from_tables = from_tables, select_aliases = select_aliases }
+  return { tables = tables, columns = columns, alias_map = alias_map, from_tables = from_tables, select_aliases = select_aliases, ctes = cte_names }
 end
 
 --- Resolve connection URL from a connection name.

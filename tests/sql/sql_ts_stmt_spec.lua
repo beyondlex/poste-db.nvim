@@ -304,6 +304,44 @@ if sem_ok and sem._test and sem._test.extract_references_from_node then
       assert.is_true(refs.select_aliases["avg_load"], "avg_load should be in select_aliases")
     end)
   end)
+
+  describe("semantic reference extraction (CTEs)", function()
+    local extract = sem._test.extract_references_from_node
+
+    local function extract_tables(sql)
+      local buf = make_buf({ sql })
+      local parser = assert(vim.treesitter.get_parser(buf, "sql"))
+      local root = parser:parse()[1]:root()
+      local stmt = nil
+      for child in root:iter_children() do
+        if child:type() == "statement" then stmt = child break end
+      end
+      local refs = extract(stmt, buf)
+      local names = {}
+      for _, t in ipairs(refs.tables) do names[#names + 1] = t.name end
+      return names, refs, buf
+    end
+
+    it("does not flag recursive CTE self-reference", function()
+      local names = extract_tables(
+        "WITH RECURSIVE seq (i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM seq WHERE i < 3) "
+          .. "INSERT INTO authors (username, email, bio) SELECT i, i, i FROM seq;"
+      )
+      assert.same({ "authors" }, names, "seq is a CTE, only the INSERT target must remain")
+    end)
+
+    it("does not flag plain CTE reference but keeps body tables", function()
+      local names = extract_tables("WITH x AS (SELECT id FROM users WHERE active) SELECT * FROM x;")
+      assert.same({ "users" }, names, "x is a CTE, users in the CTE body is a real table")
+    end)
+
+    it("does not flag chained CTE references", function()
+      local names = extract_tables(
+        "WITH a AS (SELECT 1 AS n), b AS (SELECT n FROM a) SELECT n FROM b;"
+      )
+      assert.same({}, names, "a and b are CTEs, no real tables in this statement")
+    end)
+  end)
 end
 
 describe("digit-fragment highlight (syntax.highlight_digit_prefix_fragments)", function()
