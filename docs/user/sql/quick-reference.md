@@ -86,7 +86,6 @@ Unknown `{{VAR}}` references stay literal.
 | `<CR>` | Expand/collapse node; leaf node previews data |
 | `r` | Refresh current node |
 | `/` | Search filter |
-| `s` | Generate SELECT query |
 | `d` | Generate DESCRIBE query |
 | `q` | Close browser |
 

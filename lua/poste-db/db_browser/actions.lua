@@ -427,61 +427,6 @@ function M.search_prev()
   do_jump(search_state.current - 1)
 end
 
-function M.generate_select_query(buf_line, context)
-  local idx = buf_line - HEADER_LINES
-  local table_node = M.find_table_node(context.line_to_node, idx)
-  if not table_node then
-    vim.notify("Move cursor to a table node", vim.log.levels.INFO)
-    return
-  end
-
-  if not context.source_buf or not vim.api.nvim_buf_is_valid(context.source_buf) then
-    vim.notify("No source SQL buffer found", vim.log.levels.WARN)
-    return
-  end
-
-  local schema_prefix = ""
-  local dialect = get_dialect(table_node, context.root_nodes)
-  if table_node.meta and table_node.meta.schema then
-    if dialect == "postgres" then
-      schema_prefix = table_node.meta.schema .. "."
-    end
-  end
-
-  local context_lines = {}
-  local conn = get_connection(table_node, context.root_nodes)
-  if conn then
-    table.insert(context_lines, "-- @connection " .. conn)
-  end
-
-  local db_name = table_node.meta and table_node.meta.database
-  if db_name then
-    table.insert(context_lines, "-- @database " .. db_name)
-  end
-
-  local query_lines = {
-    "",
-    "-- Query: " .. table_node.name,
-  }
-  for _, line in ipairs(context_lines) do
-    table.insert(query_lines, line)
-  end
-  table.insert(query_lines, "SELECT * FROM " .. schema_prefix .. ident.quote(table_node.name, dialect) .. " LIMIT 100;")
-  table.insert(query_lines, "")
-
-  local line_count = vim.api.nvim_buf_line_count(context.source_buf)
-  vim.api.nvim_buf_set_lines(context.source_buf, line_count, line_count, false, query_lines)
-
-  local header_line = line_count + 2
-  local target_win = vim.fn.bufwinid(context.source_buf)
-  if target_win and target_win ~= -1 then
-    vim.api.nvim_set_current_win(target_win)
-    vim.api.nvim_win_set_cursor(target_win, { header_line, 0 })
-  end
-
-  vim.notify("Generated SELECT for: " .. table_node.name, vim.log.levels.INFO)
-end
-
 local function format_bytes(bytes)
   if type(bytes) ~= "number" then return tostring(bytes or "?") end
   if bytes >= 1073741824 then return string.format("%.2f GB", bytes / 1073741824) end

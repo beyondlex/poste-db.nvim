@@ -135,7 +135,6 @@ Press `<leader>db` in a SQL file to open the database tree browser.
 |-----|--------|
 | `<CR>` | Toggle node expand/collapse |
 | `x` | Context menu |
-| `s` | Generate SELECT * |
 | `d` | Generate DESCRIBE |
 | `/` | Search filter |
 | `q` | Close |

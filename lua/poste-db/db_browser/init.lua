@@ -215,12 +215,6 @@ local function setup_browser_buffer()
       actions.search_filter(vim.fn.line("."), make_context())
     end, opts)
   end
-  k = state.get_keymap("sql_db_browser", "select_query", "s")
-  if k then
-    vim.keymap.set("n", k, function()
-      actions.generate_select_query(vim.fn.line("."), make_context())
-    end, opts)
-  end
   k = state.get_keymap("sql_db_browser", "close", "q")
   if k then
     vim.keymap.set("n", k, function() M.close() end, opts)
@@ -284,19 +278,6 @@ local function setup_browser_buffer()
   if k then
     vim.keymap.set("n", k, function()
       start_copy(vim.fn.line("."))
-    end, opts)
-  end
-
-  -- Create object: a on connection → create database, a on database → create schema
-  k = state.get_keymap("sql_db_browser", "create_object", "a")
-  if k then
-    vim.keymap.set("n", k, function()
-      local node = tree.get_node_at_line(line_to_node, vim.fn.line("."))
-      if node and node.node_type == "connection" then
-        require("poste-db.db_browser.db_create").open(node, make_context())
-      elseif node and node.node_type == "database" then
-        require("poste-db.db_browser.schema_create").open(node, make_context())
-      end
     end, opts)
   end
 

@@ -440,36 +440,10 @@ end
 
 ## 4. Integration Points
 
-### `init.lua` — Keymap
-
-```lua
--- In setup_browser_buffer()
-k = state.get_keymap("sql_db_browser", "create_object", "a")
-if k then
-  -- Contextual binding:
-  --   connection node -> create database
-  --   database node   -> create schema
-  vim.keymap.set("n", k, function()
-    local node = tree.get_node_at_line(line_to_node, vim.fn.line("."))
-    if node and node.node_type == "connection" then
-      require("poste-db.db_browser.db_create").open(node, make_context())
-    elseif node and node.node_type == "database" then
-      require("poste-db.db_browser.schema_create").open(node, make_context())
-    end
-  end, opts)
-end
-```
-
-### `state.lua` — Default Keymap
-
-```lua
-sql_db_browser = {
-  ...
-  create_object = "a",
-}
-```
-
 ### `context_menu.lua` — Menu Item
+
+Create Database / Create Schema are exposed only through the context menu
+(`x`); no dedicated browser keymap is registered.
 
 ```lua
 connection = {

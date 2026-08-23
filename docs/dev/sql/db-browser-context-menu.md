@@ -300,7 +300,6 @@ require("poste").setup({
       context_menu = "x",          -- new
       -- Legacy keys (retain for backward compat, or set to false)
       search_filter = "/",
-      select_query = "s",          -- false → force context menu
       describe_query = "d",        -- false → force context menu
       close = "q",
     },
