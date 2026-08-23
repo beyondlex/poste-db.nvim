@@ -122,7 +122,8 @@ function M.resolve_detected_target(parsed, cword, db, after_dot_col)
         table_name = schema_match.name,
       }
     end
-    if not is_table and tables and #tables > 0 then
+    if not is_table and tables and #tables > 0
+      and not SKIP_KEYWORDS[strip_q(tables[1].name):lower()] then
       return {
         kind = "column",
         db = db,
