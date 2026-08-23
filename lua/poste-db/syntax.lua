@@ -222,6 +222,7 @@ local CONSTRUCT_KEYWORDS = {
   CREATE = true, TABLE = true, INVISIBLE = true, INT = true,
   PRIMARY = true, KEY = true, AUTO_INCREMENT = true, VARCHAR = true,
   CHAR = true, COLLATE = true, CHARACTER = true,
+  IF = true, EXISTS = true,
 }
 
 local function hl_err_tokens(buf, row, from_col, to_col)
