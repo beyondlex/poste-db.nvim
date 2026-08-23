@@ -132,6 +132,7 @@ function M.open()
       if key and key ~= false then
         local key_display = state.format_key_string(key)
         local description = desc[action] or ""
+        if description == "" then goto continue end
         local line = string.format("  %-12s  %s", key_display, description)
         table.insert(lines, line)
         width = math.max(width, #line + 2)
@@ -140,6 +141,7 @@ function M.open()
           table.insert(highlights, { line = #lines - 1, col_start = 2, col_end = key_e, hl_group = "Special" })
         end
       end
+      ::continue::
     end
   end
 
