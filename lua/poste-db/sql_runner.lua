@@ -361,9 +361,6 @@ function M.run_sql_request()
         require("poste-db.completion.data").clear_cache()
       end
 
-      -- If raw mode was active, restore dataset buffer before rendering new results
-      require("poste-db.buffer.nav").restore_from_raw_mode()
-
       sql_context.handle_use_statement(parsed)
 
       local results = parsed.results or {}

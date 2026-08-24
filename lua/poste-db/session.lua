@@ -31,7 +31,6 @@ function M.begin(meta)
     state.sql.last_dataset = nil
     state.sql.pagination = {}
     state.sql.cell = { row = 1, col = 1 }
-    state.sql._raw_mode = false
   end
 
   active = session

@@ -301,10 +301,6 @@ function M.toggle_row_numbers()
     vim.log.levels.INFO, { title = C.TITLE })
 end
 
-function M.restore_from_raw_mode()
-  raw_mode.exit()
-end
-
 --- Delegates to buffer_nav_ui.build_status_winbar with current dataset context.
 function M.build_status_winbar(meta)
   return require("poste-db.buffer.nav_ui").build_status_winbar(meta, D.T(), #D.tabs, D.active_tab_idx)

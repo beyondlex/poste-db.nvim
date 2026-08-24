@@ -20,10 +20,6 @@ end
 
 local function check_edit_guards(tab)
   if not tab or not tab.layout then return false end
-  if get_state().sql._raw_mode then
-    vim.notify("Editing is not supported in raw mode", vim.log.levels.WARN)
-    return false
-  end
   if tab.layout.rows and #tab.layout.rows > const.EDIT_MAX_ROWS then
     vim.notify("Editing is not supported for result sets > " .. const.EDIT_MAX_ROWS .. " rows", vim.log.levels.WARN)
     return false

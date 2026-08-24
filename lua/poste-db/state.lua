@@ -17,7 +17,7 @@ M.highlight_cell = true -- toggle: extmark on current cell
 M._hide_header_float = false -- toggle: suppress float header window
 M._hide_row_numbers = false  -- toggle: suppress row number column highlight
 M._trace = false        -- toggle: perf tracing for h/j/k/l navigation
-M._raw_mode = false     -- toggle: compact raw rendering (no column padding)
+
 M.db_browser = {        -- database structure browser
   connection = nil,   -- current connection name being browsed
 }
