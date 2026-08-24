@@ -4,7 +4,7 @@
 --- Multi-statement execution works (see sql_runner), but the tab
 --- infrastructure must work correctly when multiple tabs are created.
 
-local buffer = require("poste-sql.buffer")
+local buffer = require("poste-db.buffer")
 local t = buffer._test
 
 describe("tab system", function()

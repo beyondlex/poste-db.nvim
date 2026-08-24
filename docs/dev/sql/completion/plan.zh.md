@@ -37,8 +37,8 @@
   - `get_items()` 接入此新函数
 
 - [x] **P1f. 旧版开关** — 在 `completion/init.lua`:
-  - `vim.g.poste_sql_legacy_completion = true` → 仅 Lua 回退
-  - `vim.g.poste_sql_legacy_completion = "rust"` → 仅 Rust，不回退
+  - `vim.g.poste_db_legacy_completion = true` → 仅 Lua 回退
+  - `vim.g.poste_db_legacy_completion = "rust"` → 仅 Rust，不回退
   - 默认 `nil` → Rust 优先，Lua 不覆盖
 
 - [x] **P1g. 测试导出改名**:
@@ -56,7 +56,7 @@ cargo test -p poste-core sql_context
 tests/run.sh
 ```
 
-**标准**: 默认补全不再被 Lua 启发式覆盖。`vim.g.poste_sql_legacy_completion = "rust"` 可再现纯 Rust 行为。
+**标准**: 默认补全不再被 Lua 启发式覆盖。`vim.g.poste_db_legacy_completion = "rust"` 可再现纯 Rust 行为。
 
 ---
 

@@ -56,10 +56,10 @@
 
 | 文件 | 操作 | 说明 |
 |------|------|------|
-| `lua/poste-sql/db_browser/copy.lua` | **新增** | 复制编排逻辑、进度管理 |
-| `lua/poste-sql/db_browser/init.lua` | 修改 | 多选状态、Tab/Esc/p 键位 |
-| `lua/poste-sql/db_browser/tree.lua` | 修改 | `flatten_tree` 支持选中标记渲染 |
-| `lua/poste-sql/db_browser/icons.lua` | 修改 | 添加 `SELECTED`/`UNSELECTED` 图标常量 |
+| `lua/poste-db/db_browser/copy.lua` | **新增** | 复制编排逻辑、进度管理 |
+| `lua/poste-db/db_browser/init.lua` | 修改 | 多选状态、Tab/Esc/p 键位 |
+| `lua/poste-db/db_browser/tree.lua` | 修改 | `flatten_tree` 支持选中标记渲染 |
+| `lua/poste-db/db_browser/icons.lua` | 修改 | 添加 `SELECTED`/`UNSELECTED` 图标常量 |
 
 ### 状态管理（`db_browser/init.lua`）
 
@@ -149,7 +149,7 @@ dialect 不一致时：
 
 ### 标识符引用规则
 
-由 `lua/poste-sql/table_ops.lua` 中的 `quote()` 函数处理（已实现）：
+由 `lua/poste-db/table_ops.lua` 中的 `quote()` 函数处理（已实现）：
 
 | Dialect | 引用符 | 示例 |
 |---------|--------|------|
@@ -266,5 +266,5 @@ copy_tables(source_node, target_node, selected_tables)
 - `poste/cli.lua` — `run_async` 调用 CLI
 - `poste/dialog.lua` — 确认/进度/结果浮窗
 - `poste/state.lua` — 配置读取
-- `poste-sql/connections.lua` — `get_connection_config` 获取 dialect
+- `poste-db/connections.lua` — `get_connection_config` 获取 dialect
 - 现有 `poste introspect --type ddl` 和 `poste run` 命令（无需改动 Rust）

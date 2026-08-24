@@ -4,9 +4,9 @@
 --- - extract_stmt_at_cursor: single-statement extraction (indicator placement)
 --- - try_ts_stmt_span: Tree-sitter statement boundary detection
 
-local init = require("poste-sql.init")
+local init = require("poste-db.init")
 local t = init._test
-local has_sql_parser = require("poste-sql.ts_stmt").check_parser()
+local has_sql_parser = require("poste-db.ts_stmt").check_parser()
 
 local function make_buf(lines)
   local buf = vim.api.nvim_create_buf(false, true)

@@ -5,7 +5,7 @@ package.loaded["poste.util"] = saved_poste_util or {
   end,
 }
 
-local nav = require("poste-sql.nav")
+local nav = require("poste-db.nav")
 
 describe("nav.goto_definition", function()
   local saved_modules = {}
@@ -51,7 +51,7 @@ describe("nav.goto_definition", function()
       "dialect = \"postgres\"",
     }, config_path)
 
-    stub_module("poste-sql.connections", {
+    stub_module("poste-db.connections", {
       find_connections_toml = function()
         return config_path
       end,
@@ -74,12 +74,12 @@ describe("nav.goto_definition", function()
   it("delegates @database jumps to db_browser.navigate_to", function()
     local record = {}
 
-    stub_module("poste-sql.context", {
+    stub_module("poste-db.context", {
       resolve_full_context = function()
         return { connection = "conn" }
       end,
     })
-    stub_module("poste-sql.db_browser", {
+    stub_module("poste-db.db_browser", {
       navigate_to = function(conn, db)
         record.conn = conn
         record.db = db
@@ -97,17 +97,17 @@ describe("nav.goto_definition", function()
   it("navigates table words through db_browser.navigate_to_table when no binary is available", function()
     local record = {}
 
-    stub_module("poste-sql.context", {
+    stub_module("poste-db.context", {
       resolve_full_context = function()
         return { connection = "conn", database = "blog" }
       end,
     })
-    stub_module("poste-sql.completion.data", {
+    stub_module("poste-db.completion.data", {
       find_binary = function()
         return nil
       end,
     })
-    stub_module("poste-sql.db_browser", {
+    stub_module("poste-db.db_browser", {
       navigate_to_table = function(conn, db, tbl, col)
         record.conn = conn
         record.db = db

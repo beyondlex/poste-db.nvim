@@ -1,10 +1,10 @@
 local saved_state = package.loaded["poste.state"]
 local saved_util = package.loaded["poste.util"]
 local saved_indicators = package.loaded["poste.indicators"]
-local saved_statement = package.loaded["poste-sql.statement"]
-local saved_introspect = package.loaded["poste-sql.introspect"]
-local saved_format = package.loaded["poste-sql.format"]
-local saved_buffer = package.loaded["poste-sql.buffer"]
+local saved_statement = package.loaded["poste-db.statement"]
+local saved_introspect = package.loaded["poste-db.introspect"]
+local saved_format = package.loaded["poste-db.format"]
+local saved_buffer = package.loaded["poste-db.buffer"]
 
 local state_stub = {
   sql = { context = { connection = nil, database = nil } },
@@ -17,18 +17,18 @@ local state_stub = {
 package.loaded["poste.state"] = state_stub
 package.loaded["poste.util"] = {}
 package.loaded["poste.indicators"] = { clear_all = function() end, set_indicator = function() end }
-package.loaded["poste-sql.statement"] = {
+package.loaded["poste-db.statement"] = {
   extract_stmt_at_cursor = function() end,
   extract_visual_block = function() end,
   find_stmt_lines = function() end,
   get_stmt_sql = function() end,
   extract_table_name = function() end,
 }
-package.loaded["poste-sql.introspect"] = { show_table_ddl = function() end }
-package.loaded["poste-sql.format"] = { format_dataset = function() end, format_error = function() end, plan_resultset_layout = function() end, render_page = function() end, format_resultset = function() end }
-package.loaded["poste-sql.buffer"] = { clear_panel = function() end, render_dataset = function() end }
+package.loaded["poste-db.introspect"] = { show_table_ddl = function() end }
+package.loaded["poste-db.format"] = { format_dataset = function() end, format_error = function() end, plan_resultset_layout = function() end, render_page = function() end, format_resultset = function() end }
+package.loaded["poste-db.buffer"] = { clear_panel = function() end, render_dataset = function() end }
 
-local runner = require("poste-sql.sql_runner")
+local runner = require("poste-db.sql_runner")
 
 describe("sql_runner ensure_sql_keymaps", function()
   local buf
@@ -44,11 +44,11 @@ describe("sql_runner ensure_sql_keymaps", function()
       return default
     end
     runner.ensure_sql_keymaps(buf)
-    assert.is_true(vim.b[buf].poste_sql_keymaps_installed)
+    assert.is_true(vim.b[buf].poste_db_keymaps_installed)
   end)
 
   it("skips if already installed", function()
-    vim.b[buf].poste_sql_keymaps_installed = true
+    vim.b[buf].poste_db_keymaps_installed = true
     local get_keymap_calls = 0
     state_stub.get_keymap = function()
       get_keymap_calls = get_keymap_calls + 1
@@ -86,10 +86,10 @@ describe("sql_runner run_sql_request", function()
     package.loaded["poste.state"] = saved_state
     package.loaded["poste.util"] = saved_util
     package.loaded["poste.indicators"] = saved_indicators
-    package.loaded["poste-sql.statement"] = saved_statement
-    package.loaded["poste-sql.introspect"] = saved_introspect
-    package.loaded["poste-sql.format"] = saved_format
-    package.loaded["poste-sql.buffer"] = saved_buffer
+    package.loaded["poste-db.statement"] = saved_statement
+    package.loaded["poste-db.introspect"] = saved_introspect
+    package.loaded["poste-db.format"] = saved_format
+    package.loaded["poste-db.buffer"] = saved_buffer
   end)
 end)
 

@@ -1,0 +1,184 @@
+CREATE DATABASE IF NOT EXISTS blog CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE blog;
+
+CREATE TABLE users (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    name        VARCHAR(100) NOT NULL,
+    email       VARCHAR(255) NOT NULL UNIQUE,
+    status      ENUM('active','inactive') NOT NULL DEFAULT 'active',
+    created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+CREATE TABLE categories (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    name        VARCHAR(100) NOT NULL UNIQUE,
+    slug        VARCHAR(100) NOT NULL UNIQUE,
+    description TEXT,
+    created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+CREATE TABLE authors (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    username    VARCHAR(50)  NOT NULL UNIQUE,
+    email       VARCHAR(255) NOT NULL UNIQUE,
+    bio         TEXT,
+    created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+CREATE TABLE posts (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    author_id   INT NOT NULL,
+    category_id INT NOT NULL,
+    title       VARCHAR(300) NOT NULL,
+    slug        VARCHAR(300) NOT NULL UNIQUE,
+    body        TEXT NOT NULL,
+    status      ENUM('draft','published','archived') NOT NULL DEFAULT 'draft',
+    published_at TIMESTAMP NULL,
+    metadata    JSON,
+    created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (author_id)   REFERENCES authors(id),
+    FOREIGN KEY (category_id) REFERENCES categories(id)
+) ENGINE=InnoDB;
+
+CREATE TABLE tags (
+    id   INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(50) NOT NULL UNIQUE
+) ENGINE=InnoDB;
+
+CREATE TABLE post_tags (
+    post_id INT NOT NULL,
+    tag_id  INT NOT NULL,
+    PRIMARY KEY (post_id, tag_id),
+    FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE,
+    FOREIGN KEY (tag_id)  REFERENCES tags(id)  ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE comments (
+    id         INT AUTO_INCREMENT PRIMARY KEY,
+    post_id    INT NOT NULL,
+    author     VARCHAR(100) NOT NULL,
+    email      VARCHAR(255) NOT NULL,
+    body       TEXT NOT NULL,
+    approved   BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE,
+    INDEX idx_comments_post_id (post_id),
+    INDEX idx_comments_approved (approved)
+) ENGINE=InnoDB;
+
+INSERT INTO users (name, email) VALUES
+  ('Alice', 'alice@example.com'),
+  ('Bob', 'bob@example.com'),
+  ('Maria', 'maria@example.com');
+
+INSERT INTO users (name, email)
+WITH RECURSIVE seq (i) AS (
+    SELECT 1 UNION ALL SELECT i + 1 FROM seq WHERE i < 50
+)
+SELECT
+  CONCAT('User', i),
+  CONCAT('user', i, '@example.com')
+FROM seq;
+
+INSERT INTO categories (name, slug, description) VALUES
+  ('Technology',  'technology',  'Software, hardware, and everything in between'),
+  ('Design',      'design',      'UI/UX, graphic design, and visual arts'),
+  ('DevOps',      'devops',      'Infrastructure, CI/CD, and operations'),
+  ('Career',      'career',      'Professional growth and industry insights');
+
+INSERT INTO authors (username, email, bio) VALUES
+  ('alice_dev',   'alice@example.com',   'Full-stack developer, open source enthusiast'),
+  ('bob_design',  'bob@example.com',     'Product designer with 10 years experience'),
+  ('carol_ops',   'carol@example.com',   'SRE at a fintech startup');
+
+INSERT INTO authors (username, email, bio)
+WITH RECURSIVE seq (i) AS (
+    SELECT 1 UNION ALL SELECT i + 1 FROM seq WHERE i < 50
+)
+SELECT
+  CONCAT('author', i),
+  CONCAT('author', i, '@example.com'),
+  ELT(1 + (i % 5), 'Full-stack developer', 'Backend engineer', 'Frontend specialist', 'DevOps engineer', 'Data scientist')
+FROM seq;
+
+INSERT INTO posts (author_id, category_id, title, slug, body, status, published_at, metadata) VALUES
+  (1, 1, 'Getting Started with Rust',       'getting-started-with-rust',
+   'Rust is a systems programming language focused on safety and performance...', 'published', NOW() - INTERVAL 20 DAY,
+   JSON_OBJECT('views', 1450, 'reading_time', 8, 'tags', JSON_ARRAY('rust', 'tutorial'))),
+  (1, 1, 'Neovim as an IDE',                'neovim-as-an-ide',
+   'With the right plugins, Neovim can rival any modern IDE...',                  'published', NOW() - INTERVAL 15 DAY,
+   JSON_OBJECT('views', 980, 'reading_time', 6, 'tags', JSON_ARRAY('neovim', 'ide'))),
+  (2, 2, 'Design Systems at Scale',         'design-systems-at-scale',
+   'Building and maintaining a design system across multiple product teams...',   'published', NOW() - INTERVAL 10 DAY,
+   JSON_OBJECT('views', 720, 'reading_time', 12, 'tags', JSON_ARRAY('design', 'systems'))),
+  (3, 3, 'Kubernetes Observability',        'kubernetes-observability',
+   'Logs, metrics, and traces: the three pillars of observability...',             'published', NOW() - INTERVAL 7 DAY,
+   JSON_OBJECT('views', 1120, 'reading_time', 9, 'tags', JSON_ARRAY('kubernetes', 'observability'))),
+  (1, 1, 'Async Rust in Production',        'async-rust-in-production',
+   'Lessons learned running Tokio-based services in production...',                'draft',     NULL,
+   JSON_OBJECT('views', 0, 'reading_time', 10, 'tags', JSON_ARRAY('rust', 'async'))),
+  (2, 2, 'Color Theory for Developers',     'color-theory-for-developers',
+   'Understanding color spaces, contrast ratios, and accessibility...',            'published', NOW() - INTERVAL 3 DAY,
+   JSON_OBJECT('views', 540, 'reading_time', 5, 'tags', JSON_ARRAY('design', 'color'))),
+  (3, 3, 'GitOps with ArgoCD',              'gitops-with-argocd',
+   'Declarative continuous delivery for Kubernetes using Git as source of truth...','archived',  NOW() - INTERVAL 60 DAY,
+   JSON_OBJECT('views', 310, 'reading_time', 7, 'tags', JSON_ARRAY('gitops', 'argocd')));
+
+INSERT INTO posts (author_id, category_id, title, slug, body, status, published_at)
+WITH RECURSIVE seq (i) AS (
+    SELECT 1 UNION ALL SELECT i + 1 FROM seq WHERE i < 200
+)
+SELECT
+  1 + (i % 53),
+  1 + (i % 4),
+  CONCAT('Post Title ', i),
+  CONCAT('post-', i),
+  CONCAT('Content for post number ', i),
+  ELT(1 + (i % 3), 'draft', 'published', 'archived'),
+  CASE WHEN i % 3 != 1 THEN NOW() - INTERVAL (i * 2) DAY ELSE NULL END
+FROM seq;
+
+INSERT INTO tags (name) VALUES
+  ('rust'), ('neovim'), ('lua'), ('design-system'), ('figma'),
+  ('kubernetes'), ('docker'), ('prometheus'), ('gitops'), ('accessibility');
+
+INSERT INTO tags (name)
+WITH RECURSIVE seq (i) AS (
+    SELECT 1 UNION ALL SELECT i + 1 FROM seq WHERE i < 20
+)
+SELECT CONCAT('tag-', i) FROM seq;
+
+INSERT INTO post_tags (post_id, tag_id) VALUES
+  (1, 1), (2, 2), (2, 3), (3, 4), (3, 5),
+  (4, 6), (4, 7), (4, 8), (5, 1), (6, 5), (6, 10), (7, 9), (7, 6);
+
+INSERT INTO post_tags (post_id, tag_id)
+WITH RECURSIVE seq (i) AS (
+    SELECT 1 UNION ALL SELECT i + 1 FROM seq WHERE i < 200
+)
+SELECT
+  8 + (i % 200),
+  1 + (i % 30)
+FROM seq
+WHERE i % 3 != 0;
+
+INSERT INTO comments (post_id, author, email, body, approved) VALUES
+  (1, 'reader42',    'reader42@mail.com',    'Great intro to Rust!',                           TRUE),
+  (1, 'cpp_dev',     'cpp@mail.com',         'How does Rust compare to C++ for embedded?',    TRUE),
+  (2, 'vim_user',    'vim@mail.com',         'I switched from VS Code last year.',            TRUE),
+  (3, 'junior_dev',  'junior@mail.com',      'Any tips for design systems?',                   TRUE),
+  (4, 'sre_pro',     'sre@mail.com',         'We use Grafana + Loki + Tempo.',                TRUE),
+  (6, 'a11y_adv',    'a11y@mail.com',        'WCAG 2.2 is a must-read.',                       TRUE);
+
+INSERT INTO comments (post_id, author, email, body, approved)
+WITH RECURSIVE seq (i) AS (
+    SELECT 1 UNION ALL SELECT i + 1 FROM seq WHERE i < 50
+)
+SELECT
+  1 + (a.i + (b.i - 1) * 50) % 207,
+  CONCAT('reader', a.i + (b.i - 1) * 50),
+  CONCAT('reader', a.i + (b.i - 1) * 50, '@mail.com'),
+  CONCAT('Comment body number ', a.i + (b.i - 1) * 50),
+  RAND() < 0.7
+FROM seq a CROSS JOIN seq b
+WHERE a.i + (b.i - 1) * 50 <= 500;

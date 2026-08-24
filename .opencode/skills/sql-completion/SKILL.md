@@ -26,7 +26,7 @@ covers what docs don't: workflow, rules of thumb, historical pitfalls.
 - Table, alias, schema, or column extraction logic
 - Statement boundary detection
 - New SQL constructs (CTEs, window functions, `SHOW`, `COPY`, `FOR UPDATE`)
-- Any change in `crates/poste-core/src/sql_context/` or `lua/poste-sql/completion*.lua`
+- Any change in `crates/poste-core/src/sql_context/` or `lua/poste-db/completion*.lua`
 
 ## Source-of-Truth Rules
 
@@ -149,7 +149,7 @@ For dialect-specific completion:
 ### Hybrid Override (Fixed in P1)
 
 Lua no longer overrides Rust. When debugging, test with
-`vim.g.poste_sql_legacy_completion = "rust"` to isolate Rust behavior.
+`vim.g.poste_db_legacy_completion = "rust"` to isolate Rust behavior.
 Fix missing detection in Rust rather than adding Lua heuristics.
 
 ### Schema Loss Produces Wrong Columns
@@ -201,8 +201,8 @@ Tokenizer changes must preserve:
 | `crates/poste-core/src/sql_context/tables.rs` | Table/schema/alias extraction |
 | `crates/poste-core/src/sql_context/functions.rs` | SQL function list |
 | `crates/poste-cli/src/main.rs` | `poste context detect` JSON shape |
-| `lua/poste-sql/completion/init.lua` | Completion orchestrator |
-| `lua/poste-sql/completion/ctx.lua` | Legacy Lua regex fallback (deprecated) |
-| `lua/poste-sql/completion/data.lua` | Async introspection, cache, fallback lists |
-| `lua/poste-sql/context.lua` | Connection/database resolution |
+| `lua/poste-db/completion/init.lua` | Completion orchestrator |
+| `lua/poste-db/completion/ctx.lua` | Legacy Lua regex fallback (deprecated) |
+| `lua/poste-db/completion/data.lua` | Async introspection, cache, fallback lists |
+| `lua/poste-db/context.lua` | Connection/database resolution |
 | `crates/poste-exec/src/sql_dialect.rs` | Runtime dialect behavior for introspection/execution |

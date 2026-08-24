@@ -1,12 +1,12 @@
 local saved_state = package.loaded["poste.state"]
 local saved_select = package.loaded["poste.select"]
-local saved_const = package.loaded["poste-sql.constants"]
-local saved_connections = package.loaded["poste-sql.connections"]
+local saved_const = package.loaded["poste-db.constants"]
+local saved_connections = package.loaded["poste-db.connections"]
 
 local state_stub = { sql = { context = { connection = nil, database = nil } }, log = function() end }
-local const_stub = package.loaded["poste-sql.constants"] or require("poste-sql.constants")
+local const_stub = package.loaded["poste-db.constants"] or require("poste-db.constants")
 
-package.loaded["poste-sql.connections"] = {
+package.loaded["poste-db.connections"] = {
   get_connection_config = function(name)
     return { database = "default_db" }
   end,
@@ -14,7 +14,7 @@ package.loaded["poste-sql.connections"] = {
 package.loaded["poste.state"] = state_stub
 package.loaded["poste.select"] = { select = function() end }
 
-local context = require("poste-sql.context")
+local context = require("poste-db.context")
 
 describe("context resolve_context", function()
   local function make_buf(lines)
@@ -121,7 +121,7 @@ describe("context get_cursor_status_text", function()
 
   before_each(function()
     package.loaded["poste.state"] = state_stub
-    package.loaded["poste-sql.connections"] = {
+    package.loaded["poste-db.connections"] = {
       get_connection_config = function(name)
         return { database = "default_db" }
       end,
@@ -170,8 +170,8 @@ describe("context handle_use_statement", function()
   after_each(function()
     package.loaded["poste.state"] = saved_state
     package.loaded["poste.select"] = saved_select
-    package.loaded["poste-sql.constants"] = saved_const
-    package.loaded["poste-sql.connections"] = saved_connections
+    package.loaded["poste-db.constants"] = saved_const
+    package.loaded["poste-db.connections"] = saved_connections
   end)
 end)
 

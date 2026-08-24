@@ -17,10 +17,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout poste-sql.nvim
+      - name: Checkout poste-db.nvim
         uses: actions/checkout@v4
         with:
-          path: poste-sql.nvim
+          path: poste-db.nvim
 
       - name: Checkout poste.nvim (sibling dependency)
         uses: actions/checkout@v4
@@ -44,12 +44,12 @@ jobs:
           nvim --headless -u NONE -c "TSInstallSync sql" -c "qa" 2>/dev/null || true
 
       - name: Run tests
-        working-directory: poste-sql.nvim
+        working-directory: poste-db.nvim
         run: |
           ./tests/run.sh 2>&1 || echo "::warning::Tests failed or skipped (missing binary?)"
 
       - name: Show test summary
-        working-directory: poste-sql.nvim
+        working-directory: poste-db.nvim
         if: always()
         run: |
           echo "=== Test output (if any) ==="

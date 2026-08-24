@@ -1,4 +1,4 @@
-local statement = require("poste-sql.statement")
+local statement = require("poste-db.statement")
 
 describe("statement find_block_for_line", function()
   it("returns whole buffer when no markers exist", function()

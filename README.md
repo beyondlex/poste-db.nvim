@@ -1,4 +1,4 @@
-# poste-sql.nvim
+# poste-db.nvim
 
 **SQL execution, dataset browser, and schema introspection for Neovim.** Part of the [Poste](https://github.com/beyondlex/poste.nvim) family.
 
@@ -21,13 +21,13 @@
 ```lua
 -- lazy.nvim
 {
-  "beyondlex/poste-sql.nvim",
+  "beyondlex/poste-db.nvim",
   dependencies = {
     "beyondlex/poste.nvim",
     "saghen/blink.cmp",
   },
   config = function()
-    require("poste-sql.init").setup()
+    require("poste-db.init").setup()
   end,
 }
 ```
@@ -135,7 +135,6 @@ Press `<leader>db` in a SQL file to open the database tree browser.
 |-----|--------|
 | `<CR>` | Toggle node expand/collapse |
 | `x` | Context menu |
-| `s` | Generate SELECT * |
 | `d` | Generate DESCRIBE |
 | `/` | Search filter |
 | `q` | Close |
@@ -157,33 +156,42 @@ Press `<Tab>` to jump between placeholders, `<S-Tab>` to go back.
 - **Functions** — Aggregate and scalar functions per dialect
 - **Connection-aware** — Completions reflect the actual schema
 
-Requires **blink.cmp**. Auto-registers as `poste_sql` source.
+Requires **blink.cmp**. Auto-registers as `poste_db` source.
 
 ### SQL Snippets
 
-Built-in snippets appear as completion items when the prefix matches a trigger word:
+Built-in snippets are organized as **categories**, each with per-dialect
+templates picked from the current connection's dialect
+(mysql / mariadb / postgres / sqlite, falling back to a `default` template).
+A trigger routes to a category: `trigger -> category -> [dialect] -> template`.
 
-| Trigger | Template |
-|---------|----------|
-| `ct` | `create table` |
-| `sf` / `sl` | `select * from ... limit 100` |
-| `cnt` | `select count(*)` |
-| `ins` | `insert into ... values` |
-| `upd` | `update ... set ... where` |
-| `del` | `delete from ... where` |
-| `wh` | `where` clause |
-| `cola` | `alter table add column` |
-| `colu` | `alter table modify column` |
-| `cte` | `with ... as` |
-| `idx` | `create index` |
-| `uni` | `union all` |
+Every built-in snippet appears as a completion item when the prefix matches
+its trigger word:
+
+| Trigger | Category | Template | Dialect variants |
+|---------|----------|----------|------------------|
+| `ct` | `create_table` | `create table` | mysql `AUTO_INCREMENT`, postgres `SERIAL`, sqlite `AUTOINCREMENT` |
+| `tab` | `create_table_timestamp` | `create table` + `updated_at`/`created_at` | postgres/sqlite drop `ON UPDATE CURRENT_TIMESTAMP` |
+| `cdb` | `create_database` | `create database` | mysql `CHARACTER SET`+`COLLATE`, postgres `ENCODING`/`LC_COLLATE`, sqlite `ATTACH DATABASE` |
+| `col` | `column` | integer column | postgres/sqlite drop `COMMENT` |
+| `colv` | `column_varchar` | varchar column | postgres/sqlite drop `COMMENT`, sqlite uses `TEXT` |
+| `sf` | `select_from` | `select * from ... limit 100` | default only |
+| `cnt` | `select_count` | `select count(*)` | default only |
+| `ins` | `insert` | `insert into ... values` | default only |
+| `upd` | `update` | `update ... set ... where` | default only |
+| `del` | `delete` | `delete from ... where` | default only |
+| `cte` | `cte` | `with ... as` | default only |
+| `idx` | `create_index` | `create index` | default only |
+| `cola` | `alter_add_column` | `alter table add column` | postgres/sqlite drop `COMMENT` |
+| `colu` | `alter_modify_column` | `alter table modify column` | postgres uses `ALTER COLUMN ... SET` |
+| `uni` | `union_all` | `union all` | default only |
 
 All snippets use **LSP-style syntax** (`${1:placeholder}`, `$0` for exit, `$$` for literal `$`). See `:help vim.snippet` or the [LSP spec](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#snippet_syntax) for details.
 
 **Custom snippets** via `setup()`:
 
 ```lua
-require("poste-sql").setup({
+require("poste-db").setup({
   snippets = {
     -- Simple: trigger word → snippet body
     myq = "SELECT * FROM ${1:table} WHERE ${2:condition};",
@@ -192,6 +200,16 @@ require("poste-sql").setup({
     myf = {
       label = "my custom query",
       snippet = "with ${1:cte} as (\n  ${2:select_query}\n)\nselect * from ${1:cte};",
+    },
+
+    -- Route a trigger to a built-in category (or override one)
+    mkct = "create_table",          -- new trigger for create_table category
+    -- ct  = "create_database",     -- override built-in ct
+
+    -- Custom category with per-dialect variants
+    mkb = {
+      default  = "CREATE DATABASE ${1:db};",
+      postgres = "CREATE DATABASE ${1:db} ENCODING 'UTF8';",
     },
   },
 })

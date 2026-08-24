@@ -1,5 +1,5 @@
-local sort = require("poste-sql.buffer.nav_sort")
-local D = require("poste-sql.dataset")
+local sort = require("poste-db.buffer.nav_sort")
+local D = require("poste-db.dataset")
 
 describe("buffer_nav_sort", function()
   it("cycles sort state and reset", function()

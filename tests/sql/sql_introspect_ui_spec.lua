@@ -1,4 +1,4 @@
-local ui = require("poste-sql.introspect.ui")
+local ui = require("poste-db.introspect.ui")
 
 describe("introspect ui helpers", function()
   local saved_notify = vim.notify
@@ -73,12 +73,12 @@ describe("introspect ui helpers", function()
     assert.same({
       msg = "Column 'missing' not found in table 'authors'",
       level = vim.log.levels.WARN,
-      opts = { title = "Poste SQL" },
+      opts = { title = "PosteDb" },
     }, notified)
     assert.same({
       msg = "No database info found",
       level = vim.log.levels.WARN,
-      opts = { title = "Poste SQL" },
+      opts = { title = "PosteDb" },
     }, notified2)
   end)
 end)

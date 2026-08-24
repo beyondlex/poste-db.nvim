@@ -1,7 +1,7 @@
 -- Diagnostic tests for SQL completion
 -- Focus: does "SELECT * FROM authors WHERE " trigger column completions?
 
-local sql_comp = require("poste-sql.completion")
+local sql_comp = require("poste-db.completion")
 local get_items = sql_comp._test.get_items
 
 -- ── 3. get_items integration (no real DB needed) ─────────────────────────────
@@ -516,7 +516,7 @@ describe("get_items table context", function()
     state.sql.context = { connection = "test-conn", database = "blog" }
     sql_comp.cache_tables({ { name = "authors" }, { name = "posts" } })
     -- Pre-cache databases so ensure_databases doesn't start async job with binary
-    local data_mod = require("poste-sql.completion.data")
+    local data_mod = require("poste-db.completion.data")
     local cache = data_mod.get_cache()
     cache["test-conn/__databases__"] = { "blog" }
   end)
@@ -634,7 +634,7 @@ end)
 -- Requires Rust binary. Skip if not found.
 -- Authoritative drift tests are in Rust: test_lua_fallback_functions_are_subset,
 -- test_lua_keywords_recognized_by_rust.
-local data = require("poste-sql.completion.data")
+local data = require("poste-db.completion.data")
 describe("Rust/Lua function drift", function()
   it("every Lua SQL_FUNCTIONS entry exists in Rust known_functions()", function()
     local binary = data.find_binary()
@@ -678,13 +678,13 @@ describe("completion mode integration", function()
   end
 
   local function mock_find_binary()
-    _G._saved_find_binary = require("poste-sql.completion.data").find_binary
-    require("poste-sql.completion.data").find_binary = function() return nil end
+    _G._saved_find_binary = require("poste-db.completion.data").find_binary
+    require("poste-db.completion.data").find_binary = function() return nil end
   end
 
   local function restore_find_binary()
     if _G._saved_find_binary then
-      require("poste-sql.completion.data").find_binary = _G._saved_find_binary
+      require("poste-db.completion.data").find_binary = _G._saved_find_binary
       _G._saved_find_binary = nil
     end
   end
@@ -697,11 +697,11 @@ describe("completion mode integration", function()
     sql_comp.cache_columns("authors", {
       { name = "id" }, { name = "username" }, { name = "email" }, { name = "bio" },
     })
-    _G._saved_legacy = vim.g.poste_sql_legacy_completion
+    _G._saved_legacy = vim.g.poste_db_legacy_completion
   end)
 
   after_each(function()
-    vim.g.poste_sql_legacy_completion = _G._saved_legacy
+    vim.g.poste_db_legacy_completion = _G._saved_legacy
     restore_find_binary()
   end)
 
@@ -711,7 +711,7 @@ describe("completion mode integration", function()
     before_each(function() mock_find_binary() end)
 
     it("returns keywords after WHERE (heuristic removed)", function()
-      vim.g.poste_sql_legacy_completion = true
+      vim.g.poste_db_legacy_completion = true
       local buf = make_buf({ "###", "SELECT * FROM authors WHERE " })
       local items = nil
       get_items(buf, "SELECT * FROM authors WHERE ", 2, function(r) items = r end)
@@ -725,7 +725,7 @@ describe("completion mode integration", function()
     end)
 
     it("uses Lua fallback SQL_FUNCTIONS for keyword context", function()
-      vim.g.poste_sql_legacy_completion = true
+      vim.g.poste_db_legacy_completion = true
       local buf = make_buf({ "###", "CO" })
       local items = nil
       get_items(buf, "CO", 2, function(r) items = r end)
@@ -740,7 +740,7 @@ describe("completion mode integration", function()
 
   -- Mode: "rust" (Rust strict) — Rust path only, no Lua fallback
   describe("legacy_completion = 'rust' (Rust strict)", function()
-    local data_mod = require("poste-sql.completion.data")
+    local data_mod = require("poste-db.completion.data")
     local has_binary = data_mod.find_binary() ~= nil
 
     local function skip_or_run(assert_fn)
@@ -754,7 +754,7 @@ describe("completion mode integration", function()
 
     it("returns columns after WHERE", function()
       skip_or_run(function()
-        vim.g.poste_sql_legacy_completion = "rust"
+        vim.g.poste_db_legacy_completion = "rust"
         local buf = make_buf({ "###", "SELECT * FROM authors WHERE " })
         local items = nil
         get_items(buf, "SELECT * FROM authors WHERE ", 2, function(r) items = r end)
@@ -768,7 +768,7 @@ describe("completion mode integration", function()
 
     it("returns tables after FROM", function()
       skip_or_run(function()
-        vim.g.poste_sql_legacy_completion = "rust"
+        vim.g.poste_db_legacy_completion = "rust"
         local buf = make_buf({ "###", "SELECT * FROM " })
         local items = nil
         get_items(buf, "SELECT * FROM ", 2, function(r) items = r end)
@@ -782,7 +782,7 @@ describe("completion mode integration", function()
 
   -- Conditional: Rust binary integration tests
   describe("Rust binary integration", function()
-    local data_mod = require("poste-sql.completion.data")
+    local data_mod = require("poste-db.completion.data")
     local binary = data_mod.find_binary()
     local has_binary = binary ~= nil
 
@@ -898,25 +898,111 @@ describe("completion mode integration", function()
   -- Mode toggle function
   describe("toggle_legacy cycles through modes", function()
     before_each(function()
-      vim.g.poste_sql_legacy_completion = nil
+      vim.g.poste_db_legacy_completion = nil
     end)
 
     it("first call sets to true (Lua-only)", function()
       sql_comp.toggle_legacy()
-      assert.is_true(vim.g.poste_sql_legacy_completion)
+      assert.is_true(vim.g.poste_db_legacy_completion)
     end)
 
     it("second call sets to 'rust' (Rust strict)", function()
       sql_comp.toggle_legacy()
       sql_comp.toggle_legacy()
-      assert.equals("rust", vim.g.poste_sql_legacy_completion)
+      assert.equals("rust", vim.g.poste_db_legacy_completion)
     end)
 
     it("third call resets to nil (default hybrid)", function()
       sql_comp.toggle_legacy()
       sql_comp.toggle_legacy()
       sql_comp.toggle_legacy()
-      assert.is_nil(vim.g.poste_sql_legacy_completion)
+      assert.is_nil(vim.g.poste_db_legacy_completion)
+    end)
+  end)
+
+  describe("tables_db_flag scopes db/schema prefixes per dialect", function()
+    local comp_data = require("poste-db.completion.data")
+
+    it("scopes postgres/sqlite prefixes by schema", function()
+      assert.equals("--schema", comp_data.tables_db_flag("postgres"))
+      assert.equals("--schema", comp_data.tables_db_flag("PostgreSQL"))
+      assert.equals("--schema", comp_data.tables_db_flag("sqlite"))
+    end)
+
+    it("scopes mysql/mariadb (and unknown) prefixes by database", function()
+      assert.equals("--database", comp_data.tables_db_flag("mysql"))
+      assert.equals("--database", comp_data.tables_db_flag("mariadb"))
+      assert.equals("--database", comp_data.tables_db_flag(nil))
+      assert.equals("--database", comp_data.tables_db_flag("clickhouse"))
+    end)
+  end)
+
+  describe("handle_table postgres pg_catalog completion", function()
+    local handlers = require("poste-db.completion.handlers")
+    local data_mod = require("poste-db.completion.data")
+    local orig_ensure_tables, orig_ensure_databases
+
+    before_each(function()
+      orig_ensure_tables = data_mod.ensure_tables
+      orig_ensure_databases = data_mod.ensure_databases
+      data_mod.ensure_tables = function(cb) cb() end
+      data_mod.ensure_databases = function(cb) cb() end
+    end)
+
+    after_each(function()
+      data_mod.ensure_tables = orig_ensure_tables
+      data_mod.ensure_databases = orig_ensure_databases
+    end)
+
+    local function dispatch_table(prefix, dialect)
+      local buf = vim.api.nvim_create_buf(false, true)
+      local items = nil
+      handlers.dispatch(
+        { bufnr = buf, line_before = "SELECT * FROM " .. prefix, prefix = prefix, dialect = dialect },
+        "table", nil, nil, function(r) items = r end)
+      return items
+    end
+
+    it("offers pg_catalog relations for a 'pg' prefix on postgres", function()
+      local labels = {}
+      for _, it in ipairs(dispatch_table("pg", "postgres") or {}) do labels[it.label] = true end
+      assert.is_true(labels["pg_tables"], "pg_tables should be offered")
+      assert.is_true(labels["pg_stat_activity"], "pg_stat_activity should be offered")
+      assert.is_true(labels["pg_class"], "pg_class should be offered")
+    end)
+
+    it("does not offer pg_catalog relations for a non-pg prefix", function()
+      local labels = {}
+      for _, it in ipairs(dispatch_table("au", "postgres") or {}) do labels[it.label] = true end
+      assert.is_nil(labels["pg_tables"])
+    end)
+
+    it("does not offer pg_catalog relations for mysql", function()
+      local labels = {}
+      for _, it in ipairs(dispatch_table("pg", "mysql") or {}) do labels[it.label] = true end
+      assert.is_nil(labels["pg_tables"])
+    end)
+  end)
+
+  describe("keyword completion for tree-sitter-unsupported constructs", function()
+    local ctx = require("poste-db.completion.ctx")
+
+    it("offers sqlite dialect keywords", function()
+      local labels = {}
+      for _, it in ipairs(ctx.kw_items("GLO", "sqlite")) do labels[it.label] = true end
+      assert.is_true(labels["GLOB"], "GLOB should be offered for sqlite")
+    end)
+
+    it("offers standard keywords in any dialect", function()
+      local labels = {}
+      for _, it in ipairs(ctx.kw_items("SAVE", nil)) do labels[it.label] = true end
+      assert.is_true(labels["SAVEPOINT"], "SAVEPOINT should be offered")
+    end)
+
+    it("does not offer sqlite-only keywords for mysql", function()
+      local labels = {}
+      for _, it in ipairs(ctx.kw_items("PRAGMA", "mysql")) do labels[it.label] = true end
+      assert.is_nil(labels["PRAGMA"], "PRAGMA is sqlite-only")
     end)
   end)
 end)

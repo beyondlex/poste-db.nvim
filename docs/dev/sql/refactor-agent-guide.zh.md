@@ -1,4 +1,4 @@
-# poste-sql.nvim 重构执行指南
+# poste-db.nvim 重构执行指南
 
 > 面向 AI agent 的重构作业说明。目标不是“重写”，而是按最小风险路径拆分、去重、补护栏。
 
@@ -122,7 +122,7 @@ AI agent 在改动任何高风险逻辑前，必须先补最小化回归测试�
 
 ### 3.4 不越界
 
-默认只改 `poste-sql.nvim` 仓库内文件。
+默认只改 `poste-db.nvim` 仓库内文件。
 
 只有在“当前仓库无法独立完成”时，才考虑改 `poste.nvim`，并且必须先说明理由。
 
@@ -158,8 +158,8 @@ AI agent 在改动任何高风险逻辑前，必须先补最小化回归测试�
 
 建议新增模块：
 
-- `lua/poste-sql/constants.lua`
-- `lua/poste-sql/util.lua`
+- `lua/poste-db/constants.lua`
+- `lua/poste-db/util.lua`
 
 规则：
 
@@ -310,12 +310,12 @@ AI agent 在动手前应该先回答这三个问题：
 
 高风险优先级从高到低：
 
-1. `lua/poste-sql/nav/init.lua`
-2. `lua/poste-sql/buffer/init.lua`
-3. `lua/poste-sql/buffer/nav.lua`
-4. `lua/poste-sql/introspect/init.lua`
-5. `lua/poste-sql/edit_commit/init.lua`
-6. `lua/poste-sql/completion/init.lua`
+1. `lua/poste-db/nav/init.lua`
+2. `lua/poste-db/buffer/init.lua`
+3. `lua/poste-db/buffer/nav.lua`
+4. `lua/poste-db/introspect/init.lua`
+5. `lua/poste-db/edit_commit/init.lua`
+6. `lua/poste-db/completion/init.lua`
 
 ## 9. 推荐的执行命令
 

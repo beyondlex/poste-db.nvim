@@ -150,7 +150,7 @@ extract_stmt_at_cursor:
 
 **Current**: Calls `cli.run_async({ "context", "stmt", ... })` with 50ms debounce.
 
-**Change**: Replace `cli.run_async` call with `require("poste-sql.ts_stmt").find_stmt_span()`.
+**Change**: Replace `cli.run_async` call with `require("poste-db.ts_stmt").find_stmt_span()`.
 
 **Effect**: Async job eliminated. No more `_job_id` tracking. Result is synchronous (Tree-sitter parse is fast). Debounce can be reduced further or removed.
 
@@ -224,7 +224,7 @@ New test file for `ts_stmt.lua`. Uses `vim.treesitter` to parse SQL strings and 
 **Test structure**:
 
 ```lua
-local ts_stmt = require("poste-sql.ts_stmt")
+local ts_stmt = require("poste-db.ts_stmt")
 
 describe("find_stmt_span", function()
   it("returns correct span for single statement", function()
@@ -347,6 +347,6 @@ If Tree-sitter boundary detection fails for any buffer:
 
 1. `statement.lua` still has the Rust fallback path (`try_rust_stmt_span`, `try_rust_stmt_ranges`)
 2. `statement_indicator.lua` can fall back to Rust async if `ts_stmt` returns nil
-3. `init.lua` can re-register `__poste_sql_disabled__` via `:PosteSQLToggleTS` command
+3. `init.lua` can re-register `__poste_sql_disabled__` via `:PosteDbToggleTS` command
 
 This means zero risk of regression — the new TS path is additive, not a replacement. Rust stays as a working fallback.

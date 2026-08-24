@@ -1,4 +1,4 @@
-local float_window = require("poste-sql.float_window")
+local float_window = require("poste-db.float_window")
 
 describe("float_window centered_dimensions", function()
   local original_columns = vim.o.columns

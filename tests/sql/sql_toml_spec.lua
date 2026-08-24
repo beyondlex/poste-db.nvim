@@ -1,4 +1,4 @@
-local toml = require("poste-sql.toml")
+local toml = require("poste-db.toml")
 
 describe("toml.parse", function()
   it("parses a simple key=value", function()

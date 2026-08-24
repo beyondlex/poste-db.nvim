@@ -2,7 +2,7 @@
 
 **目标**：在进入 P1-P4 执行前，对齐 Poste SQL 文件语法契约、JSON 上下文契约和实现优先级。
 
-**会前准备**：阅读 `poste-sql-file-syntax.en.md` + `design-decisions.en.md`。
+**会前准备**：阅读 `poste-db-file-syntax.en.md` + `design-decisions.en.md`。
 
 ---
 
@@ -14,7 +14,7 @@
 
 ## 2. 文件语法契约（15 分钟）
 
-逐节讨论 `poste-sql-file-syntax.en.md`：
+逐节讨论 `poste-db-file-syntax.en.md`：
 
 | 章节 | 关键问题 |
 |------|----------|

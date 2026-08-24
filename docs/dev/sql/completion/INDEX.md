@@ -10,7 +10,7 @@ If you're an AI agent encountering this codebase for the first time, read and fo
 
 | Order | File | After reading you should understand |
 |-------|------|-------------------------------------|
-| ① | `p0/poste-sql-file-syntax.en.md` | File structure, directive rules, statement boundaries, JSON contract, context type semantics (8 sections) |
+| ① | `p0/poste-db-file-syntax.en.md` | File structure, directive rules, statement boundaries, JSON contract, context type semantics (8 sections) |
 | ② | `plan.en.md` | Per-phase step checklist, verification commands, commit checklist |
 
 Reference material:
@@ -87,9 +87,9 @@ Use `[x]` for completed checkboxes, `⬜` for not started. Partial progress can 
 | Need | Path |
 |------|------|
 | Current implementation step | `plan.en.md` — find the first unchecked `[ ]` |
-| Complete context type table (14 types + 42 edge cases) | `p0/poste-sql-file-syntax.en.md` §5 |
-| JSON contract field definitions | `p0/poste-sql-file-syntax.en.md` §4 |
-| Statement boundary rules (current) | `p0/poste-sql-file-syntax.en.md` §3 |
+| Complete context type table (14 types + 42 edge cases) | `p0/poste-db-file-syntax.en.md` §5 |
+| JSON contract field definitions | `p0/poste-db-file-syntax.en.md` §4 |
+| Statement boundary rules (current) | `p0/poste-db-file-syntax.en.md` §3 |
 | Semantic-level statement boundaries (future) | `archived/semantic-statement-boundary.en.md` |
 | Per-phase changed file list | `plan.en.md` — "Files:" lists in each P1-P4 step |
 | Global commit checklist | `plan.en.md` §Global Commit Checklist (file end) |

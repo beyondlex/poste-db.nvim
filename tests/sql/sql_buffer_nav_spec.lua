@@ -1,6 +1,6 @@
-local D = require("poste-sql.dataset")
-local nav = require("poste-sql.buffer.nav")
-local ui = require("poste-sql.buffer.nav_ui")
+local D = require("poste-db.dataset")
+local nav = require("poste-db.buffer.nav")
+local ui = require("poste-db.buffer.nav_ui")
 local state = require("poste.state")
 
 describe("buffer_nav helpers", function()
@@ -52,7 +52,7 @@ describe("buffer_nav helpers", function()
 
     assert.truthy(text:find("12 rows", 1, true))
     assert.truthy(text:find("title ↓", 1, true))
-    assert.truthy(text:find("Page 2/3", 1, true))
+    assert.truthy(text:find("P:2/3", 1, true))
     assert.truthy(text:find("filter: status=open", 1, true))
     assert.truthy(text:find("search: needle (2/2)", 1, true))
   end)
@@ -66,7 +66,7 @@ describe("buffer_nav horizontal scroll", function()
       pcall(vim.api.nvim_win_close, D.dataset_window, true)
     end
     D.dataset_window = nil
-    require("poste-sql.buffer.header").close()
+    require("poste-db.buffer.header").close()
     state.sql.cell = { row = 1, col = 1 }
   end)
 
@@ -103,8 +103,8 @@ describe("buffer_nav horizontal scroll", function()
     local saved_columns = vim.o.columns
     vim.o.columns = 40
 
-    local format = require("poste-sql.format")
-    local buffer = require("poste-sql.buffer")
+    local format = require("poste-db.format")
+    local buffer = require("poste-db.buffer")
     local body = vim.json.encode({
       type = "resultset",
       total_rows = 50,
@@ -153,8 +153,8 @@ describe("buffer_nav horizontal scroll", function()
     local saved_columns = vim.o.columns
     vim.o.columns = 60
 
-    local format = require("poste-sql.format")
-    local buffer = require("poste-sql.buffer")
+    local format = require("poste-db.format")
+    local buffer = require("poste-db.buffer")
     local cols = {}
     local row = {}
     for i = 1, 30 do
@@ -215,8 +215,8 @@ describe("buffer_nav horizontal scroll", function()
     local saved_columns = vim.o.columns
     vim.o.columns = 50
 
-    local format = require("poste-sql.format")
-    local buffer = require("poste-sql.buffer")
+    local format = require("poste-db.format")
+    local buffer = require("poste-db.buffer")
     local cols = {}
     local row = {}
     for i, name in ipairs({ "id", "姓名", "备注", "data", "extra", "订单号", "金额", "状态", "时间" }) do
@@ -253,9 +253,9 @@ describe("buffer_nav horizontal scroll", function()
       pcall(vim.api.nvim_win_call, win, function()
         vim.fn.winrestview({ leftcol = leftcol })
       end)
-      require("poste-sql.buffer.header").update()
+      require("poste-db.buffer.header").update()
       local float_text = vim.api.nvim_buf_get_lines(
-        require("poste-sql.buffer.header")._test.float_buf(), 0, 1, false)[1]
+        require("poste-db.buffer.header")._test.float_buf(), 0, 1, false)[1]
       assert.is_not_nil(float_text, "header float must exist after scroll")
 
       local float_seps = {}

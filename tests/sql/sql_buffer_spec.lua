@@ -1,5 +1,5 @@
-local buffer = require("poste-sql.buffer")
-local D = require("poste-sql.dataset")
+local buffer = require("poste-db.buffer")
+local D = require("poste-db.dataset")
 
 describe("buffer header test helpers", function()
   before_each(function()

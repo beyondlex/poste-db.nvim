@@ -37,8 +37,8 @@
   - Wire `get_items()` → new wrapper
 
 - [x] **P1f. Legacy switch** — In `completion/init.lua`:
-  - `vim.g.poste_sql_legacy_completion = true` → Lua-only fallback
-  - `vim.g.poste_sql_legacy_completion = "rust"` → Rust-only, no fallback
+  - `vim.g.poste_db_legacy_completion = true` → Lua-only fallback
+  - `vim.g.poste_db_legacy_completion = "rust"` → Rust-only, no fallback
   - Default `nil` → Rust first, Lua never overrides
 
 - [x] **P1g. Test export rename**:
@@ -55,7 +55,7 @@ cargo test -p poste-core sql_context
 tests/run.sh
 ```
 
-**Acceptance**: Default completion no longer overridden by Lua heuristic. `vim.g.poste_sql_legacy_completion = "rust"` reproduces Rust-only behavior.
+**Acceptance**: Default completion no longer overridden by Lua heuristic. `vim.g.poste_db_legacy_completion = "rust"` reproduces Rust-only behavior.
 
 ---
 

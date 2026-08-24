@@ -1,4 +1,4 @@
-# poste-sql.nvim 代码审查报告
+# poste-db.nvim 代码审查报告
 
 > 审查方式：核心链路逐文件通读（init / sql_runner / session_conn / exec_run / context / connections / toml / format 等）+ 五个并行深度审查（dataset buffer/UI 层、DB Browser 层、补全/上下文层、执行/导入导出/连接层、测试与工程基建）+ 亲自运行测试套件验证。
 >
@@ -46,7 +46,7 @@
 | `db_browser/async.lua:30` | `DB Browser introspect: <argv>` |
 | `db_browser/operations.lua:154` | `DB Browser DDL: <argv 含 --connection-url>` |
 | `session_conn.lua:127` | stdout 前 200 字节——**含查询结果行数据** |
-| `init.lua:164-166` | `:PosteSQLSessionList` 通知直接展示含密码的 conn_url |
+| `init.lua:164-166` | `:PosteDbSessionList` 通知直接展示含密码的 conn_url |
 
 另外凭据**以 argv 传递**给每个进程，`ps` 可见；其中 session 进程长驻整个编辑会话（`session_conn.lua:192`），密码在进程列表中长期暴露。涉及：`exec_run.lua:72-94`、`session_conn.lua:192`、`introspect/table.lua:24,44,68`、`introspect/column.lua:27`、`file_exec.lua:355`、`db_browser/async.lua:18`。
 
@@ -147,11 +147,11 @@ local ok, parsed = pcall(vim.json.decode, output)   -- output 从未定义！
 
 ### P1-4 `connections.lua:341,359` `apply_connection` 未禁用 swapfile → E303
 
-直接 `nvim_buf_set_lines` 修改源 buffer 前未置 `swapfile=false`。headless / swap 目录不可写环境下 `:PosteConnection` 崩溃（测试已复现 E303）。
+直接 `nvim_buf_set_lines` 修改源 buffer 前未置 `swapfile=false`。headless / swap 目录不可写环境下 `:PosteDbConnection` 崩溃（测试已复现 E303）。
 
 ### P1-5 statusline 按连接着色是死代码
 
-`statusline.lua:54-66` 从 `vim.b.poste_sql_context` 提取连接名，但该变量存的是 `nav_ui.lua:17-42` 生成的**展示串**（`"localhost:5432  🗄 blog"`，不含连接名）→ `get_connection_config(name)` 精确查表恒 nil → **README 宣传的 per-connection 颜色从未生效**。
+`statusline.lua:54-66` 从 `vim.b.poste_db_context` 提取连接名，但该变量存的是 `nav_ui.lua:17-42` 生成的**展示串**（`"localhost:5432  🗄 blog"`，不含连接名）→ `get_connection_config(name)` 精确查表恒 nil → **README 宣传的 per-connection 颜色从未生效**。
 
 ### P1-6 配置发现不一致：cwd vs buffer 目录
 
@@ -187,10 +187,10 @@ local ok, parsed = pcall(vim.json.decode, output)   -- output 从未定义！
 | `nav.lua:150-157` | `sidescrolloff` 临时置 0 后 `pcall(nvim_win_set_cursor)`，抛错则 sso 永久停在 0 |
 | `buffer/init.lua:221-226` / `page.lua` | 切 tab 丢 edit highlights；翻页丢 cell highlight（`nvim_buf_set_lines` 删 extmark 后不重放） |
 | `exec_run.lua:62-65`、`statement.lua:49` | USE 检测只匹配 `USE <word>;`——`USE "my db"`、`` USE `db` ``、`USE db -- comment`、多行 USE 漏检 |
-| `export.lua:384-401` | `export.M.run` 忽略 `path` 参数——`:PosteExport csv file /x/y.csv` 仍弹交互选择器 |
+| `export.lua:384-401` | `export.M.run` 忽略 `path` 参数——`:PosteDbExport csv file /x/y.csv` 仍弹交互选择器 |
 | `file_exec.lua:300-301` vs `sql_runner.lua:498,533` | `max_rows` 不一致：文件执行截断 1000 行，手动执行 0 不限 |
 | `exec_run.lua:40-52` | 临时 SQL 文件写进**源文件目录**（`.poste_sql_*.sql`），崩溃残留、污染 git 状态；`strftime+math.random` 同秒碰撞 |
-| `completion/data.lua:537` | `vim.notify("DEBUG: binary not found!", ERROR)` **无条件触发**（同文件其余 496-529 行都有 `vim.g.poste_sql_debug` 门控，唯独此处漏）——缺 binary 时每次列补全弹 ERROR |
+| `completion/data.lua:537` | `vim.notify("DEBUG: binary not found!", ERROR)` **无条件触发**（同文件其余 496-529 行都有 `vim.g.poste_db_debug` 门控，唯独此处漏）——缺 binary 时每次列补全弹 ERROR |
 | `sql_runner.lua:223-225` | `first_line` 回退有运算符优先级 bug（纯外观） |
 | `context.lua:19-56` | 每次光标移动读全文件 + 扫 `1..cursor_line`，O(文件大小) |
 
@@ -222,11 +222,11 @@ local ok, parsed = pcall(vim.json.decode, output)   -- output 从未定义！
 
 ### P2-5 状态管理碎片化与双真相源
 
-`poste-sql.state`（`state.lua`）+ `poste.state.sql` 懒加载 `__index`（poste.nvim `state.lua:100-107`）+ `session.lua` 模块级 `active` + `dataset.lua` 模块级 `D`。`state.last_response`/`state.sql.cell`/`state.sql.pagination` 被多处直接读写；tab 光标同时存于 `D.tabs[].cursor` 与全局 `state.sql.cell`——**两处真相源**，漏同步即错位（如 `find_column` 只改 cell 不回写 tab.cursor）。
+`poste-db.state`（`state.lua`）+ `poste.state.sql` 懒加载 `__index`（poste.nvim `state.lua:100-107`）+ `session.lua` 模块级 `active` + `dataset.lua` 模块级 `D`。`state.last_response`/`state.sql.cell`/`state.sql.pagination` 被多处直接读写；tab 光标同时存于 `D.tabs[].cursor` 与全局 `state.sql.cell`——**两处真相源**，漏同步即错位（如 `find_column` 只改 cell 不回写 tab.cursor）。
 
 ### P2-6 `init.lua setup()` 上帝函数与调试残留
 
-`init.lua` 626 行：约 20 个用户命令、多组 autocmd、注册逻辑重复（`register_sql_completion` 与 `PosteSQLCmpReload`）；**默认注册 7+ 个调试命令**（`PosteSQLDiag:364`、`PosteSQLDebugSpace:409`、`PosteSQLCmpTest:434`、`PosteSQLCmpDebug:480`、`PosteSQLCmpStatus:266`、`PosteSQLAutoTrigger:313`、`PosteSQLCmpReload:342`）；`completion/init.lua:181-183` 的 `detect_context_for_completion` 是恒返回 `"keyword"` 的假桩（`:PosteSQLCmpStatus`/`:PosteSQLDiag` 显示假上下文）；`PosteSQLDiag`（`init.lua:374`）调用已删除的 `_test.extract_from_tables` 直接报错。
+`init.lua` 626 行：约 20 个用户命令、多组 autocmd、注册逻辑重复（`register_sql_completion` 与 `PosteDbCmpReload`）；**默认注册 7+ 个调试命令**（`PosteDbDiag:364`、`PosteDbDebugSpace:409`、`PosteDbCmpTest:434`、`PosteDbCmpDebug:480`、`PosteDbCmpStatus:266`、`PosteDbAutoTrigger:313`、`PosteDbCmpReload:342`）；`completion/init.lua:181-183` 的 `detect_context_for_completion` 是恒返回 `"keyword"` 的假桩（`:PosteDbCmpStatus`/`:PosteDbDiag` 显示假上下文）；`PosteDbDiag`（`init.lua:374`）调用已删除的 `_test.extract_from_tables` 直接报错。
 
 ### P2-7 耦合与重复
 
@@ -265,7 +265,7 @@ local ok, parsed = pcall(vim.json.decode, output)   -- output 从未定义！
 ### P3-3 测试环境不隔离
 
 - `tests/run.sh:14-20` 启动 nvim **无 `-u NONE`/`-u minimal_init`**，加载用户真实 `~/.config/nvim/init.lua`；`minimal_init.lua` 只作为 plenary 选项追加 rtp，**从未替代 vimrc**。用户插件（mini.statusline/blink.cmp 等）会真实影响被测行为。
-- `tests/run.sh:6` `PLENARY_PATH` 硬编码 lazy 安装路径，未安装直接 `exit 1`；`:17` 依赖兄弟目录 `../poste.nvim`；`:19` `runtime plugin/poste-sql.lua` 会执行 `setup()`——约 20 个命令/autocmd 副作用进测试进程。
+- `tests/run.sh:6` `PLENARY_PATH` 硬编码 lazy 安装路径，未安装直接 `exit 1`；`:17` 依赖兄弟目录 `../poste.nvim`；`:19` `runtime plugin/poste-db.lua` 会执行 `setup()`——约 20 个命令/autocmd 副作用进测试进程。
 - 无 tree-sitter SQL parser 时 TS 相关测试**静默 `pending()`**（`sql_multi_stmt_spec.lua:410-450`），`make_buf` 还 `vim.wait(500)` 空等——诊断/语义诊断断言永不执行。
 - 48 个 spec 在同一进程顺序执行，共享 `D.tabs`/`state.sql`/`vim.g`/`package.loaded` 全局状态（如 `sql_connections_spec.lua:19-28` 桩掉整个 toml 模块）。
 - `tests/diag/diag_sql.lua` 是孤立脚本，未接入 run.sh，头部注释路径与实际不符。
@@ -292,9 +292,9 @@ local ok, parsed = pcall(vim.json.decode, output)   -- output 从未定义！
 
 - **README 数据集编辑键位表错误**（`README.md:117-121`）：声称 `i`/`a` 编辑、`o`/`O` 插入行、`u` 撤销——实际只绑 `i`/`cc`/`dd`/`o`/`<leader>w`（`buffer/init.lua:122-131`），**`a`、`O`、`u` 从未绑定**。
 - **README 集成测试路径错误**（`README.md:201-212`）：`cd tests/sql && docker compose up -d` 与 `tests/sql/queries/postgres.sql` 不存在；真实 compose/queries 在 `playground/sql/`。
-- **补全设计文档路径全部过期**（`docs/dev/sql/completion/README.en.md:17-21`）：引用 `lua/poste/sql/`（实际 `lua/poste-sql/`）与 `crates/poste-core/`（本仓库无 crates/，已迁至 poste.nvim）。
+- **补全设计文档路径全部过期**（`docs/dev/sql/completion/README.en.md:17-21`）：引用 `lua/poste/sql/`（实际 `lua/poste-db/`）与 `crates/poste-core/`（本仓库无 crates/，已迁至 poste.nvim）。
 - **docs/dev/sql/README.md 索引不全**：只列 4/10 篇；"Last updated: 2026-08-01" 为未来日期。
-- **AGENTS.md 引用不存在文件**：`lua/poste/help.lua`（poste.nvim 无此文件，实际在本仓库 `lua/poste-sql/help.lua`）；`LEARNINGS.md` 不存在。
+- **AGENTS.md 引用不存在文件**：`lua/poste/help.lua`（poste.nvim 无此文件，实际在本仓库 `lua/poste-db/help.lua`）；`LEARNINGS.md` 不存在。
 - **测试残留**：`minimal_init.lua:8` 引用不存在的 `tests/helpers/` 目录；`sql_tab_spec.lua:8` 注释 "Multi-statement execution is not yet implemented" 早已过期。
 - **仓库卫生（合格项）**：`.gitignore` 忽略 `.env`/`.env.*`；`connections.toml` 提交的均为 `{{VAR}}` 占位符；磁盘 `.env` 无真实凭据。小瑕疵：`playground/sql/env.json` 提交了 dev 凭据形状；`syntax/*.vim` 头部 "Latest Revision: 2026-06-09" 为未来日期。
 
@@ -312,7 +312,7 @@ local ok, parsed = pcall(vim.json.decode, output)   -- output 从未定义！
 
 ## 7. 附录 A：模块 × 测试覆盖矩阵
 
-**零测试模块**（`grep -r 'poste-sql.<mod>' tests/sql/` 无命中）：
+**零测试模块**（`grep -r 'poste-db.<mod>' tests/sql/` 无命中）：
 
 `health.lua`、`help.lua`、`statusline.lua`、`insert_hint.lua`、`source_format.lua`、`syntax.lua`、`session.lua`、`session_conn.lua`、`export.lua`、`context_client.lua`、`snippets.lua`、`semantic_diagnostics.lua`、`diagnostics.lua`、`toml.lua`（被测试桩绕过）、`buffer/search.lua`、`buffer/page.lua`、`buffer/header.lua`（仅切片助手）、`completion/adapter.lua`、`completion/debug.lua`、`db_browser/{operations, copy, forms, forms_advanced, async, context_menu, db_create, schema_create, completion}.lua`、`editor/nav.lua`、`editor/column.lua`、`import/{execute, mapping}.lua`、`highlights/theme.lua`。
 

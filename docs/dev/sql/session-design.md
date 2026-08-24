@@ -48,7 +48,7 @@ key 为 `connection_url`（Lua 解析后的完整 URL），<CR> 时按此查找�
 | 后续 `<CR>`（同 connection） | 复用 session |
 | 不同 connection 的 `<CR>` | 启动新 session（不同进程），两 session 独立 |
 | Buffer 关闭 | 遍历 pool，从 `bufs` 移除该 buffer；若 `bufs` 为空 → 关闭 session，从 pool 删除 |
-| `:PosteSQLSessionStop` | 可指定 connection_url 关闭单个，或 `--all` 关闭全部 |
+| `:PosteDbSessionStop` | 可指定 connection_url 关闭单个，或 `--all` 关闭全部 |
 | 空闲超时（可选） | 可配置 N 秒无请求后自动关闭 |
 
 ### 共享
@@ -101,7 +101,7 @@ session::execute()
   ├─ 3. stdin EOF → 关闭连接 → 退出（exit 0）
 ```
 
-## Lua 侧: `lua/poste-sql/session_conn.lua`
+## Lua 侧: `lua/poste-db/session_conn.lua`
 
 ### 接口
 
@@ -189,12 +189,12 @@ end
 |------|---------|
 | `crates/poste-cli/src/session.rs` | **新文件**: session 守护进程 |
 | `crates/poste-cli/src/main.rs` | 注册 `Session` 子命令 |
-| `lua/poste-sql/session_conn.lua` | **新文件**: session 池管理 + 发送/接收 |
-| `lua/poste-sql/sql_runner.lua` | `run_sql_request()` 集成 session 路径 |
-| `lua/poste-sql/init.lua` | `setup()` 中注册 `BufUnload` 自动清理 |
+| `lua/poste-db/session_conn.lua` | **新文件**: session 池管理 + 发送/接收 |
+| `lua/poste-db/sql_runner.lua` | `run_sql_request()` 集成 session 路径 |
+| `lua/poste-db/init.lua` | `setup()` 中注册 `BufUnload` 自动清理 |
 
 ## 未来可扩展
 
 - 空闲超时自动关闭
-- `:PosteSQLSessionList` 查看所有活跃 session
+- `:PosteDbSessionList` 查看所有活跃 session
 - 事务模式 session（`BEGIN` 跨 `<CR>`）
