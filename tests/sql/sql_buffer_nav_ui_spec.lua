@@ -139,12 +139,30 @@ describe("buffer_nav_ui", function()
     assert.is_nil(clean)
   end)
 
+  it("shortens multi-column SELECT in statusline", function()
+    local text = ui.build_sql_statusline(
+      "SELECT p.id, p.title, p.status FROM posts p WHERE p.id = 1", 80)
+    assert.truthy(text:find("SELECT p.id, ... FROM", 1, true))
+    assert.is_falsy(text:find("p.title", 1, true))
+    assert.is_falsy(text:find("p.status", 1, true))
+  end)
+
+  it("preserves single-column SELECT in statusline", function()
+    local text = ui.build_sql_statusline("SELECT p.title FROM posts p", 80)
+    assert.truthy(text:find("SELECT p.title FROM", 1, true))
+  end)
+
+  it("preserves non-SELECT queries in statusline", function()
+    local text = ui.build_sql_statusline("WITH cte AS (SELECT id FROM posts) SELECT * FROM cte", 80)
+    assert.truthy(text:find("WITH cte", 1, true))
+  end)
+
   it("builds a truncated SQL statusline", function()
     local width = 40
     local text = ui.build_sql_statusline(
       "SELECT p.id, p.title FROM posts p LEFT JOIN comments c ON c.post_id = p.id ORDER BY p.title",
       width)
-    assert.truthy(text:find("SELECT p.id, p.title", 1, true))
+    assert.truthy(text:find("SELECT p.id, ... FROM", 1, true))
     assert.truthy(text:find("…", 1, true))
     assert.is_true(vim.fn.strdisplaywidth(text:gsub("%%#.-%%#", "")) <= width)
   end)

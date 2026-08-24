@@ -17,6 +17,17 @@ local function flatten_sql(sql)
   return (sql or ""):gsub("[ \t\r\n]+", " "):gsub("^%s+", ""):gsub("%s+$", "")
 end
 
+--- For SELECT queries, replace multi-column lists with just the first column
+--- + `, ...` before FROM. Case-insensitive for SELECT/FROM keywords.
+local function shorten_select_fields(sql, width)
+  local select_prefix, cols, from_clause = sql:match(
+    "^([Ss][Ee][Ll][Ee][Cc][Tt]%s+)(.-)(%s+[Ff][Rr][Oo][Mm]%s.*)$")
+  if not select_prefix then return sql end
+  local first_col = cols:match("^(.-),")
+  if not first_col then return sql end
+  return select_prefix .. first_col .. ", ..." .. from_clause
+end
+
 --- Truncate a string to `max_width` display cells, appending `…`. Uses
 --- `strdisplaywidth` so CJK/emoji never split mid-character.
 local function truncate_display(s, max_width)
@@ -199,7 +210,9 @@ end
 --- @param width number statusline width in cells
 --- @return string
 function M.build_sql_statusline(sql, width)
-  local text = truncate_display(flatten_sql(sql or ""), math.max(10, width - 2))
+  local text = flatten_sql(sql or "")
+  text = shorten_select_fields(text)
+  text = truncate_display(text, math.max(10, width - 2))
   if text == "" then return "" end
   return "%#PosteDbDatasetMeta# " .. statusline_escape(text) .. "%#PosteDbDatasetMeta#"
 end
