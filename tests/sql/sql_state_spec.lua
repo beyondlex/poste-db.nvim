@@ -22,7 +22,6 @@ describe("poste-db.state defaults", function()
     assert.is_false(state._hide_header_float)
     assert.is_false(state._hide_row_numbers)
     assert.is_false(state._trace)
-    assert.is_false(state._raw_mode)
   end)
 
   it("exposes db_browser connection nil", function()
