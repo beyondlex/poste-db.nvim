@@ -4,7 +4,7 @@
 -- installed) and overriding the cache for specific formatters via
 -- M._test.set_detected().
 
-local state = require("poste.state")
+local state = require("poste-db.state")
 local sf = require("poste-db.source_format")
 local t = sf._test
 

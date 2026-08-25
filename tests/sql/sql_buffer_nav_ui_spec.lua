@@ -1,14 +1,14 @@
 local ui = require("poste-db.buffer.nav_ui")
-local state = require("poste.state")
+local state = require("poste-db.state")
 
 describe("buffer_nav_ui", function()
   before_each(function()
-    _G.__saved_conn_name = state.sql and state.sql.context and state.sql.context.connection
+    _G.__saved_conn_name = state and state.context and state.context.connection
   end)
 
   after_each(function()
-    if state.sql and state.sql.context then
-      state.sql.context.connection = _G.__saved_conn_name
+    if state and state.context then
+      state.context.connection = _G.__saved_conn_name
     end
     _G.__saved_conn_name = nil
   end)
@@ -18,8 +18,8 @@ describe("buffer_nav_ui", function()
   end)
 
   it("includes the connection name in the winbar text", function()
-    if state.sql and state.sql.context then
-      state.sql.context.connection = "inventory"
+    if state and state.context then
+      state.context.connection = "inventory"
     end
     local text = ui.build_status_winbar_text({
       type = "resultset",
@@ -30,8 +30,8 @@ describe("buffer_nav_ui", function()
     }, {}, 1, 1)
     assert.truthy(text:find("inventory", 1, true))
     assert.is_falsy(text:find("localhost:5432", 1, true))
-    if state.sql and state.sql.context then
-      state.sql.context.connection = nil
+    if state and state.context then
+      state.context.connection = nil
     end
   end)
 
@@ -81,9 +81,9 @@ describe("buffer_nav_ui", function()
     assert.truthy(ctx:find("posts", 1, true))
   end)
 
-  it("includes the connection name when state.sql.context.connection is set", function()
-    if state.sql and state.sql.context then
-      state.sql.context.connection = "inventory"
+  it("includes the connection name when state.context.connection is set", function()
+    if state and state.context then
+      state.context.connection = "inventory"
     end
     local ctx = ui.build_statusline_context({
       type = "resultset",
@@ -94,8 +94,8 @@ describe("buffer_nav_ui", function()
     assert.is_falsy(ctx:find("localhost:5432", 1, true))
     assert.truthy(ctx:find("blog", 1, true))
     assert.truthy(ctx:find("posts", 1, true))
-    if state.sql and state.sql.context then
-      state.sql.context.connection = nil
+    if state and state.context then
+      state.context.connection = nil
     end
   end)
 

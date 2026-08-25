@@ -20,9 +20,9 @@ describe("get_items with seeded cache", function()
   before_each(function()
     -- We need a connection context so conn_key() returns something.
     -- Temporarily set global state.
-    local state = require("poste.state")
-    state.sql = state.sql or {}
-    state.sql.context = { connection = "test-conn", database = "blog" }
+    local state = require("poste-db.state")
+    state = state or {}
+    state.context = { connection = "test-conn", database = "blog" }
 
     -- Seed the cache via public API
     sql_comp.cache_tables({ { name = "authors" }, { name = "posts" } })
@@ -119,8 +119,8 @@ end)
 
 describe("get_completions line_before", function()
   before_each(function()
-    local state = require("poste.state")
-    state.sql = { context = { connection = "test-conn", database = "blog" } }
+    local state = require("poste-db.state")
+    state = { context = { connection = "test-conn", database = "blog" } }
     sql_comp.cache_tables({ { name = "authors" } })
     sql_comp.cache_columns("authors", {
       { name = "id" }, { name = "username" },
@@ -240,8 +240,8 @@ describe("get_items dot_column resolves alias", function()
   end
 
   before_each(function()
-    local state = require("poste.state")
-    state.sql = { context = { connection = "test-conn", database = "blog" } }
+    local state = require("poste-db.state")
+    state = { context = { connection = "test-conn", database = "blog" } }
     sql_comp.cache_tables({ { name = "authors" }, { name = "posts" } })
     sql_comp.cache_columns("posts", {
       { name = "id" }, { name = "title" }, { name = "author_id" },
@@ -296,8 +296,8 @@ end)
 
 describe("get_completions dedup", function()
   before_each(function()
-    local state = require("poste.state")
-    state.sql = { context = { connection = "test-conn", database = "blog" } }
+    local state = require("poste-db.state")
+    state = { context = { connection = "test-conn", database = "blog" } }
     sql_comp.cache_tables({ { name = "authors" }, { name = "posts" } })
     sql_comp.cache_columns("authors", {
       { name = "id" }, { name = "username" }, { name = "email" }, { name = "bio" },
@@ -367,8 +367,8 @@ end)
 
 describe("complete dedup (nvim-cmp path)", function()
   before_each(function()
-    local state = require("poste.state")
-    state.sql = { context = { connection = "test-conn", database = "blog" } }
+    local state = require("poste-db.state")
+    state = { context = { connection = "test-conn", database = "blog" } }
     sql_comp.cache_tables({ { name = "authors" } })
     sql_comp.cache_columns("authors", {
       { name = "id" }, { name = "username" }, { name = "email" }, { name = "bio" },
@@ -413,9 +413,9 @@ describe("get_items insert_column", function()
   end
 
   before_each(function()
-    local state = require("poste.state")
-    state.sql = state.sql or {}
-    state.sql.context = { connection = "test-conn", database = "blog" }
+    local state = require("poste-db.state")
+    state = state or {}
+    state.context = { connection = "test-conn", database = "blog" }
     sql_comp.cache_tables({ { name = "authors" } })
     sql_comp.cache_columns("authors", {
       { name = "id" }, { name = "username" }, { name = "email" }, { name = "bio" },
@@ -485,8 +485,8 @@ describe("get_items insert_column", function()
   end)
 
   it("no-id quick-insert hidden when table has no id column", function()
-    local state = require("poste.state")
-    state.sql.context = { connection = "test-conn", database = "blog" }
+    local state = require("poste-db.state")
+    state.context = { connection = "test-conn", database = "blog" }
     sql_comp.cache_columns("tags", {
       { name = "name" }, { name = "slug" },
     })
@@ -511,9 +511,9 @@ describe("get_items table context", function()
   end
 
   before_each(function()
-    local state = require("poste.state")
-    state.sql = state.sql or {}
-    state.sql.context = { connection = "test-conn", database = "blog" }
+    local state = require("poste-db.state")
+    state = state or {}
+    state.context = { connection = "test-conn", database = "blog" }
     sql_comp.cache_tables({ { name = "authors" }, { name = "posts" } })
     -- Pre-cache databases so ensure_databases doesn't start async job with binary
     local data_mod = require("poste-db.completion.data")
@@ -690,9 +690,9 @@ describe("completion mode integration", function()
   end
 
   before_each(function()
-    local state = require("poste.state")
-    state.sql = state.sql or {}
-    state.sql.context = { connection = "test-conn", database = "blog" }
+    local state = require("poste-db.state")
+    state = state or {}
+    state.context = { connection = "test-conn", database = "blog" }
     sql_comp.cache_tables({ { name = "authors" }, { name = "posts" } })
     sql_comp.cache_columns("authors", {
       { name = "id" }, { name = "username" }, { name = "email" }, { name = "bio" },

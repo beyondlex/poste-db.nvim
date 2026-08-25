@@ -1,15 +1,15 @@
 local cell = require("poste-db.buffer.nav_cell")
-local state = require("poste.state")
+local state = require("poste-db.state")
 
 describe("buffer_nav_cell", function()
-  local saved_highlight_cell = state.sql.highlight_cell
+  local saved_highlight_cell = state.highlight_cell
 
   before_each(function()
-    state.sql.highlight_cell = false
+    state.highlight_cell = false
   end)
 
   after_each(function()
-    state.sql.highlight_cell = saved_highlight_cell
+    state.highlight_cell = saved_highlight_cell
   end)
 
   it("extracts the first resultset cell", function()
@@ -155,6 +155,6 @@ describe("buffer_nav_cell", function()
       { fn = "highlight", args = { "buf", 3, 4, { kind = "meta" }, nil, { 1, 2 } } },
       { fn = "clear", args = { "buf" } },
     }, calls)
-    assert.is_false(state.sql.highlight_cell)
+    assert.is_false(state.highlight_cell)
   end)
 end)

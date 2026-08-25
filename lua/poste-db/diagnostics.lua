@@ -6,7 +6,8 @@
 local ts_stmt = require("poste-db.ts_stmt")
 local context = require("poste-db.context")
 local connections = require("poste-db.connections")
-local state = require("poste.state")
+local sql_state = require("poste-db.state")
+
 local compat = require("poste-db.compat")
 
 local M = {}
@@ -32,7 +33,7 @@ local function get_dialect(buf)
   local ctx = context.resolve_context(buf)
   local conn = ctx.connection
   if not conn then
-    conn = state.sql and state.sql.context and state.sql.context.connection
+    conn = sql_state and sql_state.context and sql_state.context.connection
   end
   if conn then
     local cfg = connections.get_connection_config(conn)

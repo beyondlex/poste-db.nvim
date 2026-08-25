@@ -2,6 +2,8 @@
 local D = require("poste-db.dataset")
 local C = require("poste-db.constants")
 local state = require("poste.state")
+local sql_state = require("poste-db.state")
+
 local config = require("poste-db.config")
 local sql_highlights = require("poste-db.highlights")
 local render = require("poste-db.buffer.render")
@@ -233,7 +235,7 @@ end
 local function save_active_tab_state()
   local tab = D.T()
   if not tab then return end
-  tab.cursor = { row = state.sql.cell.row, col = state.sql.cell.col }
+  tab.cursor = { row = sql_state.cell.row, col = sql_state.cell.col }
   if D.dataset_window and vim.api.nvim_win_is_valid(D.dataset_window) then
     tab.leftcol = vim.api.nvim_win_call(D.dataset_window, function()
       return vim.fn.winsaveview().leftcol
@@ -242,9 +244,9 @@ local function save_active_tab_state()
 end
 
 local function apply_tab_state(tab)
-  state.sql.cell.row = tab.cursor.row
-  state.sql.cell.col = tab.cursor.col
-  if tab.data then state.sql.last_dataset = tab.data end
+  sql_state.cell.row = tab.cursor.row
+  sql_state.cell.col = tab.cursor.col
+  if tab.data then sql_state.last_dataset = tab.data end
 end
 
 --- Render the currently active tab (D.T()) into the dataset window.
@@ -433,11 +435,11 @@ local function render_dataset_layout(tab, lines, meta)
   tab.rows_source = tab.rows_source or layout.rows
   tab.row_number_mode = tab.row_number_mode or "source"
   if not layout._conn_name then
-    local conn_name = state.sql.context.connection
+    local conn_name = sql_state.context.connection
     if conn_name and conn_name ~= "" then layout._conn_name = conn_name end
   end
   if not layout._database then
-    local db_name = state.sql.context.database
+    local db_name = sql_state.context.database
     if db_name and db_name ~= "" then layout._database = db_name end
   end
   if not layout._conn_name and tab.data and tab.data.connection then
@@ -533,7 +535,7 @@ function M.render_dataset(lines, meta, opts)
     end
     if data then
       tab.data = data
-      state.sql.last_dataset = data
+      sql_state.last_dataset = data
     end
   end
 
@@ -563,12 +565,12 @@ function M.render_dataset(lines, meta, opts)
     end
 
     -- Store connection name & database for dataset operations (commit, refresh, PK introspection)
-    -- These persist even if state.sql.context is cleared later
-    local conn_name = state.sql.context.connection
+    -- These persist even if sql_state.context is cleared later
+    local conn_name = sql_state.context.connection
     if conn_name and conn_name ~= "" then
       tab.layout._conn_name = conn_name
     end
-    local db_name = state.sql.context.database
+    local db_name = sql_state.context.database
     if db_name and db_name ~= "" then
       tab.layout._database = db_name
     end
@@ -691,8 +693,8 @@ function M.render_dataset(lines, meta, opts)
     pcall(vim.api.nvim_win_set_cursor, D.dataset_window, { 1, 0 })
   elseif not tab.is_sorting then
     if meta and meta.type == "resultset" and meta.row_count > 0 then
-      state.sql.cell.row = 1
-      state.sql.cell.col = 1
+      sql_state.cell.row = 1
+      sql_state.cell.col = 1
       pcall(vim.api.nvim_win_set_cursor, D.dataset_window, { meta.data_start_line, 0 })
       local cs = tab.buffer_col_starts and tab.buffer_col_starts[meta.data_start_line]
       sql_highlights.highlight_cell(D.dataset_buffer, 1, 1, meta, nil, cs)

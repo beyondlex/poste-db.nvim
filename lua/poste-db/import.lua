@@ -1,4 +1,5 @@
-local state = require("poste.state")
+local sql_state = require("poste-db.state")
+
 local async = require("poste-db.db_browser.async")
 
 local fmt = require("poste-db.import.format")
@@ -28,7 +29,7 @@ local function get_columns_from_node(table_node)
 end
 
 local function fetch_columns_async(node, context, callback)
-  local conn = node.meta and node.meta.connection or state.sql.db_browser.connection
+  local conn = node.meta and node.meta.connection or sql_state.db_browser.connection
   local dir = vim.fn.getcwd()
   if context.source_buf and vim.api.nvim_buf_is_valid(context.source_buf) then
     local buf_name = vim.api.nvim_buf_get_name(context.source_buf)

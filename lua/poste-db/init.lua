@@ -1,4 +1,4 @@
-local state = require("poste.state")
+local config = require("poste-db.config")
 local statement = require("poste-db.statement")
 local sql_introspect = require("poste-db.introspect")
 local sql_runner = require("poste-db.sql_runner")
@@ -6,7 +6,6 @@ local sql_runner = require("poste-db.sql_runner")
 local M = {}
 M.ensure_sql_keymaps = sql_runner.ensure_sql_keymaps
 
-local config = require("poste-db.config")
 local ck = config.get_keymap("sql_source", "clear_filter", "<leader>cr")
 if ck then
   vim.keymap.set("n", ck, function()

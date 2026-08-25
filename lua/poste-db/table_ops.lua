@@ -2,6 +2,7 @@
 --- Generates DDL SQL and inserts it into the source buffer for review/execution.
 --- Keymaps registered on the DB Browser buffer: ma/mr/md/mt
 local state = require("poste.state")
+local config = require("poste-db.config")
 
 local M = {}
 
@@ -193,7 +194,7 @@ end
 function M.register_keymaps(browser_buf, get_table_context)
   local opts = { buffer = browser_buf, noremap = true, silent = true }
 
-  local k = state.get_keymap("sql_table_ops", "select_all", "ma")
+  local k = config.get_keymap("sql_table_ops", "select_all", "ma")
   if k then
     vim.keymap.set("n", k, function()
       local ctx = get_table_context()
@@ -201,7 +202,7 @@ function M.register_keymaps(browser_buf, get_table_context)
     end, vim.tbl_extend("force", opts, { desc = "Add column" }))
   end
 
-  k = state.get_keymap("sql_table_ops", "refresh_all", "mr")
+  k = config.get_keymap("sql_table_ops", "refresh_all", "mr")
   if k then
     vim.keymap.set("n", k, function()
       local ctx = get_table_context()
@@ -209,7 +210,7 @@ function M.register_keymaps(browser_buf, get_table_context)
     end, vim.tbl_extend("force", opts, { desc = "Rename column" }))
   end
 
-  k = state.get_keymap("sql_table_ops", "describe_all", "md")
+  k = config.get_keymap("sql_table_ops", "describe_all", "md")
   if k then
     vim.keymap.set("n", k, function()
       local ctx = get_table_context()
@@ -217,7 +218,7 @@ function M.register_keymaps(browser_buf, get_table_context)
     end, vim.tbl_extend("force", opts, { desc = "Drop column" }))
   end
 
-  k = state.get_keymap("sql_table_ops", "toggle_menu", "mt")
+  k = config.get_keymap("sql_table_ops", "toggle_menu", "mt")
   if k then
     vim.keymap.set("n", k, function()
       local ctx = get_table_context()

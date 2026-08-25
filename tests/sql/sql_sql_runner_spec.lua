@@ -1,4 +1,6 @@
 local saved_state = package.loaded["poste.state"]
+local saved_sql_state = package.loaded["poste-db.state"]
+local saved_config = package.loaded["poste-db.config"]
 local saved_util = package.loaded["poste.util"]
 local saved_indicators = package.loaded["poste.indicators"]
 local saved_statement = package.loaded["poste-db.statement"]
@@ -6,15 +8,24 @@ local saved_introspect = package.loaded["poste-db.introspect"]
 local saved_format = package.loaded["poste-db.format"]
 local saved_buffer = package.loaded["poste-db.buffer"]
 
-local state_stub = {
-  sql = { context = { connection = nil, database = nil } },
+local poste_state_stub = {
   current_env = "dev",
   find_poste_binary = function() return nil end,
-  get_keymap = function() return nil end,
   log = function() end,
+  last_response = nil,
+}
+local sql_state_stub = {
+  context = { connection = nil, database = nil },
+  _sql_session = nil,
+}
+local config_stub = {
+  get_keymap = function() return nil end,
+  config = {},
 }
 
-package.loaded["poste.state"] = state_stub
+package.loaded["poste.state"] = poste_state_stub
+package.loaded["poste-db.state"] = sql_state_stub
+package.loaded["poste-db.config"] = config_stub
 package.loaded["poste.util"] = {}
 package.loaded["poste.indicators"] = { clear_all = function() end, set_indicator = function() end }
 package.loaded["poste-db.statement"] = {
@@ -40,7 +51,7 @@ describe("sql_runner ensure_sql_keymaps", function()
   end)
 
   it("installs keymaps on first call", function()
-    state_stub.get_keymap = function(area, name, default)
+    config_stub.get_keymap = function(area, name, default)
       return default
     end
     runner.ensure_sql_keymaps(buf)
@@ -50,7 +61,7 @@ describe("sql_runner ensure_sql_keymaps", function()
   it("skips if already installed", function()
     vim.b[buf].poste_db_keymaps_installed = true
     local get_keymap_calls = 0
-    state_stub.get_keymap = function()
+    config_stub.get_keymap = function()
       get_keymap_calls = get_keymap_calls + 1
       return nil
     end
@@ -68,11 +79,11 @@ describe("sql_runner run_sql_request", function()
     vim.api.nvim_buf_set_name(buf, vim.fn.tempname() .. ".sql")
     vim.api.nvim_set_current_buf(buf)
     vim.b[buf] = {}
-    state_stub.sql = { context = { connection = nil, database = nil } }
+    sql_state_stub.context = { connection = nil, database = nil }
   end)
 
   it("notifies when binary not found", function()
-    state_stub.find_poste_binary = function() return nil end
+    poste_state_stub.find_poste_binary = function() return nil end
     local notified
     vim.notify = function(msg, level)
       notified = { msg = msg, level = level }
@@ -84,6 +95,8 @@ describe("sql_runner run_sql_request", function()
 
   after_each(function()
     package.loaded["poste.state"] = saved_state
+    package.loaded["poste-db.state"] = saved_sql_state
+    package.loaded["poste-db.config"] = saved_config
     package.loaded["poste.util"] = saved_util
     package.loaded["poste.indicators"] = saved_indicators
     package.loaded["poste-db.statement"] = saved_statement

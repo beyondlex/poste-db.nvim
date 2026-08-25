@@ -14,7 +14,7 @@ end
 
 local state = nil
 local function get_state()
-  if not state then state = require("poste.state") end
+  if not state then state = require("poste-db.state") end
   return state
 end
 
@@ -267,8 +267,8 @@ function M.edit_cell()
   if not check_edit_guards(tab) then return end
 
   local state = get_state()
-  local row_idx = state.sql.cell.row
-  local col_idx = state.sql.cell.col
+  local row_idx = state.cell.row
+  local col_idx = state.cell.col
   local col_meta = tab.layout.columns[col_idx]
 
   if not M.is_data_row(tab, row_idx) then return end
@@ -289,7 +289,7 @@ function M.delete_row()
   if not check_edit_guards(tab) then return end
 
   local state = get_state()
-  local row_idx = state.sql.cell.row
+  local row_idx = state.cell.row
 
   if not M.is_data_row(tab, row_idx) then return end
 

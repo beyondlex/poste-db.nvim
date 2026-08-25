@@ -2,6 +2,8 @@
 local D = require("poste-db.dataset")
 local C = require("poste-db.constants")
 local state = require("poste.state")
+local sql_state = require("poste-db.state")
+
 local sql_highlights = require("poste-db.highlights")
 local nav_state = require("poste-db.buffer.nav_state")
 local header = require("poste-db.buffer.header")
@@ -21,16 +23,16 @@ local function get_col_starts(tab, row)
 end
 
 ------------------------------------------------------------------------------
--- Trace helpers (opt-in via state.sql._trace)
+-- Trace helpers (opt-in via sql_state._trace)
 ------------------------------------------------------------------------------
 local T_items = {}
 local function T_clear() T_items = {} end
 local function T_mark(label)
-  if not state.sql._trace then return end
+  if not sql_state._trace then return end
   T_items[#T_items + 1] = { label = label, t = vim.fn.reltime() }
 end
 local function T_report()
-  if not state.sql._trace or #T_items == 0 then return end
+  if not sql_state._trace or #T_items == 0 then return end
   local t0 = T_items[1].t
   local total = vim.fn.reltimefloat(vim.fn.reltime(t0)) * 1000
   local lines = {}
@@ -47,8 +49,8 @@ end
 
 local function focus_cell(tab, row, col, update_header)
   T_mark("position_cursor")
-  state.sql.cell.row = row
-  state.sql.cell.col = col
+  sql_state.cell.row = row
+  sql_state.cell.col = col
   local line = M.position_cursor(row, col)
   T_mark("highlight_cell")
   sql_highlights.highlight_cell(D.dataset_buffer, row, col, tab.meta, line, get_col_starts(tab, row))
@@ -62,11 +64,11 @@ function M.move_cell(drow, dcol)
   local tab = D.T()
   if not tab or not tab.meta or tab.meta.type ~= "resultset" then return end
 
-  if state.sql._trace then T_clear() end
+  if sql_state._trace then T_clear() end
   T_mark("move_cell")
 
-  local row = state.sql.cell.row + drow
-  local col = state.sql.cell.col + dcol
+  local row = sql_state.cell.row + drow
+  local col = sql_state.cell.col + dcol
 
   row = math.max(1, math.min(row, tab.meta.row_count or 0))
   col = math.max(1, math.min(col, tab.meta.col_count or 0))
@@ -83,27 +85,27 @@ end
 function M.goto_first_col()
   local tab = D.T()
   if not tab or not tab.meta then return end
-  focus_cell(tab, state.sql.cell.row, 1, true)
+  focus_cell(tab, sql_state.cell.row, 1, true)
 end
 
 function M.goto_last_col()
   local tab = D.T()
   if not tab or not tab.meta then return end
   local last = tab.meta.col_count or 1
-  focus_cell(tab, state.sql.cell.row, last, true)
+  focus_cell(tab, sql_state.cell.row, last, true)
 end
 
 function M.goto_first_row()
   local tab = D.T()
   if not tab or not tab.meta then return end
-  focus_cell(tab, 1, state.sql.cell.col, false)
+  focus_cell(tab, 1, sql_state.cell.col, false)
 end
 
 function M.goto_last_row()
   local tab = D.T()
   if not tab or not tab.meta then return end
   local last = tab.meta.row_count or 1
-  focus_cell(tab, last, state.sql.cell.col, false)
+  focus_cell(tab, last, sql_state.cell.col, false)
 end
 
 function M.position_cursor(row, col)
@@ -210,8 +212,8 @@ function M.preview_cell()
 
   local tab = nav_state.get_resultset_data_tab()
   if not tab then return end
-  local row = state.sql.cell.row
-  local col = state.sql.cell.col
+  local row = sql_state.cell.row
+  local col = sql_state.cell.col
 
   local res, raw_val = cell.get_resultset_cell(tab, row, col)
   if not res then return end
@@ -234,8 +236,8 @@ end
 function M.yank_cell()
   local tab = nav_state.get_resultset_data_tab()
   if not tab then return end
-  local row = state.sql.cell.row
-  local col = state.sql.cell.col
+  local row = sql_state.cell.row
+  local col = sql_state.cell.col
   local text, preview_text = cell.build_cell_yank_text(tab, row, col)
   vim.fn.setreg('"', text)
   vim.fn.setreg('+', text)
@@ -244,7 +246,7 @@ end
 
 function M.yank_column()
   local tab = nav_state.get_resultset_data_tab()
-  local col = state.sql.cell.col
+  local col = sql_state.cell.col
   local result, count, col_name = cell.build_column_yank_text(tab, col)
   if not result then return end
   vim.fn.setreg('"', result)
@@ -262,7 +264,7 @@ function M.sort_by_current_col()
   local data = tab.data
   if not data or not data.results or #data.results == 0 then return end
 
-  local col = state.sql.cell.col
+  local col = sql_state.cell.col
   local lines, meta, render_opts = sort_helper.prepare_current_col_sort(tab, data, D.active_tab_idx, col)
   if not lines then return end
 

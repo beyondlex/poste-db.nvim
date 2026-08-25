@@ -1,6 +1,7 @@
 --- Dataset cell navigation --- extract, format, yank, highlight individual cells.
 local C = require("poste-db.constants")
-local state = require("poste.state")
+local sql_state = require("poste-db.state")
+
 local sql_highlights = require("poste-db.highlights")
 
 local M = {}
@@ -162,9 +163,9 @@ function M.apply_cell_highlight(enabled, dataset_buffer, row, col, meta, col_sta
 end
 
 function M.toggle_cell_highlight(dataset_buffer, row, col, meta, col_starts)
-  state.sql.highlight_cell = not state.sql.highlight_cell
-  M.apply_cell_highlight(state.sql.highlight_cell, dataset_buffer, row, col, meta, col_starts)
-  return state.sql.highlight_cell
+  sql_state.highlight_cell = not sql_state.highlight_cell
+  M.apply_cell_highlight(sql_state.highlight_cell, dataset_buffer, row, col, meta, col_starts)
+  return sql_state.highlight_cell
 end
 
 return M

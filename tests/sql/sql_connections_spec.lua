@@ -1,17 +1,17 @@
 local saved_cli = package.loaded["poste.cli"]
-local saved_state = package.loaded["poste.state"]
+local saved_state = package.loaded["poste-db.state"]
 local saved_util = package.loaded["poste.util"]
 local saved_select = package.loaded["poste.select"]
 local saved_const = package.loaded["poste-db.constants"]
 local saved_toml = package.loaded["poste-db.toml"]
 
 local cli_stub = {}
-local state_stub = { sql = { context = { connection = nil, database = nil } } }
+local state_stub = { context = { connection = nil, database = nil } }
 local util_stub = { find_file_upwards = function() return nil end }
 local select_stub = { select = function() end }
 
 package.loaded["poste.cli"] = cli_stub
-package.loaded["poste.state"] = state_stub
+package.loaded["poste-db.state"] = state_stub
 package.loaded["poste.util"] = util_stub
 package.loaded["poste.select"] = select_stub
 package.loaded["poste-db.constants"] = require("poste-db.constants")
@@ -339,12 +339,12 @@ describe("connections apply_connection", function()
   end
 
   before_each(function()
-    state_stub.sql = { context = { connection = nil, database = nil } }
+    state_stub.context = { connection = nil, database = nil }
   end)
 
-  it("updates state.sql.context.connection", function()
+  it("updates state.context.connection", function()
     connections.apply_connection({ name = "analytics" })
-    assert.equals("analytics", state_stub.sql.context.connection)
+    assert.equals("analytics", state_stub.context.connection)
   end)
 
   it("updates existing @connection directive", function()

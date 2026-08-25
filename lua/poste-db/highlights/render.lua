@@ -1,5 +1,6 @@
 --- Highlight rendering --- apply extmark highlights to dataset buffer lines.
-local state = require("poste.state")
+local sql_state = require("poste-db.state")
+
 local const = require("poste-db.constants")
 
 local M = {}
@@ -10,7 +11,7 @@ local ns_cursorline = vim.api.nvim_create_namespace("poste_db_dataset_cursorline
 local ns_edit = vim.api.nvim_create_namespace("poste_db_dataset_edit")
 
 local function row_nums_hidden()
-  return state.sql._hide_row_numbers
+  return sql_state._hide_row_numbers
 end
 
 local function find_cell_range_by_starts(col_starts, col)
@@ -202,7 +203,7 @@ end
 function M.highlight_cell(buf, row, col, meta, line, col_starts)
   vim.api.nvim_buf_clear_namespace(buf, ns_cell, 0, -1)
   vim.api.nvim_buf_clear_namespace(buf, ns_cursorline, 0, -1)
-  if not state.sql.highlight_cell then return end
+  if not sql_state.highlight_cell then return end
   if not meta or meta.type ~= "resultset" then return end
   if not meta.data_start_line or not meta.data_end_line then return end
 

@@ -1,7 +1,8 @@
 --- Dataset pagination --- page navigation, refresh, and winbar updates.
 local D = require("poste-db.dataset")
 local C = require("poste-db.constants")
-local state = require("poste.state")
+local sql_state = require("poste-db.state")
+
 local sql_highlights = require("poste-db.highlights")
 local nav_ui = require("poste-db.buffer.nav_ui")
 local M = {}
@@ -42,8 +43,8 @@ function M.refresh_page()
       local buffer = require("poste-db.buffer")
       buffer.apply_rendered_page(tab, lines, meta)
 
-      if state.sql.cell.row > page_rows then
-        state.sql.cell.row = page_rows
+      if sql_state.cell.row > page_rows then
+        sql_state.cell.row = page_rows
       end
       if tab.cursor.row > page_rows then
         tab.cursor.row = page_rows
@@ -63,7 +64,7 @@ function M.refresh_page()
     end
 
     -- Re-create header float if it was closed (e.g. after raw mode toggle)
-    if tab.header_text and not state.sql._hide_header_float then
+    if tab.header_text and not sql_state._hide_header_float then
       require("poste-db.buffer.header").update()
     end
 
@@ -95,8 +96,8 @@ function M.refresh_page()
     meta.row_count = page_rows
     meta.data_end_line = data_start + page_rows - 1
 
-    if state.sql.cell.row > page_rows then
-      state.sql.cell.row = page_rows
+    if sql_state.cell.row > page_rows then
+      sql_state.cell.row = page_rows
     end
     if tab.cursor.row > page_rows then
       tab.cursor.row = page_rows

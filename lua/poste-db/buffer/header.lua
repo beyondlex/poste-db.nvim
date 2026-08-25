@@ -2,7 +2,8 @@
 --- horizontal scroll, plus the slicing helpers behind it. No poste deps
 --- beyond dataset state; all float state is module-local.
 local D = require("poste-db.dataset")
-local state = require("poste.state")
+local sql_state = require("poste-db.state")
+
 local util = require("poste-db.util")
 
 local M = {}
@@ -116,7 +117,7 @@ function M.update()
   local tab = D.T()
   if not tab or not tab.header_text or not D.dataset_window then return end
   if not vim.api.nvim_win_is_valid(D.dataset_window) then return end
-  if state.sql._hide_header_float then M.close(); return end
+  if sql_state._hide_header_float then M.close(); return end
 
   local win_width = vim.api.nvim_win_get_width(D.dataset_window)
   if win_width <= 0 then return end

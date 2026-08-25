@@ -1,4 +1,6 @@
-local state = require("poste.state")
+local config = require("poste-db.config")
+local sql_state = require("poste-db.state")
+
 local tree = require("poste-db.db_browser.tree")
 local async = require("poste-db.db_browser.async")
 local actions = require("poste-db.db_browser.actions")
@@ -20,7 +22,7 @@ local multi_select = {
 
 local function render_tree()
   if not browser_buf or not vim.api.nvim_buf_is_valid(browser_buf) then return end
-  local conn_label = state.sql.db_browser.connection or "No connection"
+  local conn_label = sql_state.db_browser.connection or "No connection"
   local new_map = tree.render_tree(browser_buf, line_to_node, root_nodes, conn_label, multi_select)
   line_to_node = new_map
 end
@@ -163,7 +165,7 @@ local function start_copy(buf_line)
 end
 
 local function make_context()
-  local conn_label = state.sql.db_browser.connection or "No connection"
+  local conn_label = sql_state.db_browser.connection or "No connection"
   return {
     browser_buf = browser_buf,
     line_to_node = line_to_node,
@@ -189,50 +191,50 @@ local function setup_browser_buffer()
   vim.api.nvim_buf_set_name(browser_buf, "poste://db_browser")
 
   local opts = { buffer = browser_buf, noremap = true, silent = true }
-  local k = state.get_keymap("sql_db_browser", "toggle_node", "<CR>")
+  local k = config.get_keymap("sql_db_browser", "toggle_node", "<CR>")
   if k then
     vim.keymap.set("n", k, function()
       actions.toggle_node(vim.fn.line("."), make_context())
     end, opts)
   end
-  k = state.get_keymap("sql_db_browser", "move_left", "h")
+  k = config.get_keymap("sql_db_browser", "move_left", "h")
   if k then
     vim.keymap.set("n", k, function()
       actions.collapse_or_parent(vim.fn.line("."), make_context())
     end, opts)
   end
-  k = state.get_keymap("sql_db_browser", "move_right", "l")
+  k = config.get_keymap("sql_db_browser", "move_right", "l")
   if k then
     vim.keymap.set("n", k, function()
       actions.expand_or_child(vim.fn.line("."), make_context())
     end, opts)
   end
-  k = state.get_keymap("sql_db_browser", "refresh_node", "r")
+  k = config.get_keymap("sql_db_browser", "refresh_node", "r")
   if k then
     vim.keymap.set("n", k, function()
       actions.refresh_node(vim.fn.line("."), make_context())
     end, opts)
   end
-  k = state.get_keymap("sql_db_browser", "search_filter", "/")
+  k = config.get_keymap("sql_db_browser", "search_filter", "/")
   if k then
     vim.keymap.set("n", k, function()
       actions.search_filter(vim.fn.line("."), make_context())
     end, opts)
   end
-  k = state.get_keymap("sql_db_browser", "close", "q")
+  k = config.get_keymap("sql_db_browser", "close", "q")
   if k then
     vim.keymap.set("n", k, function() M.close() end, opts)
   end
-  k = state.get_keymap("sql_db_browser", "search_next", "n")
+  k = config.get_keymap("sql_db_browser", "search_next", "n")
   if k then
     vim.keymap.set("n", k, function() actions.search_next() end, opts)
   end
-  k = state.get_keymap("sql_db_browser", "search_prev", "N")
+  k = config.get_keymap("sql_db_browser", "search_prev", "N")
   if k then
     vim.keymap.set("n", k, function() actions.search_prev() end, opts)
   end
 
-  k = state.get_keymap("sql_db_browser", "context_menu", "x")
+  k = config.get_keymap("sql_db_browser", "context_menu", "x")
   if k then
     local context_menu = require("poste-db.db_browser.context_menu")
     vim.keymap.set("n", k, function()
@@ -241,13 +243,13 @@ local function setup_browser_buffer()
     end, opts)
   end
 
-  k = state.get_keymap("sql_db_browser", "help", "g?")
+  k = config.get_keymap("sql_db_browser", "help", "g?")
   if k then
     vim.keymap.set("n", k, function() require("poste-db.help").open() end, opts)
   end
 
   -- Multi-select: Tab toggles selection on table nodes
-  k = state.get_keymap("sql_db_browser", "multi_select_toggle", "<Tab>")
+  k = config.get_keymap("sql_db_browser", "multi_select_toggle", "<Tab>")
   if k then
     vim.keymap.set("n", k, function()
       toggle_multi_select_on_table(vim.fn.line("."))
@@ -255,7 +257,7 @@ local function setup_browser_buffer()
   end
 
   -- Esc: exit multi-select and/or clear search
-  k = state.get_keymap("sql_db_browser", "multi_select_exit", "<Esc>")
+  k = config.get_keymap("sql_db_browser", "multi_select_exit", "<Esc>")
   if k then
     vim.keymap.set("n", k, function()
       exit_multi_select()
@@ -264,7 +266,7 @@ local function setup_browser_buffer()
   end
 
   -- Info: i shows table or column metadata based on cursor position
-  k = state.get_keymap("sql_db_browser", "table_info", "i")
+  k = config.get_keymap("sql_db_browser", "table_info", "i")
   if k then
     vim.keymap.set("n", k, function()
       local buf_line = vim.fn.line(".")
@@ -278,7 +280,7 @@ local function setup_browser_buffer()
   end
 
   -- Copy: p triggers copy to target database
-  k = state.get_keymap("sql_db_browser", "copy_tables", "p")
+  k = config.get_keymap("sql_db_browser", "copy_tables", "p")
   if k then
     vim.keymap.set("n", k, function()
       start_copy(vim.fn.line("."))
@@ -286,7 +288,7 @@ local function setup_browser_buffer()
   end
 
   -- Go to definition: gd on connection opens connections.toml at the entry
-  k = state.get_keymap("sql_db_browser", "goto_definition", "gd")
+  k = config.get_keymap("sql_db_browser", "goto_definition", "gd")
   if k then
     vim.keymap.set("n", k, function()
       local node = tree.get_node_at_line(line_to_node, vim.fn.line("."))
@@ -321,7 +323,7 @@ end
 local function open_window()
   if browser_win and vim.api.nvim_win_is_valid(browser_win) then return browser_win end
 
-  local cfg = state.config.db_browser or {}
+  local cfg = config.config.db_browser or {}
   local pos = cfg.split_position or "right"
   local width = cfg.split_width or 40
   local dir = pos == "right" and "botright" or "topleft"
@@ -350,7 +352,7 @@ function M.navigate_to(conn_name, db_name)
   async.load_connections(function(nodes)
     root_nodes = nodes
     if #root_nodes > 0 then
-      state.sql.db_browser.connection = root_nodes[1].name
+      sql_state.db_browser.connection = root_nodes[1].name
     end
 
     local conn_node = nil
@@ -421,7 +423,7 @@ function M.navigate_to_table(conn_name, db_name, table_name, column_name)
   async.load_connections(function(nodes)
     root_nodes = nodes
     if #root_nodes > 0 then
-      state.sql.db_browser.connection = root_nodes[1].name
+      sql_state.db_browser.connection = root_nodes[1].name
     end
 
     local conn_node = nil
@@ -571,7 +573,7 @@ function M.open()
   async.load_connections(function(nodes)
     root_nodes = nodes
     if #root_nodes > 0 then
-      state.sql.db_browser.connection = root_nodes[1].name
+      sql_state.db_browser.connection = root_nodes[1].name
     end
     render_tree()
     -- Focus cursor on first connection
@@ -625,14 +627,14 @@ function M.refresh_by_conn(conn_name, db_name)
   node.children = nil
   node.expanded = false
   node.loading = true
-  local new_map = tree.render_tree(browser_buf, line_to_node, root_nodes, state.sql.db_browser.connection or "No connection", multi_select)
+  local new_map = tree.render_tree(browser_buf, line_to_node, root_nodes, sql_state.db_browser.connection or "No connection", multi_select)
   line_to_node = new_map
 
   local search_dir = M.get_search_dir()
   async.fetch_children(node, function()
     node.expanded = true
     vim.schedule(function()
-      local nm = tree.render_tree(browser_buf, line_to_node, root_nodes, state.sql.db_browser.connection or "No connection", multi_select)
+      local nm = tree.render_tree(browser_buf, line_to_node, root_nodes, sql_state.db_browser.connection or "No connection", multi_select)
       line_to_node = nm
     end)
   end, search_dir)

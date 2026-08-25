@@ -1,9 +1,9 @@
-local saved_state = package.loaded["poste.state"]
+local saved_state = package.loaded["poste-db.state"]
 local saved_select = package.loaded["poste.select"]
 local saved_const = package.loaded["poste-db.constants"]
 local saved_connections = package.loaded["poste-db.connections"]
 
-local state_stub = { sql = { context = { connection = nil, database = nil } }, log = function() end }
+local state_stub = { context = { connection = nil, database = nil }, log = function() end }
 local const_stub = package.loaded["poste-db.constants"] or require("poste-db.constants")
 
 package.loaded["poste-db.connections"] = {
@@ -11,7 +11,7 @@ package.loaded["poste-db.connections"] = {
     return { database = "default_db" }
   end,
 }
-package.loaded["poste.state"] = state_stub
+package.loaded["poste-db.state"] = state_stub
 package.loaded["poste.select"] = { select = function() end }
 
 local context = require("poste-db.context")
@@ -25,8 +25,8 @@ describe("context resolve_context", function()
   end
 
   after_each(function()
-    package.loaded["poste.state"] = state_stub
-    state_stub.sql = { context = { connection = nil, database = nil } }
+    package.loaded["poste-db.state"] = state_stub
+    state_stub.context = { connection = nil, database = nil }
   end)
 
   it("returns nil for empty buffer", function()
@@ -82,12 +82,12 @@ end)
 
 describe("context get_status_text", function()
   before_each(function()
-    package.loaded["poste.state"] = state_stub
-    state_stub.sql = { context = { connection = nil, database = nil } }
+    package.loaded["poste-db.state"] = state_stub
+    state_stub.context = { connection = nil, database = nil }
   end)
 
   after_each(function()
-    package.loaded["poste.state"] = state_stub
+    package.loaded["poste-db.state"] = state_stub
   end)
 
   it("returns empty string when no conn or db", function()
@@ -95,18 +95,18 @@ describe("context get_status_text", function()
   end)
 
   it("returns [db: conn/db] when both present", function()
-    state_stub.sql.context.connection = "analytics"
-    state_stub.sql.context.database = "blog"
+    state_stub.context.connection = "analytics"
+    state_stub.context.database = "blog"
     assert.equals("[db: analytics/blog]", context.get_status_text())
   end)
 
   it("returns [db: conn] when only connection", function()
-    state_stub.sql.context.connection = "analytics"
+    state_stub.context.connection = "analytics"
     assert.equals("[db: analytics]", context.get_status_text())
   end)
 
   it("returns [db: ?/db] when only database", function()
-    state_stub.sql.context.database = "blog"
+    state_stub.context.database = "blog"
     assert.equals("[db: ?/blog]", context.get_status_text())
   end)
 end)
@@ -120,7 +120,7 @@ describe("context get_cursor_status_text", function()
   end
 
   before_each(function()
-    package.loaded["poste.state"] = state_stub
+    package.loaded["poste-db.state"] = state_stub
     package.loaded["poste-db.connections"] = {
       get_connection_config = function(name)
         return { database = "default_db" }
@@ -147,28 +147,28 @@ end)
 
 describe("context handle_use_statement", function()
   before_each(function()
-    state_stub.sql = { context = { connection = nil, database = nil } }
+    state_stub.context = { connection = nil, database = nil }
   end)
 
   it("does nothing for nil response", function()
     context.handle_use_statement(nil)
-    assert.is_nil(state_stub.sql.context.database)
+    assert.is_nil(state_stub.context.database)
   end)
 
   it("does nothing for response without body", function()
     context.handle_use_statement({})
-    assert.is_nil(state_stub.sql.context.database)
+    assert.is_nil(state_stub.context.database)
   end)
 
   it("updates database from USE response", function()
     context.handle_use_statement({
       body = vim.json.encode({ type = "use", database_name = "blog" }),
     })
-    assert.equals("blog", state_stub.sql.context.database)
+    assert.equals("blog", state_stub.context.database)
   end)
 
   after_each(function()
-    package.loaded["poste.state"] = saved_state
+    package.loaded["poste-db.state"] = saved_state
     package.loaded["poste.select"] = saved_select
     package.loaded["poste-db.constants"] = saved_const
     package.loaded["poste-db.connections"] = saved_connections

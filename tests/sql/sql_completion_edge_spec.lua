@@ -20,27 +20,27 @@ end
 ----------------------------------------------------------------------
 describe("resolve_current_context / conn_key", function()
   before_each(function()
-    local state = require("poste.state")
-    state.sql = state.sql or {}
+    local state = require("poste-db.state")
+    state = state or {}
   end)
 
   it("nil conn_key when no connection in buffer or state", function()
     local buf = make_buf({"###", "SELECT * FROM users"})
     vim.api.nvim_set_current_buf(buf)
-    local state = require("poste.state")
-    state.sql.context = nil
+    local state = require("poste-db.state")
+    state.context = nil
     assert.is_nil(conn_key())
   end)
 
-  it("conn_key from state.sql.context", function()
-    local state = require("poste.state")
-    state.sql.context = { connection = "pg-dev", database = "blog" }
+  it("conn_key from state.context", function()
+    local state = require("poste-db.state")
+    state.context = { connection = "pg-dev", database = "blog" }
     assert.equals("pg-dev/blog", conn_key())
   end)
 
   it("conn_key works without database", function()
-    local state = require("poste.state")
-    state.sql.context = { connection = "pg-dev", database = nil }
+    local state = require("poste-db.state")
+    state.context = { connection = "pg-dev", database = nil }
     assert.equals("pg-dev/", conn_key())
   end)
 

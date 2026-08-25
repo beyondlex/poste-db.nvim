@@ -2,6 +2,8 @@
 --- Provides keyword tables, connection context resolution, lazy-fetch
 --- (tables/columns/databases via the Rust CLI), and binary helpers.
 local state = require("poste.state")
+local sql_state = require("poste-db.state")
+
 local compat = require("poste-db.compat")
 
 local M = {}
@@ -200,13 +202,13 @@ end
 
 function M.resolve_current_context()
   local ok, sql_context = pcall(require, "poste-db.context")
-  if not ok then return state.sql and state.sql.context end
+  if not ok then return sql_state and sql_state.context end
   local ctx = sql_context.resolve_full_context(vim.api.nvim_get_current_buf())
   if not ctx.connection then
-    ctx.connection = state.sql and state.sql.context and state.sql.context.connection
+    ctx.connection = sql_state and sql_state.context and sql_state.context.connection
   end
   if not ctx.database then
-    ctx.database = state.sql and state.sql.context and state.sql.context.database
+    ctx.database = sql_state and sql_state.context and sql_state.context.database
   end
   return ctx
 end

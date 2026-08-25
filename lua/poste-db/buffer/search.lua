@@ -2,7 +2,8 @@
 local D = require("poste-db.dataset")
 local C = require("poste-db.constants")
 local nav_ui = require("poste-db.buffer.nav_ui")
-local state = require("poste.state")
+local sql_state = require("poste-db.state")
+
 local sql_highlights = require("poste-db.highlights")
 local sql_format = require("poste-db.format")
 local float_window = require("poste-db.float_window")
@@ -62,8 +63,8 @@ local function jump_to_search_match(idx)
 
   local posize = paginated and tab.page_size or nil
   local vis_row = posize and (match.row - (tab.page - 1) * posize) or match.row
-  state.sql.cell.row = vis_row
-  state.sql.cell.col = match.col
+  sql_state.cell.row = vis_row
+  sql_state.cell.col = match.col
   local line = require("poste-db.buffer.nav").position_cursor(vis_row, match.col)
   local cs = tab.buffer_col_starts and tab.buffer_col_starts[(tab.meta.data_start_line or 1) + vis_row - 1]
   sql_highlights.highlight_cell(D.dataset_buffer, vis_row, match.col, tab.meta, line, cs)
@@ -179,7 +180,7 @@ function M.filter_by_current_cell()
   end
   local res = tab.data.results and tab.data.results[1]
   if not res or not res.rows or #res.rows == 0 then return end
-  local row, col = state.sql.cell.row, state.sql.cell.col
+  local row, col = sql_state.cell.row, sql_state.cell.col
   local paginated = tab.pagination_enabled and tab.num_pages and tab.num_pages > 1
     and (tab.padded_full or tab.layout)
   if paginated then
@@ -281,8 +282,8 @@ function M.find_column()
     if not choice then return end
     local idx = tonumber(choice)
     if not idx then return end
-    state.sql.cell.col = idx
-    local row = state.sql.cell.row
+    sql_state.cell.col = idx
+    local row = sql_state.cell.row
     local line = require("poste-db.buffer.nav").position_cursor(row, idx)
     local cs = tab.buffer_col_starts and tab.buffer_col_starts[(tab.meta.data_start_line or 1) + row - 1]
     sql_highlights.highlight_cell(D.dataset_buffer, row, idx, tab.meta, line, cs)

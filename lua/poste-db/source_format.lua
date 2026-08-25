@@ -11,7 +11,9 @@
 ---   - M.format_text()   — format a SQL string
 ---   - conform.nvim integration — register poste_sql/poste_sqlite filetypes
 
-local state = require("poste.state")
+local config = require("poste-db.config")
+
+local sql_state = require("poste-db.state")
 
 local M = {}
 
@@ -108,11 +110,11 @@ function M.rediscover()
   _detected = {}
 end
 
---- Get the user-configured formatter priority order (from state.config).
+--- Get the user-configured formatter priority order (from config).
 --- Falls back to the built-in default if not configured.
 --- @return string[] List of formatter names in priority order
 function M._get_priority()
-  local config_formatters = state and state.config and state.config.sql_formatters
+  local config_formatters = config.config.sql_formatters
   if config_formatters and type(config_formatters) == "table" and #config_formatters > 0 then
     -- Validate that each entry is a known formatter
     local valid = {}
@@ -127,7 +129,7 @@ function M._get_priority()
 end
 
 --- Find the best available formatter for the given dialect.
---- Uses the user-configured priority order from state.config.sql_formatters.
+--- Uses the user-configured priority order from config.sql_formatters.
 --- Falls back to the next available formatter if the best one is not installed.
 --- @param dialect string|nil SQL dialect (mysql, postgres, sqlite, etc.)
 --- @return string|nil Formatter name, or nil if none found
@@ -210,7 +212,7 @@ function M.resolve_dialect(bufnr)
     local resolved = ctx.resolve_context(bufnr)
     local conn = resolved.connection
     if not conn then
-      conn = state.sql and state.sql.context and state.sql.context.connection
+      conn = sql_state and sql_state.context and sql_state.context.connection
     end
     if conn then
       local connections = require("poste-db.connections")

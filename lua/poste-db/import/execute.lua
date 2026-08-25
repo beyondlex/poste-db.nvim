@@ -1,4 +1,5 @@
 local state = require("poste.state")
+local config = require("poste-db.config")
 local dml = require("poste-db.dml")
 local edit_commit = require("poste-db.edit_commit")
 local mapping = require("poste-db.import.mapping")
@@ -73,7 +74,7 @@ function M.execute_import(table_info, valid_rows, col_map, table_cols, callback)
   end
 
   local norm_cols = mapping.normalize_columns(table_cols)
-  local chunk_size = state.config.import_chunk_size or 100
+  local chunk_size = config.config.import_chunk_size or 100
   local total_imported = 0
   local all_errors = {}
 

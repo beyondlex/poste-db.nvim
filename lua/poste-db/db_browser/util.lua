@@ -1,10 +1,11 @@
-local state = require("poste.state")
+
+local sql_state = require("poste-db.state")
 
 local M = {}
 
 function M.get_dialect(node, root_nodes)
   if node.meta and node.meta.dialect then return node.meta.dialect end
-  local conn_name = node.meta and node.meta.connection or state.sql.db_browser.connection
+  local conn_name = node.meta and node.meta.connection or sql_state.db_browser.connection
   for _, root in ipairs(root_nodes or {}) do
     if root.name == conn_name then
       return root.meta and root.meta.dialect or "postgres"
@@ -15,7 +16,7 @@ end
 
 function M.get_connection(node)
   if node.node_type == "connection" then return node.name end
-  return node.meta and node.meta.connection or state.sql.db_browser.connection
+  return node.meta and node.meta.connection or sql_state.db_browser.connection
 end
 
 function M.get_search_dir(source_buf)

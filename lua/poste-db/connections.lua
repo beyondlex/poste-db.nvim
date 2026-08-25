@@ -2,6 +2,8 @@
 --- Provides :PosteDbConnection command to list, select, and test connections.
 local cli = require("poste.cli")
 local state = require("poste.state")
+local sql_state = require("poste-db.state")
+
 local util = require("poste.util")
 local select_mod = require("poste.select")
 local const = require("poste-db.constants")
@@ -350,10 +352,10 @@ function M.select_connection()
 end
 
 --- Apply a selected connection to the current buffer.
---- Updates @connection directive and state.sql.context.connection.
+--- Updates @connection directive and sql_state.context.connection.
 function M.apply_connection(conn)
   local conn_name = conn.name
-  state.sql.context.connection = conn_name
+  sql_state.context.connection = conn_name
 
   -- Update or insert @connection directive in the current buffer
   local buf = vim.api.nvim_get_current_buf()

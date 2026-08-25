@@ -1,7 +1,7 @@
 local D = require("poste-db.dataset")
 local nav = require("poste-db.buffer.nav")
 local ui = require("poste-db.buffer.nav_ui")
-local state = require("poste.state")
+local state = require("poste-db.state")
 
 describe("buffer_nav helpers", function()
   before_each(function()
@@ -67,7 +67,7 @@ describe("buffer_nav horizontal scroll", function()
     end
     D.dataset_window = nil
     require("poste-db.buffer.header").close()
-    state.sql.cell = { row = 1, col = 1 }
+    state.cell = { row = 1, col = 1 }
   end)
 
   it("slices the header with separators only at their true screen positions", function()
@@ -144,7 +144,7 @@ describe("buffer_nav horizontal scroll", function()
     for _ = 1, 10 do nav.move_cell(0, -1) end
     local leftcol = vim.api.nvim_win_call(win, vim.fn.winsaveview).leftcol
     assert.equals(0, leftcol, "leftcol must return to 0 so the row-number column is visible")
-    assert.equals(1, state.sql.cell.col)
+    assert.equals(1, state.cell.col)
 
     vim.o.columns = saved_columns
   end)
@@ -187,7 +187,7 @@ describe("buffer_nav horizontal scroll", function()
     local col_starts = tab.buffer_col_starts[tab.meta.data_start_line]
     local function cursor_screen_col()
       local v = vim.fn.winsaveview()
-      return col_starts[state.sql.cell.col + 1].disp_start - v.leftcol
+      return col_starts[state.cell.col + 1].disp_start - v.leftcol
     end
 
     -- Walk right across the middle of the table (remaining columns still do
@@ -204,7 +204,7 @@ describe("buffer_nav horizontal scroll", function()
       prev_screen = screen
     end
 
-    assert.equals(24, state.sql.cell.col)
+    assert.equals(24, state.cell.col)
     local scrolled = vim.api.nvim_win_call(win, vim.fn.winsaveview).leftcol
     assert.is_true(scrolled > 0, "expected the window to have scrolled horizontally")
 

@@ -2,6 +2,7 @@
 --- and multi-statement (visual selection) execution.
 --- Each statement result goes into its own dataset tab.
 local state = require("poste.state")
+local sql_state = require("poste-db.state")
 local config = require("poste-db.config")
 local indicators = require("poste.indicators")
 local statement = require("poste-db.statement")
@@ -277,8 +278,8 @@ function M.run_sql_request()
     ctx = sql_context.resolve_full_context(src_buf)
   end
   -- Persist resolved context so it's available for dataset editing (PK introspection etc.)
-  if ctx.connection then state.sql.context.connection = ctx.connection end
-  if ctx.database then state.sql.context.database = ctx.database end
+  if ctx.connection then sql_state.context.connection = ctx.connection end
+  if ctx.database then sql_state.context.database = ctx.database end
 
   -- Resolve connection name to URL and pass directly (bypasses Rust connections.json lookup)
   local conn_url = nil
@@ -500,7 +501,7 @@ end
       entry.error = true
       indicators.set_indicator(src_buf, (stmt_end or first_line) - 1, "error")
       vim.notify(message, vim.log.levels.ERROR, { title = "PosteDb" })
-      local lines = sql_format.format_error(message, state.sql.context.connection or "")
+      local lines = sql_format.format_error(message, sql_state.context.connection or "")
       sql_buffer.render_dataset(lines, { type = "error" })
       -- Log failed execution
       local edit_commit = require("poste-db.edit_commit")
@@ -508,7 +509,7 @@ end
       edit_commit.write_log({
         source = "manual_exec",
         connection = context.connection or "",
-        dialect = state.sql.context.dialect or "",
+        dialect = sql_state.context.dialect or "",
         database = context.database or "",
         sql = buf_content or "",
         status = "error",

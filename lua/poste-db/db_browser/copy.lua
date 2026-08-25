@@ -1,4 +1,5 @@
 local state = require("poste.state")
+local config = require("poste-db.config")
 local cli = require("poste.cli")
 local util = require("poste.util")
 local dialog = require("poste.dialog")
@@ -474,7 +475,7 @@ local function copy_one_table(source, target, table_name, target_table_name, on_
 end
 
 local function popup_options()
-  local cfg = state.config.db_browser or {}
+  local cfg = config.config.db_browser or {}
   local pos = cfg.split_position or "right"
   local width = 60
   local height = 12
