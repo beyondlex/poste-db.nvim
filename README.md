@@ -226,7 +226,7 @@ require("poste-db").setup({
 
 ```bash
 # Start test databases (PG 16 on 15432, MySQL 8.0 on 13306)
-cd playground/sql && docker compose up -d
+cd playground && docker compose up -d
 
 # Run Lua tests
 tests/run.sh

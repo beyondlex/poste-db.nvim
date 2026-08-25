@@ -25,7 +25,15 @@ function M.setup()
     local count = 0
     for conn_url, info in pairs(sessions) do
       count = count + 1
-      table.insert(lines, string.format("  %s  (job %d, %s)", log.redact_url(conn_url), info.job_id, info.dialect))
+      local created = os.date("%m-%d %H:%M", info.created_at)
+      local active = os.date("%m-%d %H:%M", info.last_active)
+      local now = os.time()
+      local idle_sec = now - info.last_active
+      local status = idle_sec < 30 and "active" or "idle"
+      table.insert(lines, string.format(
+        "  %s  created: %s  last: %s  (%s)",
+        log.redact_url(conn_url), created, active, status
+      ))
     end
     if count == 0 then table.insert(lines, "  (none)") end
     vim.notify(table.concat(lines, "\n"), vim.log.levels.INFO, { title = "PosteDb" })

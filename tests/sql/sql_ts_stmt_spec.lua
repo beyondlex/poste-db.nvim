@@ -245,6 +245,15 @@ describe("find_error_nodes", function()
     assert.is_true(#errors > 0, "numeric INTERVAL is invalid in postgres")
   end)
 
+  it("suppresses numeric INTERVAL in INSERT VALUES for mariadb (regression)", function()
+    -- `NOW() - INTERVAL 20 DAY` inside an INSERT VALUES clause produces an
+    -- ERROR node with text `INTERVAL 20` (parser recovers before the unit
+    -- keyword). Must be suppressed for mariadb.
+    local buf = make_buf({ "INSERT INTO posts (published_at) VALUES (NOW() - INTERVAL 20 DAY);" })
+    local errors = ts_stmt.find_error_nodes(buf, "mariadb")
+    assert.same({}, errors, "INTERVAL in INSERT VALUES must not be flagged for mariadb")
+  end)
+
   it("suppresses parenthesized INTERVAL (expr) regardless of dialect", function()
     -- `INTERVAL (i * 2) DAY` is a tree-sitter parser limitation, not a real error.
     local buf = make_buf({ "SELECT NOW() - INTERVAL (i * 2) DAY FROM seq;" })

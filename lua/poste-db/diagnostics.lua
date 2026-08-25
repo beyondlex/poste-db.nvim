@@ -7,6 +7,7 @@ local ts_stmt = require("poste-db.ts_stmt")
 local context = require("poste-db.context")
 local connections = require("poste-db.connections")
 local state = require("poste.state")
+local compat = require("poste-db.compat")
 
 local M = {}
 
@@ -16,20 +17,42 @@ local ns = vim.api.nvim_create_namespace("poste_db_diagnostics")
 local ns_hl = vim.api.nvim_create_namespace("poste_db_diagnostics_highlight")
 
 --- Resolve the connection dialect for a buffer (lowercase), or nil.
---- Mirrors completion's dialect flag: buffer context → runtime connection.
+--- Checks: ### dialect header → connection config → g:poste_db_dialect → filetype.
 --- @param buf number  buffer handle
 --- @return string|nil
 local function get_dialect(buf)
+  -- Check ### dialect header in the buffer
+  local lines = vim.api.nvim_buf_get_lines(buf, 0, math.min(20, vim.api.nvim_buf_line_count(buf)), false)
+  for _, line in ipairs(lines) do
+    local d = line:match("^### dialect%s+(%S+)")
+    if d then return d:lower() end
+  end
+
+  -- Resolve from connection config
   local ctx = context.resolve_context(buf)
   local conn = ctx.connection
   if not conn then
     conn = state.sql and state.sql.context and state.sql.context.connection
   end
-  if not conn then return nil end
-  local cfg = connections.get_connection_config(conn)
-  if cfg and cfg.dialect and cfg.dialect ~= "" then
-    return cfg.dialect:lower()
+  if conn then
+    local cfg = connections.get_connection_config(conn)
+    if cfg and cfg.dialect and cfg.dialect ~= "" then
+      return cfg.dialect:lower()
+    end
   end
+
+  -- Fallback to global dialect option
+  local global_dialect = compat.opt("dialect")
+  if global_dialect and global_dialect ~= "" then
+    return global_dialect:lower()
+  end
+
+  -- Fallback based on filetype
+  local ft = vim.bo[buf].filetype
+  if ft == "poste_sqlite" then
+    return "sqlite"
+  end
+
   return nil
 end
 

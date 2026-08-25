@@ -12,15 +12,17 @@ local state = require("poste.state")
 local M = {}
 
 -- pool[connection_url] = {
---   job_id  = number,
---   conn_url = string,
---   dialect = string,
---   database = string,
---   bufs    = { [bufnr] = true },
---   seq     = number,
---   pending = { [seq] = { on_response = fn, on_error = fn } },
---   buffer  = string,   -- partial stdout line buffer
---   alive   = boolean,
+--   job_id      = number,
+--   conn_url    = string,
+--   dialect     = string,
+--   database    = string,
+--   bufs        = { [bufnr] = true },
+--   seq         = number,
+--   pending     = { [seq] = { on_response = fn, on_error = fn } },
+--   buffer      = string,   -- partial stdout line buffer
+--   alive       = boolean,
+--   created_at  = number,   -- os.time()
+--   last_active = number,   -- os.time()
 -- }
 local pool = {}
 
@@ -177,6 +179,7 @@ local function start(conn_url, database)
   if not binary then return nil end
 
   local db = database or database_from_url(conn_url)
+  local now = os.time()
   local session = {
     job_id = nil,
     conn_url = conn_url,
@@ -187,6 +190,8 @@ local function start(conn_url, database)
     pending = {},
     buffer  = "",
     alive = true,
+    created_at = now,
+    last_active = now,
   }
 
   local cmd = { binary, "session", "--connection", conn_url, "--max-rows", "0", "--timeout", "0" }
@@ -252,6 +257,7 @@ function M.execute(conn_url, sql, callbacks, bufnr, database)
   end
 
   session.seq = session.seq + 1
+  session.last_active = os.time()
   local seq = session.seq
   session.pending[seq] = {
     on_response = callbacks.on_response,
@@ -303,11 +309,16 @@ function M.cleanup_buf(bufnr)
 end
 
 --- List active sessions (for debugging / :PosteDbSessionList).
---- @return { [conn_url] = { job_id, dialect } }
+--- @return { [conn_url] = { job_id, dialect, created_at, last_active } }
 function M.list()
   local out = {}
   for conn_url, session in pairs(pool) do
-    out[conn_url] = { job_id = session.job_id, dialect = session.dialect }
+    out[conn_url] = {
+      job_id = session.job_id,
+      dialect = session.dialect,
+      created_at = session.created_at,
+      last_active = session.last_active,
+    }
   end
   return out
 end
