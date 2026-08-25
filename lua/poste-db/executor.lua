@@ -1,4 +1,5 @@
 local state = require("poste.state")
+local config = require("poste-db.config")
 local session_conn = require("poste-db.session_conn")
 local exec_run = require("poste-db.exec_run")
 local log = require("poste-db.log")
@@ -6,7 +7,7 @@ local log = require("poste-db.log")
 local M = {}
 
 local function default_max_rows()
-  return state.config.default_max_rows or 0
+  return config.config.default_max_rows or 0
 end
 
 function M.execute(opts)

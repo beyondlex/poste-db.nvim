@@ -6,7 +6,8 @@ local sql_runner = require("poste-db.sql_runner")
 local M = {}
 M.ensure_sql_keymaps = sql_runner.ensure_sql_keymaps
 
-local ck = state.get_keymap("sql_source", "clear_filter", "<leader>cr")
+local config = require("poste-db.config")
+local ck = config.get_keymap("sql_source", "clear_filter", "<leader>cr")
 if ck then
   vim.keymap.set("n", ck, function()
     local sql_buf = require("poste-db.buffer")
@@ -21,10 +22,8 @@ M._test = statement._test
 function M.setup(opts)
   opts = opts or {}
   local state = require("poste.state")
-  state.config.db_browser = vim.tbl_deep_extend("force", state.config.db_browser, opts.db_browser or {})
-  if opts.hide_empty_result_tabs ~= nil then
-    state.config.hide_empty_result_tabs = opts.hide_empty_result_tabs
-  end
+  local config = require("poste-db.config")
+  config.merge(opts)
   require("poste-db.snippets").setup(opts)
   require("poste-db.insert_hint").setup()
 

@@ -1,5 +1,5 @@
 --- SQL keymap help — displays SQL-specific keymaps in a floating window.
-local state = require("poste.state")
+local config = require("poste-db.config")
 local dialog = require("poste.dialog")
 
 local M = {}
@@ -109,7 +109,7 @@ function M.open()
 
   for _, section in ipairs(sections) do
     local title = SECTION_TITLES[section] or section
-    local km = state.config.keymaps[section] or {}
+    local km = config.config.keymaps[section] or {}
     local desc = DESCRIPTIONS[section] or {}
 
     table.insert(lines, "")
@@ -125,9 +125,9 @@ function M.open()
     table.sort(actions)
 
     for _, action in ipairs(actions) do
-      local key = state.get_keymap(section, action)
+      local key = config.get_keymap(section, action)
       if key and key ~= false then
-        local key_display = state.format_key_string(key)
+        local key_display = config.format_key_string(key)
         local description = desc[action] or ""
         if description == "" then goto continue end
         local line = string.format("  %-12s  %s", key_display, description)
@@ -144,8 +144,8 @@ function M.open()
 
   local close_keys = {}
   local function collect_close(section, action)
-    local k = state.get_keymap(section, action)
-    if k then close_keys[state.format_key_string(k)] = true end
+    local k = config.get_keymap(section, action)
+    if k then close_keys[config.format_key_string(k)] = true end
   end
   collect_close("sql_dataset", "close")
   collect_close("sql_db_browser", "close")

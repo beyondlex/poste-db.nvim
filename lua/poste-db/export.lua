@@ -4,7 +4,7 @@
 --- Path memory persisted in stdpath("cache")/poste_export_config.
 
 local D = require("poste-db.dataset")
-local state = require("poste.state")
+local config = require("poste-db.config")
 
 local M = {}
 
@@ -50,8 +50,8 @@ end
 -------------------------------------------------------------------------------
 
 local function get_default_dir()
-  if state.config.export_path then
-    return state.config.export_path
+  if config.config.export_path then
+    return config.config.export_path
   end
   local cfg = load_export_config()
   if cfg.last_dir then

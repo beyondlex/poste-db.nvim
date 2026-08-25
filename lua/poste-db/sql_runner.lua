@@ -2,6 +2,7 @@
 --- and multi-statement (visual selection) execution.
 --- Each statement result goes into its own dataset tab.
 local state = require("poste.state")
+local config = require("poste-db.config")
 local indicators = require("poste.indicators")
 local statement = require("poste-db.statement")
 local sql_introspect = require("poste-db.introspect")
@@ -51,7 +52,7 @@ function M.ensure_sql_keymaps(buf)
   local keymap_opts = { buffer = buf, noremap = true, silent = true }
 
   -- Normal mode: execute statement at cursor
-  local k = state.get_keymap("sql_source", "run", "<CR>")
+  local k = config.get_keymap("sql_source", "run", "<CR>")
   if k then
     vim.keymap.set("n", k, function()
       M.run_sql_request()
@@ -59,7 +60,7 @@ function M.ensure_sql_keymaps(buf)
   end
 
   -- K: show DDL for table under cursor
-  k = state.get_keymap("sql_source", "show_ddl", "K")
+  k = config.get_keymap("sql_source", "show_ddl", "K")
   if k then
     vim.keymap.set("n", k, function()
       sql_introspect.show_table_ddl()
@@ -67,7 +68,7 @@ function M.ensure_sql_keymaps(buf)
   end
 
   -- Visual mode: execute selected statements (uses same key as normal run)
-  k = state.get_keymap("sql_source", "run", "<CR>")
+  k = config.get_keymap("sql_source", "run", "<CR>")
   if k then
     vim.keymap.set("x", k, function()
       _vis_start = vim.fn.line("v")
@@ -82,13 +83,13 @@ function M.ensure_sql_keymaps(buf)
   end
 
   -- g?: show keymap help
-  k = state.get_keymap("sql_source", "help", "g?")
+  k = config.get_keymap("sql_source", "help", "g?")
   if k then
     vim.keymap.set("n", k, function() require("poste-db.help").open() end, keymap_opts)
   end
 
   -- <leader>l: toggle SQL execution log
-  k = state.get_keymap("sql_source", "toggle_log", "<leader>l")
+  k = config.get_keymap("sql_source", "toggle_log", "<leader>l")
   if k then
     vim.keymap.set("n", k, function()
       require("poste-db.log_viewer").toggle()
@@ -96,7 +97,7 @@ function M.ensure_sql_keymaps(buf)
   end
 
   -- Format SQL buffer/selection (default <leader>ff)
-  k = state.get_keymap("sql_source", "format", "<leader>ff")
+  k = config.get_keymap("sql_source", "format", "<leader>ff")
   if k then
     vim.keymap.set("n", k, function()
       local ok, source_format = pcall(require, "poste-db.source_format")
@@ -369,7 +370,7 @@ function M.run_sql_request()
 
     if is_multi then
       local tab_idx = 0
-      local hide_empty = state.config.hide_empty_result_tabs ~= false
+      local hide_empty = config.config.hide_empty_result_tabs ~= false
       for i, result in ipairs(results) do
         if result.error then
           entry.error = true

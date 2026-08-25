@@ -1,4 +1,4 @@
-local state = require("poste.state")
+local config = require("poste-db.config")
 local buffer_setup = require("poste.buffer_setup")
 
 local M = {}
@@ -8,7 +8,7 @@ function M.setup()
   local sql_syntax = require("poste-db.syntax")
 
   local function setup_db_browser_keymap(buf)
-    local k = state.get_keymap("sql_source", "toggle_db_browser", "<leader>db")
+    local k = config.get_keymap("sql_source", "toggle_db_browser", "<leader>db")
     if k then
       vim.keymap.set("n", k, function() require("poste-db.db_browser").toggle() end,
         { buffer = buf, noremap = true, silent = true, desc = "Toggle DB Browser" })
@@ -62,7 +62,7 @@ function M.setup()
       else
         vim.bo.filetype = "poste_sql"
       end
-      local k = state.get_keymap("sql_source", "trigger_completion", "<C-Space>")
+      local k = config.get_keymap("sql_source", "trigger_completion", "<C-Space>")
       if k then
         vim.keymap.set("i", k, function()
           pcall(function() require("poste-db.completion.adapter").show() end)
@@ -106,7 +106,7 @@ function M.setup_existing_buffers()
   local buffer_setup = require("poste.buffer_setup")
 
   local function setup_db_browser_keymap(buf)
-    local k = state.get_keymap("sql_source", "toggle_db_browser", "<leader>db")
+    local k = config.get_keymap("sql_source", "toggle_db_browser", "<leader>db")
     if k then
       vim.keymap.set("n", k, function() require("poste-db.db_browser").toggle() end,
         { buffer = buf, noremap = true, silent = true, desc = "Toggle DB Browser" })

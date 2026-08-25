@@ -6,6 +6,7 @@
 
 local state = require("poste.state")
 local util = require("poste.util")
+local config = require("poste-db.config")
 local helpers = require("poste-db.introspect.helpers")
 local route = require("poste-db.introspect.route")
 local detect = require("poste-db.introspect.detect")
@@ -59,9 +60,9 @@ function M.show_float(lines, title, ft)
     if vim.api.nvim_win_is_valid(win) then vim.api.nvim_win_close(win, true) end
     show_float_win = nil
   end
-  local ck = state.get_keymap("sql_introspect", "close", "q")
+  local ck = config.get_keymap("sql_introspect", "close", "q")
   if ck then vim.keymap.set("n", ck, close_fn, sopts) end
-  ck = state.get_keymap("sql_introspect", "close_alt", "<Esc>")
+  ck = config.get_keymap("sql_introspect", "close_alt", "<Esc>")
   if ck then vim.keymap.set("n", ck, close_fn, sopts) end
 end
 
