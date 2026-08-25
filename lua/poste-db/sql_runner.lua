@@ -108,25 +108,8 @@ function M.ensure_sql_keymaps(buf)
     end, keymap_opts)
   end
 
-  -- Execute SQL file
-  k = state.get_keymap("sql_source", "exec_file", "<leader>ef")
-  if k then
-    vim.keymap.set("n", k, function()
-      local buf = vim.api.nvim_get_current_buf()
-      local filepath = vim.api.nvim_buf_get_name(buf)
-      if filepath == "" then
-        vim.notify("Buffer must be saved to a file first", vim.log.levels.WARN)
-        return
-      end
-      require("poste-db.file_exec").run({
-        filepath = filepath,
-        mode = "greedy",
-      })
-    end, keymap_opts)
-  end
-
   -- CursorMoved: update context indicator in statusline + statement highlight
-  local augroup = "PosteDbContext_" .. buf
+  local augroup = "PosteDbCursorMoved_" .. buf
   pcall(vim.api.nvim_del_augroup_by_name, augroup)
   local group = vim.api.nvim_create_augroup(augroup, { clear = true })
   vim.api.nvim_create_autocmd("CursorMoved", {

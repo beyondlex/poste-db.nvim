@@ -100,12 +100,6 @@ function M.get_dataset_buffer()
   if k then vim.keymap.set("n", k, function() require("poste-db.buffer.nav").yank_column() end, opts) end
   k = state.get_keymap("sql_dataset", "sort_column", "s")
   if k then vim.keymap.set("n", k, function() require("poste-db.buffer.nav").sort_by_current_col() end, opts) end
-  k = state.get_keymap("sql_dataset", "toggle_cell_highlight", "zh")
-  if k then vim.keymap.set("n", k, function() require("poste-db.buffer.nav").toggle_cell_highlight() end, opts) end
-  k = state.get_keymap("sql_dataset", "toggle_header_float", "zH")
-  if k then vim.keymap.set("n", k, function() require("poste-db.buffer.nav").toggle_header_float() end, opts) end
-  k = state.get_keymap("sql_dataset", "toggle_row_numbers", "zN")
-  if k then vim.keymap.set("n", k, function() require("poste-db.buffer.nav").toggle_row_numbers() end, opts) end
   k = state.get_keymap("sql_dataset", "toggle_raw_mode", "<leader>gp")
   if k then vim.keymap.set("n", k, function() require("poste-db.buffer.nav").toggle_raw_mode() end, opts) end
   k = state.get_keymap("sql_dataset", "next_tab", "<Tab>")

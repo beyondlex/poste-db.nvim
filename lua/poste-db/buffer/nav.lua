@@ -273,34 +273,6 @@ function M.sort_by_current_col()
   M.move_cell(0, 0)
 end
 
-function M.toggle_cell_highlight()
-  local tab = nav_state.get_tab()
-  local enabled = cell.toggle_cell_highlight(D.dataset_buffer, state.sql.cell.row, state.sql.cell.col, tab and tab.meta, get_col_starts(tab, state.sql.cell.row))
-  vim.notify(string.format("Cell highlight: %s", enabled and "ON" or "OFF"),
-    vim.log.levels.INFO, { title = C.TITLE })
-end
-
-function M.toggle_header_float()
-  state.sql._hide_header_float = not state.sql._hide_header_float
-  if state.sql._hide_header_float then
-    header.close()
-  else
-    header.update()
-  end
-  vim.notify(string.format("Header float: %s", state.sql._hide_header_float and "OFF" or "ON"),
-    vim.log.levels.INFO, { title = C.TITLE })
-end
-
-function M.toggle_row_numbers()
-  state.sql._hide_row_numbers = not state.sql._hide_row_numbers
-  local tab = nav_state.get_resultset_tab()
-  if tab and tab.padded and tab.meta then
-    sql_highlights.apply_dataset_highlights(D.dataset_buffer, tab.padded, tab.meta)
-  end
-  vim.notify(string.format("Row numbers: %s", state.sql._hide_row_numbers and "OFF" or "ON"),
-    vim.log.levels.INFO, { title = C.TITLE })
-end
-
 --- Delegates to buffer_nav_ui.build_status_winbar with current dataset context.
 function M.build_status_winbar(meta)
   return require("poste-db.buffer.nav_ui").build_status_winbar(meta, D.T(), #D.tabs, D.active_tab_idx)

@@ -1,7 +1,6 @@
 --- SQL execution context management.
 --- Handles connection → database context resolution and status display.
 local state = require("poste.state")
-local select_mod = require("poste.select")
 local const = require("poste-db.constants")
 local lex = require("poste-db.lex")
 
@@ -60,7 +59,7 @@ function M.resolve_full_context(buf, limit_line)
 
   local ctx = M.resolve_context(buf, limit_line)
 
-  -- Fallback to runtime state for connection (from :PosteDbContext or manual set)
+  -- Fallback to runtime state for connection (set by :PosteDbConnection or execution)
   local state_sql = state.sql
   local conn = ctx.connection or (state_sql and state_sql.context and state_sql.context.connection)
 
@@ -123,53 +122,6 @@ function M.get_cursor_status_text(buf)
     return string.format("%s/%s", ctx.connection, ctx.database)
   end
   return ctx.connection
-end
-
----------------------------------------------------------------------------
--- Context switching command
----------------------------------------------------------------------------
-
---- Switch SQL context interactively.
---- Usage:
----   :PosteDbContext              — interactive: pick connection, then database
----   :PosteDbContext <conn>       — set connection only
----   :PosteDbContext <conn> <db>  — set connection and database
-function M.switch_context(args)
-  if args and #args >= 1 then
-    -- Direct argument mode
-    state.sql.context.connection = args[1]
-    if #args >= 2 then
-      state.sql.context.database = args[2]
-    end
-    vim.notify(string.format("Context: %s", M.get_status_text()), vim.log.levels.INFO)
-    return
-  end
-
-  -- Interactive mode: list connections, then let user pick
-  local connections = require("poste-db.connections")
-  connections.list_connections(function(conn_list)
-    if #conn_list == 0 then
-      vim.notify("No connections found. Create a connections.toml file.", vim.log.levels.WARN)
-      return
-    end
-
-    local items = {}
-    for _, conn in ipairs(conn_list) do
-      local icon = ({ postgres = "🐘", mysql = "🐬", sqlite = "📦" })[conn.dialect] or "❓"
-      table.insert(items, string.format("%s %s", icon, conn.name))
-    end
-
-    select_mod.select(items, "Select Connection", function(selected)
-      if not selected then return end
-
-      -- Extract connection name
-      local conn_name = selected:match("^[^%s]+%s+(.+)")
-      if not conn_name then return end
-
-      state.sql.context.connection = conn_name
-      vim.notify(string.format("Context connection: %s", conn_name), vim.log.levels.INFO)
-    end)
-  end)
 end
 
 return M

@@ -168,12 +168,6 @@ function M.setup()
     require("poste-db.log_viewer").toggle()
   end, { desc = "Toggle SQL execution log viewer" })
 
-  vim.api.nvim_create_user_command("PosteDbContext", function(args)
-    local context = require("poste-db.context")
-    local parts = {}; for word in args.args:gmatch("%S+") do parts[#parts + 1] = word end
-    context.switch_context(parts)
-  end, { nargs = "*", desc = "Switch SQL execution context" })
-
   vim.api.nvim_create_user_command("PosteDbRunFile", function(args)
     require("poste-db.file_exec").run({ filepath = args.args, mode = "greedy" })
   end, { nargs = 1, complete = "file", desc = "Execute a SQL file" })
