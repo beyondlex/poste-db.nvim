@@ -11,6 +11,60 @@ local M = {}
 
 -- Forward declarations
 local update_winbar
+local jump_to_search_match
+
+--- Recompute search matches from search_text against the current view_indices.
+--- The set of matching rows is unchanged by sort/filter (only their order), so
+--- matches are re-derived to keep n/N and highlights correct after a reorder.
+local function compute_matches(tab, text)
+  tab.search_matches = {}
+  tab.search_matches_by_page = {}
+  local q = text:lower()
+  local all_indices = tab.view_indices
+  if not all_indices then
+    all_indices = {}
+    for i = 1, #tab.rows_source do all_indices[i] = i end
+  end
+  local total_count = 0
+  for view_pos, src_idx in ipairs(all_indices) do
+    local row_data = tab.rows_source[src_idx]
+    for ci, val in ipairs(row_data) do
+      local s = (val == nil or val == vim.NIL) and "" or tostring(val)
+      if s:lower():find(q, 1, true) then
+        total_count = total_count + 1
+        local page = math.ceil(view_pos / tab.page_size)
+        if not tab.search_matches_by_page[page] then
+          tab.search_matches_by_page[page] = {}
+        end
+        tab.search_matches_by_page[page][#tab.search_matches_by_page[page] + 1] = {
+          row = view_pos, col = ci, global_match_idx = total_count,
+        }
+        tab.search_matches[#tab.search_matches + 1] = { row = view_pos, col = ci }
+      end
+    end
+  end
+  tab.search_total_matches = total_count
+end
+
+--- Re-derive search matches after view_indices changed (sort/filter) so stale
+--- view-position matches don't point at rows that are no longer results.
+function M.recompute_after_view_change()
+  local tab = D.T()
+  if not tab or not tab.search_text then return end
+  if not tab.rows_source then
+    tab.search_text = nil; tab.search_matches = {}; tab.search_idx = 0
+    tab.search_matches_by_page = nil; tab.search_total_matches = 0
+    M.apply_search_highlights(); update_winbar()
+    return
+  end
+  compute_matches(tab, tab.search_text)
+  if #tab.search_matches > 0 then
+    jump_to_search_match(1)
+  else
+    tab.search_idx = 0
+    M.apply_search_highlights(); update_winbar()
+  end
+end
 
 function M.apply_search_highlights()
   if not D.dataset_buffer or not vim.api.nvim_buf_is_valid(D.dataset_buffer) then return end
@@ -44,7 +98,7 @@ function M.apply_search_highlights()
   end
 end
 
-local function jump_to_search_match(idx)
+jump_to_search_match = function(idx)
   local tab = D.T()
   if not tab or not tab.search_matches or #tab.search_matches == 0 then return end
   local match = tab.search_matches[idx]
@@ -114,33 +168,7 @@ function M.show_search()
     tab.rows_source = tab.rows_source or (tab.data.results and tab.data.results[1] and tab.data.results[1].rows)
     if not tab.rows_source then return end
     tab.search_text = text
-    tab.search_matches = {}
-    tab.search_matches_by_page = {}
-    local q = text:lower()
-    local all_indices = tab.view_indices
-    if not all_indices then
-      all_indices = {}
-      for i = 1, #tab.rows_source do all_indices[i] = i end
-    end
-    local total_count = 0
-    for view_pos, src_idx in ipairs(all_indices) do
-      local row_data = tab.rows_source[src_idx]
-      for ci, val in ipairs(row_data) do
-        local s = (val == nil or val == vim.NIL) and "" or tostring(val)
-        if s:lower():find(q, 1, true) then
-          total_count = total_count + 1
-          local page = math.ceil(view_pos / tab.page_size)
-          if not tab.search_matches_by_page[page] then
-            tab.search_matches_by_page[page] = {}
-          end
-          tab.search_matches_by_page[page][#tab.search_matches_by_page[page] + 1] = {
-            row = view_pos, col = ci, global_match_idx = total_count,
-          }
-          tab.search_matches[#tab.search_matches + 1] = { row = view_pos, col = ci }
-        end
-      end
-    end
-    tab.search_total_matches = total_count
+    compute_matches(tab, text)
     if #tab.search_matches > 0 then
       jump_to_search_match(1)
     else

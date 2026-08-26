@@ -272,6 +272,7 @@ function M.sort_by_current_col()
   local buffer = require("poste-db.buffer")
   buffer.render_dataset(lines, meta, render_opts)
   tab.is_sorting = false
+  require("poste-db.buffer.search").recompute_after_view_change()
   M.move_cell(0, 0)
 end
 
