@@ -59,21 +59,31 @@ function M.open_preview_float(title, text, ft)
   vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
   vim.api.nvim_set_option_value("bufhidden", "wipe", { buf = buf })
 
-  -- Anchor below the cursor when there is room; otherwise grow upward.
-  local winline = math.max(vim.fn.winline(), 1)
-  local lines_below = math.max(vim.fn.winheight(0) - winline, 0)
+  -- Anchor against the whole editor, not the (possibly small) dataset window,
+  -- so the preview isn't squashed to the window's height. Use the cursor's
+  -- absolute screen position and always show at least 3 rows of a tall value.
+  local winid = vim.api.nvim_get_current_win()
+  local cursor = vim.api.nvim_win_get_cursor(winid)
+  local pos = vim.fn.screenpos(winid, cursor[1], cursor[2])
+  local cursor_row = pos and pos.row or 1
+  local cursor_col = pos and pos.col or 1
+
+  local MIN_PREVIEW_HEIGHT = 3
+  local lines_below = math.max(vim.o.lines - cursor_row, 0)
+  local lines_above = math.max(cursor_row - 1, 0)
   local row
   if height <= lines_below then
     row = 1
   else
-    height = math.max(math.min(height, winline - 2), 1)
+    local min_h = math.min(height, MIN_PREVIEW_HEIGHT)
+    height = math.max(math.min(height, lines_above), min_h)
     row = -height
   end
 
   -- Keep the float inside the editor when the cursor sits near the right edge.
   local col = 0
-  if vim.fn.wincol() + width > vim.o.columns then
-    col = math.max(vim.o.columns - width - vim.fn.wincol(), -vim.fn.wincol())
+  if cursor_col + width > vim.o.columns then
+    col = math.max(vim.o.columns - width - cursor_col, -cursor_col)
   end
 
   local win_opts = {
