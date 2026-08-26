@@ -77,21 +77,9 @@ function M.show()
   local sopts = { buffer = buf, noremap = true, silent = true }
   vim.keymap.set("n", "q", close, sopts)
   vim.keymap.set("n", "<Esc>", close, sopts)
-  vim.keymap.set("n", "j", "<C-e>", sopts)
-  vim.keymap.set("n", "k", "<C-y>", sopts)
-  vim.keymap.set("n", "d", "<C-d>", sopts)
-  vim.keymap.set("n", "u", "<C-u>", sopts)
-  vim.keymap.set("n", "g", "gg", sopts)
-  vim.keymap.set("n", "G", "G", sopts)
-  vim.keymap.set("n", "<Space>", "<C-f>", sopts)
-  vim.keymap.set("n", "<BS>", "<C-b>", sopts)
 
   vim.keymap.set("v", "q", close, sopts)
   vim.keymap.set("v", "<Esc>", close, sopts)
-  vim.keymap.set("v", "j", "j", sopts)
-  vim.keymap.set("v", "k", "k", sopts)
-  vim.keymap.set("v", "h", "h", sopts)
-  vim.keymap.set("v", "l", "l", sopts)
 end
 
 M.toggle = M.show
