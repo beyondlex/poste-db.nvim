@@ -115,14 +115,6 @@ end
 
 function M.set_preview_keymaps(buf, close_fn)
   local sopts = { buffer = buf, noremap = true, silent = true }
-  vim.keymap.set("n", "j", "<C-e>", sopts)
-  vim.keymap.set("n", "k", "<C-y>", sopts)
-  vim.keymap.set("n", "d", "<C-d>", sopts)
-  vim.keymap.set("n", "u", "<C-u>", sopts)
-  vim.keymap.set("n", "g", "gg", sopts)
-  vim.keymap.set("n", "G", "G", sopts)
-  vim.keymap.set("n", "<Space>", "<C-f>", sopts)
-  vim.keymap.set("n", "<BS>", "<C-b>", sopts)
   vim.keymap.set("n", "q", close_fn, sopts)
   vim.keymap.set("n", "<Esc>", close_fn, sopts)
 end

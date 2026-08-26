@@ -23,11 +23,11 @@ describe("buffer_nav_preview", function()
 
     vim.keymap.set = original
     assert.is_true(ok, err)
-    assert.equals(10, #calls)
-    assert.equals("q", calls[9].lhs)
-    assert.equals("<Esc>", calls[10].lhs)
+    assert.equals(2, #calls)
+    assert.equals("q", calls[1].lhs)
+    assert.equals("<Esc>", calls[2].lhs)
     assert.equals(12, calls[1].opts.buffer)
-    assert.is_true(calls[9].rhs ~= nil)
+    assert.is_true(calls[1].rhs ~= nil)
   end)
 
   describe("compute_preview_size", function()

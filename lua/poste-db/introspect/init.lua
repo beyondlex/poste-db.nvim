@@ -15,6 +15,7 @@ local context_resolver = require("poste-db.introspect.context")
 local ui = require("poste-db.introspect.ui")
 local column = require("poste-db.introspect.column")
 local table_helper = require("poste-db.introspect.table")
+local preview = require("poste-db.buffer.nav_preview")
 local const = require("poste-db.constants")
 
 local M = {}
@@ -33,33 +34,21 @@ function M.show_float(lines, title, ft)
     vim.notify("No content to display", vim.log.levels.WARN, { title = const.PLUGIN_TITLE })
     return
   end
-  local ok, float_buf, win = pcall(vim.lsp.util.open_floating_preview, lines, ft or "sql", {
-    border = "rounded",
-    title = title,
-    title_pos = "left",
-  })
-  if not ok or not float_buf then
-    return
-  end
+
+  -- Use the shared cell-preview float: native buffer navigation for scrolling
+  -- and editor-anchored sizing, so a small source/dataset window can't squash
+  -- the DDL/info popup (same treatment as the dataset K preview).
+  local float_buf, win = preview.open_preview_float(title, table.concat(lines, "\n"), ft or "sql")
+  if not float_buf or not win then return end
 
   show_float_win = win
   vim.api.nvim_set_current_win(win)
 
-  vim.wo[win].linebreak = true
-  vim.wo[win].scrolloff = 1
-  vim.wo[win].cursorline = true
-
-  local sopts = { buffer = float_buf, noremap = true, silent = true }
-  vim.keymap.set("n", "j", "j", sopts)
-  vim.keymap.set("n", "k", "k", sopts)
-  vim.keymap.set("n", "d", "<C-d>", sopts)
-  vim.keymap.set("n", "u", "<C-u>", sopts)
-  vim.keymap.set("n", "g", "gg", sopts)
-  vim.keymap.set("n", "G", "G", sopts)
   local close_fn = function()
     if vim.api.nvim_win_is_valid(win) then vim.api.nvim_win_close(win, true) end
     show_float_win = nil
   end
+  local sopts = { buffer = float_buf, noremap = true, silent = true }
   local ck = config.get_keymap("sql_introspect", "close", "q")
   if ck then vim.keymap.set("n", ck, close_fn, sopts) end
   ck = config.get_keymap("sql_introspect", "close_alt", "<Esc>")
