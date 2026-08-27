@@ -347,14 +347,6 @@ function M.resolve_conflict_names(target, items, on_resolved, on_cancel, opts)
           end
         )
       end)
-              else
-                results[i] = chosen
-                step(i + 1)
-              end
-            end)
-          end
-        )
-      end)
     end
 
     step(1)
