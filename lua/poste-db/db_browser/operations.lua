@@ -1095,20 +1095,33 @@ local function start_batch_drop(items, conn_label, search_dir, context)
     vim.keymap.set("n", "q", function() sdlg:close() end, { buffer = sdlg.buf, noremap = true, silent = true, nowait = true })
   end
 
-  local function refresh_parent(it)
-    if not it.parent then return end
-    it.parent.children = nil
-    it.parent.expanded = false
-    it.parent.loading = true
+  local function refresh_all_parents()
+    local seen = {}
+    for _, it in ipairs(items) do
+      if it.parent and not seen[it.parent] then
+        seen[it.parent] = true
+        it.parent.children = nil
+        it.parent.expanded = false
+        it.parent.loading = true
+      end
+    end
     local nm = tree.render_tree(context.browser_buf, context.line_to_node, context.root_nodes, context.conn_label)
     for i, n in ipairs(nm) do context.line_to_node[i] = n end
-    async.fetch_children(it.parent, function()
-      it.parent.expanded = true
-      vim.schedule(function()
-        local nm2 = tree.render_tree(context.browser_buf, context.line_to_node, context.root_nodes, context.conn_label)
-        for i, n in ipairs(nm2) do context.line_to_node[i] = n end
-      end)
-    end, search_dir)
+    local parents = {}
+    for p in pairs(seen) do table.insert(parents, p) end
+    local idx = 0
+    local function next_refresh()
+      idx = idx + 1
+      if idx > #parents then return end
+      local p = parents[idx]
+      async.fetch_children(p, function()
+        p.expanded = true
+        vim.schedule(function()
+          next_refresh()
+        end)
+      end, search_dir)
+    end
+    next_refresh()
   end
 
   local function process_next(idx)
@@ -1123,6 +1136,7 @@ local function start_batch_drop(items, conn_label, search_dir, context)
         progress_dlg:close()
       end
       show_summary()
+      refresh_all_parents()
       return
     end
     local it = items[idx]
@@ -1155,7 +1169,6 @@ local function start_batch_drop(items, conn_label, search_dir, context)
           else
             results[it.label] = { status = "done" }
             completed = completed + 1
-            refresh_parent(it)
           end
           render_progress()
           process_next(idx + 1)
