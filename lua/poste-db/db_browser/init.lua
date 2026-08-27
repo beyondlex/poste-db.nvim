@@ -443,6 +443,19 @@ local function setup_browser_buffer()
     end, opts)
   end
 
+  -- Multi-select batch drop: D drops all selected tables at source database
+  k = config.get_keymap("sql_db_browser", "multi_select_drop", "D")
+  if k then
+    local ops_mod = require("poste-db.db_browser.operations")
+    vim.keymap.set("n", k, function()
+      if not multi_select.active or not next(multi_select.selected) then
+        return
+      end
+      ops_mod.batch_drop_tables(multi_select.selected, make_context())
+      exit_multi_select()
+    end, opts)
+  end
+
   -- Go to definition: gd on connection opens connections.toml at the entry
   k = config.get_keymap("sql_db_browser", "goto_definition", "gd")
   if k then
