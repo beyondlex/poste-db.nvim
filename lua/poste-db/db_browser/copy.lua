@@ -273,7 +273,9 @@ end
 ---@param items table[] {name=..., schema=?}
 ---@param on_resolved function(names string[]) parallel to items
 ---@param on_cancel function()
-function M.resolve_conflict_names(target, items, on_resolved, on_cancel)
+---@param opts table|nil {skip_dialogs=bool}
+function M.resolve_conflict_names(target, items, on_resolved, on_cancel, opts)
+  opts = opts or {}
   local hooks = _G.poste_db_copy_test_hooks or {}
   local exists_fn = hooks.exists
     or function(t, name, schema, cb)
@@ -314,6 +316,11 @@ function M.resolve_conflict_names(target, items, on_resolved, on_cancel)
         return
       end
       bump_until_free(i, items[i].name, 1, function(safe_default)
+        if opts.skip_dialogs then
+          results[i] = safe_default
+          step(i + 1)
+          return
+        end
         input_fn(
           "Name for '" .. items[i].name .. "'"
             .. " at " .. target.conn .. "." .. tostring(target.db or "") .. ": ",
@@ -326,14 +333,20 @@ function M.resolve_conflict_names(target, items, on_resolved, on_cancel)
             end
             exists_fn(target, chosen, items[i].schema, function(found2)
               if found2 and chosen ~= safe_default then
-                -- The user's own pick is taken too: auto-bump instead of a
-                -- second dialog round-trip.
                 vim.notify("'" .. chosen .. "' also exists — using an automatic suffix",
                   vim.log.levels.INFO)
                 bump_until_free(i, chosen, 1, function(bumped)
                   results[i] = bumped
                   step(i + 1)
                 end)
+              else
+                results[i] = chosen
+                step(i + 1)
+              end
+            end)
+          end
+        )
+      end)
               else
                 results[i] = chosen
                 step(i + 1)
@@ -1049,7 +1062,7 @@ function M.paste_objects(source, target, items, triggers, routines, opts)
       end)
     end, function()
       -- user aborted during conflict naming
-    end)
+    end, { skip_dialogs = true })
   end)
 end
 
