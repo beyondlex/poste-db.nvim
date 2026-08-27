@@ -1,4 +1,3 @@
-local state = require("poste.state")
 local config = require("poste-db.config")
 local session_conn = require("poste-db.session_conn")
 local exec_run = require("poste-db.exec_run")

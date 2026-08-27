@@ -1,7 +1,6 @@
 --- Table operations UI — triggered from DB Browser or SQL file.
 --- Generates DDL SQL and inserts it into the source buffer for review/execution.
 --- Keymaps registered on the DB Browser buffer: ma/mr/md/mt
-local state = require("poste.state")
 local config = require("poste-db.config")
 
 local M = {}

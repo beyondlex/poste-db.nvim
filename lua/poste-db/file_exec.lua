@@ -1,5 +1,4 @@
 local state = require("poste.state")
-local indicators = require("poste.indicators")
 local dialog = require("poste.dialog")
 local layout = require("poste.layout")
 local connections = require("poste-db.connections")

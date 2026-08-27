@@ -20,7 +20,6 @@ M._test = statement._test
 
 function M.setup(opts)
   opts = opts or {}
-  local state = require("poste.state")
   local config = require("poste-db.config")
   config.merge(opts)
   require("poste-db.snippets").setup(opts)

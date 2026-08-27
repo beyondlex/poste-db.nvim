@@ -1,7 +1,6 @@
 local icons = require("poste-db.db_browser.icons")
 local tree = require("poste-db.db_browser.tree")
 local async = require("poste-db.db_browser.async")
-local state = require("poste.state")
 local cli = require("poste.cli")
 local ident = require("poste-db.ident")
 local util = require("poste-db.db_browser.util")
