@@ -443,14 +443,6 @@ local function setup_browser_buffer()
     end, opts)
   end
 
-  -- Copy: p triggers copy to target database
-  k = config.get_keymap("sql_db_browser", "copy_tables", "p")
-  if k then
-    vim.keymap.set("n", k, function()
-      start_copy(vim.fn.line("."))
-    end, opts)
-  end
-
   -- Go to definition: gd on connection opens connections.toml at the entry
   k = config.get_keymap("sql_db_browser", "goto_definition", "gd")
   if k then

@@ -1052,3 +1052,21 @@ function M.paste_objects(source, target, items, triggers, routines, opts)
     end)
   end)
 end
+
+--- Legacy compat shim for the old multi-select copy path (init.lua:start_copy).
+--- Converts a flat list of table names into items and delegates to paste_objects.
+function M.copy_tables(source, target, table_names, on_complete)
+  local items = {}
+  for _, name in ipairs(table_names) do
+    table.insert(items, {
+      kind = "table",
+      name = name,
+      conn = source.conn,
+      db = source.db,
+      dialect = source.dialect,
+    })
+  end
+  M.paste_objects(source, target, items, {}, {}, { on_complete = on_complete })
+end
+
+return M
