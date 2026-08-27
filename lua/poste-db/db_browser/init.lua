@@ -279,6 +279,170 @@ local function setup_browser_buffer()
     end, opts)
   end
 
+  -- Yank: y records a copy source (table, view, database, schema, or sqlite connection)
+  k = config.get_keymap("sql_db_browser", "yank_node", "y")
+  if k then
+    vim.keymap.set("n", k, function()
+      local node = tree.get_node_at_line(line_to_node, vim.fn.line("."))
+      if not node then return end
+      -- Resolve root-level dialect for nodes that may not carry it.
+      local root_dialect = nil
+      for _, root in ipairs(root_nodes) do
+        if root.name == node.name and root.node_type == "connection" then
+          root_dialect = root.meta and root.meta.dialect; break
+        end
+        if root.name == (node.meta and node.meta.connection) then
+          root_dialect = root.meta and root.meta.dialect; break
+        end
+      end
+      local yank = require("poste-db.db_browser.yank")
+      local entry = yank.from_node(node, root_dialect)
+      if entry then
+        yank.set(entry)
+        local desc = yank.describe()
+        vim.notify("Yanked " .. (desc or "item") .. " (press p on a database to paste)", vim.log.levels.INFO)
+      end
+    end, opts)
+  end
+
+  -- Copy/Paste: p triggers paste from either multi-select or yank register
+  k = config.get_keymap("sql_db_browser", "copy_tables", "p")
+  if k then
+    vim.keymap.set("n", k, function()
+      local buf_line = vim.fn.line(".")
+      -- Multi-select path (existing behavior)
+      if multi_select.active and next(multi_select.selected) then
+        start_copy(buf_line)
+        return
+      end
+      -- Yank-register path
+      local yank = require("poste-db.db_browser.yank")
+      local entry = yank.get()
+      if not entry then
+        vim.notify("Nothing yanked. Use <Tab> to select tables, or press y on a table/view/database to yank.", vim.log.levels.INFO)
+        return
+      end
+      -- Resolve target: cursor must be on or under a database node.
+      -- For sqlite connections (dialect "sqlite"), the connection node itself
+      -- acts as the effective database.
+      local node = tree.get_node_at_line(line_to_node, buf_line)
+      if not node then return end
+
+      local target_db = nil
+      local is_sqlite_conn_target = false
+
+      if node.node_type == "database" then
+        target_db = node
+      elseif node.node_type == "connection" then
+        if node.meta and node.meta.dialect == "sqlite" then
+          is_sqlite_conn_target = true
+        end
+      else
+        -- Walk up to find enclosing database or connection.
+        local cur = node
+        while cur do
+          if cur.node_type == "database" then target_db = cur; break end
+          if cur.node_type == "connection" then
+            if cur.meta and cur.meta.dialect == "sqlite" then
+              is_sqlite_conn_target = true
+            end
+            break
+          end
+          cur = cur.parent
+        end
+      end
+
+      if not target_db and not is_sqlite_conn_target then
+        vim.notify("Move cursor to a target database (or sqlite connection) to paste", vim.log.levels.INFO)
+        return
+      end
+
+      -- Resolve target connection/db/dialect from the target node.
+      local target_conn = (target_db and target_db.meta and target_db.meta.connection)
+        or node.name
+      local target_db_name = (target_db and (target_db.name or target_db.meta.database))
+        or nil
+      local target_dialect = (node.meta and node.meta.dialect)
+        or (target_db and target_db.meta and target_db.meta.dialect)
+        or entry.dialect
+
+      -- For sqlite connection target, target_db_name stays nil (connection == db).
+
+      local copy_mod = require("poste-db.db_browser.copy")
+      if entry.kind == "database" then
+        -- Enumerate all objects at paste time via catalog.
+        local catalog = require("poste-db.db_browser.catalog")
+        catalog.enumerate(entry, function(objects, triggers, routines)
+          copy_mod.paste_objects(entry, {
+            conn = target_conn, db = target_db_name, dialect = target_dialect,
+          }, objects, triggers, routines, {
+            on_complete = function()
+              -- Refresh target node display.
+              if target_db then
+                target_db.children = nil
+                target_db.expanded = false
+                target_db.loading = true
+                render_tree()
+                async.fetch_children(target_db, function()
+                  target_db.expanded = true
+                  vim.schedule(render_tree)
+                end, get_search_dir())
+              elseif is_sqlite_conn_target then
+                -- Refresh the connection node (sqlite).
+                for _, root in ipairs(root_nodes) do
+                  if root.name == target_conn then
+                    root.children = nil
+                    root.expanded = false
+                    root.loading = true
+                    render_tree()
+                    async.fetch_children(root, function()
+                      root.expanded = true
+                      vim.schedule(render_tree)
+                    end, get_search_dir())
+                    break
+                  end
+                end
+              end
+            end,
+          })
+        end, function(err)
+          vim.notify("Failed to enumerate objects for paste: " .. tostring(err), vim.log.levels.ERROR)
+        end)
+      elseif entry.kind == "table" or entry.kind == "view" then
+        copy_mod.paste_objects(entry, {
+          conn = target_conn, db = target_db_name, dialect = target_dialect,
+        }, { entry }, {}, {}, {
+          on_complete = function()
+            if target_db then
+              target_db.children = nil
+              target_db.expanded = false
+              target_db.loading = true
+              render_tree()
+              async.fetch_children(target_db, function()
+                target_db.expanded = true
+                vim.schedule(render_tree)
+              end, get_search_dir())
+            elseif is_sqlite_conn_target then
+              for _, root in ipairs(root_nodes) do
+                if root.name == target_conn then
+                  root.children = nil
+                  root.expanded = false
+                  root.loading = true
+                  render_tree()
+                  async.fetch_children(root, function()
+                    root.expanded = true
+                    vim.schedule(render_tree)
+                  end, get_search_dir())
+                  break
+                end
+              end
+            end
+          end,
+        })
+      end
+    end, opts)
+  end
+
   -- Copy: p triggers copy to target database
   k = config.get_keymap("sql_db_browser", "copy_tables", "p")
   if k then

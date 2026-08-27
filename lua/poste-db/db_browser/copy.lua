@@ -3,6 +3,8 @@ local config = require("poste-db.config")
 local cli = require("poste.cli")
 local util = require("poste.util")
 local dialog = require("poste.dialog")
+local sql_conn = require("poste-db.db_browser.sql_conn")
+local catalog = require("poste-db.db_browser.catalog")
 
 local M = {}
 
@@ -146,49 +148,24 @@ local function prepare_table_ddl(ddl, target_table_name, table_name, schema, dia
   return table.concat(seq_stmts, "\n")
 end
 
-local function dialect_table_exists_sql(dialect)
+local function dialect_table_exists_sql(dialect, schema)
   if dialect == "mysql" or dialect == "mariadb" then
-    return "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '%s'"
+    -- information_schema (not SHOW TABLES) so views collide correctly too.
+    return "SELECT TABLE_NAME FROM information_schema.TABLES"
+      .. " WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '%s'"
   elseif dialect == "postgres" then
-    return "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = '%s')"
+    return "SELECT EXISTS (SELECT FROM information_schema.tables"
+      .. " WHERE table_schema = '" .. (schema or "public") .. "'"
+      .. " AND table_name = '%s')"
   else
-    return "SELECT name FROM sqlite_master WHERE type='table' AND name='%s'"
+    return "SELECT name FROM sqlite_master"
+      .. " WHERE type IN ('table','view') AND name='%s'"
   end
 end
 
-local function find_search_dir()
-  local browser = require("poste-db.db_browser")
-  return browser.get_search_dir()
-end
-
+--- Run `sql` on conn/database; on_result receives the raw JSON envelope.
 local function run_sql_on_conn(conn_name, database, sql, on_result, on_error)
-  local connections = require("poste-db.connections")
-  local url, err = connections.resolve_connection_url(conn_name)
-  if not url then
-    if on_error then on_error(err or "unknown error") end
-    return
-  end
-
-  local search_dir = find_search_dir()
-  local src_file = search_dir .. "/copy.sql"
-  local exec_run = require("poste-db.exec_run")
-  local job_id = exec_run.run_async(sql, {
-    src_file = src_file,
-    conn_url = url,
-    database = database,
-    mode = "greedy",
-  }, {
-    on_response = function(resp)
-      if on_result then on_result(vim.json.encode(resp)) end
-    end,
-    on_error = function(message)
-      if on_error then on_error(message) end
-    end,
-  })
-
-  if not job_id or job_id <= 0 then
-    if on_error then on_error("Failed to start job") end
-  end
+  sql_conn.run(conn_name, database, sql, on_result, on_error)
 end
 
 local function introspect_ddl(conn_name, db_name, table_name, on_result, on_error)
@@ -245,8 +222,8 @@ local function introspect_ddl(conn_name, db_name, table_name, on_result, on_erro
   })
 end
 
-local function check_table_exists(conn_name, database, dialect, name, on_result, on_error)
-  local sql = dialect_table_exists_sql(dialect):format(name)
+local function check_table_exists(conn_name, database, dialect, name, on_result, on_error, schema)
+  local sql = dialect_table_exists_sql(dialect, schema):format(name)
   run_sql_on_conn(conn_name, database, sql, function(output)
     local ok, parsed = pcall(vim.json.decode, output)
     if not ok or not parsed then
@@ -269,26 +246,119 @@ local function check_table_exists(conn_name, database, dialect, name, on_result,
   end, on_error)
 end
 
-local function resolve_table_name(conn_name, database, dialect, base_name, on_result, on_error)
-  check_table_exists(conn_name, database, dialect, base_name, function(exists)
-    if not exists then
-      on_result(base_name)
+-- --------------------------------------------------------- conflict naming
+
+local function make_default_input()
+  ---@param prompt string
+  ---@param default string
+  ---@param cb function(string|nil)
+  return function(prompt, default, cb)
+    vim.ui.input({ prompt = prompt, default = default }, function(text)
+      if text ~= nil and text == "" then text = nil end
+      cb(text)
+    end)
+  end
+end
+
+--- Resolve target names for pasted items when originals already exist there.
+---
+--- - free name                → kept as-is
+--- - colliding name           → dialog prefilled with <name>_copy (auto-bumped
+---                              to _copy2… while occupied); user may type any
+---                              name, which is itself re-checked and bumped
+---                              automatically if taken
+--- - cancelling the dialog    → aborts the whole paste (on_cancel)
+---
+---@param target table {conn, db, dialect}
+---@param items table[] {name=..., schema=?}
+---@param on_resolved function(names string[]) parallel to items
+---@param on_cancel function()
+function M.resolve_conflict_names(target, items, on_resolved, on_cancel)
+  local hooks = _G.poste_db_copy_test_hooks or {}
+  local exists_fn = hooks.exists
+    or function(t, name, schema, cb)
+      check_table_exists(t.conn, t.db, t.dialect, name, cb, function(err)
+        vim.schedule(function() vim.notify("Copy: " .. tostring(err), vim.log.levels.ERROR) end)
+        cb(true) -- fail closed: pretend it exists rather than clobber it
+      end)
+    end
+  local input_fn = hooks.input or make_default_input()
+
+  -- Pre-collect all collisions up-front so dialogs only appear when needed.
+  local collision_state = {} --- [i] = {base=<new base or nil>}
+  local checked = 0
+  if #items == 0 then on_resolved({}) return end
+
+  local function proceed_with_resolution()
+    local results = {}
+    local aborted = false
+
+    local function finish()
+      if not aborted then on_resolved(results) end
+    end
+
+    local function bump_until_free(i, base, suffix, cb)
+      local candidate = base .. "_copy" .. (suffix > 1 and tostring(suffix) or "")
+      exists_fn(target, candidate, items[i].schema, function(found)
+        if not found then cb(candidate) else bump_until_free(i, base, suffix + 1, cb) end
+      end)
+    end
+
+    local function step(i)
+      if aborted then return end
+      if i > #items then finish() return end
+      local state_i = collision_state[i]
+      if not state_i then
+        results[i] = items[i].name
+        step(i + 1)
+        return
+      end
+      bump_until_free(i, items[i].name, 1, function(safe_default)
+        input_fn(
+          "Name for '" .. items[i].name .. "'"
+            .. " at " .. target.conn .. "." .. tostring(target.db or "") .. ": ",
+          safe_default,
+          function(chosen)
+            if chosen == nil then
+              aborted = true
+              on_cancel()
+              return
+            end
+            exists_fn(target, chosen, items[i].schema, function(found2)
+              if found2 and chosen ~= safe_default then
+                -- The user's own pick is taken too: auto-bump instead of a
+                -- second dialog round-trip.
+                vim.notify("'" .. chosen .. "' also exists — using an automatic suffix",
+                  vim.log.levels.INFO)
+                bump_until_free(i, chosen, 1, function(bumped)
+                  results[i] = bumped
+                  step(i + 1)
+                end)
+              else
+                results[i] = chosen
+                step(i + 1)
+              end
+            end)
+          end
+        )
+      end)
+    end
+
+    step(1)
+  end
+
+  local function probe_next(i)
+    if i > #items then
+      proceed_with_resolution()
       return
     end
+    exists_fn(target, items[i].name, items[i].schema, function(found)
+      if found then collision_state[i] = { base = items[i].name } end
+      probe_next(i + 1)
+    end)
+  end
 
-    local function try_suffix(suffix)
-      local candidate = base_name .. "_copy" .. (suffix > 1 and suffix or "")
-      check_table_exists(conn_name, database, dialect, candidate, function(exists2)
-        if not exists2 then
-          on_result(candidate)
-        else
-          try_suffix(suffix + 1)
-        end
-      end, on_error)
-    end
-
-    try_suffix(1)
-  end, on_error)
+  probe_next(1)
 end
 
 local function copy_data_same_server(source, target, schema, table_name, target_table_name, on_done, on_error)
@@ -482,72 +552,123 @@ local function popup_options()
   return { width = width, height = height, dir = pos }
 end
 
-local function show_confirm_dialog(source, target, table_names, on_confirm, on_cancel)
+-- ------------------------------------------------------------ size display
+
+local function format_bytes(n)
+  if type(n) ~= "number" then return nil end
+  if n < 1024 then return string.format("%d B", n)
+  elseif n < 1024 * 1024 then return string.format("%.1f KB", n / 1024)
+  elseif n < 1024 * 1024 * 1024 then return string.format("%.1f MB", n / (1024 * 1024))
+  else return string.format("%.2f GB", n / (1024 * 1024 * 1024)) end
+end
+
+--- Look up a plan item's byte size from the sizes map (bare and, for PG,
+--- "schema.name" keys).
+local function item_bytes(sizes, item)
+  if not sizes or next(sizes) == nil then return nil end
+  local v = sizes[item.final]
+  if v == nil and item.schema then v = sizes[item.schema .. "." .. item.orig] end
+  if v == nil then v = sizes[item.orig] end
+  if type(v) == "number" then return v end
+  return nil
+end
+
+-- ---------------------------------------------------------- confirm dialog
+
+--- Show the pre-flight confirmation with size estimate and rename mapping.
+---@param source table {conn, db, dialect}
+---@param target table {conn, db, dialect}
+---@param plan table[] {kind, orig, final, schema, kind_tag}
+---@param sizes table|nil name -> bytes map from catalog.sizes()
+local function show_paste_confirm(source, target, plan, sizes, on_confirm, on_cancel)
   local popts = popup_options()
-  local height = math.max(12, 6 + math.min(#table_names, 5))
-  height = math.min(height, 20)
-
-  local opts = {
-    title = "Copy Tables",
-    width = popts.width,
-    height = height,
-    border = "rounded",
-    backdrop = true,
-  }
-
-  local dlg = dialog.open(opts)
-
-  local src_dialect_tag = " (" .. source.dialect .. ")"
-  local tgt_dialect_tag = " (" .. target.dialect .. ")"
   local same_dialect = source.dialect == target.dialect
   local same_server = source.conn == target.conn
-  local can_copy = same_dialect
+
+  local total_bytes = 0
+  local any_size = false
+  for _, p in ipairs(plan) do
+    if p.kind == "table" or p.kind == "view" then
+      local b = item_bytes(sizes, p)
+      if b then any_size = true; total_bytes = total_bytes + b end
+    end
+  end
 
   local status_text
   if not same_dialect then
-    status_text = "  MISMATCH - dialect differs"
+    status_text = "MISMATCH - dialect differs"
   elseif not same_server then
-    status_text = "  Cross-server (SELECT+INSERT)"
+    status_text = "Cross-server (SELECT+INSERT)"
   else
-    status_text = "  Ready"
+    status_text = "Ready"
   end
 
   local lines = {
-    "  Source:  " .. source.conn .. "." .. source.db .. src_dialect_tag,
-    "  Target:  " .. target.conn .. "." .. target.db .. tgt_dialect_tag,
+    "  Source:  " .. source.conn .. "." .. tostring(source.db or "(conn)")
+      .. " (" .. source.dialect .. ")",
+    "  Target:  " .. target.conn .. "." .. tostring(target.db or "(conn)")
+      .. " (" .. target.dialect .. ")",
     "  Status:  " .. status_text,
     "",
+    "  Items:   " .. #plan .. "        Size: ~"
+      .. (any_size and format_bytes(total_bytes) or "unknown"),
   }
 
-  local km = { buffer = dlg.buf, noremap = true, silent = true, nowait = true }
-  if can_copy then
-    local display_names = {}
-    for i, name in ipairs(table_names) do
-      if i <= 5 then
-        table.insert(display_names, "    " .. name)
-      else
-        table.insert(display_names, "    ... and " .. (#table_names - 5) .. " more")
-        break
-      end
-    end
-    table.insert(lines, "  Selected tables (" .. #table_names .. "):")
-    for _, l in ipairs(display_names) do
-      table.insert(lines, l)
-    end
-    table.insert(lines, "")
-    table.insert(lines, "  [y] Confirm  [n] Cancel")
-
-    vim.keymap.set("n", "y", function()
-      dlg:close()
-      if on_confirm then on_confirm() end
-    end, km)
-    vim.keymap.set("n", "n", function()
-      dlg:close()
-      if on_cancel then on_cancel() end
-    end, km)
-  else
-    table.insert(lines, "  Press [q] to close")
+  -- Warn before a heavy cross-server load: SELECT* loads the whole result
+  -- set into memory before batching INSERTs.
+  if same_dialect and not same_server and total_bytes > 100 * 1024 * 1024 then
+    table.insert(lines, "           ⚠ >100 MB cross-server copy may be slow")
   end
+
+  table.insert(lines, "")
+  table.insert(lines, "  Plan:")
+  local renamed = 0
+  for i, p in ipairs(plan) do
+    local label
+    if p.kind_tag and p.kind_tag ~= "" then
+      label = "    " .. p.final .. p.kind_tag
+    else
+      label = "    " .. p.final
+    end
+    if p.final ~= p.orig then
+      renamed = renamed + 1
+      label = "    " .. p.orig .. " → " .. p.final .. p.kind_tag
+    end
+    local b = item_bytes(sizes, p)
+    if b and b > 0 then
+      label = label .. string.rep(" ", math.max(1, 34 - #label)) .. "(" .. format_bytes(b) .. ")"
+    end
+    table.insert(lines, label)
+    if i >= 8 then
+      table.insert(lines, "    ... and " .. (#plan - 8) .. " more")
+      break
+    end
+  end
+  if renamed > 0 then
+    table.insert(lines, "")
+    table.insert(lines, "  " .. renamed .. " name conflict" .. (renamed > 1 and "s" or "") .. " resolved via dialog")
+  end
+  table.insert(lines, "")
+  table.insert(lines, "  [y] Start  [n] Cancel")
+
+  local height = math.min(math.max(12, #lines + 2), 26)
+  local dlg = dialog.open({
+    title = "Paste",
+    width = math.max(popts.width, 56),
+    height = height,
+    border = "rounded",
+    backdrop = true,
+  })
+
+  local km = { buffer = dlg.buf, noremap = true, silent = true, nowait = true }
+  vim.keymap.set("n", "y", function()
+    dlg:close()
+    if on_confirm then on_confirm() end
+  end, km)
+  vim.keymap.set("n", "n", function()
+    dlg:close()
+    if on_cancel then on_cancel() end
+  end, km)
 
   dlg:update(lines)
 end
@@ -584,13 +705,13 @@ local function show_summary_dialog(completed, failed, errors)
   dlg:update(lines)
 end
 
-local function show_progress_dialog(source, target, table_names, on_close)
+local function show_paste_progress(source, target, jobs, on_close)
   local popts = popup_options()
-  local height = math.max(14, 8 + #table_names)
+  local height = math.max(14, 8 + #jobs)
   height = math.min(height, 24)
 
   local opts = {
-    title = "Copying Tables",
+    title = "Copying",
     width = popts.width,
     height = height,
     border = "rounded",
@@ -600,14 +721,14 @@ local function show_progress_dialog(source, target, table_names, on_close)
 
   local dlg = dialog.open(opts)
   local results = {}
-  local total = #table_names
+  local total = #jobs
   local completed = 0
   local failed = 0
   local errors = {}
   local cancelled = false
 
-  for _, name in ipairs(table_names) do
-    results[name] = { status = "pending", row_count = "", elapsed = "" }
+  for _, j in ipairs(jobs) do
+    results[j.label] = { status = "pending", row_count = "", elapsed = "" }
   end
 
   local function render()
@@ -618,28 +739,34 @@ local function show_progress_dialog(source, target, table_names, on_close)
     local bar_len = 20
     local filled = math.floor(done / total * bar_len)
     local bar = string.rep("█", filled) .. string.rep("░", bar_len - filled)
-    table.insert(lines, "  Source: " .. source.conn .. "." .. source.db)
-    table.insert(lines, "  Target: " .. target.conn .. "." .. target.db)
+    table.insert(lines, "  Source: " .. source.conn .. "." .. tostring(source.db or "(conn)"))
+    table.insert(lines, "  Target: " .. target.conn .. "." .. tostring(target.db or "(conn)"))
     table.insert(lines, "")
     local bar_line = "  " .. bar .. "  " .. done .. "/" .. total .. " (" .. pct .. "%)"
     table.insert(lines, bar_line)
     table.insert(highlights, { line = #lines - 1, col_start = 0, col_end = #bar_line, hl_group = "PosteDbCopyProgress" })
     table.insert(lines, "")
 
-    for _, name in ipairs(table_names) do
-      local r = results[name]
+    for _, j in ipairs(jobs) do
+      local r = results[j.label]
+      local shown = j.label .. (j.tag or "")
       if r.status == "done" then
-        local line = "  ✓ " .. name .. "  (" .. r.row_count .. " rows, " .. r.elapsed .. ")"
+        local line = "  ✓ " .. shown
+        if r.row_count ~= "" then
+          line = line .. "  (" .. r.row_count .. (r.elapsed ~= "" and ", " .. r.elapsed or "") .. ")"
+        elseif r.elapsed ~= "" then
+          line = line .. "  (" .. r.elapsed .. ")"
+        end
         table.insert(lines, line)
         table.insert(highlights, { line = #lines - 1, col_start = 0, col_end = #line, hl_group = "PosteDbCopySuccess" })
       elseif r.status == "copying" then
-        table.insert(lines, "  ⟳ " .. name .. "  (copying...)")
+        table.insert(lines, "  ⟳ " .. shown .. "  (copying...)")
       elseif r.status == "error" then
-        local line = "  ✘ " .. name
+        local line = "  ✘ " .. shown
         table.insert(lines, line)
         table.insert(highlights, { line = #lines - 1, col_start = 0, col_end = #line, hl_group = "PosteDbCopyError" })
       else
-        table.insert(lines, "  ◻ " .. name .. "  (pending)")
+        table.insert(lines, "  ◻ " .. shown .. "  (pending)")
       end
     end
 
@@ -662,23 +789,20 @@ local function show_progress_dialog(source, target, table_names, on_close)
 
   render()
 
-  local function advance(name, status, row_count, elapsed, err_msg)
-    if cancelled then return end
-    results[name] = { status = status, row_count = row_count or "", elapsed = elapsed or "" }
+  local function advance(label, status, row_count, elapsed, err_msg)
+    results[label] = { status = status, row_count = row_count or "", elapsed = elapsed or "" }
     if status == "done" then
       completed = completed + 1
     elseif status == "error" then
       failed = failed + 1
-      errors[name] = err_msg or "Unknown error"
+      errors[label] = err_msg or "Unknown error"
     end
     render()
 
-    if completed + failed == total then
-      if failed > 0 then
-        vim.defer_fn(function()
-          show_summary_dialog(completed, failed, errors)
-        end, 500)
-      end
+    if completed + failed == total and failed > 0 then
+      vim.defer_fn(function()
+        show_summary_dialog(completed, failed, errors)
+      end, 500)
     end
   end
 
@@ -688,21 +812,17 @@ local function show_progress_dialog(source, target, table_names, on_close)
       if cancelled then return end
       idx = idx + 1
       if idx > total then return end
-      local name = table_names[idx]
+      local j = jobs[idx]
 
-      results[name] = { status = "copying", row_count = "", elapsed = "" }
+      results[j.label] = { status = "copying", row_count = "", elapsed = "" }
       render()
 
-      resolve_table_name(target.conn, target.db, target.dialect, name, function(resolved_name)
-        copy_one_table(source, target, name, resolved_name, function(row_count, elapsed)
-          advance(name, "done", row_count, elapsed, nil)
-          process_next()
-        end, function(err)
-          advance(name, "error", nil, nil, err)
-          process_next()
-        end)
-      end, function(err)
-        advance(name, "error", nil, nil, err)
+      j.work(function(ok, row_count, elapsed, err)
+        if ok then
+          advance(j.label, "done", row_count, elapsed)
+        else
+          advance(j.label, "error", nil, nil, err)
+        end
         process_next()
       end)
     end
@@ -710,26 +830,225 @@ local function show_progress_dialog(source, target, table_names, on_close)
     process_next()
   end
 
-  return dlg, start_copy, function()
+  return start_copy, function()
     cancelled = true
     dlg:close()
   end
 end
 
-function M.copy_tables(source, target, table_names, on_complete)
+-- --------------------------------------------------------------- executors
+
+local KIND_TAGS = {
+  view = " (view)",
+  trigger = " (trigger)",
+  PROCEDURE = " (procedure)",
+  FUNCTION = " (function)",
+}
+
+local function execute_sql_on_target(target, sql, cb)
+  run_sql_on_conn(target.conn, target.db, sql, function(output)
+    local ok = check_response(output, "execute", function(err) cb(false, nil, nil, err) end)
+    if not ok then return end
+    cb(true, "-", "?")
+  end, function(err) cb(false, nil, nil, err) end)
+end
+
+--- Replace a routine's own name inside its SHOW CREATE/pg_get_functiondef
+--- text (first occurrence after the PROCEDURE/FUNCTION keyword, so DEFINER
+--- clauses are untouched).
+local function rename_routine_in_def(dialect, def, src, tgt)
+  local upper = def:upper()
+  local kw_pos = upper:find("PROCEDURE") or upper:find("FUNCTION")
+  if not kw_pos then return def end
+
+  if dialect == "mysql" or dialect == "mariadb" then
+    local open = def:find("`", kw_pos, true)
+    while open do
+      local close = def:find("`", open + 1, true)
+      if not close then break end
+      if def:sub(open + 1, close - 1) == src then
+        return def:sub(1, open) .. "`" .. tgt .. "`" .. def:sub(close + 1)
+      end
+      open = def:find("`", close + 1, true)
+      if open and open > close and open < kw_pos + 200 then
+        -- keep scanning just past this token pair; stop runaway scans early
+        break
+      end
+      open = nil
+    end
+    -- Fallback: any direct `src` mention right after the keyword.
+    local plain_idx = def:find("`" .. src .. "`", kw_pos, true)
+    if plain_idx then
+      return def:sub(1, plain_idx) .. "`" .. tgt .. "`" .. def:sub(plain_idx + #src + 2)
+    end
+    return def
+  end
+
+  -- Postgres: name immediately precedes the parameter list.
+  local paren = def:find("%(", kw_pos)
+  if not paren then return def end
+  local before = def:sub(kw_pos + 1, paren - 1)
+  local trimmed = before:gsub('%s+', '')
+  if trimmed:sub(-#src) == src then
+    local start_pos = kw_pos + 1 + (#before - #trimmed) + (#trimmed - #src)
+    return def:sub(1, start_pos - 1) .. tgt .. def:sub(paren)
+  end
+  return def
+end
+
+-- ------------------------------------------------------------ orchestration
+
+local function default_item_context(entry, ctx_defaults)
+  entry.conn = entry.conn or ctx_defaults.conn
+  entry.db = entry.db or ctx_defaults.db
+  entry.dialect = entry.dialect or ctx_defaults.dialect
+  return entry
+end
+
+--- Copy/paste pipeline shared by yank-paste and legacy multi-select.
+---
+--- Stage 1 probe sizes (async, tolerant) →
+--- Stage 2 resolve conflicts via dialogs (tables/views only) →
+--- Stage 3 confirm dialog → Stage 4 sequential execution with progress.
+---
+---@param source table {conn, db, dialect}
+---@param target table {conn, db, dialect}
+---@param items table[] {kind="table"|"view", name, conn?, db?, dialect?}
+---@param triggers table[] parsed catalog trigger rows
+---@param routines table[] {name, rtype, conn?, db?, dialect?}
+---@param opts table|nil {on_complete=function()}
+function M.paste_objects(source, target, items, triggers, routines, opts)
+  opts = opts or {}
+
   if source.dialect ~= target.dialect then
-    show_confirm_dialog(source, target, table_names, nil, nil)
+    vim.notify(string.format(
+      "Cannot paste: dialect mismatch (%s → %s). Both must be the same dialect.",
+      source.dialect, target.dialect), vim.log.levels.ERROR)
+    return
+  end
+  if #items == 0 and #triggers == 0 and #routines == 0 then
+    vim.notify("Nothing to paste", vim.log.levels.INFO)
     return
   end
 
-  show_confirm_dialog(source, target, table_names, function()
-    local _, start_copy_fn = show_progress_dialog(source, target, table_names, function()
-      if on_complete then on_complete() end
+  local norm_items = {}
+  for _, it in ipairs(items) do
+    table.insert(norm_items, default_item_context(it, source))
+  end
+  local norm_routines = {}
+  for _, r in ipairs(routines) do
+    table.insert(norm_routines, default_item_context(r, source))
+  end
+
+  local resolvable = {}
+  for _, it in ipairs(norm_items) do
+    table.insert(resolvable, it) -- keep reference order stable
+  end
+
+  -- Views fetch their definitions lazily at execution time, so cache them
+  -- here only when the item itself names one (no-op otherwise).
+
+  catalog.sizes({ conn = source.conn, db = source.db, dialect = source.dialect }, function(sizes)
+    M.resolve_conflict_names(target, resolvable, function(names)
+      local plan = {}
+      for i, it in ipairs(norm_items) do
+        table.insert(plan, {
+          kind = it.kind,
+          orig = it.name,
+          final = names[i] or it.name,
+          schema = it.schema,
+          kind_tag = it.kind == "view" and KIND_TAGS.view or "",
+        })
+      end
+      for _, t in ipairs(triggers) do
+        table.insert(plan, {
+          kind = "trigger",
+          orig = tostring(t.name),
+          final = tostring(t.name),
+          kind_tag = KIND_TAGS.trigger,
+        })
+      end
+      for _, r in ipairs(norm_routines) do
+        table.insert(plan, {
+          kind = "routine",
+          orig = r.name,
+          final = r.name,
+          rtype = r.rtype,
+          kind_tag = KIND_TAGS[r.rtype] or "",
+        })
+      end
+
+      show_paste_confirm(source, target, plan, sizes, function()
+        local jobs = {}
+
+        for i, it in ipairs(norm_items) do
+          local final_name = plan[i].final
+          if it.kind == "view" then
+            jobs[#jobs + 1] = {
+              label = final_name,
+              tag = KIND_TAGS.view,
+              work = function(cb)
+                catalog.fetch_view_definition(
+                  { conn = it.conn, db = it.db, dialect = it.dialect, name = it.name },
+                  function(body, err)
+                    if not body then cb(false, nil, nil, err); return end
+                    local create_sql = "CREATE VIEW " .. quote(final_name, target.dialect)
+                      .. " AS " .. body
+                    execute_sql_on_target(target, create_sql, cb)
+                  end)
+              end,
+            }
+          else
+            jobs[#jobs + 1] = {
+              label = final_name,
+              work = function(cb)
+                copy_one_table(it, target, it.name, final_name,
+                  function(row_count, elapsed) cb(true, row_count, elapsed) end,
+                  function(err) cb(false, nil, nil, err) end)
+              end,
+            }
+          end
+        end
+
+        for _, t in ipairs(triggers) do
+          jobs[#jobs + 1] = {
+            label = tostring(t.name),
+            tag = KIND_TAGS.trigger,
+            work = function(cb)
+              local sql = catalog.compose_trigger_sql(target.dialect, t)
+              execute_sql_on_target(target, sql, cb)
+            end,
+          }
+        end
+
+        for ji, r in ipairs(norm_routines) do
+          local plan_entry = plan[#norm_items + #triggers + ji]
+          jobs[#jobs + 1] = {
+            label = plan_entry.final,
+            tag = plan_entry.kind_tag,
+            work = function(cb)
+              catalog.fetch_routine_definition(r, function(def, err)
+                if not def then cb(false, nil, nil, err); return end
+                local sql = def
+                if plan_entry.final ~= r.name then
+                  sql = rename_routine_in_def(r.dialect, def, r.name, plan_entry.final)
+                end
+                execute_sql_on_target(target, sql, cb)
+              end)
+            end,
+          }
+        end
+
+        local start_fn, cancel_fn = show_paste_progress(source, target, jobs, function()
+          if opts.on_complete then opts.on_complete() end
+        end)
+        _G.poste_db_copy_cancel_last = cancel_fn
+        start_fn()
+      end, function()
+        -- user cancelled at confirm
+      end)
+    end, function()
+      -- user aborted during conflict naming
     end)
-    start_copy_fn()
-  end, function()
-    if on_complete then on_complete() end
   end)
 end
-
-return M
