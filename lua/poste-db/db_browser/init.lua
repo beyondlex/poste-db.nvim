@@ -300,7 +300,10 @@ local function setup_browser_buffer()
       if entry then
         yank.set(entry)
         local desc = yank.describe()
-        vim.notify("Yanked " .. (desc or "item") .. " (press p on a database to paste)", vim.log.levels.INFO)
+        local hint = (entry.kind == "database")
+          and "(press p on a database to paste, or on a connection to clone)"
+          or "(press p on a database to paste)"
+        vim.notify("Yanked " .. (desc or "item") .. " " .. hint, vim.log.levels.INFO)
       end
     end, opts)
   end
@@ -324,18 +327,22 @@ local function setup_browser_buffer()
       end
       -- Resolve target: cursor must be on or under a database node.
       -- For sqlite connections (dialect "sqlite"), the connection node itself
-      -- acts as the effective database.
+      -- acts as the effective database. For a whole-database yank, a non-sqlite
+      -- connection node is a CLONE target: a new database is created there.
       local node = tree.get_node_at_line(line_to_node, buf_line)
       if not node then return end
 
       local target_db = nil
       local is_sqlite_conn_target = false
+      local clone_conn = nil
 
       if node.node_type == "database" then
         target_db = node
       elseif node.node_type == "connection" then
         if node.meta and node.meta.dialect == "sqlite" then
           is_sqlite_conn_target = true
+        elseif entry.kind == "database" then
+          clone_conn = node
         end
       else
         -- Walk up to find enclosing database or connection.
@@ -345,6 +352,8 @@ local function setup_browser_buffer()
           if cur.node_type == "connection" then
             if cur.meta and cur.meta.dialect == "sqlite" then
               is_sqlite_conn_target = true
+            elseif entry.kind == "database" then
+              clone_conn = cur
             end
             break
           end
@@ -352,8 +361,9 @@ local function setup_browser_buffer()
         end
       end
 
-      if not target_db and not is_sqlite_conn_target then
-        vim.notify("Move cursor to a target database (or sqlite connection) to paste", vim.log.levels.INFO)
+      if not target_db and not is_sqlite_conn_target and not clone_conn then
+        vim.notify("Move cursor to a target database (or sqlite connection) to paste, "
+          .. "or to a connection to clone", vim.log.levels.INFO)
         return
       end
 
@@ -369,6 +379,27 @@ local function setup_browser_buffer()
       -- For sqlite connection target, target_db_name stays nil (connection == db).
 
       local copy_mod = require("poste-db.db_browser.copy")
+
+      -- Whole-database yank onto a non-sqlite connection → clone into a NEW database.
+      if clone_conn and entry.kind == "database" then
+        local clone_dialect = (clone_conn.meta and clone_conn.meta.dialect)
+          or entry.dialect
+        copy_mod.clone_database(entry, { conn = clone_conn.name, dialect = clone_dialect }, {
+          on_complete = function()
+            -- Refresh the connection to surface the new database.
+            clone_conn.children = nil
+            clone_conn.expanded = false
+            clone_conn.loading = true
+            render_tree()
+            async.fetch_children(clone_conn, function()
+              clone_conn.expanded = true
+              vim.schedule(render_tree)
+            end, get_search_dir())
+          end,
+        })
+        return
+      end
+
       if entry.kind == "database" then
         -- Enumerate all objects at paste time via catalog.
         local catalog = require("poste-db.db_browser.catalog")

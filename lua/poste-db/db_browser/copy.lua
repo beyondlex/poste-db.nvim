@@ -1,8 +1,10 @@
+local uv = vim.uv or vim.loop
 local state = require("poste.state")
 local config = require("poste-db.config")
 local cli = require("poste.cli")
 local util = require("poste.util")
 local dialog = require("poste.dialog")
+local C = require("poste.constants")
 local sql_conn = require("poste-db.db_browser.sql_conn")
 local catalog = require("poste-db.db_browser.catalog")
 
@@ -715,13 +717,26 @@ local function show_paste_progress(source, target, jobs, on_close)
   local height = math.max(14, 8 + #jobs)
   height = math.min(height, 24)
 
+  local spinner_timer = nil
+
+  local function stop_spinner()
+    if spinner_timer then
+      spinner_timer:stop()
+      pcall(spinner_timer.close, spinner_timer)
+      spinner_timer = nil
+    end
+  end
+
   local opts = {
     title = "Copying",
     width = popts.width,
     height = height,
     border = "rounded",
     backdrop = true,
-    on_close = on_close,
+    on_close = function()
+      stop_spinner()
+      if on_close then on_close() end
+    end,
   }
 
   local dlg = dialog.open(opts)
@@ -731,9 +746,14 @@ local function show_paste_progress(source, target, jobs, on_close)
   local failed = 0
   local errors = {}
   local cancelled = false
+  local spinner_frame = 1
 
   for _, j in ipairs(jobs) do
     results[j.label] = { status = "pending", row_count = "", elapsed = "" }
+  end
+
+  local function set_spinner_frame(frame)
+    spinner_frame = ((frame - 1) % #C.SPINNER_FRAMES) + 1
   end
 
   local function render()
@@ -765,7 +785,9 @@ local function show_paste_progress(source, target, jobs, on_close)
         table.insert(lines, line)
         table.insert(highlights, { line = #lines - 1, col_start = 0, col_end = #line, hl_group = "PosteDbCopySuccess" })
       elseif r.status == "copying" then
-        table.insert(lines, "  ⟳ " .. shown .. "  (copying...)")
+        local line = "  " .. C.SPINNER_FRAMES[spinner_frame] .. " " .. shown .. "  (copying...)"
+        table.insert(lines, line)
+        table.insert(highlights, { line = #lines - 1, col_start = 0, col_end = #line, hl_group = "PosteDbCopyProgress" })
       elseif r.status == "error" then
         local line = "  ✘ " .. shown
         table.insert(lines, line)
@@ -794,6 +816,17 @@ local function show_paste_progress(source, target, jobs, on_close)
 
   render()
 
+  local function any_copying()
+    local active = false
+    for _, j in ipairs(jobs) do
+      if results[j.label] and results[j.label].status == "copying" then
+        active = true
+        break
+      end
+    end
+    return active
+  end
+
   local function advance(label, status, row_count, elapsed, err_msg)
     results[label] = { status = status, row_count = row_count or "", elapsed = elapsed or "" }
     if status == "done" then
@@ -803,6 +836,10 @@ local function show_paste_progress(source, target, jobs, on_close)
       errors[label] = err_msg or "Unknown error"
     end
     render()
+
+    if not any_copying() then
+      stop_spinner()
+    end
 
     if completed + failed == total and failed > 0 then
       vim.defer_fn(function()
@@ -816,10 +853,27 @@ local function show_paste_progress(source, target, jobs, on_close)
     local function process_next()
       if cancelled then return end
       idx = idx + 1
-      if idx > total then return end
+      if idx > total then
+        stop_spinner()
+        return
+      end
       local j = jobs[idx]
 
       results[j.label] = { status = "copying", row_count = "", elapsed = "" }
+      if not spinner_timer then
+        -- Animate the copying spinner while any item is in flight.
+        spinner_timer = uv.new_timer()
+        spinner_timer:start(C.SPINNER_INTERVAL_MS, C.SPINNER_INTERVAL_MS, vim.schedule_wrap(function()
+          if cancelled or not dlg.buf or not vim.api.nvim_buf_is_valid(dlg.buf) then
+            stop_spinner()
+            return
+          end
+          set_spinner_frame(spinner_frame + 1)
+          render()
+        end))
+      else
+        set_spinner_frame(spinner_frame + 1)
+      end
       render()
 
       j.work(function(ok, row_count, elapsed, err)
@@ -837,6 +891,7 @@ local function show_paste_progress(source, target, jobs, on_close)
 
   return start_copy, function()
     cancelled = true
+    stop_spinner()
     dlg:close()
   end
 end
@@ -1058,6 +1113,93 @@ function M.paste_objects(source, target, items, triggers, routines, opts)
   end)
 end
 
+--- Run CREATE DATABASE on a connection (no database override → the URL's
+--- default database is used as the session database, which is fine for
+--- postgres/mysql CREATE DATABASE).
+local function create_database(conn, dialect, new_db, on_done, on_error)
+  local q = function(n) return quote(n, dialect) end
+  local create_sql = "CREATE DATABASE " .. q(new_db) .. ";"
+  run_sql_on_conn(conn, nil, create_sql, function(output)
+    local ok, decoded = check_response(output, "CREATE DATABASE", on_error)
+    if not ok then return end
+    on_done(decoded)
+  end, on_error)
+end
+
+--- Pick a free default clone name: `<base>`, else `<base>2`, `<base>3`, …
+--- (matching the sibling-database set).
+---@param base string e.g. "blog_copy"
+---@param existing table<string,true> existing database names
+---@return string
+local function pick_clone_default(base, existing)
+  if not existing[base] then return base end
+  local n = 2
+  while existing[base .. tostring(n)] do
+    n = n + 1
+  end
+  return base .. tostring(n)
+end
+
+--- Clone a whole database into a NEW database on the target connection.
+---
+--- Flow: prompt for a name (default `<src>_copy`, auto-bumped free) →
+--- CREATE DATABASE → enumerate source objects → paste_objects into the new db.
+--- The paste engine reuses its cross-server SELECT+INSERT path because the
+--- target database differs from the source, even on the same server.
+---
+---@param source table {conn, db, dialect} yanked source database
+---@param target table {conn, dialect} target connection (non-sqlite)
+---@param opts table|nil {on_complete=function()}
+function M.clone_database(source, target, opts)
+  opts = opts or {}
+
+  if not source.db then
+    vim.notify("Cannot clone: no source database name.", vim.log.levels.ERROR)
+    return
+  end
+  if source.dialect ~= target.dialect then
+    vim.notify(string.format("Cannot clone: dialect mismatch (%s → %s).",
+      source.dialect, target.dialect), vim.log.levels.ERROR)
+    return
+  end
+
+  local async = require("poste-db.db_browser.async")
+  local browser = require("poste-db.db_browser")
+  local base_name = source.db .. "_copy"
+
+  async.run_introspect(target.conn, "databases", nil, nil, nil, function(result)
+    local existing = {}
+    if result and result.items then
+      for _, it in ipairs(result.items) do existing[it.name] = true end
+    end
+    local default = pick_clone_default(base_name, existing)
+
+    vim.ui.input({
+      prompt = "New database name (" .. target.conn .. "): ",
+      default = default,
+    }, function(chosen)
+      if not chosen or chosen == "" then return end
+      if existing[chosen] then
+        vim.notify("Database '" .. chosen .. "' already exists on " .. target.conn, vim.log.levels.WARN)
+        return
+      end
+      create_database(target.conn, target.dialect, chosen, function()
+        catalog.enumerate(source, function(objects, triggers, routines)
+          M.paste_objects(source, {
+            conn = target.conn, db = chosen, dialect = target.dialect,
+          }, objects, triggers, routines, { on_complete = opts.on_complete })
+        end, function(err)
+          vim.notify("Failed to enumerate objects for clone: " .. tostring(err), vim.log.levels.ERROR)
+        end)
+      end, function(err)
+        vim.schedule(function()
+          vim.notify("Clone failed to create database: " .. tostring(err), vim.log.levels.ERROR)
+        end)
+      end)
+    end)
+  end, browser.get_search_dir())
+end
+
 --- Legacy compat shim for the old multi-select copy path (init.lua:start_copy).
 --- Converts a flat list of table names into items and delegates to paste_objects.
 function M.copy_tables(source, target, table_names, on_complete)
@@ -1073,5 +1215,10 @@ function M.copy_tables(source, target, table_names, on_complete)
   end
   M.paste_objects(source, target, items, {}, {}, { on_complete = on_complete })
 end
+
+M._test = {
+  pick_clone_default = pick_clone_default,
+  show_paste_progress = show_paste_progress,
+}
 
 return M

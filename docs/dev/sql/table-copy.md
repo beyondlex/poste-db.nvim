@@ -67,18 +67,21 @@ local multi_select = {
 | `<Esc>` | 多选模式中 | 退出多选，清除所有选中 |
 | `y` | 光标在 table/view/database/schema/connection 节点上 | Yank（记录）该对象为源 |
 | `p` | 光标在 database 或 SQLite connection 节点上 | 粘贴（优先多选，其次 yank 寄存器） |
+| `p` | 光标在非 SQLite connection 节点上，且 yank 源是 database | **克隆**：在该连接上创建新库并复制整库内容 |
 
 ### Yank/Paste 流程
 
 ```
 1. 在 DB Browser 中定位到要复制的节点（table/view/database/PG schema 或 SQLite 连接）。
 2. 按 y 记录对象为源；状态栏提示 "Yanked … (press p on a database to paste)"。
-3. 将光标移到目标 database 节点（或 SQLite 连接节点）。
+3. 将光标移到目标 database 节点（或 SQLite 连接节点），或非 SQLite 的 connection 节点。
 4. 按 p：
    - 如果处于多选模式且有选中项，走多选复制流程。
    - 否则，从 yank 寄存器读取源对象：
      * 表/视图级别 → 粘贴该表/视图（支持同库就地复制）。
-     * 数据库/Schema 级别 → 粘贴该下所有表、视图、触发器、存储过程/函数。
+     * 数据库/Schema 级别 →
+       - 光标在 database 节点：粘贴该所有表、视图、触发器、存储过程/函数。
+       - 光标在非 SQLite connection 节点：克隆为**新库** — 提示输入库名（默认 `<源库>_copy`，自动避让已存在），执行 `CREATE DATABASE` 后再复制全部内容。
    - 确认对话框显示源/目标、条目数、数据量 MB、改名映射。
    - 同名冲突弹窗（默认 <名>_copy）→ 用户可自定义或自动追加后缀。
    - 进度窗口顺序执行（表 → 视图 → 触发器 → 例程），完成后显示汇总。

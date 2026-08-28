@@ -73,8 +73,8 @@ local DESCRIPTIONS = {
     search_next = "Next search match",
     search_prev = "Previous search match",
     table_info = "Show table info (rows, size, engine, etc.)",
-    yank_node = "Yank table/view/database (press p to paste)",
-    copy_tables = "Paste from yank or multi-select (table(s))",
+    yank_node = "Yank table/view/database (press p to paste / clone)",
+    copy_tables = "Paste from yank/multi-select, or clone db onto a connection",
   },
   sql_introspect = {
     close = "Close introspect window",
