@@ -68,13 +68,14 @@ end
 --- The commands table handed to poste-ai's context contract.
 --- @return table
 function M.list()
+  local icons = require("poste-db.db_browser.icons").ICONS
   return {
     {
       name = "connections",
       desc = "scope this chat to a connection",
       complete = function(prefix, scope, cb) M.complete_connections(prefix, scope, cb) end,
       run = function(item, api)
-        if item and item.label then api.set_scope("connection", item.label) end
+        if item and item.label then api.set_scope("connection", item.label, icons.connection) end
       end,
     },
     {
@@ -82,7 +83,7 @@ function M.list()
       desc = "scope this chat to a database within the connection",
       complete = function(prefix, scope, cb) M.complete_databases(prefix, scope, cb) end,
       run = function(item, api)
-        if item and item.label then api.set_scope("database", item.label) end
+        if item and item.label then api.set_scope("database", item.label, icons.database) end
       end,
     },
   }
