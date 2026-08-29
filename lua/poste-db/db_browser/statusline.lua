@@ -20,41 +20,37 @@ local function statusline_escape(s)
   return (s:gsub("%%", "%%%%"))
 end
 
---- Walk up from `node` through .parent to build a conn→db→schema path label,
---- e.g. "▃ pg-dev  🗄 blog  📁 public". Hangs at the first missing piece.
----@param node table|nil browser tree node under the cursor
----@param root_nodes table list of connection root nodes
----@return string|nil
-function M.node_path(node, root_nodes)
-  if not node then return nil end
-
-  local parts = {}
-  local cur = node
-  while cur do
-    if cur.node_type == "connection" then
-      table.insert(parts, 1, "%#PosteDbBrowserIconConn#" .. ICON_CONN .. " %*" .. statusline_escape(cur.name))
-      break
-    elseif cur.node_type == "database" then
-      table.insert(parts, 1, "%#PosteDbBrowserIconDb#" .. ICON_DB .. " %*" .. statusline_escape(cur.name))
-    elseif cur.node_type == "schema" then
-      table.insert(parts, 1, "%#PosteDbBrowserIconSchema#" .. ICON_SCHEMA .. " %*" .. statusline_escape(cur.name))
-    end
-    cur = cur.parent
-  end
-
-  -- Fallback: the first root connection when the node is detached (tests).
-  if #parts == 0 then
-    local conn = root_nodes and root_nodes[1] and root_nodes[1].name
-    if conn then
-      return "%#PosteDbBrowserIconConn#" .. ICON_CONN .. " %*" .. statusline_escape(conn)
-    end
-    return nil
-  end
-  return table.concat(parts, "  ")
+local function conn_part(conn_name)
+  return "%#PosteDbBrowserIconConn#" .. ICON_CONN .. " %*" .. statusline_escape(conn_name)
 end
 
-local function connection_label(conn_label)
-  return "%#PosteDbBrowserIconConn#" .. ICON_CONN .. " %*" .. statusline_escape(conn_label)
+local function db_part(db_name)
+  return "%#PosteDbBrowserIconDb#" .. ICON_DB .. " %*" .. statusline_escape(db_name)
+end
+
+local function schema_part(schema_name)
+  return "%#PosteDbBrowserIconSchema#" .. ICON_SCHEMA .. " %*" .. statusline_escape(schema_name)
+end
+
+--- Build a conn→db→schema path label from the scope under the cursor, e.g.
+--- "▃ pg-dev  🗄 blog  📁 public". Nil when there is no scope at all.
+---@param conn_name string|nil enclosing connection node name
+---@param db_name string|nil enclosing database node name
+---@param schema_name string|nil enclosing schema node name
+---@return string|nil
+function M.node_path(conn_name, db_name, schema_name)
+  local parts = {}
+  if conn_name and conn_name ~= "" then
+    parts[#parts + 1] = conn_part(conn_name)
+  end
+  if db_name and db_name ~= "" then
+    parts[#parts + 1] = db_part(db_name)
+  end
+  if schema_name and schema_name ~= "" then
+    parts[#parts + 1] = schema_part(schema_name)
+  end
+  if #parts == 0 then return nil end
+  return table.concat(parts, "  ")
 end
 
 --- Build the DB Browser statusline text.
@@ -69,7 +65,7 @@ function M.build(node_path, multi_select, conn_label)
   local text = "%#PosteDbBrowserHeader# DB Browser%*"
   local ctx = node_path
   if (not ctx or ctx == "") and conn_label and conn_label ~= "" then
-    ctx = connection_label(conn_label)
+    ctx = conn_part(conn_label)
   end
   if ctx and ctx ~= "" then
     text = text .. "  " .. ctx

@@ -26,15 +26,30 @@ local statusline = require("poste-db.db_browser.statusline")
 
 local function update_statusline()
   if not browser_buf or not vim.api.nvim_buf_is_valid(browser_buf) then return end
-  local node = nil
+  -- Enclosing scope of the line under the browser cursor. Nodes carry no
+  -- parent pointers; scan line_to_node upward from the cursor line (the same
+  -- approach find_target_db uses) to find the nearest connection/database/
+  -- schema. Columns hang under a table, so the scan also covers them.
+  local conn_name, db_name, schema_name = nil, nil, nil
   for _, win in ipairs(vim.api.nvim_list_wins()) do
     if vim.api.nvim_win_get_buf(win) == browser_buf then
       local row = vim.api.nvim_win_get_cursor(win)[1]
-      node = tree.get_node_at_line(line_to_node, row)
-      if node then break end
+      for i = row - HEADER_LINES, 1, -1 do
+        local n = line_to_node[i]
+        if not n then break end
+        if n.node_type == "connection" then
+          conn_name = conn_name or n.name
+        elseif n.node_type == "database" then
+          db_name = db_name or n.name
+        elseif n.node_type == "schema" then
+          schema_name = schema_name or n.name
+        end
+        if conn_name then break end
+      end
+      break
     end
   end
-  local path = statusline.node_path(node, root_nodes)
+  local path = statusline.node_path(conn_name, db_name, schema_name)
   local conn_label = sql_state.db_browser.connection or "No connection"
   statusline.update(browser_buf, path, multi_select, conn_label)
 end
@@ -542,6 +557,14 @@ local function setup_browser_buffer()
     end
     return { table_name = node.name, dialect = dialect, source_buf = source_buf }
   end)
+
+  -- Keep the statusline's connection/db/schema context in sync with the cursor.
+  vim.api.nvim_create_autocmd("CursorMoved", {
+    buffer = browser_buf,
+    callback = function()
+      update_statusline()
+    end,
+  })
 
   return browser_buf
 end

@@ -698,17 +698,14 @@ describe("db_browser yank register indicator", function()
     assert.is_truthy(text:find("Yanked: table maria-dev.blog.posts", 1, true) ~= nil, "yank fragment added")
   end)
 
-  it("node_path walks ancestors to build a conn/db/schema label", function()
-    local conn = tree.make_connection_node({ name = "pg-dev", dialect = "postgres" })
-    local db = tree.make_database_node({ name = "blog" }, "pg-dev", "postgres")
-    db.parent = conn
-    local schema = tree.make_schema_node({ name = "public" }, "pg-dev", "postgres")
-    schema.parent = db
-
-    assert.is_truthy(statusline.node_path(conn, { conn }):find("pg-dev", 1, true))
-    assert.is_truthy(statusline.node_path(db, { conn }):find("blog", 1, true))
-    assert.is_truthy(statusline.node_path(schema, { conn }):find("public", 1, true))
-    assert.is_truthy(statusline.node_path(schema, { conn }):find("blog", 1, true))
+  it("node_path builds a conn/db/schema label", function()
+    assert.is_truthy(statusline.node_path("pg-dev"):find("pg-dev", 1, true), "conn shown")
+    assert.is_truthy(statusline.node_path("pg-dev", "blog"):find("blog", 1, true), "db shown")
+    local full = statusline.node_path("pg-dev", "blog", "public")
+    assert.is_truthy(full:find("pg-dev", 1, true))
+    assert.is_truthy(full:find("blog", 1, true))
+    assert.is_truthy(full:find("public", 1, true))
+    assert.is_nil(statusline.node_path(nil, nil, nil), "no scope → nil")
   end)
 
   it("update_statusline writes the indicator to the browser window", function()
