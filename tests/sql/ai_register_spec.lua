@@ -29,6 +29,22 @@ describe("poste-db.ai.system_prompt", function()
     assert.truthy(prompt:find("shop"))
   end)
 
+  it("prefers the chat scope over the SQL buffer context", function()
+    state.context.connection = "pg-ecommerce"
+    state.context.database = "shop"
+    local prompt = system_prompt._test.build({ connection = "my-blog", database = "blog" })
+    assert.truthy(prompt:find("Current chat scope"))
+    assert.truthy(prompt:find("my%-blog"))
+    assert.truthy(prompt:find("blog"))
+    assert.falsy(prompt:find("Current SQL context"))
+  end)
+
+  it("covers a connection-only chat scope", function()
+    local prompt = system_prompt._test.build({ connection = "my-blog" })
+    assert.truthy(prompt:find("Current chat scope"))
+    assert.truthy(prompt:find("my%-blog"))
+  end)
+
   it("omits the context section when unset", function()
     local prompt = system_prompt._test.build()
     assert.falsy(prompt:find("Current SQL context"))

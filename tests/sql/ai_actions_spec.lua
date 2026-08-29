@@ -98,12 +98,28 @@ describe("poste-db.ai.actions", function()
     after_each(function()
       state.context.connection = nil
       state.context.database = nil
+      local ok, scope = pcall(require, "poste-ai.chat.scope")
+      if ok then scope.clear() end
     end)
 
     it("prefers the mentioned connection/database", function()
       local conn, db = actions._test.resolve_target({
         { type = "context", context = "db", data = { connection = "my-blog", database = "blog" } },
       })
+      assert.are.equal("my-blog", conn)
+      assert.are.equal("blog", db)
+    end)
+
+    it("prefers the poste-ai chat scope over the SQL context", function()
+      local ok, scope = pcall(require, "poste-ai.chat.scope")
+      if not ok then
+        pending("poste-ai.nvim not on rtp")
+        return
+      end
+      state.context.connection = "pg-ecommerce"
+      scope.set("connection", "my-blog")
+      scope.set("database", "blog")
+      local conn, db = actions._test.resolve_target({})
       assert.are.equal("my-blog", conn)
       assert.are.equal("blog", db)
     end)

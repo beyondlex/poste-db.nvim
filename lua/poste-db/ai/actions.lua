@@ -39,8 +39,8 @@ local function strip_directives(sql)
     :gsub("^%s*%-%-%s*@database%s+%S+%s*\n?", ""))
 end
 
---- Resolve the target connection from mention refs, falling back to the
---- current SQL context.
+--- Resolve the target connection. Priority: mention refs → the poste-ai chat
+--- scope (bound with /connections, /databases) → the current SQL context.
 --- @param refs table|nil
 --- @return string|nil conn, string|nil database, string|nil err
 function M.resolve_target(refs)
@@ -50,11 +50,18 @@ function M.resolve_target(refs)
       return ref.data.connection, ref.data.database, nil
     end
   end
+  local ok, poste_ai = pcall(require, "poste-ai")
+  if ok then
+    local scope = poste_ai.scope and poste_ai.scope() or nil
+    if scope and scope.connection then
+      return scope.connection, scope.database, nil
+    end
+  end
   local state = require("poste-db.state")
   if state.context and state.context.connection then
     return state.context.connection, state.context.database, nil
   end
-  return nil, nil, "no target connection — mention one with @connection/database or set -- @connection in the SQL buffer"
+  return nil, nil, "no target connection — scope with /connections, mention one with @connection/database, or set -- @connection in the SQL buffer"
 end
 
 --- Render a parsed legacy response into the dataset view.

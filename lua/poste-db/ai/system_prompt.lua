@@ -29,17 +29,30 @@ local KNOWLEDGE = [[You are running inside poste-db.nvim, a SQL execution plugin
 - Use the schema summary injected with the user message; do not invent tables or columns that are not listed. If unsure about a column, ask.
 - Prefer LIMIT on exploratory SELECTs; never write destructive DDL/DML unless explicitly asked.]]
 
---- Build the db-context system prompt (called per request).
+--- Build the db-context system prompt (called per request). `chat_scope` is
+--- the poste-ai chat scope map (from /connections, /databases) and takes
+--- precedence over the SQL buffer context.
+--- @param chat_scope table|nil map with optional connection/database keys
 --- @return string
-function M.build()
+function M.build(chat_scope)
   local parts = { KNOWLEDGE }
 
-  local conn = state.context and state.context.connection
-  local db = state.context and state.context.database
-  if conn or db then
-    local cur = "## Current SQL context\nThe buffer the user is working in is currently bound to: "
-      .. "connection " .. tostring(conn or "(none)") .. ", database " .. tostring(db or "(none)") .. "."
-    parts[#parts + 1] = cur
+  local conn = chat_scope and chat_scope.connection
+  local db = chat_scope and chat_scope.database
+  if conn then
+    parts[#parts + 1] = "## Current chat scope\n"
+      .. "The chat is scoped to connection " .. conn
+      .. (db and (", database " .. db) or "")
+      .. ". SQL blocks run against this target by default — no @connection directive needed; "
+      .. "qualify objects only when the query crosses databases."
+  else
+    conn = state.context and state.context.connection
+    db = state.context and state.context.database
+    if conn or db then
+      local cur = "## Current SQL context\nThe buffer the user is working in is currently bound to: "
+        .. "connection " .. tostring(conn or "(none)") .. ", database " .. tostring(db or "(none)") .. "."
+      parts[#parts + 1] = cur
+    end
   end
 
   return table.concat(parts, "\n\n")

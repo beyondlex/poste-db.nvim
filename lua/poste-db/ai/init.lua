@@ -16,9 +16,10 @@ function M.register()
   local ok, poste_ai = pcall(require, "poste-ai")
   if not ok then return false end
   poste_ai.register_context("db", {
-    system_prompt = function()
-      return require("poste-db.ai.system_prompt").build()
+    system_prompt = function(scope)
+      return require("poste-db.ai.system_prompt").build(scope)
     end,
+    commands = require("poste-db.ai.commands").list(),
     mention = {
       match = function(token)
         return require("poste-db.ai.mentions").match(token)
