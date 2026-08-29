@@ -6,6 +6,7 @@ Independent SQL plugin for Poste. Depends on [poste.nvim](https://github.com/bey
 
 - All SQL Lua code lives under `lua/poste-db/`
 - Requires `poste.nvim` on rtp — `require("poste.state")` must succeed
+- Optional: [poste-ai.nvim](https://github.com/beyondlex/poste-ai.nvim) on rtp enables the AI chat (`:PosteDbChat`, `<leader>aa`). `lua/poste-db/ai/` must only `pcall(require, "poste-ai")` and silently skip when absent
 - `plugin/poste-db.lua` calls `require("poste-db.init").setup()`
 - `ftdetect/poste_sql.vim` sets filetypes for `.sql` and `.sqlite`
 - Uses same `poste` Rust binary from poste.nvim
@@ -66,6 +67,7 @@ rule — `local` bindings are not hoisted.
 |------|-------|
 | **Shared infra (state, cli, select, indicators, buffer_setup, help, etc.)** | `../poste.nvim/lua/poste/` |
 | **Rust CLI (crates, build system)** | `../poste.nvim/crates/` |
+| **AI chat generic layer (chat UI, SSE, markdown, context API)** | `../poste-ai.nvim/lua/poste-ai/` + `docs/dev/sql/ai-chat.md` |
 | **Preflight / test / architecture / refactor / nav / introspect harnesses** | `.opencode/skills/` |
 | Completion rules | `.opencode/skills/sql-completion/SKILL.md` |
 | Build & test | `tests/run.sh` |

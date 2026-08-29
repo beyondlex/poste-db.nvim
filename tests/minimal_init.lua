@@ -3,6 +3,10 @@
 
 vim.opt.runtimepath:append(".")
 vim.opt.runtimepath:append("../poste.nvim")
+-- Optional: poste-ai.nvim (AI chat integration tests are skipped when absent)
+if vim.fn.isdirectory("../poste-ai.nvim") == 1 then
+  vim.opt.runtimepath:append("../poste-ai.nvim")
+end
 
 package.path = package.path
   .. ";./tests/?.lua"

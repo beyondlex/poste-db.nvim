@@ -154,6 +154,10 @@ function M.setup()
     require("poste-db.db_browser").toggle()
   end, { desc = "Toggle database browser" })
 
+  vim.api.nvim_create_user_command("PosteDbChat", function()
+    require("poste-db.ai").open_chat()
+  end, { desc = "Open the AI chat with the PosteDb context (requires poste-ai.nvim)" })
+
   vim.api.nvim_create_user_command("PosteDbExport", function(args)
     local parts = {}; for word in args.args:gmatch("%S+") do parts[#parts + 1] = word end
     require("poste-db.export").run(parts[1], parts[2], parts[3])

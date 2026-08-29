@@ -55,6 +55,9 @@ function M.setup(opts)
   end })
   require("poste-db.autocmds").setup()
   require("poste-db.commands").setup()
+  -- Optional AI chat integration (poste-ai.nvim). Silent when absent; the
+  -- registration is retried on :PosteDbChat in case poste-ai loads later.
+  pcall(function() require("poste-db.ai").register() end)
   -- Statusline integration on by default (opt-out)
   -- always-on behavior so the SQL-file/dataset context stays visible.
   if opts.statusline ~= false then require("poste-db.statusline").setup() end

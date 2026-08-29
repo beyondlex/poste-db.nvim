@@ -115,6 +115,19 @@ For SQL completion specific work, also load `.opencode/skills/sql-completion/SKI
 | `log_viewer.lua` | SQL execution log viewer |
 | `prototype.lua` | Prototype/experimental code |
 
+#### AI Chat (optional — requires poste-ai.nvim on rtp)
+
+| File | Role |
+|------|------|
+| `ai/init.lua` | Registers the "db" context on poste-ai; `:PosteDbChat`, `ask_selection()` (visual `<leader>aa`) |
+| `ai/mentions.lua` | `@connection/database[/table]` token matching, completion candidates, async schema summaries (via `db_browser/async.run_introspect`) |
+| `ai/system_prompt.lua` | Per-request system prompt: plugin knowledge + current SQL context |
+| `ai/actions.lua` | AI ```sql code-block execution → `executor.execute` → `buffer.render_dataset`; read-only gate + confirm for DML/DDL |
+
+Rules: `poste-db/ai/` must never `require("poste-db.http.*")`-style protocol modules, and it
+treats `poste-ai` as optional (`pcall(require, "poste-ai")` everywhere; silent skip when absent).
+Credentials never enter prompts — schema summaries carry names/dialects/comments only.
+
 ### SQL Rust
 
 | File | Role |

@@ -28,6 +28,12 @@ jobs:
           repository: beyondlex/poste.nvim
           path: poste.nvim
 
+      - name: Checkout poste-ai.nvim (optional AI chat dependency)
+        uses: actions/checkout@v4
+        with:
+          repository: beyondlex/poste-ai.nvim
+          path: poste-ai.nvim
+
       - name: Install Neovim ${{ matrix.nvim_version }}
         uses: rhysd/action-setup-vim@v1
         with:

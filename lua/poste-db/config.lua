@@ -23,6 +23,7 @@ M.defaults = {
       clear_filter = "<leader>cr",
       toggle_db_browser = "<leader>db",
       trigger_completion = "<C-Space>",
+      ask_ai = "<leader>aa",
       help = "g?",
     },
     sql_dataset = {

@@ -40,6 +40,15 @@ function M.setup_buffer_keymaps(buf)
     if k and nav.trigger_completion then vim.keymap.set("n", k, nav.trigger_completion, keymap_opts) end
   end
 
+  -- Ask the AI about a visual selection (@file(l1-l2) mention into the chat)
+  local ai_key = config.get_keymap("sql_source", "ask_ai", "<leader>aa")
+  if ai_key then
+    local ai_opts = { buffer = buf, noremap = true, silent = true, desc = "Poste: ask AI about selection" }
+    vim.keymap.set("v", ai_key, function()
+      require("poste-db.ai").ask_selection()
+    end, ai_opts)
+  end
+
   -- Snippet tab-stop navigation (insert mode, only intercept when snippet active)
   local ft = vim.api.nvim_buf_get_option(buf, "filetype")
   if ft == "poste_sql" or ft == "poste_sqlite" then

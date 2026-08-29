@@ -57,10 +57,11 @@ vim.g.poste_db_legacy_completion = "rust"
 | [DB Browser Context Menu](./db-browser-context-menu.md) | Database browser context menu design |
 | [Schema Create](./schema-create-design.md) | Schema creation dialog, advanced form component, SQL execution from DB browser |
 | [Refactor Agent Guide](./refactor-agent-guide.zh.md) | AI agent execution guide for the refactor branch |
+| [AI Chat Integration](./ai-chat.md) | poste-ai.nvim "db" context: @connection mentions, schema injection, SQL code-block execution into the dataset |
 
 > **Archived design docs** (features implemented, kept for reference):  
 > SQL Feature Design, Dataset UI Design, Dataset Editing, Data Import — these are in [archived docs](../archived/README.md) as their features are now implemented.
 
 ---
 
-*SQL developer documentation — Last updated: 2026-08-22*
+*SQL developer documentation — Last updated: 2026-08-29*
