@@ -14,6 +14,7 @@ local M = {}
 local ICON_CONN = "\239\136\179"
 local ICON_DB = "\239\135\128"
 local ICON_SCHEMA = "\239\129\187"
+local ICON_TABLE = "\239\131\142"
 
 --- Escape `%` for use inside a statusline string.
 local function statusline_escape(s)
@@ -32,13 +33,20 @@ local function schema_part(schema_name)
   return "%#PosteDbBrowserIconSchema#" .. ICON_SCHEMA .. " %*" .. statusline_escape(schema_name)
 end
 
---- Build a conn→db→schema path label from the scope under the cursor, e.g.
---- "▃ pg-dev  🗄 blog  📁 public". Nil when there is no scope at all.
+local function table_part(table_name)
+  return "%#PosteDbBrowserIconTable#" .. ICON_TABLE .. " %*" .. statusline_escape(table_name)
+end
+
+--- Build a conn→db→schema→table path label from the scope under the cursor,
+--- e.g. "▃ pg-dev  🗄 blog  📁 public  📊 orders". The table segment only
+--- appears when the cursor is on (or inside) a table/column. Nil when there
+--- is no scope at all.
 ---@param conn_name string|nil enclosing connection node name
 ---@param db_name string|nil enclosing database node name
 ---@param schema_name string|nil enclosing schema node name
+---@param table_name string|nil enclosing table node name (cursor on table/column)
 ---@return string|nil
-function M.node_path(conn_name, db_name, schema_name)
+function M.node_path(conn_name, db_name, schema_name, table_name)
   local parts = {}
   if conn_name and conn_name ~= "" then
     parts[#parts + 1] = conn_part(conn_name)
@@ -48,6 +56,9 @@ function M.node_path(conn_name, db_name, schema_name)
   end
   if schema_name and schema_name ~= "" then
     parts[#parts + 1] = schema_part(schema_name)
+  end
+  if table_name and table_name ~= "" then
+    parts[#parts + 1] = table_part(table_name)
   end
   if #parts == 0 then return nil end
   return table.concat(parts, "  ")

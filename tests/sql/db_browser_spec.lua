@@ -698,14 +698,16 @@ describe("db_browser yank register indicator", function()
     assert.is_truthy(text:find("Yanked: table maria-dev.blog.posts", 1, true) ~= nil, "yank fragment added")
   end)
 
-  it("node_path builds a conn/db/schema label", function()
+  it("node_path builds a conn/db/schema/table label", function()
     assert.is_truthy(statusline.node_path("pg-dev"):find("pg-dev", 1, true), "conn shown")
     assert.is_truthy(statusline.node_path("pg-dev", "blog"):find("blog", 1, true), "db shown")
     local full = statusline.node_path("pg-dev", "blog", "public")
     assert.is_truthy(full:find("pg-dev", 1, true))
     assert.is_truthy(full:find("blog", 1, true))
     assert.is_truthy(full:find("public", 1, true))
-    assert.is_nil(statusline.node_path(nil, nil, nil), "no scope → nil")
+    assert.is_truthy(statusline.node_path("pg-dev", "blog", "public", "orders"):find("orders", 1, true),
+      "table shown when cursor is on a table/column")
+    assert.is_nil(statusline.node_path(nil, nil, nil, nil), "no scope → nil")
   end)
 
   it("update_statusline writes the indicator to the browser window", function()
