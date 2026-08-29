@@ -66,6 +66,7 @@ local function setup_highlights()
     vim.api.nvim_set_hl(0, "PosteDbBrowserSearchChar", { fg = "#bb9af7", bold = true })
     vim.api.nvim_set_hl(0, "PosteDbBrowserSelected", { fg = "#7aa2f7", bold = true })
     vim.api.nvim_set_hl(0, "PosteDbBrowserYanked", { fg = "#bb9af7", bold = true })
+    vim.api.nvim_set_hl(0, "PosteDbBrowserComment", { fg = "#7a7f9c" })
   else
     vim.api.nvim_set_hl(0, "PosteDbBrowserHeader", { fg = "#2e7de9", bold = true })
     vim.api.nvim_set_hl(0, "PosteDbBrowserSeparator", { fg = "#a8aecb" })
@@ -85,6 +86,7 @@ local function setup_highlights()
     vim.api.nvim_set_hl(0, "PosteDbBrowserSearchChar", { fg = "#9854f1", bold = true })
     vim.api.nvim_set_hl(0, "PosteDbBrowserSelected", { fg = "#2e7de9", bold = true })
     vim.api.nvim_set_hl(0, "PosteDbBrowserYanked", { fg = "#9854f1", bold = true })
+    vim.api.nvim_set_hl(0, "PosteDbBrowserComment", { fg = "#8a90b0" })
   end
 
   state.apply_highlight_overrides({
@@ -95,6 +97,7 @@ local function setup_highlights()
     "PosteDbBrowserIconPk", "PosteDbBrowserIconFk",
     "PosteDbBrowserKeyHint", "PosteDbBrowserSearchMatch",
     "PosteDbBrowserSearchChar", "PosteDbBrowserSelected", "PosteDbBrowserYanked",
+    "PosteDbBrowserComment",
   })
 end
 

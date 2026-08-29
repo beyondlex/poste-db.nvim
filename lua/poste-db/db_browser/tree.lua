@@ -66,6 +66,7 @@ function M.make_table_node(item, schema, database, conn_name)
       schema = schema,
       database = database,
       connection = conn_name,
+      comment = item.comment or "",
     },
   }
 end

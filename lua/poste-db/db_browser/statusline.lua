@@ -1,10 +1,10 @@
---- DB Browser statusline: connection context + yanked indicator.
+--- DB Browser statusline: connection/db/schema/table/column context under the
+--- cursor, the enclosing table/column comment (gray, truncated), and the yank
+--- register indicator.
 ---
 --- Mirrors the dataset window's statusline approach (buffer/nav_ui.lua): a
---- per-window `statusline` option carrying persistent context. It shows the
---- connection/database/schema path under the cursor (so the statusline is
---- actually informative, not just the buffer name), plus the yank-register
---- indicator when the register holds a source.
+--- per-window `statusline` option carrying persistent context. The path tracks
+--- the cursor so the statusline always shows where in the tree you are.
 
 local icons = require("poste-db.db_browser.icons")
 local MARKER_YANKED = icons.MARKER_YANKED
@@ -15,10 +15,26 @@ local ICON_CONN = "\239\136\179"
 local ICON_DB = "\239\135\128"
 local ICON_SCHEMA = "\239\129\187"
 local ICON_TABLE = "\239\131\142"
+local ICON_COLUMN = "\238\170\136"
 
 --- Escape `%` for use inside a statusline string.
 local function statusline_escape(s)
   return (s:gsub("%%", "%%%%"))
+end
+
+--- Truncate a string to `max` display cells, appending "…". Uses
+--- strdisplaywidth so CJK/emoji never split mid-character.
+local function truncate_display(s, max)
+  if max < 1 then return "" end
+  if vim.fn.strdisplaywidth(s) <= max then return s end
+  local out, w = {}, 0
+  for _, ch in ipairs(vim.fn.split(s, "\\zs")) do
+    local cw = vim.fn.strdisplaywidth(ch)
+    if w + cw > max - 1 then break end
+    w = w + cw
+    out[#out + 1] = ch
+  end
+  return table.concat(out) .. "…"
 end
 
 local function conn_part(conn_name)
@@ -37,16 +53,19 @@ local function table_part(table_name)
   return "%#PosteDbBrowserIconTable#" .. ICON_TABLE .. " %*" .. statusline_escape(table_name)
 end
 
---- Build a conn→db→schema→table path label from the scope under the cursor,
---- e.g. "▃ pg-dev  🗄 blog  📁 public  📊 orders". The table segment only
---- appears when the cursor is on (or inside) a table/column. Nil when there
---- is no scope at all.
----@param conn_name string|nil enclosing connection node name
----@param db_name string|nil enclosing database node name
----@param schema_name string|nil enclosing schema node name
----@param table_name string|nil enclosing table node name (cursor on table/column)
----@return string|nil
-function M.node_path(conn_name, db_name, schema_name, table_name)
+local function column_part(column_name)
+  return "%#PosteDbBrowserIconCol#" .. ICON_COLUMN .. " %*" .. statusline_escape(column_name)
+end
+
+--- Build the path label from the scope under the cursor, e.g.
+--- "▃ pg-dev  🗄 blog  📁 public  📊 orders  ⚈ id". Empty when no scope.
+---@param conn_name string|nil
+---@param db_name string|nil
+---@param schema_name string|nil
+---@param table_name string|nil
+---@param column_name string|nil
+---@return string
+function M.node_path(conn_name, db_name, schema_name, table_name, column_name)
   local parts = {}
   if conn_name and conn_name ~= "" then
     parts[#parts + 1] = conn_part(conn_name)
@@ -60,26 +79,30 @@ function M.node_path(conn_name, db_name, schema_name, table_name)
   if table_name and table_name ~= "" then
     parts[#parts + 1] = table_part(table_name)
   end
-  if #parts == 0 then return nil end
+  if column_name and column_name ~= "" then
+    parts[#parts + 1] = column_part(column_name)
+  end
   return table.concat(parts, "  ")
 end
 
 --- Build the DB Browser statusline text.
----@param node_path string|nil conn/db/schema path under the cursor
+---@param path string already-built path fragment (M.node_path output)
+---@param comment string|nil table/column comment shown gray, truncated
 ---@param multi_select table|nil {active=boolean} for the selection counter
----@param conn_label string|nil fallback connection name shown when no cursor path
+---@param width number statusline width in cells (for comment truncation)
 ---@return string statusline text; "" keeps the default statusline
-function M.build(node_path, multi_select, conn_label)
+function M.build(path, comment, multi_select, width)
   local yank = require("poste-db.db_browser.yank")
   local yanked = yank.statusline_label()
 
-  local text = "%#PosteDbBrowserHeader# DB Browser%*"
-  local ctx = node_path
-  if (not ctx or ctx == "") and conn_label and conn_label ~= "" then
-    ctx = conn_part(conn_label)
-  end
-  if ctx and ctx ~= "" then
-    text = text .. "  " .. ctx
+  local text = path or ""
+  if comment and comment ~= "" then
+    -- Strip statusline markup (%#...# / %*) so strdisplaywidth measures the
+    -- visible text, not the highlight directives.
+    local plain = text:gsub("%%#.-#", ""):gsub("%%%*", ""):gsub("%%[<%=>]", "")
+    local used = vim.fn.strdisplaywidth(plain)
+    local max = math.max(4, width - used - 4)
+    text = text .. "  %#PosteDbBrowserComment# " .. statusline_escape(truncate_display(comment, max)) .. "%*"
   end
 
   if multi_select and multi_select.active then
@@ -101,14 +124,13 @@ function M.build(node_path, multi_select, conn_label)
 end
 
 --- Refresh the statusline on the window that owns `browser_buf`, if any.
---- Falls back to a buffer set so the indicator survives window swaps.
-function M.update(browser_buf, node_path, multi_select, conn_label)
+function M.update(browser_buf, path, comment, multi_select)
   if not browser_buf or not vim.api.nvim_buf_is_valid(browser_buf) then return end
-
-  local text = M.build(node_path, multi_select, conn_label)
 
   for _, win in ipairs(vim.api.nvim_list_wins()) do
     if vim.api.nvim_win_get_buf(win) == browser_buf then
+      local width = vim.api.nvim_win_get_width(win)
+      local text = M.build(path, comment, multi_select, width)
       if text == "" then
         pcall(vim.api.nvim_set_option_value, "statusline", "", { win = win })
       else

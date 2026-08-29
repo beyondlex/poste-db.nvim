@@ -29,8 +29,9 @@ local function update_statusline()
   -- Enclosing scope of the line under the browser cursor. Nodes carry no
   -- parent pointers; scan line_to_node upward from the cursor line (the same
   -- approach find_target_db uses) to find the nearest connection/database/
-  -- schema/table. Columns hang under a table, so the scan also covers them.
-  local conn_name, db_name, schema_name, table_name = nil, nil, nil, nil
+  -- schema/table/column. Columns hang under a table, so the scan covers them.
+  local conn_name, db_name, schema_name, table_name, column_name = nil, nil, nil, nil, nil
+  local comment = nil
   for _, win in ipairs(vim.api.nvim_list_wins()) do
     if vim.api.nvim_win_get_buf(win) == browser_buf then
       local row = vim.api.nvim_win_get_cursor(win)[1]
@@ -45,15 +46,18 @@ local function update_statusline()
           schema_name = schema_name or n.name
         elseif n.node_type == "table" then
           table_name = table_name or n.name
+          comment = comment or (n.meta and n.meta.comment)
+        elseif n.node_type == "column" then
+          column_name = column_name or n.name
+          comment = comment or (n.meta and n.meta.comment)
         end
         if conn_name then break end
       end
       break
     end
   end
-  local path = statusline.node_path(conn_name, db_name, schema_name, table_name)
-  local conn_label = sql_state.db_browser.connection or "No connection"
-  statusline.update(browser_buf, path, multi_select, conn_label)
+  local path = statusline.node_path(conn_name, db_name, schema_name, table_name, column_name)
+  statusline.update(browser_buf, path, comment, multi_select)
 end
 
 local function render_tree()

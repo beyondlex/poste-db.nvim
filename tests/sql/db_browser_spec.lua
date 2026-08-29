@@ -669,22 +669,21 @@ describe("db_browser yank register indicator", function()
     assert.is_nil(text:find("Yanked:", 1, true), "yank fragment moved off the winbar")
   end)
 
-  it("build_statusline shows the yank fragment after the title with a highlight", function()
+  it("build_statusline shows the yank fragment with a highlight", function()
     yank.set({ kind = "database", conn = "maria-dev", db = "blog", dialect = "mysql" })
-    local text = statusline.build(nil, { active = false, selected = {} })
+    local text = statusline.build("", nil, { active = false, selected = {} }, 80)
 
-    assert.is_truthy(text:find(" DB Browser", 1, true) ~= nil, "title kept")
     assert.is_truthy(text:find("Yanked: database maria-dev.blog", 1, true) ~= nil, "yanked item shown")
     assert.is_truthy(text:find("%#PosteDbBrowserYanked#") ~= nil, "yank fragment is highlighted")
     assert.is_truthy(text:find(icons.MARKER_YANKED) ~= nil, "yank fragment carries the yanked marker")
-    -- %< must precede the yank fragment so the title wins in narrow splits
+    -- %< must precede the yank fragment so the path wins in narrow splits
     assert.is_truthy(text:find("%%<") < text:find("%#PosteDbBrowserYanked#"),
       "%< placed before the yank fragment")
   end)
 
   it("build_statusline omits the yank fragment when nothing is yanked", function()
     yank.clear()
-    assert.is_nil(statusline.build(nil, { active = false, selected = {} }):find("Yanked:", 1, true),
+    assert.is_nil(statusline.build("", nil, { active = false, selected = {} }, 80):find("Yanked:", 1, true),
       "no yank fragment when register empty")
   end)
 
@@ -693,12 +692,23 @@ describe("db_browser yank register indicator", function()
     local ms = { active = true, selected = {} }
     ms.selected[tree.make_table_node({ name = "posts" }, "public", "blog", "maria-dev")] = true
 
-    local text = statusline.build(nil, ms)
+    local text = statusline.build("", nil, ms, 80)
     assert.is_truthy(text:find("[1 selected]", 1, true) ~= nil, "selection fragment kept")
     assert.is_truthy(text:find("Yanked: table maria-dev.blog.posts", 1, true) ~= nil, "yank fragment added")
   end)
 
-  it("node_path builds a conn/db/schema/table label", function()
+  it("build_statusline appends the comment in gray, truncated", function()
+    local text = statusline.build("", "a long table comment that overflows badly here", nil, 40)
+    assert.is_truthy(text:find("%#PosteDbBrowserComment#") ~= nil, "comment fragment highlighted")
+    assert.is_truthy(text:find("…") ~= nil, "comment truncated with ellipsis")
+  end)
+
+  it("build_statusline omits the comment when empty", function()
+    local text = statusline.build("", "", nil, 80)
+    assert.is_nil(text:find("%#PosteDbBrowserComment#", 1, true), "no comment fragment when empty")
+  end)
+
+  it("node_path builds a conn/db/schema/table/column label", function()
     assert.is_truthy(statusline.node_path("pg-dev"):find("pg-dev", 1, true), "conn shown")
     assert.is_truthy(statusline.node_path("pg-dev", "blog"):find("blog", 1, true), "db shown")
     local full = statusline.node_path("pg-dev", "blog", "public")
@@ -707,7 +717,9 @@ describe("db_browser yank register indicator", function()
     assert.is_truthy(full:find("public", 1, true))
     assert.is_truthy(statusline.node_path("pg-dev", "blog", "public", "orders"):find("orders", 1, true),
       "table shown when cursor is on a table/column")
-    assert.is_nil(statusline.node_path(nil, nil, nil, nil), "no scope → nil")
+    assert.is_truthy(statusline.node_path("pg-dev", "blog", nil, "authors", "username"):find("username", 1, true),
+      "column shown when cursor is on a column")
+    assert.equals("", statusline.node_path(nil, nil, nil, nil, nil), "no scope → empty")
   end)
 
   it("update_statusline writes the indicator to the browser window", function()
@@ -716,7 +728,7 @@ describe("db_browser yank register indicator", function()
     local buf = vim.api.nvim_create_buf(false, false)
     local win = vim.api.nvim_open_win(buf, true, { split = "right", width = 20 })
 
-    statusline.update(buf, nil, { active = false, selected = {} }, "maria-dev")
+    statusline.update(buf, "", nil, { active = false, selected = {} })
     local written = vim.api.nvim_get_option_value("statusline", { win = win })
     assert.is_truthy(written:find("Yanked: database maria-dev.blog", 1, true) ~= nil, "indicator written")
 
