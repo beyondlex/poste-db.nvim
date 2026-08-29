@@ -58,3 +58,34 @@ describe("buffer header test helpers", function()
     assert.equals("raw", out_meta.type)
   end)
 end)
+
+describe("buffer error rendering", function()
+  before_each(function()
+    buffer._test.reset()
+    if D.dataset_window and vim.api.nvim_win_is_valid(D.dataset_window) then
+      pcall(vim.api.nvim_win_close, D.dataset_window, true)
+    end
+    D.dataset_window = nil
+    D.dataset_tabpage = nil
+  end)
+
+  it("keeps the error buffer displayed after the BufLeave guard fires", function()
+    -- Render a resultset first so the dataset window + BufLeave autocmd exist
+    buffer.render_dataset({ "id", "1" }, {
+      type = "resultset",
+      row_count = 1,
+      columns = { { name = "id" } },
+      data_start_line = 1,
+    }, { layout = { rows = {}, columns = { { name = "id" } } } })
+    assert.equals("poste://dataset", vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(D.dataset_window)))
+
+    -- Render an error; the BufLeave guard must NOT yank the window back
+    -- to the dataset buffer and hide the error.
+    buffer.render_dataset({ "", "  ✗ SQL Error", "" }, { type = "error" })
+    assert.equals("poste://error", vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(D.dataset_window)))
+
+    -- Let the scheduled BufLeave callback run
+    vim.wait(50, function() return false end)
+    assert.equals("poste://error", vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(D.dataset_window)))
+  end)
+end)

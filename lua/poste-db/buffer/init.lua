@@ -55,6 +55,11 @@ function M.get_error_buffer()
   vim.api.nvim_set_option_value("swapfile", false, { buf = D.error_buffer })
   vim.api.nvim_set_option_value("modifiable", false, { buf = D.error_buffer })
   vim.api.nvim_buf_set_name(D.error_buffer, "poste://error")
+
+  local opts = { buffer = D.error_buffer, noremap = true, silent = true }
+  local k = config.get_keymap("sql_dataset", "close", "q")
+  if k then vim.keymap.set("n", k, function() M.close() end, opts) end
+
   return D.error_buffer
 end
 
@@ -195,7 +200,9 @@ function M.get_dataset_buffer()
         if not vim.api.nvim_win_is_valid(win) then return end
         if not vim.api.nvim_buf_is_valid(D.dataset_buffer) then return end
         local buf = vim.api.nvim_win_get_buf(win)
-        if buf ~= D.dataset_buffer then
+        -- Allow the plugin's own error buffer (rendered for failed queries);
+        -- only revert user-initiated buffer swaps back to the dataset buffer.
+        if buf ~= D.dataset_buffer and buf ~= D.error_buffer then
           vim.api.nvim_win_set_buf(win, D.dataset_buffer)
         end
       end)
