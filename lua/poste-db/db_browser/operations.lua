@@ -8,6 +8,7 @@ local forms = require("poste-db.db_browser.forms")
 local ident = require("poste-db.ident")
 local util = require("poste-db.db_browser.util")
 local compat = require("poste-db.compat")
+local notify = require("poste-db.db_browser.notify")
 
 local HEADER_LINES = icons.HEADER_LINES
 local M = {}
@@ -39,7 +40,7 @@ end
 
 local function insert_into_source(context, lines, cursor_offset, cursor_col)
   if not context.source_buf or not vim.api.nvim_buf_is_valid(context.source_buf) then
-    vim.notify("No source SQL buffer found", vim.log.levels.WARN)
+    notify.warn("No source SQL buffer found")
     return false
   end
   local line_count = vim.api.nvim_buf_line_count(context.source_buf)
@@ -146,7 +147,7 @@ function M.select_star(node, context)
   end
 
   if not table_node or (table_node.node_type ~= "table" and table_node.node_type ~= "view") then
-    vim.notify("Move cursor to a table or view node", vim.log.levels.INFO)
+    notify.info("Move cursor to a table or view node")
     return
   end
 
@@ -158,7 +159,7 @@ function M.select_star(node, context)
   table.insert(query_lines, "")
 
   if insert_into_source(context, query_lines, cursor_offset) then
-    vim.notify("Generated SELECT for: " .. table_node.name, vim.log.levels.INFO)
+    notify.info("Generated SELECT for: " .. table_node.name)
   end
 end
 
@@ -171,7 +172,7 @@ function M.show_ddl(node, context)
   end
 
   if not table_node or (table_node.node_type ~= "table" and table_node.node_type ~= "view") then
-    vim.notify("DDL is only available for tables and views", vim.log.levels.INFO)
+    notify.info("DDL is only available for tables and views")
     return
   end
 
@@ -207,7 +208,7 @@ function M.show_ddl(node, context)
       local ok, parsed = pcall(vim.json.decode, output)
       if not ok or type(parsed) ~= "table" then
         vim.schedule(function()
-          vim.notify("DDL: failed to parse output", vim.log.levels.WARN)
+          notify.warn("DDL: failed to parse output")
         end)
         return
       end
@@ -215,7 +216,7 @@ function M.show_ddl(node, context)
       local items = parsed.items
       if not items or #items == 0 then
         vim.schedule(function()
-          vim.notify("DDL: no items in response", vim.log.levels.WARN)
+          notify.warn("DDL: no items in response")
         end)
         return
       end
@@ -223,7 +224,7 @@ function M.show_ddl(node, context)
       vim.schedule(function()
         local ddl = items[1].ddl or ""
         if ddl == "" then
-          vim.notify("DDL: empty result", vim.log.levels.WARN)
+          notify.warn("DDL: empty result")
           return
         end
         local lines = vim.split(ddl, "\n")
@@ -248,13 +249,13 @@ end
 function M.copy_name(node)
   local name = node.name or ""
   vim.fn.setreg("+", name)
-  vim.notify("Copied: " .. name, vim.log.levels.INFO)
+  notify.info("Copied: " .. name)
 end
 
 --- Rename table or column via vim.ui.input → generate ALTER SQL.
 function M.rename(node, context)
   if node.node_type ~= "table" and node.node_type ~= "column" then
-    vim.notify("Rename is only available for tables and columns", vim.log.levels.INFO)
+    notify.info("Rename is only available for tables and columns")
     return
   end
 
@@ -297,7 +298,7 @@ function M.rename(node, context)
     elseif node.node_type == "column" then
       local table_node = find_table_node(context, vim.fn.line(".") - HEADER_LINES)
       if not table_node then
-        vim.notify("Could not find parent table", vim.log.levels.WARN)
+        notify.warn("Could not find parent table")
         return
       end
       if conn then
@@ -320,7 +321,7 @@ function M.rename(node, context)
 
     table.insert(lines, "")
     insert_into_source(context, lines, cursor_offset)
-    vim.notify("Generated RENAME " .. label .. " SQL", vim.log.levels.INFO)
+    notify.info("Generated RENAME " .. label .. " SQL")
   end)
 end
 
@@ -329,7 +330,7 @@ function M.refresh(node, context)
   if node.node_type == "column" or node.node_type == "index"
       or node.node_type == "key_item" or node.node_type == "fk_item"
       or node.node_type == "index_item" then
-    vim.notify("Cannot refresh leaf nodes", vim.log.levels.INFO)
+    notify.info("Cannot refresh leaf nodes")
     return
   end
 
@@ -422,7 +423,7 @@ function M.new_query(node, context)
   table.insert(lines, "")
 
   insert_into_source(context, lines, cursor_offset)
-  vim.notify("New query block created", vim.log.levels.INFO)
+  notify.info("New query block created")
 end
 
 --- Set default database/schema: insert USE or SET search_path.
@@ -450,7 +451,7 @@ function M.set_default(node, context)
   table.insert(lines, "")
 
   insert_into_source(context, lines, cursor_offset)
-  vim.notify("Set default: " .. node.name, vim.log.levels.INFO)
+  notify.info("Set default: " .. node.name)
 end
 
 --- Open connections.toml at this connection's entry.
@@ -458,14 +459,14 @@ function M.edit_conn(node, context)
   local conn_name = node.node_type == "connection" and node.name
     or (node.meta and node.meta.connection)
   if not conn_name then
-    vim.notify("No connection name found", vim.log.levels.WARN)
+    notify.warn("No connection name found")
     return
   end
 
   local connections = require("poste-db.connections")
   local config_path = connections.find_connections_toml(get_search_dir(context))
   if not config_path then
-    vim.notify("connections.toml not found", vim.log.levels.WARN)
+    notify.warn("connections.toml not found")
     return
   end
 
@@ -488,20 +489,20 @@ function M.edit_conn(node, context)
   if found_line then
     vim.api.nvim_win_set_cursor(0, { found_line, 0 })
   else
-    vim.notify("Connection '" .. conn_name .. "' not found in file", vim.log.levels.WARN)
+    notify.warn("Connection '" .. conn_name .. "' not found in file")
   end
 end
 
 --- Modify Column: open form with type/nullable/default, generate ALTER SQL.
 function M.modify_col(node, context)
   if node.node_type ~= "column" then
-    vim.notify("Modify is only available for columns", vim.log.levels.INFO)
+    notify.info("Modify is only available for columns")
     return
   end
 
   local table_node = find_table_node(context, vim.fn.line(".") - HEADER_LINES)
   if not table_node then
-    vim.notify("Could not find parent table", vim.log.levels.WARN)
+    notify.warn("Could not find parent table")
     return
   end
 
@@ -528,7 +529,7 @@ function M.modify_col(node, context)
     }, dialect))
     table.insert(lines, "")
     insert_into_source(context, lines, cursor_offset)
-    vim.notify("Generated ALTER SQL for column: " .. node.name, vim.log.levels.INFO)
+    notify.info("Generated ALTER SQL for column: " .. node.name)
   end)
 end
 
@@ -550,7 +551,7 @@ function M.new_table(node, context)
   forms.open(title, fields, function(updated)
     local table_name = updated[1].value
     if table_name == "" then
-      vim.notify("Table name cannot be empty", vim.log.levels.WARN)
+      notify.warn("Table name cannot be empty")
       return
     end
 
@@ -577,7 +578,7 @@ function M.new_table(node, context)
     table.insert(lines, "")
 
     insert_into_source(context, lines, cursor_offset)
-    vim.notify("Generated CREATE TABLE: " .. table_name, vim.log.levels.INFO)
+    notify.info("Generated CREATE TABLE: " .. table_name)
   end)
 end
 
@@ -586,7 +587,7 @@ function M.create_table_template(node, context)
   local conn = get_connection_name(node, context)
 
   if not context.source_buf or not vim.api.nvim_buf_is_valid(context.source_buf) then
-    vim.notify("No source SQL buffer found", vim.log.levels.WARN)
+    notify.warn("No source SQL buffer found")
     return
   end
 
@@ -620,7 +621,7 @@ create table ${1:table_name} (
     vim.api.nvim_win_set_cursor(0, { line_count - 1, 13 })
   end
 
-  vim.notify("Generated CREATE TABLE template", vim.log.levels.INFO)
+  notify.info("Generated CREATE TABLE template")
 end
 
 --- New Column: open form with name/type/nullable/default, generate ALTER TABLE ADD COLUMN.
@@ -630,7 +631,7 @@ function M.new_column(node, context)
     table_node = find_table_node(context, vim.fn.line(".") - HEADER_LINES)
   end
   if not table_node or table_node.node_type ~= "table" then
-    vim.notify("Move cursor to a table node", vim.log.levels.INFO)
+    notify.info("Move cursor to a table node")
     return
   end
 
@@ -654,7 +655,7 @@ function M.new_column(node, context)
     local default_val = updated[4].value
 
     if col_name == "" then
-      vim.notify("Column name cannot be empty", vim.log.levels.WARN)
+      notify.warn("Column name cannot be empty")
       return
     end
 
@@ -685,7 +686,7 @@ function M.new_column(node, context)
     table.insert(lines, "")
 
     insert_into_source(context, lines, cursor_offset)
-    vim.notify("Generated ADD COLUMN: " .. col_name, vim.log.levels.INFO)
+    notify.info("Generated ADD COLUMN: " .. col_name)
   end)
 end
 
@@ -714,13 +715,13 @@ function M.insert_template(node, context)
     table_node = find_table_node(context, vim.fn.line(".") - HEADER_LINES)
   end
   if not table_node or table_node.node_type ~= "table" then
-    vim.notify("Move cursor to a table node", vim.log.levels.INFO)
+    notify.info("Move cursor to a table node")
     return
   end
 
   local cols = get_columns_from_node(table_node)
   if not cols then
-    vim.notify("Expand the table first to see columns", vim.log.levels.WARN)
+    notify.warn("Expand the table first to see columns")
     return
   end
 
@@ -741,7 +742,7 @@ function M.insert_template(node, context)
   cursor_offset = cursor_offset + 1  -- land on VALUES line
 
   insert_into_source(context, lines, cursor_offset, 8)  -- col 8 = inside VALUES ()
-  vim.notify("Generated INSERT template for: " .. table_node.name, vim.log.levels.INFO)
+  notify.info("Generated INSERT template for: " .. table_node.name)
 end
 
 --- UPDATE template: generate UPDATE ... SET ... WHERE based on table columns.
@@ -751,13 +752,13 @@ function M.update_template(node, context)
     table_node = find_table_node(context, vim.fn.line(".") - HEADER_LINES)
   end
   if not table_node or table_node.node_type ~= "table" then
-    vim.notify("Move cursor to a table node", vim.log.levels.INFO)
+    notify.info("Move cursor to a table node")
     return
   end
 
   local cols = get_columns_from_node(table_node)
   if not cols then
-    vim.notify("Expand the table first to see columns", vim.log.levels.WARN)
+    notify.warn("Expand the table first to see columns")
     return
   end
 
@@ -789,17 +790,17 @@ function M.update_template(node, context)
   table.insert(lines, "")
 
   insert_into_source(context, lines, cursor_offset)
-  vim.notify("Generated UPDATE template for: " .. table_node.name, vim.log.levels.INFO)
+  notify.info("Generated UPDATE template for: " .. table_node.name)
 end
 
 --- Import data from CSV/TSV/JSON into this table.
 function M.import_data(node, context)
   if node.meta and node.meta.table_type == "VIEW" then
-    vim.notify("Cannot import data into a view", vim.log.levels.WARN)
+    notify.warn("Cannot import data into a view")
     return
   end
   if node.node_type ~= "table" then
-    vim.notify("Import is only available for tables", vim.log.levels.INFO)
+    notify.info("Import is only available for tables")
     return
   end
   require("poste-db.import").run(node, context)
@@ -901,7 +902,7 @@ execute_drop = function(table_node, qualified, conn, schema_prefix, context)
           vim.notify("Failed to drop table '" .. qualified .. "'", vim.log.levels.ERROR)
           return
         end
-        vim.notify("Dropped table: " .. qualified, vim.log.levels.INFO)
+        notify.info("Dropped table: " .. qualified)
         if parent then
           parent.children = nil
           parent.expanded = false
@@ -938,7 +939,7 @@ function M.drop_table(node, context)
     table_node = find_table_node(context, vim.fn.line(".") - HEADER_LINES)
   end
   if not table_node or table_node.node_type ~= "table" then
-    vim.notify("Move cursor to a table node", vim.log.levels.INFO)
+    notify.info("Move cursor to a table node")
     return
   end
 
@@ -1212,7 +1213,7 @@ function M.batch_drop_tables(selected_nodes, context)
     end
   end
   if #items == 0 then
-    vim.notify("No table nodes selected", vim.log.levels.INFO)
+    notify.info("No table nodes selected")
     return
   end
 

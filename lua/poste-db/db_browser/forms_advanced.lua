@@ -1,6 +1,7 @@
 local state = require("poste.state")
 local dialog = require("poste.dialog")
 local layout = require("poste.layout")
+local notify = require("poste-db.db_browser.notify")
 
 local M = {}
 
@@ -413,7 +414,7 @@ function M.open(opts)
       local vals = get_field_values()
       local err, err_key = on_validate(vals)
       if err then
-        vim.notify(err, vim.log.levels.WARN)
+        notify.warn(err)
         if err_key then
           for fi, ri in ipairs(focusable) do
             local r = rows[ri]
@@ -439,11 +440,11 @@ function M.open(opts)
   local function copy_sql()
     local text = table.concat(sql_lines, "\n")
     if text == "" then
-      vim.notify("No SQL to copy", vim.log.levels.INFO)
+      notify.info("No SQL to copy")
       return
     end
     vim.fn.setreg("+", text)
-    vim.notify("SQL copied to clipboard", vim.log.levels.INFO)
+    notify.info("SQL copied to clipboard")
   end
 
   local function delete_list_entry()

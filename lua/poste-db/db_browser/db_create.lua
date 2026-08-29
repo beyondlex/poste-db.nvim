@@ -2,6 +2,7 @@ local forms_advanced = require("poste-db.db_browser.forms_advanced")
 local tree = require("poste-db.db_browser.tree")
 local async = require("poste-db.db_browser.async")
 local util = require("poste-db.db_browser.util")
+local notify = require("poste-db.db_browser.notify")
 
 local M = {}
 
@@ -105,7 +106,7 @@ end
 local refresh_target
 
 local function execute_sql(sql, conn_name, context, opts)
-  vim.notify("Creating database...", vim.log.levels.INFO)
+  notify.info("Creating database...")
 
   local connections = require("poste-db.connections")
   local url, err = connections.resolve_connection_url(conn_name)
@@ -137,7 +138,7 @@ local function execute_sql(sql, conn_name, context, opts)
         if msg == "" then msg = "Unknown SQL error" end
         vim.notify("Database create failed:\n" .. msg, vim.log.levels.ERROR)
       else
-        vim.notify("Database created successfully", vim.log.levels.INFO)
+        notify.info("Database created successfully")
       end
       refresh_target(opts and opts.target_node or nil, context)
     end,
@@ -181,7 +182,7 @@ function M.open(node, context)
   local dialect = get_dialect(node, context)
 
   if dialect == "sqlite" then
-    vim.notify("SQLite does not support CREATE DATABASE", vim.log.levels.INFO)
+    notify.info("SQLite does not support CREATE DATABASE")
     return
   end
 

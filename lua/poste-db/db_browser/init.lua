@@ -5,6 +5,8 @@ local tree = require("poste-db.db_browser.tree")
 local async = require("poste-db.db_browser.async")
 local actions = require("poste-db.db_browser.actions")
 local HEADER_LINES = require("poste-db.db_browser.icons").HEADER_LINES
+local notify = require("poste-db.db_browser.notify")
+local yank = require("poste-db.db_browser.yank")
 
 local M = {}
 
@@ -20,11 +22,29 @@ local multi_select = {
   selected = {},
 }
 
+local statusline = require("poste-db.db_browser.statusline")
+
+local function update_statusline()
+  if not browser_buf or not vim.api.nvim_buf_is_valid(browser_buf) then return end
+  local node = nil
+  for _, win in ipairs(vim.api.nvim_list_wins()) do
+    if vim.api.nvim_win_get_buf(win) == browser_buf then
+      local row = vim.api.nvim_win_get_cursor(win)[1]
+      node = tree.get_node_at_line(line_to_node, row)
+      if node then break end
+    end
+  end
+  local path = statusline.node_path(node, root_nodes)
+  local conn_label = sql_state.db_browser.connection or "No connection"
+  statusline.update(browser_buf, path, multi_select, conn_label)
+end
+
 local function render_tree()
   if not browser_buf or not vim.api.nvim_buf_is_valid(browser_buf) then return end
   local conn_label = sql_state.db_browser.connection or "No connection"
   local new_map = tree.render_tree(browser_buf, line_to_node, root_nodes, conn_label, multi_select)
   line_to_node = new_map
+  update_statusline()
 end
 
 local function exit_multi_select()
@@ -99,18 +119,18 @@ M.get_search_dir = get_search_dir
 
 local function start_copy(buf_line)
   if not multi_select.active or not next(multi_select.selected) then
-    vim.notify("No tables selected. Use <Tab> to select tables first.", vim.log.levels.INFO)
+    notify.info("No tables selected. Use <Tab> to select tables first.")
     return
   end
 
   local target_db = find_target_db(buf_line)
   if not target_db then
-    vim.notify("Move cursor to a target database", vim.log.levels.INFO)
+    notify.info("Move cursor to a target database")
     return
   end
 
   if target_db == multi_select.source_db then
-    vim.notify("Target database is the same as source. Select a different database.", vim.log.levels.WARN)
+    notify.warn("Target database is the same as source. Select a different database.")
     return
   end
 
@@ -295,15 +315,13 @@ local function setup_browser_buffer()
           root_dialect = root.meta and root.meta.dialect; break
         end
       end
-      local yank = require("poste-db.db_browser.yank")
       local entry = yank.from_node(node, root_dialect)
       if entry then
         yank.set(entry)
-        local desc = yank.describe()
-        local hint = (entry.kind == "database")
-          and "(press p on a database to paste, or on a connection to clone)"
-          or "(press p on a database to paste)"
-        vim.notify("Yanked " .. (desc or "item") .. " " .. hint, vim.log.levels.INFO)
+        -- Persistent statusline indicator (not a one-shot notify, which would
+        -- block on "Press ENTER"); also a brief non-blocking flash.
+        update_statusline()
+        require("poste-db.db_browser.flash").flash("Yanked " .. (yank.describe() or ""))
       end
     end, opts)
   end
@@ -319,10 +337,9 @@ local function setup_browser_buffer()
         return
       end
       -- Yank-register path
-      local yank = require("poste-db.db_browser.yank")
       local entry = yank.get()
       if not entry then
-        vim.notify("Nothing yanked. Use <Tab> to select tables, or press y on a table/view/database to yank.", vim.log.levels.INFO)
+        notify.info("Nothing yanked. Use <Tab> to select tables, or press y on a table/view/database to yank.")
         return
       end
       -- Resolve target: cursor must be on or under a database node.
@@ -362,8 +379,8 @@ local function setup_browser_buffer()
       end
 
       if not target_db and not is_sqlite_conn_target and not clone_conn then
-        vim.notify("Move cursor to a target database (or sqlite connection) to paste, "
-          .. "or to a connection to clone", vim.log.levels.INFO)
+        notify.info("Move cursor to a target database (or sqlite connection) to paste, "
+          .. "or to a connection to clone")
         return
       end
 
@@ -386,6 +403,9 @@ local function setup_browser_buffer()
           or entry.dialect
         copy_mod.clone_database(entry, { conn = clone_conn.name, dialect = clone_dialect }, {
           on_complete = function()
+            -- Consumed: drop the register (and its statusline indicator) now.
+            yank.clear()
+            update_statusline()
             -- Refresh the connection to surface the new database.
             clone_conn.children = nil
             clone_conn.expanded = false
@@ -408,6 +428,9 @@ local function setup_browser_buffer()
             conn = target_conn, db = target_db_name, dialect = target_dialect,
           }, objects, triggers, routines, {
             on_complete = function()
+              -- Consumed: drop the register (and its statusline indicator) now.
+              yank.clear()
+              update_statusline()
               -- Refresh target node display.
               if target_db then
                 target_db.children = nil
@@ -444,6 +467,9 @@ local function setup_browser_buffer()
           conn = target_conn, db = target_db_name, dialect = target_dialect,
         }, { entry }, {}, {}, {
           on_complete = function()
+            -- Consumed: drop the register (and its statusline indicator) now.
+            yank.clear()
+            update_statusline()
             if target_db then
               target_db.children = nil
               target_db.expanded = false
@@ -561,7 +587,7 @@ function M.navigate_to(conn_name, db_name)
     end
     if not conn_node then
       render_tree()
-      vim.notify("Connection '" .. conn_name .. "' not found in connections.toml", vim.log.levels.WARN)
+      notify.warn("Connection '" .. conn_name .. "' not found in connections.toml")
       return
     end
 
@@ -579,7 +605,7 @@ function M.navigate_to(conn_name, db_name)
       if not db_node then
         vim.schedule(function()
           render_tree()
-          vim.notify("Database '" .. db_name .. "' not found under '" .. conn_name .. "'", vim.log.levels.WARN)
+          notify.warn("Database '" .. db_name .. "' not found under '" .. conn_name .. "'")
         end)
         return
       end
@@ -632,7 +658,7 @@ function M.navigate_to_table(conn_name, db_name, table_name, column_name)
     end
     if not conn_node then
       render_tree()
-      vim.notify("Connection '" .. conn_name .. "' not found", vim.log.levels.WARN)
+      notify.warn("Connection '" .. conn_name .. "' not found")
       return
     end
 
@@ -695,7 +721,7 @@ function M.navigate_to_table(conn_name, db_name, table_name, column_name)
         end
       end
       if not db_node then
-        vim.schedule(function() render_tree(); vim.notify("Database '" .. (db_name or "?") .. "' not found", vim.log.levels.WARN) end)
+        vim.schedule(function() render_tree(); notify.warn("Database '" .. (db_name or "?") .. "' not found") end)
         return
       end
 
@@ -712,7 +738,7 @@ function M.navigate_to_table(conn_name, db_name, table_name, column_name)
             end
           end
           if not schema_node then
-            vim.schedule(function() render_tree(); vim.notify("Schema '" .. target_schema .. "' not found", vim.log.levels.WARN) end)
+            vim.schedule(function() render_tree(); notify.warn("Schema '" .. target_schema .. "' not found") end)
             return
           end
           schema_node.loading = true
@@ -726,7 +752,7 @@ function M.navigate_to_table(conn_name, db_name, table_name, column_name)
               end
             end
             if not table_node then
-              vim.schedule(function() render_tree(); vim.notify("Table '" .. bare_table .. "' not found", vim.log.levels.WARN) end)
+              vim.schedule(function() render_tree(); notify.warn("Table '" .. bare_table .. "' not found") end)
               return
             end
             table_node.loading = true
@@ -749,7 +775,7 @@ function M.navigate_to_table(conn_name, db_name, table_name, column_name)
             end
           end
           if not table_node then
-            vim.schedule(function() render_tree(); vim.notify("Table not found", vim.log.levels.WARN) end)
+            vim.schedule(function() render_tree(); notify.warn("Table not found") end)
             return
           end
           table_node.loading = true

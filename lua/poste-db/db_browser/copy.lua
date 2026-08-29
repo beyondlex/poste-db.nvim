@@ -7,6 +7,7 @@ local dialog = require("poste.dialog")
 local C = require("poste.constants")
 local sql_conn = require("poste-db.db_browser.sql_conn")
 local catalog = require("poste-db.db_browser.catalog")
+local notify = require("poste-db.db_browser.notify")
 
 local M = {}
 
@@ -335,8 +336,7 @@ function M.resolve_conflict_names(target, items, on_resolved, on_cancel, opts)
             end
             exists_fn(target, chosen, items[i].schema, function(found2)
               if found2 and chosen ~= safe_default then
-                vim.notify("'" .. chosen .. "' also exists — using an automatic suffix",
-                  vim.log.levels.INFO)
+                notify.info("'" .. chosen .. "' also exists — using an automatic suffix")
                 bump_until_free(i, chosen, 1, function(bumped)
                   results[i] = bumped
                   step(i + 1)
@@ -987,7 +987,7 @@ function M.paste_objects(source, target, items, triggers, routines, opts)
     return
   end
   if #items == 0 and #triggers == 0 and #routines == 0 then
-    vim.notify("Nothing to paste", vim.log.levels.INFO)
+    notify.info("Nothing to paste")
     return
   end
 
@@ -1180,7 +1180,7 @@ function M.clone_database(source, target, opts)
     }, function(chosen)
       if not chosen or chosen == "" then return end
       if existing[chosen] then
-        vim.notify("Database '" .. chosen .. "' already exists on " .. target.conn, vim.log.levels.WARN)
+        notify.warn("Database '" .. chosen .. "' already exists on " .. target.conn)
         return
       end
       create_database(target.conn, target.dialect, chosen, function()

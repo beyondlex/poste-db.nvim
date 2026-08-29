@@ -40,6 +40,16 @@ function M.describe()
   return entry.kind .. " " .. scope .. "." .. tostring(entry.name)
 end
 
+--- Statusline label for the persistent indicator, e.g.
+--- "Yanked: database maria-dev.blog (p to paste)".
+--- Nil when the register is empty.
+---@return string|nil
+function M.statusline_label()
+  local desc = M.describe()
+  if not desc then return nil end
+  return "Yanked: " .. desc .. " (p to paste)"
+end
+
 --- Build a register entry from a DB Browser tree node.
 --- Table nodes carry table_type ("BASE TABLE"/"VIEW"); SQLite exposes its
 --- tables directly under the connection node, so a sqlite connection acts as

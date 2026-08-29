@@ -3,6 +3,7 @@
 --- Dispatches to operations module.
 local state = require("poste.state")
 local operations = require("poste-db.db_browser.operations")
+local notify = require("poste-db.db_browser.notify")
 
 local M = {}
 
@@ -238,7 +239,7 @@ function M.open(node, context)
     if not map_entry then return end
     local op = operations[map_entry.action]
     if not op then
-      vim.notify("Unknown action: " .. tostring(map_entry.action), vim.log.levels.WARN)
+      notify.warn("Unknown action: " .. tostring(map_entry.action))
       return
     end
     close()

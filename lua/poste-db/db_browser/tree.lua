@@ -336,11 +336,11 @@ function M.apply_highlights(buf, line_count, count_ranges, line_to_node, multi_s
   end
 end
 
-function M.render_tree(browser_buf, line_to_node, root_nodes, conn_label, multi_select)
-  if not browser_buf or not vim.api.nvim_buf_is_valid(browser_buf) then return end
-
-  local lines, node_map, count_ranges = M.flatten_tree(root_nodes, 0, multi_select)
-
+--- Build the browser winbar: title, search state, and multi-select count.
+--- `%<` makes the state parts truncate first so the title always stays visible
+--- in narrow splits. The yanked indicator lives on the statusline (see
+--- db_browser/statusline.lua) because it is persistent state, not window state.
+function M.build_winbar(multi_select)
   local winbar = " DB Browser"
   local si = _G.poste_search_info
   if si and si.pattern ~= "" then
@@ -360,6 +360,14 @@ function M.render_tree(browser_buf, line_to_node, root_nodes, conn_label, multi_
       winbar = winbar .. "%#PosteDbBrowserSelected#  [" .. count .. " selected]%*"
     end
   end
+
+  return winbar
+end
+
+--- Refresh only the winbar (no tree re-render). Used right after a yank, where
+--- the tree content is unchanged.
+function M.update_winbar(browser_buf, multi_select)
+  if not browser_buf or not vim.api.nvim_buf_is_valid(browser_buf) then return end
   local browser_win
   for _, win in ipairs(vim.api.nvim_list_wins()) do
     if vim.api.nvim_win_get_buf(win) == browser_buf then
@@ -368,8 +376,16 @@ function M.render_tree(browser_buf, line_to_node, root_nodes, conn_label, multi_
     end
   end
   if browser_win then
-    vim.api.nvim_set_option_value("winbar", winbar, { win = browser_win })
+    vim.api.nvim_set_option_value("winbar", M.build_winbar(multi_select), { win = browser_win })
   end
+end
+
+function M.render_tree(browser_buf, line_to_node, root_nodes, conn_label, multi_select)
+  if not browser_buf or not vim.api.nvim_buf_is_valid(browser_buf) then return end
+
+  local lines, node_map, count_ranges = M.flatten_tree(root_nodes, 0, multi_select)
+
+  M.update_winbar(browser_buf, multi_select)
 
   vim.api.nvim_set_option_value("modifiable", true, { buf = browser_buf })
   vim.api.nvim_buf_set_lines(browser_buf, 0, -1, false, lines)

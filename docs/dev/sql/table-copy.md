@@ -73,7 +73,7 @@ local multi_select = {
 
 ```
 1. 在 DB Browser 中定位到要复制的节点（table/view/database/PG schema 或 SQLite 连接）。
-2. 按 y 记录对象为源；状态栏提示 "Yanked … (press p on a database to paste)"。
+2. 按 y 记录对象为源；DB Browser 窗口底部 statusline 显示常驻指示器 `⏉ Yanked: <对象> (p to paste)`，同时右下角 flash 提示一次（非阻塞，无需按 Enter）。
 3. 将光标移到目标 database 节点（或 SQLite 连接节点），或非 SQLite 的 connection 节点。
 4. 按 p：
    - 如果处于多选模式且有选中项，走多选复制流程。
@@ -85,6 +85,7 @@ local multi_select = {
    - 确认对话框显示源/目标、条目数、数据量 MB、改名映射。
    - 同名冲突弹窗（默认 <名>_copy）→ 用户可自定义或自动追加后缀。
    - 进度窗口顺序执行（表 → 视图 → 触发器 → 例程），完成后显示汇总。
+5. 粘贴成功完成后，yank 寄存器立即清空，statusline 指示器随之消失。
 ```
 
 ### 多选模式规则

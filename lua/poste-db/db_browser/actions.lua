@@ -4,6 +4,7 @@ local async = require("poste-db.db_browser.async")
 local cli = require("poste.cli")
 local ident = require("poste-db.ident")
 local util = require("poste-db.db_browser.util")
+local notify = require("poste-db.db_browser.notify")
 
 local HEADER_LINES = icons.HEADER_LINES
 
@@ -447,7 +448,7 @@ end
 function M.show_column_info(buf_line, context)
   local node = tree.get_node_at_line(context.line_to_node, buf_line)
   if not node or node.node_type ~= "column" then
-    vim.notify("Move cursor to a column", vim.log.levels.INFO)
+    notify.info("Move cursor to a column")
     return
   end
 
@@ -480,7 +481,7 @@ function M.show_table_info(buf_line, context)
   local idx = buf_line - HEADER_LINES
   local table_node = M.find_table_node(context.line_to_node, idx)
   if not table_node then
-    vim.notify("Move cursor to a table node", vim.log.levels.INFO)
+    notify.info("Move cursor to a table node")
     return
   end
 
@@ -513,7 +514,7 @@ function M.show_table_info(buf_line, context)
       local ok, parsed = pcall(vim.json.decode, output)
       if not ok or type(parsed) ~= "table" then
         vim.schedule(function()
-          vim.notify("Table info: failed to parse response", vim.log.levels.WARN)
+          notify.warn("Table info: failed to parse response")
         end)
         return
       end
@@ -521,7 +522,7 @@ function M.show_table_info(buf_line, context)
       local items = parsed.items
       if not items or #items == 0 then
         vim.schedule(function()
-          vim.notify("Table info: no data returned", vim.log.levels.WARN)
+          notify.warn("Table info: no data returned")
         end)
         return
       end
@@ -576,7 +577,7 @@ function M.show_table_info(buf_line, context)
     on_stderr = function(data)
       if not data or #data == 0 then return end
       vim.schedule(function()
-        vim.notify("Table info: " .. table.concat(data, "\n"), vim.log.levels.WARN)
+        notify.warn("Table info: " .. table.concat(data, "\n"))
       end)
     end,
   })

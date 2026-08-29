@@ -635,6 +635,105 @@ describe("db_browser public API", function()
   end)
 end)
 
+describe("db_browser yank register indicator", function()
+  local yank = require("poste-db.db_browser.yank")
+  local statusline = require("poste-db.db_browser.statusline")
+
+  after_each(function()
+    yank.clear()
+    _G.poste_search_info = nil
+  end)
+
+  it("statusline_label is nil when the register is empty", function()
+    yank.clear()
+    assert.is_nil(yank.statusline_label())
+  end)
+
+  it("statusline_label names the yanked item and the paste hint", function()
+    yank.set({ kind = "table", name = "posts", schema = "public", conn = "maria-dev", db = "blog", dialect = "mysql" })
+    assert.equals("Yanked: table maria-dev.blog.posts (p to paste)", yank.statusline_label())
+  end)
+
+  it("statusline_label covers whole-database and sqlite-connection yanks", function()
+    yank.set({ kind = "database", conn = "maria-dev", db = "blog", dialect = "mysql" })
+    assert.equals("Yanked: database maria-dev.blog (p to paste)", yank.statusline_label())
+
+    yank.set({ kind = "database", conn = "lite", db = nil, dialect = "sqlite" })
+    assert.equals("Yanked: database lite (p to paste)", yank.statusline_label())
+  end)
+
+  it("build_winbar no longer carries the yank fragment", function()
+    yank.set({ kind = "database", conn = "maria-dev", db = "blog", dialect = "mysql" })
+    local text = tree.build_winbar({ active = false, selected = {} })
+    assert.is_truthy(text:find(" DB Browser", 1, true) ~= nil, "title kept")
+    assert.is_nil(text:find("Yanked:", 1, true), "yank fragment moved off the winbar")
+  end)
+
+  it("build_statusline shows the yank fragment after the title with a highlight", function()
+    yank.set({ kind = "database", conn = "maria-dev", db = "blog", dialect = "mysql" })
+    local text = statusline.build(nil, { active = false, selected = {} })
+
+    assert.is_truthy(text:find(" DB Browser", 1, true) ~= nil, "title kept")
+    assert.is_truthy(text:find("Yanked: database maria-dev.blog", 1, true) ~= nil, "yanked item shown")
+    assert.is_truthy(text:find("%#PosteDbBrowserYanked#") ~= nil, "yank fragment is highlighted")
+    assert.is_truthy(text:find(icons.MARKER_YANKED) ~= nil, "yank fragment carries the yanked marker")
+    -- %< must precede the yank fragment so the title wins in narrow splits
+    assert.is_truthy(text:find("%%<") < text:find("%#PosteDbBrowserYanked#"),
+      "%< placed before the yank fragment")
+  end)
+
+  it("build_statusline omits the yank fragment when nothing is yanked", function()
+    yank.clear()
+    assert.is_nil(statusline.build(nil, { active = false, selected = {} }):find("Yanked:", 1, true),
+      "no yank fragment when register empty")
+  end)
+
+  it("build_statusline keeps selection and yank fragments together", function()
+    yank.set({ kind = "table", name = "posts", conn = "maria-dev", db = "blog", dialect = "mysql" })
+    local ms = { active = true, selected = {} }
+    ms.selected[tree.make_table_node({ name = "posts" }, "public", "blog", "maria-dev")] = true
+
+    local text = statusline.build(nil, ms)
+    assert.is_truthy(text:find("[1 selected]", 1, true) ~= nil, "selection fragment kept")
+    assert.is_truthy(text:find("Yanked: table maria-dev.blog.posts", 1, true) ~= nil, "yank fragment added")
+  end)
+
+  it("node_path walks ancestors to build a conn/db/schema label", function()
+    local conn = tree.make_connection_node({ name = "pg-dev", dialect = "postgres" })
+    local db = tree.make_database_node({ name = "blog" }, "pg-dev", "postgres")
+    db.parent = conn
+    local schema = tree.make_schema_node({ name = "public" }, "pg-dev", "postgres")
+    schema.parent = db
+
+    assert.is_truthy(statusline.node_path(conn, { conn }):find("pg-dev", 1, true))
+    assert.is_truthy(statusline.node_path(db, { conn }):find("blog", 1, true))
+    assert.is_truthy(statusline.node_path(schema, { conn }):find("public", 1, true))
+    assert.is_truthy(statusline.node_path(schema, { conn }):find("blog", 1, true))
+  end)
+
+  it("update_statusline writes the indicator to the browser window", function()
+    yank.set({ kind = "database", conn = "maria-dev", db = "blog", dialect = "mysql" })
+
+    local buf = vim.api.nvim_create_buf(false, false)
+    local win = vim.api.nvim_open_win(buf, true, { split = "right", width = 20 })
+
+    statusline.update(buf, nil, { active = false, selected = {} }, "maria-dev")
+    local written = vim.api.nvim_get_option_value("statusline", { win = win })
+    assert.is_truthy(written:find("Yanked: database maria-dev.blog", 1, true) ~= nil, "indicator written")
+
+    vim.api.nvim_win_close(win, true)
+    vim.api.nvim_buf_delete(buf, { force = true })
+  end)
+
+  it("clear drops the register immediately", function()
+    yank.set({ kind = "table", name = "posts", conn = "maria-dev", db = "blog", dialect = "mysql" })
+    assert.is_truthy(yank.get(), "register holds the entry")
+    yank.clear()
+    assert.is_nil(yank.get(), "register empty after clear")
+    assert.is_nil(yank.statusline_label(), "statusline label drops after clear")
+  end)
+end)
+
 describe("db_browser prefetch_children", function()
   local async_mod = require("poste-db.db_browser.async")
 
