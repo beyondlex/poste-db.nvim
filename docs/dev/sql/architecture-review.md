@@ -231,11 +231,20 @@ nui-components.nvim（grapp-dev，构建于 nui.nvim 之上）提供：Layout、
 - `schema_create.lua`/`db_create.lua`：提取 `db_browser/util.run_ddl_and_refresh()` 与 `refresh_subtree()`（node_type 参数化），两文件各删 ~90 行克隆。
 - `ai/init.lua`：5 份可用性守卫合并为 `ensure_available()`；`ai/mentions.lua`/`ai/schema.lua` 的 `introspect()` 包装提到 `ai/introspect.lua`（新小模块）复用。
 
+### 批次 5 — db_browser 树收权（对应 S3，Phase P-C）
+
+- `util.render_tree(context)` 取代 actions.lua（14 处）与 operations.lua（5 处）的「render_tree + line_map 逐项拷贝」两行式；`util.refresh_subtree(node, context, node_type, search_dir)` 取代 6 处手写刷新舞步（actions 的 toggle/expand/refresh、operations 的 refresh 与 drop-table），`search_dir` 参数化以保留 actions/operations 的 source-buffer 语义与 schema/db_create 的 getcwd 语义。init.lua 保留自己的 owner 路径（它以 multi_select 与显式 connection label 渲染，是状态的合法所有者）。
+- `sql_runner.lua` 的模块级共享 `_cursor_moved_timer` 改为按 buffer 键控——原先两个 SQL buffer 的光标移动会互相取消对方的 statusline/语句指示器刷新。
+
+### 修订记录
+
+- **P-B（状态单一真相源）降级为"暂不做"**：动工前逐点复核推翻了初版审计的"结构性漂移"判断——双写仅 3 处且同步点正确（详见第 5 节第 1 条）。
+
 ---
 
 ## 5. 未实施但已论证的项（按收益排序）
 
-1. **状态单一真相源**（S3）：`tab.cursor` 与 `sql_state.cell` 合一（cell 作为唯一写点，tab.cursor 变成 save/apply 时的投影）；连接上下文三份合一；`last_dataset` 砍掉（ai 直接读 tab）。风险中，需先补光标行为的 characterisation test。
+1. **状态单一真相源（修订：降级为"暂不做"）**：动笔前对光标双写做了逐点复核，结论与初版审计不同——`tab.cursor` 与 `sql_state.cell` 的双写只存在于 3 处且同步点正确：切换 tab 时 `save/apply`（buffer/init.lua:248-263）互为投影，`render_dataset` 新渲染把两者同时归零（:554 + :709-710），page.lua 对两者同时 clamp（:46-51/:99-104）；审计所称"search 只改 cell 导致漂移"实际被 save 时的 cell→cursor 拷贝兜住。合一（cell 唯一写点 + cursor 降为投影）没有行为收益，只有 churn 风险。`last_dataset` 与连接上下文三份同理：各有独立消费方与生命周期（ai 读 last_dataset、statusline 走 vim.b），强行合并是在重设计状态层而非消除坏味道。若未来状态层出实际 bug，再按"cell 唯一写点"方案重审。
 2. **db_browser 树状态收权**（S3）：把「children/expanded/loading 突变 + 渲染 + line_map 回写」收进 `tree.lua` 的 `M.invalidate_and_fetch(node, context)`，替换 12 处舞步与 27 处拷贝循环；`make_context` 收窄为只读视图。
 3. **sql_runner.run_sql_request 拆分**（S1）：`on_response` 内多 tab 渲染循环 → `sql_runner/response.lua`；DML 守卫/history/spinner 各归其位；entry 只留编排。遵循 harness 的 wrapper-先行策略。
 4. **补全热路径去同步**（S4）：`completion/init.lua:143` 的同步 `vim.system:wait()` 换成复活或重写 `context_client` 的异步协议（或彻底删协议改 debounce），并把缓存键里的全文扫描（cache_key → resolve_full_context）降为增量。
@@ -249,10 +258,10 @@ nui-components.nvim（grapp-dev，构建于 nui.nvim 之上）提供：Layout、
 
 | Phase | 目标 | 验收标准 |
 |---|---|---|
-| P-A（本次） | UI 原语统一 + 泄漏修复 + 死代码清场 | 8 处浮窗走单一原语；渲染不泄漏 autocmd；`tests/run.sh` 绿 |
-| P-B | 状态单一真相源（第 5 节 1） | 光标/上下文各只剩一个写点；tab 切换/翻页/搜索跳转行为不变（新 characterisation tests） |
-| P-C | db_browser 树收权（第 5 节 2） | 刷新舞步唯一实现；`node_type` 分发集中在 tree 层 |
-| P-D | sql_runner 拆分（第 5 节 3） | `run_sql_request` < 150 行且只做编排；response 渲染独立可测 |
+| P-A ✅（2026-08-30） | UI 原语统一 + 泄漏修复 + 死代码清场 | 8 处浮窗走单一原语；渲染不泄漏 autocmd；`tests/run.sh` 绿 |
+| P-B | ~~状态单一真相源~~ **修订：暂不做**（复核后双写受控，见第 5 节第 1 条） | — |
+| P-C ✅（2026-08-30） | db_browser 树收权：刷新舞步 + line_map 收敛到 util | 刷新舞步唯一实现（init.lua 的 owner 路径除外）；`tests/run.sh` 绿 |
+| P-D | sql_runner 拆分（第 5 节 3）：`on_response` 多 tab 渲染循环 → 独立模块，entry 只留编排 | `run_sql_request` < 150 行且只做编排；response 渲染独立可测。**注意**：on_response/on_error 内含刚调过的指示器放置逻辑（stmt_indicator_line/block_result_line），拆分须以其测试为护栏单独成 session |
 | P-E | 异步收敛 + 补全热路径去同步（第 5 节 4/6） | 唯一 job 入口带 epoch/超时；补全触发无阻塞 `:wait()` |
 | P-F | 表单框架合一（视 P-A 后的残留量决定是否引入可选 nui-components 后端） | forms.lua 退役，forms_advanced 独立承担；`M.open` < 100 行 |
 

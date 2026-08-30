@@ -22,7 +22,10 @@ local _vis_start = 0
 local _vis_end = 0
 
 -- CursorMoved debounce to avoid jitter from repeated context resolution
-local _cursor_moved_timer = nil
+-- Pending statusline/indicator debounce, keyed per SQL buffer. A single
+-- shared timer would let one buffer's cursor move cancel another buffer's
+-- scheduled update.
+local _cursor_moved_timers = {}
 local CURSOR_MOVED_DEBOUNCE_MS = 100
 
 --- Compute the indicator line for a statement: `end_nr` exclusive, trimmed
@@ -141,12 +144,13 @@ function M.ensure_sql_keymaps(buf)
     group = group,
     buffer = buf,
     callback = function()
-      if _cursor_moved_timer then
-        _cursor_moved_timer:stop()
-        _cursor_moved_timer:close()
+      local pending = _cursor_moved_timers[buf]
+      if pending then
+        pending:stop()
+        pending:close()
       end
-      _cursor_moved_timer = vim.defer_fn(function()
-        _cursor_moved_timer = nil
+      _cursor_moved_timers[buf] = vim.defer_fn(function()
+        _cursor_moved_timers[buf] = nil
         if vim.api.nvim_get_current_buf() ~= buf then return end
         local ok, ctx_mod = pcall(require, "poste-db.context")
         if ok and ctx_mod then
