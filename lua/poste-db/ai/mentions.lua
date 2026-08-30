@@ -59,19 +59,7 @@ end
 local MAX_TABLES_FOR_COLUMNS = 20
 local MAX_OUTPUT_CHARS = 12000
 
---- Run one introspect query; cb(items_table_or_nil). Items are
---- { name, type, comment } for tables and { name, type, comment, ... } for
---- columns (see db_browser/tree.lua node factories).
-local function introspect(conn, kind, table_name, db, cb)
-  local async = require("poste-db.db_browser.async")
-  async.run_introspect(conn, kind, nil, table_name, db, function(parsed)
-    if type(parsed) == "table" and type(parsed.items) == "table" then
-      cb(parsed.items)
-    else
-      cb(nil)
-    end
-  end, vim.fn.getcwd())
-end
+local introspect = require("poste-db.ai.introspect").run
 
 local function clean_comment(comment)
   if type(comment) ~= "string" or comment == "" then return nil end

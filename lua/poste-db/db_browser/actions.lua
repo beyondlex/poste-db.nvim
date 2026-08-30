@@ -8,6 +8,8 @@ local notify = require("poste-db.db_browser.notify")
 
 local HEADER_LINES = icons.HEADER_LINES
 
+local format_bytes = util.format_bytes
+
 local function deep_clean(t)
   for k, v in pairs(t) do
     if v == vim.NIL then
@@ -435,14 +437,6 @@ end
 function M.search_prev()
   if #search_state.matches == 0 then return end
   do_jump(search_state.current - 1)
-end
-
-local function format_bytes(bytes)
-  if type(bytes) ~= "number" then return tostring(bytes or "?") end
-  if bytes >= 1073741824 then return string.format("%.2f GB", bytes / 1073741824) end
-  if bytes >= 1048576 then return string.format("%.2f MB", bytes / 1048576) end
-  if bytes >= 1024 then return string.format("%.2f kB", bytes / 1024) end
-  return bytes .. " B"
 end
 
 function M.show_column_info(buf_line, context)

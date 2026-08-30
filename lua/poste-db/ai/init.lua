@@ -50,13 +50,17 @@ function M.register()
   return true
 end
 
+--- Notify and report absence of poste-ai. Returns true when available.
+local function ensure_available()
+  if M.available() then return true end
+  vim.notify("PosteDb AI chat needs poste-ai.nvim (beyondlex/poste-ai.nvim) installed.",
+    vim.log.levels.WARN, { title = "PosteDb" })
+  return false
+end
+
 --- Open the AI chat with the db context active.
 function M.open_chat()
-  if not M.available() then
-    vim.notify("PosteDb AI chat needs poste-ai.nvim (beyondlex/poste-ai.nvim) installed.",
-      vim.log.levels.WARN, { title = "PosteDb" })
-    return
-  end
+  if not ensure_available() then return end
   M.register()
   local poste_ai = require("poste-ai")
   poste_ai.set_active_context("db")
@@ -66,11 +70,7 @@ end
 --- Visual-mode entry: "ask the AI about this selection". Builds a
 --- "@path(l1-l2)" mention and pre-fills the chat input.
 function M.ask_selection()
-  if not M.available() then
-    vim.notify("PosteDb AI chat needs poste-ai.nvim (beyondlex/poste-ai.nvim) installed.",
-      vim.log.levels.WARN, { title = "PosteDb" })
-    return
-  end
+  if not ensure_available() then return end
   local buf = vim.api.nvim_get_current_buf()
   local l1 = vim.fn.line("'<")
   local l2 = vim.fn.line("'>")
@@ -99,11 +99,7 @@ end
 --- `a` on an error view: prefill the chat with the failed SQL + error
 --- message and scope the chat to the failing target.
 function M.ask_last_error()
-  if not M.available() then
-    vim.notify("PosteDb AI chat needs poste-ai.nvim (beyondlex/poste-ai.nvim) installed.",
-      vim.log.levels.WARN, { title = "PosteDb" })
-    return
-  end
+  if not ensure_available() then return end
   local err = require("poste-db.state").last_error
   if not err or not err.message then
     vim.notify("no failed execution to ask about", vim.log.levels.INFO, { title = "PosteDb" })
@@ -129,11 +125,7 @@ end
 --- `a` on a resultset view: send the last result set (truncated to 20 rows)
 --- as a markdown table into the chat, with the query that produced it.
 function M.ask_resultset()
-  if not M.available() then
-    vim.notify("PosteDb AI chat needs poste-ai.nvim (beyondlex/poste-ai.nvim) installed.",
-      vim.log.levels.WARN, { title = "PosteDb" })
-    return
-  end
+  if not ensure_available() then return end
   local data = require("poste-db.state").last_dataset
   if not data or data.type ~= "resultset" or not data.results or #data.results == 0 then
     vim.notify("no resultset to ask about", vim.log.levels.INFO, { title = "PosteDb" })
@@ -203,11 +195,7 @@ end
 --- @mention, pre-filling the chat input.
 --- @param node table|nil browser node ({ node_type, name, meta })
 function M.ask_node(node)
-  if not M.available() then
-    vim.notify("PosteDb AI chat needs poste-ai.nvim (beyondlex/poste-ai.nvim) installed.",
-      vim.log.levels.WARN, { title = "PosteDb" })
-    return
-  end
+  if not ensure_available() then return end
   if not node then return end
   local meta = node.meta or {}
   local conn = meta.connection

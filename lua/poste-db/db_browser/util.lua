@@ -36,4 +36,106 @@ function M.find_table_node(line_to_node, start_idx)
   return nil
 end
 
+--- Replace line_to_node's entries with a freshly rendered line map, keeping
+--- any stale entries beyond the new map's length.
+function M.set_line_map(line_to_node, new_map)
+  for i, n in ipairs(new_map) do line_to_node[i] = n end
+end
+
+--- Re-render the browser tree from `context` and sync the line map.
+function M.render_tree(context)
+  local tree = require("poste-db.db_browser.tree")
+  local new_map = tree.render_tree(context.browser_buf, context.line_to_node,
+    context.root_nodes, context.conn_label)
+  M.set_line_map(context.line_to_node, new_map)
+end
+
+--- Human-readable byte size ("12.3 kB", "4.00 MB", ...). Non-numbers pass
+--- through unchanged.
+function M.format_bytes(bytes)
+  if type(bytes) ~= "number" then return tostring(bytes or "?") end
+  if bytes >= 1073741824 then return string.format("%.2f GB", bytes / 1073741824) end
+  if bytes >= 1048576 then return string.format("%.2f MB", bytes / 1048576) end
+  if bytes >= 1024 then return string.format("%.2f kB", bytes / 1024) end
+  return bytes .. " B"
+end
+
+--- Invalidate `target_node` up to its `node_type` ancestor, then reload that
+--- ancestor's children and re-render. Shared by every tree-refresh dance.
+function M.refresh_subtree(target_node, context, node_type)
+  local parent = target_node
+  while parent and parent.node_type ~= node_type do
+    parent = parent.parent
+  end
+  if not parent then return end
+
+  parent.children = nil
+  parent.expanded = false
+  parent.loading = true
+
+  M.render_tree(context)
+
+  local async = require("poste-db.db_browser.async")
+  async.fetch_children(parent, function()
+    parent.expanded = true
+    vim.schedule(function()
+      M.render_tree(context)
+    end)
+  end, vim.fn.getcwd())
+end
+
+--- Execute a DDL statement through exec_run, report the outcome, and refresh
+--- the affected browser subtree. Shared by the create-schema / create-database
+--- dialogs.
+---
+--- opts: { success_msg, fail_prefix, pending_msg, database?, target_node?, node_type }
+function M.run_ddl_and_refresh(sql, conn_name, context, opts)
+  local notify = require("poste-db.db_browser.notify")
+  notify.info(opts.pending_msg)
+
+  local connections = require("poste-db.connections")
+  local url, err = connections.resolve_connection_url(conn_name)
+  if not url then
+    vim.notify(opts.fail_prefix .. " failed: " .. (err or "unknown"), vim.log.levels.ERROR)
+    return
+  end
+
+  local exec_run = require("poste-db.exec_run")
+  local job_id = exec_run.run_async(sql, {
+    conn_url = url,
+    database = opts.database or nil,
+    mode = "greedy",
+  }, {
+    on_response = function(resp)
+      local ok_body, body = pcall(vim.json.decode, resp.body or "{}")
+      if not ok_body or type(body) ~= "table" then
+        body = {}
+      end
+      local errors = {}
+      if body.results then
+        for _, result in ipairs(body.results) do
+          if result.error and result.error ~= "" then
+            table.insert(errors, result.error)
+          end
+        end
+      end
+      if resp.has_error or body.has_error or #errors > 0 then
+        local msg = table.concat(errors, "\n")
+        if msg == "" then msg = "Unknown SQL error" end
+        vim.notify(opts.fail_prefix .. " failed:\n" .. msg, vim.log.levels.ERROR)
+      else
+        notify.info(opts.success_msg)
+      end
+      M.refresh_subtree(opts.target_node, context, opts.node_type)
+    end,
+    on_error = function(message)
+      vim.notify(opts.fail_prefix .. " failed: " .. message, vim.log.levels.ERROR)
+    end,
+  })
+
+  if not job_id or job_id <= 0 then
+    vim.notify(opts.fail_prefix .. ": failed to start poste process", vim.log.levels.ERROR)
+  end
+end
+
 return M

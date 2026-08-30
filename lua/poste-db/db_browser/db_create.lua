@@ -1,6 +1,4 @@
 local forms_advanced = require("poste-db.db_browser.forms_advanced")
-local tree = require("poste-db.db_browser.tree")
-local async = require("poste-db.db_browser.async")
 local util = require("poste-db.db_browser.util")
 local notify = require("poste-db.db_browser.notify")
 
@@ -103,79 +101,14 @@ local function generate_sql(fields, dialect)
   return { postgres_create_database(fields) }
 end
 
-local refresh_target
-
 local function execute_sql(sql, conn_name, context, opts)
-  notify.info("Creating database...")
-
-  local connections = require("poste-db.connections")
-  local url, err = connections.resolve_connection_url(conn_name)
-  if not url then
-    vim.notify("Database create failed: " .. (err or "unknown"), vim.log.levels.ERROR)
-    return
-  end
-
-  local exec_run = require("poste-db.exec_run")
-  local job_id = exec_run.run_async(sql, {
-    conn_url = url,
-    mode = "greedy",
-  }, {
-    on_response = function(resp)
-      local ok_body, body = pcall(vim.json.decode, resp.body or "{}")
-      if not ok_body or type(body) ~= "table" then
-        body = {}
-      end
-      local errors = {}
-      if body.results then
-        for _, result in ipairs(body.results) do
-          if result.error and result.error ~= "" then
-            table.insert(errors, result.error)
-          end
-        end
-      end
-      if resp.has_error or body.has_error or #errors > 0 then
-        local msg = table.concat(errors, "\n")
-        if msg == "" then msg = "Unknown SQL error" end
-        vim.notify("Database create failed:\n" .. msg, vim.log.levels.ERROR)
-      else
-        notify.info("Database created successfully")
-      end
-      refresh_target(opts and opts.target_node or nil, context)
-    end,
-    on_error = function(message)
-      vim.notify("Database creation failed: " .. message, vim.log.levels.ERROR)
-    end,
+  util.run_ddl_and_refresh(sql, conn_name, context, {
+    pending_msg = "Creating database...",
+    success_msg = "Database created successfully",
+    fail_prefix = "Database create",
+    target_node = opts and opts.target_node or nil,
+    node_type = "connection",
   })
-
-  if not job_id or job_id <= 0 then
-    vim.notify("Database create: failed to start poste process", vim.log.levels.ERROR)
-  end
-end
-
-refresh_target = function(target_node, context)
-  local parent = target_node
-  while parent and parent.node_type ~= "connection" do
-    parent = parent.parent
-  end
-  if not parent then return end
-
-  parent.children = nil
-  parent.expanded = false
-  parent.loading = true
-
-  local nm = tree.render_tree(context.browser_buf, context.line_to_node,
-    context.root_nodes, context.conn_label)
-  for i, n in ipairs(nm) do context.line_to_node[i] = n end
-
-  local search_dir = vim.fn.getcwd()
-  async.fetch_children(parent, function()
-    parent.expanded = true
-    vim.schedule(function()
-      local nm2 = tree.render_tree(context.browser_buf, context.line_to_node,
-        context.root_nodes, context.conn_label)
-      for i, n in ipairs(nm2) do context.line_to_node[i] = n end
-    end)
-  end, search_dir)
 end
 
 function M.open(node, context)

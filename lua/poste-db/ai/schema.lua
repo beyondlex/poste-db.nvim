@@ -17,17 +17,7 @@ local function cache_key(scope)
   return (scope.connection or "?") .. "/" .. (scope.database or "(default)")
 end
 
---- Introspect via the poste binary; cb(items_or_nil).
-local function introspect(conn, kind, table_name, db, cb)
-  local async = require("poste-db.db_browser.async")
-  async.run_introspect(conn, kind, nil, table_name, db, function(parsed)
-    if type(parsed) == "table" and type(parsed.items) == "table" then
-      cb(parsed.items)
-    else
-      cb(nil)
-    end
-  end, vim.fn.getcwd())
-end
+local introspect = require("poste-db.ai.introspect").run
 
 local function pattern_esc(s)
   return (s:lower():gsub("[%W]", "%%%1"))
