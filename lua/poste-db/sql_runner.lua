@@ -44,6 +44,28 @@ local function stmt_indicator_line(buf_lines, line_nr, next_start, max_end)
 end
 
 
+--- True when the first real statement of `sql` is DDL (CREATE/ALTER/DROP/
+--- TRUNCATE/RENAME). Leading `-- @connection` directives, `###` section
+--- markers, blank lines and comment lines are skipped before inspecting the
+--- keyword, because buf_content (and visual blocks) carry that noise.
+--- @param sql string|nil
+--- @return boolean
+local function is_ddl(sql)
+  if not sql then return false end
+  for _, ln in ipairs(vim.split(sql, "\n", { plain = true })) do
+    local t = ln:match("^%s*(.*)%s*$") or ""
+    if t ~= "" and not t:match("^%-%-") and not t:match("^###") then
+      return t:match("^CREATE%s") ~= nil
+        or t:match("^ALTER%s") ~= nil
+        or t:match("^DROP%s") ~= nil
+        or t:match("^TRUNCATE%s") ~= nil
+        or t:match("^RENAME%s") ~= nil
+    end
+  end
+  return false
+end
+
+
 --- Install keymaps for this SQL buffer (one-time setup).
 function M.ensure_sql_keymaps(buf)
   if buf == 0 then buf = vim.api.nvim_get_current_buf() end
@@ -336,14 +358,24 @@ function M.run_sql_request()
       state.last_response = parsed
       entry.elapsed_ms = tonumber(parsed.latency_ms) or 0
 
-      local function is_ddl(sql)
-        if not sql then return false end
-        local s = sql:match("^%s*(.-)%s*$") or ""
-        return s:match("^%s*CREATE%s") or s:match("^%s*ALTER%s") or s:match("^%s*DROP%s")
-          or s:match("^%s*TRUNCATE%s") or s:match("^%s*RENAME%s")
-      end
-      if is_ddl(buf_content) then
+      -- DDL detection: buf_content (and visual blocks) may carry leading
+      -- directives (`-- @connection`), `###` section markers, blank and
+      -- comment lines, so inspect the first real statement's keyword instead
+      -- of anchoring the regex at the start of the whole blob.
+      if is_ddl(stmt_sql_raw or buf_content) then
         require("poste-db.completion.data").clear_cache()
+        -- Semantic diagnostics cache the introspected schema; a DDL may have
+        -- created/renamed/dropped tables, so invalidate and re-check so the
+        -- new tables are no longer reported as "not found".
+        local ok_sem, sem = pcall(require, "poste-db.semantic_diagnostics")
+        if ok_sem then
+          sem.invalidate(sql_state.context.connection, sql_state.context.database)
+          vim.schedule(function()
+            if vim.api.nvim_buf_is_valid(src_buf) then
+              sem.update(src_buf)
+            end
+          end)
+        end
       end
 
       sql_context.handle_use_statement(parsed)
@@ -540,6 +572,6 @@ function M.get_exec_seq()
   return exec_seq
 end
 
-M._test = statement._test
+M._test = vim.tbl_extend("force", statement._test, { is_ddl = is_ddl })
 
 return M

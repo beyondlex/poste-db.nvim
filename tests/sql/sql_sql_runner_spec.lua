@@ -34,6 +34,7 @@ package.loaded["poste-db.statement"] = {
   find_stmt_lines = function() end,
   get_stmt_sql = function() end,
   extract_table_name = function() end,
+  _test = {},
 }
 package.loaded["poste-db.introspect"] = { show_table_ddl = function() end }
 package.loaded["poste-db.format"] = { format_dataset = function() end, format_error = function() end, plan_resultset_layout = function() end, render_page = function() end, format_resultset = function() end }
@@ -67,6 +68,32 @@ describe("sql_runner ensure_sql_keymaps", function()
     end
     runner.ensure_sql_keymaps(buf)
     assert.equals(0, get_keymap_calls)
+  end)
+end)
+
+describe("sql_runner is_ddl", function()
+  it("detects DDL with leading @connection directive and ### marker", function()
+    assert.is_true(runner._test.is_ddl("-- @connection blog\n###\nCREATE TABLE three_kingdoms_characters (id INT);"))
+  end)
+
+  it("detects CREATE/ALTER/DROP/TRUNCATE/RENAME", function()
+    assert.is_true(runner._test.is_ddl("CREATE TABLE t (id INT);"))
+    assert.is_true(runner._test.is_ddl("ALTER TABLE t ADD COLUMN c INT;"))
+    assert.is_true(runner._test.is_ddl("DROP TABLE t;"))
+    assert.is_true(runner._test.is_ddl("TRUNCATE TABLE t;"))
+    assert.is_true(runner._test.is_ddl("RENAME TABLE a TO b;"))
+  end)
+
+  it("rejects DML and reads", function()
+    assert.is_false(runner._test.is_ddl("SELECT * FROM t;"))
+    assert.is_false(runner._test.is_ddl("INSERT INTO t VALUES (1);"))
+    assert.is_false(runner._test.is_ddl("UPDATE t SET c = 1;"))
+    assert.is_false(runner._test.is_ddl(nil))
+  end)
+
+  it("ignores leading comment and blank lines", function()
+    assert.is_true(runner._test.is_ddl("-- note\n\n   DROP TABLE t;"))
+    assert.is_false(runner._test.is_ddl("-- note\nSELECT 1;"))
   end)
 end)
 

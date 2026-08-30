@@ -458,6 +458,29 @@ function M.clear(buf)
   _pending_checks[buf] = nil
 end
 
+--- Invalidate the cached schema after DDL (CREATE/ALTER/DROP/TRUNCATE/RENAME).
+--- Clears the cache entry for the connection/database so the next M.update()
+--- re-introspects and picks up newly created tables. When db is nil/empty the
+--- whole connection's cached databases are dropped.
+--- @param conn string|nil connection name
+--- @param db string|nil database name
+function M.invalidate(conn, db)
+  if not conn or conn == "" then
+    _schema_cache = {}
+    return
+  end
+  if db and db ~= "" then
+    _schema_cache[conn .. "/" .. db] = nil
+    return
+  end
+  local prefix = conn .. "/"
+  for k in pairs(_schema_cache) do
+    if k:sub(1, #prefix) == prefix then
+      _schema_cache[k] = nil
+    end
+  end
+end
+
 function M.update(buf)
   if _updating then return end
   _updating = true
@@ -647,6 +670,15 @@ end
 M._test = {
   extract_references_from_node = extract_references_from_node,
   is_catalog_ref = is_catalog_ref,
+  invalidate = M.invalidate,
+  cache_keys = function()
+    local keys = {}
+    for k in pairs(_schema_cache) do keys[#keys + 1] = k end
+    return keys
+  end,
+  set_cache = function(key, value)
+    _schema_cache[key] = value
+  end,
 }
 
 return M
