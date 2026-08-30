@@ -59,6 +59,8 @@ function M.get_error_buffer()
   local opts = { buffer = D.error_buffer, noremap = true, silent = true }
   local k = config.get_keymap("sql_dataset", "close", "q")
   if k then vim.keymap.set("n", k, function() M.close() end, opts) end
+  k = config.get_keymap("sql_dataset", "ask_ai", "a")
+  if k then vim.keymap.set("n", k, function() require("poste-db.ai").ask_last_error() end, opts) end
 
   return D.error_buffer
 end
@@ -187,6 +189,10 @@ function M.get_dataset_buffer()
   k = config.get_keymap("sql_dataset", "history_prev", "<leader>b")
   if k then
     vim.keymap.set("n", k, function() M.history_prev() end, opts)
+  end
+  k = config.get_keymap("sql_dataset", "ask_ai", "a")
+  if k then
+    vim.keymap.set("n", k, function() require("poste-db.ai").ask_view() end, opts)
   end
 
   -- Prevent dataset buffer from being replaced in its window

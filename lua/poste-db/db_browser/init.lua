@@ -289,6 +289,14 @@ local function setup_browser_buffer()
     vim.keymap.set("n", k, function() require("poste-db.help").open() end, opts)
   end
 
+  k = config.get_keymap("sql_db_browser", "ask_ai", "a")
+  if k then
+    vim.keymap.set("n", k, function()
+      local node = tree.get_node_at_line(line_to_node, vim.fn.line("."))
+      require("poste-db.ai").ask_node(node)
+    end, opts)
+  end
+
   -- Multi-select: Tab toggles selection on table nodes
   k = config.get_keymap("sql_db_browser", "multi_select_toggle", "<Tab>")
   if k then

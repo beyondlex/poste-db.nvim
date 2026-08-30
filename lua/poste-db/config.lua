@@ -33,6 +33,7 @@ M.defaults = {
     },
     sql_dataset = {
       close = "q",
+      ask_ai = "a",
       move_left = "h",
       move_down = "j",
       move_up = "k",
@@ -89,6 +90,7 @@ M.defaults = {
       search_prev = "N",
       help = "g?",
       table_info = "i",
+      ask_ai = "a",
     },
     sql_introspect = {
       close = "q",

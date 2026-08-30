@@ -549,6 +549,15 @@ end
     vim.schedule(function()
       if current_seq < exec_seq then return end
       entry.error = true
+      -- retained for the AI chat's "ask about this error" action
+      local err_ctx = require("poste-db.context").resolve_full_context(src_buf, #buf_lines)
+      sql_state.last_error = {
+        message = tostring(message),
+        sql = stmt_sql_raw or buf_content,
+        connection = err_ctx.connection,
+        database = err_ctx.database,
+        at = os.time(),
+      }
       indicators.set_indicator(src_buf, (stmt_end or first_line) - 1, "error")
       vim.notify(message, vim.log.levels.ERROR, { title = "PosteDb" })
       local lines = sql_format.format_error(message, sql_state.context.connection or "")

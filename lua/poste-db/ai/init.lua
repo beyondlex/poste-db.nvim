@@ -85,6 +85,154 @@ function M.ask_selection()
   window.focus_input(true)
 end
 
+--- Scope the chat to a connection/database pair (icons follow the browser's).
+local function scope_chat_target(connection, database)
+  local ok_s, scope = pcall(require, "poste-ai.chat.scope")
+  if not ok_s or not connection then return end
+  local ok_i, icons = pcall(require, "poste-db.db_browser.icons")
+  local conn_icon = ok_i and icons.ICONS.connection or nil
+  local db_icon = ok_i and icons.ICONS.database or nil
+  scope.set("connection", connection, conn_icon)
+  if database then scope.set("database", database, db_icon) end
+end
+
+--- `a` on an error view: prefill the chat with the failed SQL + error
+--- message and scope the chat to the failing target.
+function M.ask_last_error()
+  if not M.available() then
+    vim.notify("PosteDb AI chat needs poste-ai.nvim (beyondlex/poste-ai.nvim) installed.",
+      vim.log.levels.WARN, { title = "PosteDb" })
+    return
+  end
+  local err = require("poste-db.state").last_error
+  if not err or not err.message then
+    vim.notify("no failed execution to ask about", vim.log.levels.INFO, { title = "PosteDb" })
+    return
+  end
+  scope_chat_target(err.connection, err.database)
+  local text = table.concat({
+    "This SQL failed — help me fix it:",
+    "```sql",
+    err.sql or "",
+    "```",
+    "Error:",
+    "```",
+    tostring(err.message),
+    "```",
+  }, "\n")
+  M.open_chat()
+  local window = require("poste-ai.chat.window")
+  window.set_input_text(text)
+  window.focus_input(true)
+end
+
+--- `a` on a resultset view: send the last result set (truncated to 20 rows)
+--- as a markdown table into the chat, with the query that produced it.
+function M.ask_resultset()
+  if not M.available() then
+    vim.notify("PosteDb AI chat needs poste-ai.nvim (beyondlex/poste-ai.nvim) installed.",
+      vim.log.levels.WARN, { title = "PosteDb" })
+    return
+  end
+  local data = require("poste-db.state").last_dataset
+  if not data or data.type ~= "resultset" or not data.results or #data.results == 0 then
+    vim.notify("no resultset to ask about", vim.log.levels.INFO, { title = "PosteDb" })
+    return
+  end
+  local res = data.results[1]
+  local cols = {}
+  for _, c in ipairs(res.columns or {}) do cols[#cols + 1] = c.name or "?" end
+  local rows = res.rows or {}
+  if #cols == 0 or #rows == 0 then
+    vim.notify("the result set is empty", vim.log.levels.INFO, { title = "PosteDb" })
+    return
+  end
+
+  local MAX_ROWS = 20
+  local function row_line(cells) return "| " .. table.concat(cells, " | ") .. " |" end
+  local out = { row_line(cols) }
+  local seps = {}
+  for _ in ipairs(cols) do seps[#seps + 1] = "---" end
+  out[#out + 1] = row_line(seps)
+  for i = 1, math.min(#rows, MAX_ROWS) do
+    local cells = {}
+    for j = 1, #cols do
+      local v = rows[i][j]
+      local s = (v == nil and "NULL" or tostring(v)):gsub("[|\n]", " ")
+      if #s > 60 then s = s:sub(1, 57) .. "..." end
+      cells[#cells + 1] = s
+    end
+    out[#out + 1] = row_line(cells)
+  end
+  if #rows > MAX_ROWS then
+    out[#out + 1] = ("(%d of %d rows shown)"):format(MAX_ROWS, #rows)
+  end
+
+  local text = "Help me interpret this result set:\n\n" .. table.concat(out, "\n")
+  local sql = res.original_sql or res.translated_sql
+  if not sql or sql == "" then
+    local ok_nav, nav_state = pcall(require, "poste-db.buffer.nav_state")
+    local tab = ok_nav and nav_state.get_resultset_data_tab() or nil
+    sql = tab and tab.original_sql or nil
+  end
+  if sql and sql ~= "" then
+    text = text .. "\n\nThe query was:\n```sql\n" .. sql .. "\n```"
+  end
+  M.open_chat()
+  local window = require("poste-ai.chat.window")
+  window.set_input_text(text)
+  window.focus_input(true)
+end
+
+--- `a` in the dataset/error view: ask the AI about what is shown — the last
+--- failure when the error view is up (or one exists), otherwise the result set.
+function M.ask_view()
+  local state_sql = require("poste-db.state")
+  local D = require("poste-db.dataset")
+  if D.error_buffer and vim.api.nvim_get_current_buf() == D.error_buffer then
+    return M.ask_last_error()
+  end
+  if state_sql.last_dataset and state_sql.last_dataset.type == "resultset" then
+    return M.ask_resultset()
+  end
+  if state_sql.last_error then return M.ask_last_error() end
+  vim.notify("nothing to ask about — run a query first", vim.log.levels.INFO, { title = "PosteDb" })
+end
+
+--- `a` in the db browser: ask the AI about the node's table/database via an
+--- @mention, pre-filling the chat input.
+--- @param node table|nil browser node ({ node_type, name, meta })
+function M.ask_node(node)
+  if not M.available() then
+    vim.notify("PosteDb AI chat needs poste-ai.nvim (beyondlex/poste-ai.nvim) installed.",
+      vim.log.levels.WARN, { title = "PosteDb" })
+    return
+  end
+  if not node then return end
+  local meta = node.meta or {}
+  local conn = meta.connection
+  local db = meta.database
+  local mention = nil
+  if node.node_type == "table" and conn and db then
+    mention = conn .. "/" .. db .. "/" .. node.name
+  elseif node.node_type == "database" and conn then
+    mention = conn .. "/" .. node.name
+  elseif node.node_type == "schema" and conn and db then
+    mention = conn .. "/" .. db
+  elseif node.node_type == "connection" and conn and (db or meta.database) then
+    mention = conn .. "/" .. (db or meta.database)
+  end
+  if not mention then
+    vim.notify("put the cursor on a table or database node to ask the AI",
+      vim.log.levels.INFO, { title = "PosteDb" })
+    return
+  end
+  M.open_chat()
+  local window = require("poste-ai.chat.window")
+  window.set_input_text("@" .. mention .. " ")
+  window.focus_input(true)
+end
+
 M._test = { available = M.available }
 
 return M
