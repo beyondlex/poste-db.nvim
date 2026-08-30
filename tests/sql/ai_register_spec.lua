@@ -66,6 +66,7 @@ describe("poste-db.ai integration", function()
     assert.is_function(spec.mention.match)
     assert.is_function(spec.mention.resolve)
     assert.is_function(spec.codeblock.execute)
+    assert.is_function(spec.codeblock.append_header)
     -- the mention bridge routes to poste-db.ai.mentions
     local ref = spec.mention.match("my-blog/blog")
     assert.is_not_nil(ref)

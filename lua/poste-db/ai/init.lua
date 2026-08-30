@@ -39,6 +39,9 @@ function M.register()
       execute = function(sql, refs, cb)
         require("poste-db.ai.actions").execute_sql(sql, refs, cb)
       end,
+      append_header = function(scope, text)
+        return require("poste-db.ai.actions").append_header(scope, text)
+      end,
     },
   })
   return true

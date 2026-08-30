@@ -33,6 +33,24 @@ function M.confirm_sql(sql)
   return choice == 1
 end
 
+--- Header directive lines for appending an AI-authored block into a SQL
+--- buffer (poste-ai's `ga` action) — binds the block to the chat scope set
+--- with /connections and /databases. Nil when no connection is bound or the
+--- block already carries a @connection directive (the model may emit one).
+--- @param scope table|nil chat scope snapshot
+--- @param text string block text
+--- @return string[]|nil
+function M.append_header(scope, text)
+  local conn = scope and scope.connection
+  if not conn then return nil end
+  if text and text:match("%-%-%s*@connection") then return nil end
+  local lines = { "-- @connection " .. conn }
+  if scope.database then
+    lines[#lines + 1] = "-- @database " .. scope.database
+  end
+  return lines
+end
+
 --- Strip a leading `-- @connection x` directive the model may have copied in.
 local function strip_directives(sql)
   return (sql:gsub("^%s*%-%-%s*@connection%s+%S+%s*\n?", "")
@@ -131,6 +149,7 @@ M._test = {
   is_readonly = M.is_readonly,
   resolve_target = M.resolve_target,
   strip_directives = strip_directives,
+  append_header = M.append_header,
 }
 
 return M

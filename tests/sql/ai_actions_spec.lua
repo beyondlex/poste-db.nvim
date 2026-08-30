@@ -138,6 +138,37 @@ describe("poste-db.ai.actions", function()
     end)
   end)
 
+  describe("append_header", function()
+    local scope
+    before_each(function()
+      local ok, s = pcall(require, "poste-ai.chat.scope")
+      scope = ok and s or nil
+    end)
+    after_each(function()
+      if scope then scope.clear() end
+    end)
+
+    it("builds @connection/@database directives from the chat scope", function()
+      local lines = actions._test.append_header({ connection = "my-blog", database = "blog" }, "SELECT 1")
+      assert.are.same({ "-- @connection my-blog", "-- @database blog" }, lines)
+    end)
+
+    it("omits @database when unbound", function()
+      local lines = actions._test.append_header({ connection = "my-blog" }, "SELECT 1")
+      assert.are.same({ "-- @connection my-blog" }, lines)
+    end)
+
+    it("returns nil without a connection binding", function()
+      assert.is_nil(actions._test.append_header({}, "SELECT 1"))
+      assert.is_nil(actions._test.append_header(nil, "SELECT 1"))
+    end)
+
+    it("returns nil when the block already carries a directive", function()
+      assert.is_nil(actions._test.append_header(
+        { connection = "my-blog" }, "-- @connection other\nSELECT 1"))
+    end)
+  end)
+
   describe("execute_sql", function()
     local captured
     local real_executor = package.loaded["poste-db.executor"]
