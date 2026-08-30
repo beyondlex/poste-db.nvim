@@ -13,7 +13,7 @@ Independent SQL plugin for Poste. Depends on [poste.nvim](https://github.com/bey
 - `.opencode/skills/sql/` and `.opencode/skills/sql-completion/` for agent context
 - Harness order:
   1. `.opencode/skills/sql-preflight-harness/SKILL.md`
-  2. one specialized harness if needed
+  2. one specialized harness if needed — `sql-audit-harness` when auditing/reviewing code or acting on an audit's findings
   3. `sql-test-harness` when adding or hardening tests
   4. `sql-architecture-harness` when the code shape is the problem
   5. `sql-refactor-harness`, `sql-nav-harness`, or `sql-introspect-harness` when the task matches that area
@@ -61,6 +61,17 @@ Without the forward declaration, `local function B() ... end` creates a new loca
 is only visible *after* its definition, and A will capture `nil`. This is a Lua lexical scoping
 rule — `local` bindings are not hoisted.
 
+The same rule bites when demoting `M.x` to a local: a call site hundreds of lines above the
+definition resolves to global `nil` (happened with `format.lua`'s `normalize_type`). Grep every
+call site first; forward-declare or move the definition above the first use.
+
+### `and f() or f` is not a ternary
+
+`cond and f() or f` falls back to `f` whenever `f()` returns `nil` or `false` — the middle value
+is lost. This passed a raw function to `nvim_set_hl` in `db_browser/theme.lua` when a spec
+function legitimately returned nil ("skip this group"). When the middle expression can be
+nil/false, write an explicit `if`.
+
 ## References
 
 | Want | Go to |
@@ -68,7 +79,7 @@ rule — `local` bindings are not hoisted.
 | **Shared infra (state, cli, select, indicators, buffer_setup, help, etc.)** | `../poste.nvim/lua/poste/` |
 | **Rust CLI (crates, build system)** | `../poste.nvim/crates/` |
 | **AI chat generic layer (chat UI, SSE, markdown, context API)** | `../poste-ai.nvim/lua/poste-ai/` + `docs/dev/sql/ai-chat.md` |
-| **Preflight / test / architecture / refactor / nav / introspect harnesses** | `.opencode/skills/` |
+| **Preflight / audit / test / architecture / refactor / nav / introspect harnesses** | `.opencode/skills/` |
 | Completion rules | `.opencode/skills/sql-completion/SKILL.md` |
 | Build & test | `tests/run.sh` |
 | Agent learnings | `LEARNINGS.md` |
