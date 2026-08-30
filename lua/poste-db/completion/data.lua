@@ -272,11 +272,77 @@ local function resolve_conn_url(conn)
 end
 
 ---------------------------------------------------------------------------
--- Lazy fetch tables
+-- Shared introspect-fetch scaffold
 ---------------------------------------------------------------------------
 
-local fetching_tables = {}
-local tables_callbacks = {}
+-- In-flight/callback registries shared by all ensure_* fetchers. Keys are
+-- namespaced per fetcher ("tables:", "dbs:", ...) so unrelated fetches never
+-- collide even when their cache keys do.
+local fetching = {}
+local callbacks = {}
+
+--- Run every queued callback for `key` synchronously (pre-job failure paths).
+local function flush_now(key, value)
+  fetching[key] = false
+  local cbs = callbacks[key] or {}
+  callbacks[key] = nil
+  for _, cb in ipairs(cbs) do cb(value) end
+end
+
+--- Run every queued callback for `key` on the next scheduler tick. Marks the
+--- fetch finished synchronously so on_exit skips an already-flushed job.
+local function flush_scheduled(key, value)
+  fetching[key] = false
+  vim.schedule(function()
+    local cbs = callbacks[key] or {}
+    callbacks[key] = nil
+    for _, cb in ipairs(cbs) do cb(value) end
+  end)
+end
+
+local function queue_cb(key, cb)
+  callbacks[key] = callbacks[key] or {}
+  table.insert(callbacks[key], cb)
+end
+
+--- Resolve the binary + connection URL every fetcher needs; flushes `key`
+--- with `fail_value` and returns nil when either is missing.
+local function resolve_fetch_target(key, connection, fail_value)
+  local binary = M.find_binary()
+  if not binary then flush_now(key, fail_value); return nil end
+  local url = resolve_conn_url(connection)
+  if not url then flush_now(key, fail_value); return nil end
+  return binary, url
+end
+
+--- Start one `poste introspect` job. stdout is epoch-guarded, trimmed, JSON
+--- decoded and handed to on_items(items_or_nil, flush); on_items must call
+--- flush(value) exactly once to run the queued callbacks. A fetch still
+--- pending at exit time (empty stdout or non-zero exit) is flushed with
+--- `exit_default` instead of hanging forever.
+local function start_introspect_job(key, args, on_items, exit_default)
+  local epoch = cache_epoch
+  vim.fn.jobstart(args, {
+    stdout_buffered = true,
+    on_stdout = function(_, data)
+      if not data or epoch ~= cache_epoch then return end
+      while #data > 0 and data[#data] == "" do data[#data] = nil end
+      if #data == 0 then return end
+      local ok, parsed = pcall(vim.json.decode, table.concat(data, "\n"))
+      local items = (ok and parsed and parsed.items) and parsed.items or nil
+      on_items(items, function(value) flush_scheduled(key, value) end)
+    end,
+    on_exit = function(_, _code)
+      if fetching[key] then
+        flush_scheduled(key, exit_default)
+      end
+    end,
+  })
+end
+
+---------------------------------------------------------------------------
+-- Lazy fetch tables
+---------------------------------------------------------------------------
 
 function M.ensure_tables(callback)
   local key = M.conn_key()
@@ -288,30 +354,17 @@ function M.ensure_tables(callback)
 
   if cache[key] and #cache[key].tables > 0 then callback(); return end
 
-  if fetching_tables[key] then
-    tables_callbacks[key] = tables_callbacks[key] or {}
-    table.insert(tables_callbacks[key], callback)
+  local fkey = "tables:" .. key
+  if fetching[fkey] then
+    queue_cb(fkey, callback)
     return
   end
 
-  fetching_tables[key] = true
-  tables_callbacks[key] = { callback }
+  fetching[fkey] = true
+  callbacks[fkey] = { callback }
 
-  local binary = M.find_binary()
-  if not binary then
-    fetching_tables[key] = false
-    for _, cb in ipairs(tables_callbacks[key] or {}) do cb() end
-    tables_callbacks[key] = nil
-    return
-  end
-
-  local url = resolve_conn_url(ctx.connection)
-  if not url then
-    fetching_tables[key] = false
-    for _, cb in ipairs(tables_callbacks[key] or {}) do cb() end
-    tables_callbacks[key] = nil
-    return
-  end
+  local binary, url = resolve_fetch_target(fkey, ctx.connection, nil)
+  if not binary then return end
 
   local args = { binary, "introspect", "--connection-url", url,
     "--type", "tables" }
@@ -319,34 +372,13 @@ function M.ensure_tables(callback)
     vim.list_extend(args, { "--database", ctx.database })
   end
 
-  local epoch = cache_epoch
-  vim.fn.jobstart(args, {
-    stdout_buffered = true,
-    on_stdout = function(_, data)
-      if not data or epoch ~= cache_epoch then return end
-      while #data > 0 and data[#data] == "" do data[#data] = nil end
-      if #data == 0 then return end
-      local ok, parsed = pcall(vim.json.decode, table.concat(data, "\n"))
-      if ok and parsed and parsed.items then
-        cache[key] = cache[key] or { tables = {}, columns = {} }
-        cache[key].tables = vim.tbl_map(function(i) return i.name end, parsed.items)
-      end
-      fetching_tables[key] = false
-      vim.schedule(function()
-        for _, cb in ipairs(tables_callbacks[key] or {}) do cb() end
-        tables_callbacks[key] = nil
-      end)
-    end,
-    on_exit = function(_, code)
-      fetching_tables[key] = false
-      if code ~= 0 then
-        vim.schedule(function()
-          for _, cb in ipairs(tables_callbacks[key] or {}) do cb() end
-          tables_callbacks[key] = nil
-        end)
-      end
-    end,
-  })
+  start_introspect_job(fkey, args, function(items, flush)
+    if items then
+      cache[key] = cache[key] or { tables = {}, columns = {} }
+      cache[key].tables = vim.tbl_map(function(i) return i.name end, items)
+    end
+    flush()
+  end, nil)
 end
 
 --- CLI flag used to scope a table list to a `db.`/`schema.` prefix such as
@@ -372,33 +404,19 @@ function M.ensure_tables_for_db(db_name, callback)
   end
 
   local db_cache_key = key .. "/db:" .. db_name
-
   if cache[db_cache_key] and #cache[db_cache_key].tables > 0 then callback(); return end
 
-  if fetching_tables[db_cache_key] then
-    tables_callbacks[db_cache_key] = tables_callbacks[db_cache_key] or {}
-    table.insert(tables_callbacks[db_cache_key], callback)
+  local fkey = "tables-db:" .. db_cache_key
+  if fetching[fkey] then
+    queue_cb(fkey, callback)
     return
   end
 
-  fetching_tables[db_cache_key] = true
-  tables_callbacks[db_cache_key] = { callback }
+  fetching[fkey] = true
+  callbacks[fkey] = { callback }
 
-  local binary = M.find_binary()
-  if not binary then
-    fetching_tables[db_cache_key] = false
-    for _, cb in ipairs(tables_callbacks[db_cache_key] or {}) do cb() end
-    tables_callbacks[db_cache_key] = nil
-    return
-  end
-
-  local url = resolve_conn_url(ctx.connection)
-  if not url then
-    fetching_tables[db_cache_key] = false
-    for _, cb in ipairs(tables_callbacks[db_cache_key] or {}) do cb() end
-    tables_callbacks[db_cache_key] = nil
-    return
-  end
+  local binary, url = resolve_fetch_target(fkey, ctx.connection, nil)
+  if not binary then return end
 
   local flag = M.tables_db_flag(nil)
   if ctx.connection then
@@ -412,111 +430,55 @@ function M.ensure_tables_for_db(db_name, callback)
   local args = { binary, "introspect", "--connection-url", url,
     "--type", "tables", flag, db_name }
 
-  local epoch = cache_epoch
-  vim.fn.jobstart(args, {
-    stdout_buffered = true,
-    on_stdout = function(_, data)
-      if not data or epoch ~= cache_epoch then return end
-      while #data > 0 and data[#data] == "" do data[#data] = nil end
-      if #data == 0 then return end
-      local ok, parsed = pcall(vim.json.decode, table.concat(data, "\n"))
-      if ok and parsed and parsed.items then
-        cache[db_cache_key] = cache[db_cache_key] or { tables = {}, columns = {} }
-        cache[db_cache_key].tables = vim.tbl_map(function(i) return i.name end, parsed.items)
-      end
-      fetching_tables[db_cache_key] = false
-      vim.schedule(function()
-        for _, cb in ipairs(tables_callbacks[db_cache_key] or {}) do cb() end
-        tables_callbacks[db_cache_key] = nil
-      end)
-    end,
-    on_exit = function(_, code)
-      fetching_tables[db_cache_key] = false
-      if code ~= 0 then
-        vim.schedule(function()
-          for _, cb in ipairs(tables_callbacks[db_cache_key] or {}) do cb() end
-          tables_callbacks[db_cache_key] = nil
-        end)
-      end
-    end,
-  })
+  start_introspect_job(fkey, args, function(items, flush)
+    if items then
+      cache[db_cache_key] = cache[db_cache_key] or { tables = {}, columns = {} }
+      cache[db_cache_key].tables = vim.tbl_map(function(i) return i.name end, items)
+    end
+    flush()
+  end, nil)
 end
 
 ---------------------------------------------------------------------------
 -- Lazy fetch databases for current connection
 ---------------------------------------------------------------------------
 
-local fetching_dbs = {}
-local dbs_callbacks = {}
-
 function M.ensure_databases(callback)
   local ctx = M.resolve_current_context()
   if not ctx or not ctx.connection then callback({}); return end
 
   local conn_key_str = ctx.connection
-  if fetching_dbs[conn_key_str] then
-    dbs_callbacks[conn_key_str] = dbs_callbacks[conn_key_str] or {}
-    table.insert(dbs_callbacks[conn_key_str], callback)
-    return
-  end
-
   local cache_key = conn_key_str .. "/__databases__"
   if cache[cache_key] then callback(cache[cache_key]); return end
 
-  fetching_dbs[conn_key_str] = true
-  dbs_callbacks[conn_key_str] = { callback }
-
-  local binary = M.find_binary()
-  if not binary then fetching_dbs[conn_key_str] = false; callback({}); return end
-
-  local url = resolve_conn_url(ctx.connection)
-  if not url then
-    fetching_dbs[conn_key_str] = false
-    for _, cb in ipairs(dbs_callbacks[conn_key_str] or {}) do cb({}) end
-    dbs_callbacks[conn_key_str] = nil
+  local fkey = "dbs:" .. conn_key_str
+  if fetching[fkey] then
+    queue_cb(fkey, callback)
     return
   end
+
+  fetching[fkey] = true
+  callbacks[fkey] = { callback }
+
+  local binary, url = resolve_fetch_target(fkey, ctx.connection, {})
+  if not binary then return end
 
   local args = { binary, "introspect", "--connection-url", url,
     "--type", "databases" }
 
-  local epoch = cache_epoch
-  vim.fn.jobstart(args, {
-    stdout_buffered = true,
-    on_stdout = function(_, data)
-      if not data or epoch ~= cache_epoch then return end
-      while #data > 0 and data[#data] == "" do data[#data] = nil end
-      if #data == 0 then return end
-      local ok, parsed = pcall(vim.json.decode, table.concat(data, "\n"))
-      local names = {}
-      if ok and parsed and parsed.items then
-        names = vim.tbl_map(function(i) return i.name end, parsed.items)
-        cache[cache_key] = names
-      end
-      fetching_dbs[conn_key_str] = false
-      vim.schedule(function()
-        for _, cb in ipairs(dbs_callbacks[conn_key_str] or {}) do cb(names) end
-        dbs_callbacks[conn_key_str] = nil
-      end)
-    end,
-    on_exit = function(_, code)
-      fetching_dbs[conn_key_str] = false
-      if code ~= 0 then
-        vim.schedule(function()
-          for _, cb in ipairs(dbs_callbacks[conn_key_str] or {}) do cb({}) end
-          dbs_callbacks[conn_key_str] = nil
-        end)
-      end
-    end,
-  })
+  start_introspect_job(fkey, args, function(items, flush)
+    local names = {}
+    if items then
+      names = vim.tbl_map(function(i) return i.name end, items)
+      cache[cache_key] = names
+    end
+    flush(names)
+  end, {})
 end
 
 ---------------------------------------------------------------------------
 -- Lazy fetch columns for a single table
 ---------------------------------------------------------------------------
-
-local fetching_cols = {}
-local cols_callbacks = {}
 
 --- Ensure columns for `tbl` are cached, optionally with schema qualification.
 --- schema can be a string or nil. When set, columns are cached and fetched
@@ -552,14 +514,13 @@ function M.ensure_columns(tbl, schema, callback)
     return
   end
 
-  local fkey = key .. "/" .. cache_tbl_key
+  local fkey = "cols:" .. key .. "/" .. cache_tbl_key
 
-  if fetching_cols[fkey] then
+  if fetching[fkey] then
     if compat.opt("debug") then
       vim.notify(string.format("DEBUG: already fetching %s, queuing callback", cache_tbl_key), vim.log.levels.WARN)
     end
-    cols_callbacks[fkey] = cols_callbacks[fkey] or {}
-    table.insert(cols_callbacks[fkey], callback)
+    queue_cb(fkey, callback)
     return
   end
 
@@ -567,23 +528,12 @@ function M.ensure_columns(tbl, schema, callback)
     vim.notify(string.format("DEBUG: starting fetch for %s", cache_tbl_key), vim.log.levels.WARN)
   end
 
-  fetching_cols[fkey] = true
-  cols_callbacks[fkey] = { callback }
+  fetching[fkey] = true
+  callbacks[fkey] = { callback }
 
-  local binary = M.find_binary()
+  local binary, url = resolve_fetch_target(fkey, ctx.connection, nil)
   if not binary then
     if compat.opt("debug") then vim.notify("DEBUG: binary not found!", vim.log.levels.ERROR) end
-    fetching_cols[fkey] = false
-    for _, cb in ipairs(cols_callbacks[fkey] or {}) do cb() end
-    cols_callbacks[fkey] = nil
-    return
-  end
-
-  local url = resolve_conn_url(ctx.connection)
-  if not url then
-    fetching_cols[fkey] = false
-    for _, cb in ipairs(cols_callbacks[fkey] or {}) do cb() end
-    cols_callbacks[fkey] = nil
     return
   end
 
@@ -609,38 +559,17 @@ function M.ensure_columns(tbl, schema, callback)
     vim.list_extend(args, { "--database", db_override })
   end
 
-  local epoch = cache_epoch
-  vim.fn.jobstart(args, {
-    stdout_buffered = true,
-    on_stdout = function(_, data)
-      if not data or epoch ~= cache_epoch then return end
-      while #data > 0 and data[#data] == "" do data[#data] = nil end
-      if #data == 0 then return end
-      local ok, parsed = pcall(vim.json.decode, table.concat(data, "\n"))
-      if ok and parsed and parsed.items then
-        cache[key] = cache[key] or { tables = {}, columns = {} }
-        local cols = {}
-        for _, item in ipairs(parsed.items) do
-          table.insert(cols, item.name)
-        end
-        cache[key].columns[cache_tbl_key] = cols
+  start_introspect_job(fkey, args, function(items, flush)
+    if items then
+      cache[key] = cache[key] or { tables = {}, columns = {} }
+      local cols = {}
+      for _, item in ipairs(items) do
+        table.insert(cols, item.name)
       end
-      fetching_cols[fkey] = false
-      vim.schedule(function()
-        for _, cb in ipairs(cols_callbacks[fkey] or {}) do cb() end
-        cols_callbacks[fkey] = nil
-      end)
-    end,
-    on_exit = function(_, code)
-      if fetching_cols[fkey] then
-        fetching_cols[fkey] = false
-        vim.schedule(function()
-          for _, cb in ipairs(cols_callbacks[fkey] or {}) do cb() end
-          cols_callbacks[fkey] = nil
-        end)
-      end
-    end,
-  })
+      cache[key].columns[cache_tbl_key] = cols
+    end
+    flush()
+  end, nil)
 end
 
 ---------------------------------------------------------------------------
