@@ -240,6 +240,20 @@ nui-components.nvim（grapp-dev，构建于 nui.nvim 之上）提供：Layout、
 
 - **P-B（状态单一真相源）降级为"暂不做"**：动工前逐点复核推翻了初版审计的"结构性漂移"判断——双写仅 3 处且同步点正确（详见第 5 节第 1 条）。
 
+### 批次 6 — sql_runner 响应处理拆分（P-D ✅）
+
+- `run_sql_request` 保留编排（语句提取、守卫、history、上下文解析、session/exec-file 路由），响应与错误处理拆到 `sql_runner/response.lua` 的 `handle`/`handle_error`。所有请求级变量经显式 `deps` 表传入（`exec_seq` 以 getter 传入），搬移的代码不再闭包捕获任何请求局部变量；`stmt_indicator_line` 与 `is_ddl` 随迁（后者经 `_test` 继续导出）。`run_sql_request` 457 → 255 行，纯搬移无行为变化。
+
+### 批次 7 — 补全内省抓取脚手架合一（P-E 部分 ✅）
+
+- `completion/data.lua` 的 4 份 `ensure_*`（tables / tables_for_db / databases / columns）各自复制的 in-flight 去重 + 回调队列 + epoch 守卫 + jobstart 机制收敛为 `start_introspect_job` + flush/queue 助手，抓取键按 fetcher 加命名空间（`tables:`/`dbs:`/`cols:`）防止统一注册表后键冲突。统一采用 ensure_columns 的退出语义，顺带修复另外三个抓取器「job 以 0 退出且 stdout 为空时回调永久悬挂」的潜在缺陷（-71 行）。
+- **未做**：补全热路径的同步 `vim.system:wait()`（completion/init.lua）改真异步——这会改变 blink.cmp 集成语义，需要独立的设计 session 与真实击键验证，不宜在本轮顺手做。
+
+### 批次 8 — db_browser 高亮主题所有者（P-F 部分 ✅）
+
+- 新增 `db_browser/theme.lua`：7 个模块各自手写的「定义组 + `apply_highlight_overrides` + ColorScheme autocmd」三件套收敛为一次 `theme.register()` 声明；注册项接受映射或函数（每次 apply 求值，icons 的明暗双调色板）、spec 可为返回 nil 跳过的函数（operations 保留"先定义者生效"语义，不覆盖主题色）。flash 的组顺带获得此前后缺失的用户 override 支持；6 个模块的 `poste.state` require 随之移除。
+- **未做**：`forms.lua` 退役并入 `forms_advanced`——这是改用户可见 UX（Modify Column / New Column / Set Default 三个对话框换框架），headless 测试覆盖不到焦点/编辑流，需要真实会话验证后单独执行。
+
 ---
 
 ## 5. 未实施但已论证的项（按收益排序）
@@ -261,9 +275,9 @@ nui-components.nvim（grapp-dev，构建于 nui.nvim 之上）提供：Layout、
 | P-A ✅（2026-08-30） | UI 原语统一 + 泄漏修复 + 死代码清场 | 8 处浮窗走单一原语；渲染不泄漏 autocmd；`tests/run.sh` 绿 |
 | P-B | ~~状态单一真相源~~ **修订：暂不做**（复核后双写受控，见第 5 节第 1 条） | — |
 | P-C ✅（2026-08-30） | db_browser 树收权：刷新舞步 + line_map 收敛到 util | 刷新舞步唯一实现（init.lua 的 owner 路径除外）；`tests/run.sh` 绿 |
-| P-D | sql_runner 拆分（第 5 节 3）：`on_response` 多 tab 渲染循环 → 独立模块，entry 只留编排 | `run_sql_request` < 150 行且只做编排；response 渲染独立可测。**注意**：on_response/on_error 内含刚调过的指示器放置逻辑（stmt_indicator_line/block_result_line），拆分须以其测试为护栏单独成 session |
-| P-E | 异步收敛 + 补全热路径去同步（第 5 节 4/6） | 唯一 job 入口带 epoch/超时；补全触发无阻塞 `:wait()` |
-| P-F | 表单框架合一（视 P-A 后的残留量决定是否引入可选 nui-components 后端） | forms.lua 退役，forms_advanced 独立承担；`M.open` < 100 行 |
+| P-D ✅（2026-08-30） | sql_runner 拆分：响应处理 → `sql_runner/response.lua` | `run_sql_request` 457→255 行只做编排；deps 显式传参零闭包捕获；套件绿 |
+| P-E ◐（2026-08-30） | 补全内省脚手架已合一（顺带修 3 处悬挂）；**热路径去同步未做** | 待独立设计 session：`vim.system:wait()` 改真异步涉及 blink 集成语义 |
+| P-F ◐（2026-08-30） | 高亮主题所有者已落地（7 模块）；**forms.lua 退役未做** | 待真实会话验证 UX 后迁移 operations 的 3 个对话框 |
 
 ---
 
