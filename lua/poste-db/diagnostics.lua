@@ -7,6 +7,7 @@ local ts_stmt = require("poste-db.ts_stmt")
 local context = require("poste-db.context")
 local connections = require("poste-db.connections")
 local sql_state = require("poste-db.state")
+local dml_guard = require("poste-db.dml_guard")
 
 local compat = require("poste-db.compat")
 
@@ -102,6 +103,9 @@ function M.update_diagnostics(buf)
   if ok_sem then
     sem.update(buf)
   end
+
+  -- Missing-WHERE lint: purple HINT diagnostics for unfiltered DELETE/UPDATE
+  dml_guard.update(buf)
 end
 
 --- Debounced update.
@@ -129,6 +133,7 @@ function M.clear_diagnostics(buf)
   if ok_sem then
     sem.clear(buf)
   end
+  dml_guard.clear(buf)
 end
 
 function M.setup(buf)

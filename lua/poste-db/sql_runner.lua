@@ -11,6 +11,7 @@ local sql_format = require("poste-db.format")
 local sql_buffer = require("poste-db.buffer")
 local session_conn = require("poste-db.session_conn")
 local D = require("poste-db.dataset")
+local dml_guard = require("poste-db.dml_guard")
 
 local M = {}
 
@@ -343,6 +344,23 @@ function M.run_sql_request()
     stmt_sql_raw = table.concat(raw_lines, "\n")
   end
   entry.sql = stmt_sql_raw or buf_content
+
+  -- Unfiltered DML guard: a DELETE/UPDATE without a WHERE clause would hit
+  -- every row. Confirm once (before any executor side effects) so a stray
+  -- `<CR>` cannot wipe a table without an explicit yes.
+  if config.config.confirm_unfiltered_dml ~= false then
+    local risky = dml_guard.scan_text(stmt_sql_raw or buf_content or "")
+    if #risky > 0 then
+      local choice = vim.fn.confirm(
+        dml_guard.confirm_message(risky),
+        "&Yes, execute\n&No, cancel", 2, "Warning")
+      if choice ~= 1 then
+        vim.notify("Cancelled — statement(s) without a WHERE clause were not executed.",
+          vim.log.levels.WARN, { title = "PosteDb" })
+        return
+      end
+    end
+  end
 
   -- Route: single non-USE statement with a resolved connection → session
   --         visual selection, USE, or no connection → exec-file

@@ -11,6 +11,8 @@ M.defaults = {
   default_max_rows = 0,
   export_path = nil,
   import_chunk_size = 100,
+  -- Confirm before executing DELETE/UPDATE statements that lack a WHERE clause
+  confirm_unfiltered_dml = true,
   db_browser = {
     split_position = "left",  -- "left" or "right"
     split_width = 40,

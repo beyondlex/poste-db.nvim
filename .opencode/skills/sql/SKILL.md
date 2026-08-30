@@ -71,6 +71,7 @@ For SQL completion specific work, also load `.opencode/skills/sql-completion/SKI
 | `edit_commit/init.lua` | Edit commit logging and execution |
 | `table_ops.lua` | Table operations UI (insert row, duplicate, delete) |
 | `insert_hint.lua` | INSERT INTO value-to-column hint |
+| `dml_guard.lua` | Guards unfiltered DELETE/UPDATE (missing WHERE): purple HINT diagnostics + run-time confirm gate |
 
 #### DB Browser
 
