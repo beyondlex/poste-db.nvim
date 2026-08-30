@@ -105,7 +105,6 @@ function M.ask_last_error()
     vim.notify("no failed execution to ask about", vim.log.levels.INFO, { title = "PosteDb" })
     return
   end
-  scope_chat_target(err.connection, err.database)
   local text = table.concat({
     "This SQL failed — help me fix it:",
     "```sql",
@@ -116,7 +115,10 @@ function M.ask_last_error()
     tostring(err.message),
     "```",
   }, "\n")
+  -- scope AFTER open_chat: open_chat restores the session's scope, which
+  -- must not override the failing target
   M.open_chat()
+  scope_chat_target(err.connection, err.database)
   local window = require("poste-ai.chat.window")
   window.set_input_text(text)
   window.focus_input(true)

@@ -7,35 +7,22 @@ local _setup_done = false
 local _debounce_timer = nil
 local _disabled = false
 
-local C = require("poste.constants")
-local sign_group = C.SIGN_GROUP_NAME .. "_boundary"
-
-local BOUNDARY_SIGNS = {
-  PosteDbBoundaryTop = "┌",
-  PosteDbBoundaryMid = "│",
-  PosteDbBoundaryBot = "└",
-}
+local ns = vim.api.nvim_create_namespace("poste_db_boundary")
 
 function M.setup()
   if _setup_done then return end
   _setup_done = true
-  vim.api.nvim_set_hl(0, "PosteDbSqlBoundaryBorder", { link = "Comment" })
-  state.apply_highlight_overrides({ "PosteDbSqlBoundaryBorder" })
-  for name, text in pairs(BOUNDARY_SIGNS) do
-    pcall(vim.fn.sign_define, name, { text = text, texthl = "PosteDbSqlBoundaryBorder" })
-  end
+  -- full-width rectangle background for the statement under the cursor
+  -- (hl_eol extmarks, poste_ai/poste_http style) — replaces the old
+  -- sign-column border tree and frees the sign column for the execution
+  -- status indicator
+  vim.api.nvim_set_hl(0, "PosteDbSqlBoundary", { bg = 0x24301f })
+  state.apply_highlight_overrides({ "PosteDbSqlBoundary" })
 end
-
-local bound_sign_ids = {}  -- buf -> { line_0 -> sign_id }
 
 local function clear_all(buf)
   if buf and vim.api.nvim_buf_is_valid(buf) then
-    if bound_sign_ids[buf] then
-      for _, sign_id in pairs(bound_sign_ids[buf]) do
-        pcall(vim.fn.sign_unplace, sign_group, { id = sign_id })
-      end
-      bound_sign_ids[buf] = nil
-    end
+    vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
   end
 end
 
@@ -45,22 +32,15 @@ local function apply_range(buf, start, stop)
   -- Don't show boundary for single-line statements
   if start == stop then return end
 
-  local ids = {}
   for line = start, stop do
-    local sign_name
-    if line == start then
-      sign_name = "PosteDbBoundaryTop"
-    elseif line == stop then
-      sign_name = "PosteDbBoundaryBot"
-    else
-      sign_name = "PosteDbBoundaryMid"
-    end
-    local sign_id = vim.fn.sign_place(0, sign_group, sign_name, buf, { lnum = line + 1 })
-    if sign_id and sign_id > 0 then
-      ids[line] = sign_id
-    end
+    vim.api.nvim_buf_set_extmark(buf, ns, line, 0, {
+      end_row = line + 1,
+      end_col = 0,
+      hl_group = "PosteDbSqlBoundary",
+      hl_eol = true,
+      hl_mode = "combine",
+    })
   end
-  bound_sign_ids[buf] = ids
 end
 
 local function fetch_and_highlight(buf, cursor_line)
@@ -132,5 +112,7 @@ end
 vim.api.nvim_create_user_command("PosteDbBoundary", function()
   require("poste-db.statement_indicator").toggle()
 end, { desc = "Toggle SQL statement boundary highlight" })
+
+M._test = { get_ns = function() return ns end }
 
 return M
