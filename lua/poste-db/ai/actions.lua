@@ -128,7 +128,35 @@ function M.execute_sql(sql, refs, cb)
     mode = "greedy",
     src_file = "poste://ai_chat",
     on_response = function(parsed)
+      -- in-band database errors arrive as a normal response: surface them as
+      -- a chat error (not a fake success) and retain them for the dataset
+      -- view's ask-AI action
+      local in_band = nil
+      if parsed and parsed.has_error then
+        local results = parsed.results
+        if not results and type(parsed.body) == "string" then
+          local ok_d, decoded = pcall(vim.json.decode, parsed.body)
+          results = ok_d and decoded.results or nil
+        end
+        for _, r in ipairs(results or {}) do
+          if r.error then
+            in_band = type(r.error) == "string" and r.error or vim.inspect(r.error)
+            break
+          end
+        end
+      end
       vim.schedule(function()
+        if in_band then
+          require("poste-db.state").last_error = {
+            message = in_band,
+            sql = sql,
+            connection = conn,
+            database = database,
+            at = os.time(),
+          }
+          cb("SQL error: " .. in_band, nil)
+          return
+        end
         local ok_r, render_err = pcall(M.render_dataset, parsed, sql)
         if ok_r then
           cb(nil, "✓ executed against " .. conn .. (database and ("/" .. database) or "")

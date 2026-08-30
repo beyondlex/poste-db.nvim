@@ -20,6 +20,12 @@ describe("poste-db.ai.system_prompt", function()
     assert.truthy(prompt:find("@connection"))
   end)
 
+  it("forbids ? placeholders in generated sql", function()
+    local prompt = system_prompt._test.build()
+    assert.truthy(prompt:find("Never emit", 1, true))
+    assert.truthy(prompt:find("placeholders", 1, true))
+  end)
+
   it("includes the current SQL context when set", function()
     state.context.connection = "pg-ecommerce"
     state.context.database = "shop"

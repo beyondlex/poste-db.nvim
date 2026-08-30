@@ -25,6 +25,7 @@ local KNOWLEDGE = [[You are running inside poste-db.nvim, a SQL execution plugin
 
 ## When the user asks for SQL
 - Output exactly one ```sql block (other prose outside it). The chat can execute it directly into the dataset view; write plain, executable statements.
+- Never emit `?` placeholders or leave template values unfilled — write complete literal values (quoted strings; NULL for unknown). `?` is sent to the database as a prepared-statement parameter and breaks execution.
 - If the user mentioned a connection with @connection/database, start the block with a `-- @connection <name>` comment line so it runs against the right server, and qualify objects when needed.
 - Use the schema summary injected with the user message; do not invent tables or columns that are not listed. If unsure about a column, ask.
 - Prefer LIMIT on exploratory SELECTs; never write destructive DDL/DML unless explicitly asked.]]

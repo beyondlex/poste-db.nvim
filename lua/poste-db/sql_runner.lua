@@ -425,6 +425,14 @@ function M.run_sql_request()
       for i, result in ipairs(results) do
         if result.error then
           entry.error = true
+          local err_text = type(result.error) == "string" and result.error or vim.inspect(result.error)
+          sql_state.last_error = {
+            message = err_text,
+            sql = statement.get_stmt_sql(buf_lines, stmt_lines, i, visual_sel_end or #buf_lines) or buf_content,
+            connection = parsed.connection,
+            database = parsed.database,
+            at = os.time(),
+          }
           tab_idx = tab_idx + 1
           local err_line = stmt_lines[i] or first_line
           local next_start = stmt_lines[i + 1]
@@ -511,7 +519,17 @@ function M.run_sql_request()
       })
 
       local has_err = results[1] and results[1].error
-      if has_err then entry.error = true end
+      if has_err then
+        entry.error = true
+        local err_text = type(results[1].error) == "string" and results[1].error or vim.inspect(results[1].error)
+        sql_state.last_error = {
+          message = err_text,
+          sql = buf_content or "",
+          connection = parsed.connection,
+          database = parsed.database,
+          at = os.time(),
+        }
+      end
       local result_line = stmt_end or first_line
       if has_err then
         indicators.set_indicator(src_buf, result_line - 1, "error")

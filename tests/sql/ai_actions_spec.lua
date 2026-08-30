@@ -225,6 +225,29 @@ describe("poste-db.ai.actions", function()
       assert.is_false(captured.opts.sql:find("@connection") ~= nil)
     end)
 
+    it("surfaces in-band database errors as a chat error and retains them", function()
+      local state_sql = require("poste-db.state")
+      local body = vim.json.encode({
+        results = { { error = "Table 'x.missing' doesn't exist" } },
+      })
+      package.loaded["poste-db.executor"] = {
+        execute = function(opts)
+          opts.on_response({ has_error = true, body = body })
+        end,
+      }
+      local err, note
+      actions.execute_sql("SELECT * FROM missing", {
+        { type = "context", context = "db", data = { connection = "my-blog", database = "blog" } },
+      }, function(e, n) err, note = e, n end)
+      vim.wait(500, function() return err ~= nil or note ~= nil end)
+
+      assert.truthy(err:find("doesn't exist", 1, true))
+      assert.is_nil(note)
+      assert.are.equal("SELECT * FROM missing", state_sql.last_error.sql)
+      assert.truthy(state_sql.last_error.message:find("doesn't exist"))
+      state_sql.last_error = nil
+    end)
+
     it("surfaces SQL errors to the chat callback", function()
       package.loaded["poste-db.executor"] = {
         execute = function(opts)
