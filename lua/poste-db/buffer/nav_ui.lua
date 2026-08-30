@@ -52,7 +52,7 @@ function M.format_conn_short(conn)
 end
 
 function M.build_statusline_context(meta, opts)
-  if not meta or meta.type ~= "resultset" then return nil end
+  if not meta or (meta.type ~= "resultset" and meta.type ~= "affected") then return nil end
   opts = opts or {}
 
   local parts = {}
@@ -178,11 +178,18 @@ function M.build_pending_changes_text(tab)
 end
 
 function M.build_status_winbar_text(meta, tab, total_tabs, active_idx, pending)
-  if not meta or meta.type ~= "resultset" then return nil end
+  if not meta or (meta.type ~= "resultset" and meta.type ~= "affected") then return nil end
 
-  local left = M.build_status_left(meta, tab)
-  local right = M.build_status_right(meta, total_tabs, active_idx, pending)
-  if not left or not right then return nil end
+  local left, right
+  if meta.type == "affected" then
+    -- Non-query results carry no row/sort/pagination fragments; show only the
+    -- connection/db context on the winbar.
+    left, right = "", ""
+  else
+    left = M.build_status_left(meta, tab)
+    right = M.build_status_right(meta, total_tabs, active_idx, pending)
+    if not left or not right then return nil end
+  end
 
   -- Connection/db context lives on the winbar's left (table name omitted — the
   -- queried tables are already visible in the dataset content); `%<` drops the

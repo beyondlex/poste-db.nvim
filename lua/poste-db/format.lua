@@ -16,14 +16,6 @@ local NUMERIC_CTYPES = {
 -- Helpers
 ---------------------------------------------------------------------------
 
-local function short_connection(conn)
-  if not conn or conn == "" then return "" end
-  local s = conn:gsub("^%w+://", "")
-  s = s:gsub("^[^@]+@", "")
-  s = s:gsub("/+$", "")
-  return s
-end
-
 local function split_lines(s)
   local lines = {}
   for line in (s .. "\n"):gmatch("(.-)\n") do
@@ -433,15 +425,13 @@ function M.format_dataset(r)
       table.insert(lines, "")
       return lines, { type = "error" }
     end
+    -- Connection/db context is shown in the dataset winbar, not in the content.
     table.insert(lines, "")
-    local db = data.database
-    if type(db) ~= "string" or db == "" then db = nil end
-    table.insert(lines, string.format("  %s%s",
-      short_connection(data.connection or ""),
-      db and (" / " .. db) or ""
-    ))
-    table.insert(lines, "")
-    return lines, { type = "affected" }
+    return lines, {
+      type = "affected",
+      connection = data.connection,
+      database = data.database,
+    }
   end
 
   -- Resultset: render table

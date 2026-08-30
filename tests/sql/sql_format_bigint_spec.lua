@@ -70,3 +70,24 @@ describe("format bigint precision", function()
     assert.equals("2", format.format_number(2))
   end)
 end)
+
+describe("format affected rows", function()
+  it("keeps the connection line out of the content and in the meta", function()
+    local body = vim.json.encode({
+      type = "affected",
+      results = { { affected_rows = 5, execution_time_ms = 10 } },
+      connection = "mysql://user:pass@localhost:13306/blog",
+      database = "blog",
+      dialect = "mysql",
+    })
+    local lines, meta = format.format_dataset({ body = body })
+
+    assert.equals("affected", meta.type)
+    assert.equals("mysql://user:pass@localhost:13306/blog", meta.connection)
+    assert.equals("blog", meta.database)
+    assert.same({ "", "  5 row(s) affected · 10ms", "" }, lines)
+    local rendered = table.concat(lines, "\n")
+    assert.is_nil(rendered:find("localhost:13306", 1, true))
+    assert.is_nil(rendered:find("/ blog", 1, true))
+  end)
+end)

@@ -70,6 +70,24 @@ describe("buffer_nav_ui", function()
     assert.is_falsy(text:find("posts", 1, true))
   end)
 
+  it("shows connection/db context on the winbar for affected results", function()
+    if state and state.context then
+      state.context.connection = "my-blog"
+    end
+    local text = ui.build_status_winbar_text({
+      type = "affected",
+      connection = "mysql://user:pass@localhost:13306/blog",
+      database = "blog",
+    }, {}, 1, 1)
+    assert.is_not_nil(text)
+    assert.truthy(text:find("my-blog", 1, true))
+    assert.truthy(text:find("\239\135\128 blog", 1, true))
+    assert.is_falsy(text:find("localhost:13306", 1, true))
+    if state and state.context then
+      state.context.connection = nil
+    end
+  end)
+
   it("builds the statusline context", function()
     local ctx = ui.build_statusline_context({
       type = "resultset",
