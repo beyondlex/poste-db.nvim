@@ -11,6 +11,9 @@ M.defaults = {
   default_max_rows = 0,
   export_path = nil,
   import_chunk_size = 100,
+  -- Enable debug commands (:PosteDbCmpDebug, :PosteDbDiag, ...). Off by
+  -- default; turn on via setup({ debug = true }) or g:poste_db_debug = true.
+  debug = false,
   -- Confirm before executing DELETE/UPDATE statements that lack a WHERE clause
   confirm_unfiltered_dml = true,
   db_browser = {

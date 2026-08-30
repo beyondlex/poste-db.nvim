@@ -2,6 +2,7 @@ local state = require("poste.state")
 local connections = require("poste-db.connections")
 local log = require("poste-db.log")
 local compat = require("poste-db.compat")
+local config = require("poste-db.config")
 
 local M = {}
 
@@ -78,9 +79,9 @@ function M.setup()
     local blink_ok = pcall(require, "blink.cmp")
     if blink_ok then
       local providers = {}
-      local config_ok, config = pcall(require, "blink.cmp.config")
-      if config_ok and config.sources and config.sources.providers then
-        for id, _ in pairs(config.sources.providers) do providers[#providers + 1] = id end
+      local blink_config_ok, blink_config = pcall(require, "blink.cmp.config")
+      if blink_config_ok and blink_config.sources and blink_config.sources.providers then
+        for id, _ in pairs(blink_config.sources.providers) do providers[#providers + 1] = id end
       end
       parts[#parts + 1] = "blink.cmp: loaded"
       parts[#parts + 1] = "  providers:  " .. (#providers > 0 and table.concat(providers, ", ") or "(none)")
@@ -176,11 +177,9 @@ function M.setup()
     require("poste-db.file_exec").run({ filepath = args.args, mode = "greedy" })
   end, { nargs = 1, complete = "file", desc = "Execute a SQL file" })
 
-  -- Debug commands were gated behind a debug global when moved out of init.lua
-  -- (fe9d0af), which silently disabled them for anyone who never set the flag.
-  -- Restore the historical always-registered behavior; set g:poste_db_debug to
-  -- false to opt out.
-  if compat.opt("debug") ~= false then
+  -- Debug commands stay out of the way by default. Enable them explicitly via
+  -- setup({ debug = true }) or the legacy g:poste_db_debug = true global.
+  if config.config.debug or compat.opt("debug") then
     vim.api.nvim_create_user_command("PosteDbAutoTrigger", function()
       local group = vim.api.nvim_create_augroup("PosteDbAutoComplete", { clear = true })
       vim.api.nvim_create_autocmd("TextChangedI", {
