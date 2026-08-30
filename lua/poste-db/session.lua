@@ -29,7 +29,6 @@ function M.begin(meta)
   -- Request-scoped clear (connection/database context intentionally kept)
   state.last_response = nil
   sql_state.last_dataset = nil
-  sql_state.pagination = {}
   sql_state.cell = { row = 1, col = 1 }
 
   active = session

@@ -113,7 +113,6 @@ local function apply_cell_edit(row_idx, col_idx, new_val)
           vim.api.nvim_buf_set_lines(buf, line_idx - 1, line_idx, false, { "  " .. new_line })
           vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
           local sql_highlights = require("poste-db.highlights")
-          sql_highlights.invalidate_sep_cache()
           sql_highlights.apply_edit_highlights(buf, tab)
         end
       end

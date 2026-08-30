@@ -222,27 +222,6 @@ function M.compose_trigger_sql(dialect, trig)
   return trig.def
 end
 
---- Build the byte-size lookup from a sizes query result.
---- Keys are bare names; PG also indexes qualified "schema.name".
----@return table map name -> bytes (value may be a pretty string when the
----   server returns formatted sizes instead of numbers)
----@return boolean ok false when the query produced nothing usable
-function M.parse_size_rows(r)
-  local map = {}
-  local count = 0
-  for _, m in ipairs(M.result_to_maps(r)) do
-    local name = m.name or m.table_name
-    if name then
-      map[name] = tonumber(m.bytes) or m.bytes
-      count = count + 1
-      if m.schema and m.schema ~= vim.NIL then
-        map[m.schema .. "." .. name] = tonumber(m.bytes) or m.bytes
-      end
-    end
-  end
-  return map, count > 0
-end
-
 -- --------------------------------------------------- async collectors
 
 local function run_maps(sql, source, on_maps, on_error, on_empty)

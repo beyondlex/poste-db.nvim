@@ -81,11 +81,8 @@ function M.find_cell_ranges_fallback(line, target_col, last_col)
   return result
 end
 
-function M.invalidate_sep_cache() end
-
 function M.apply_dataset_highlights(buf, lines, meta)
   vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
-  M.invalidate_sep_cache()
 
   if not meta or meta.type ~= "resultset" then
     if meta and meta.type == "error" then

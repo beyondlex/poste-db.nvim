@@ -9,10 +9,6 @@ describe("poste-db.state defaults", function()
     assert.is_nil(state.last_dataset)
   end)
 
-  it("exposes empty pagination", function()
-    assert.same({}, state.pagination)
-  end)
-
   it("exposes default cell position", function()
     assert.same({ row = 1, col = 1 }, state.cell)
   end)

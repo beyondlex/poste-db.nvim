@@ -4,7 +4,7 @@ local util = require("poste-db.util")
 local C = require("poste-db.constants")
 local M = {}
 
---- Normalized numeric ctypes (see M.normalize_type) eligible for right-alignment
+--- Normalized numeric ctypes (see normalize_type) eligible for right-alignment
 --- even when values arrive as strings (precision-preserving JSON strings).
 local NUMERIC_CTYPES = {
   integer = true, int = true, bigint = true, smallint = true,
@@ -66,40 +66,6 @@ local function wrap_line(text, width)
   if #current > 0 then table.insert(lines, current) end
   if #lines == 0 then lines = { "" } end
   return lines
-end
---- Examples:
----   mysql://user:pass@localhost:13306/blog → localhost:13306/blog
----   postgres://user@host:5432/db → host:5432/db
----   sqlite:/path/to/db.sqlite → db.sqlite
---- @param conn string Connection URL
---- @return string Short display format
-local function parse_connection_short(conn)  -- luacheck: ignore 211
-  if not conn or conn == "" then return "unknown" end
-
-  -- Handle SQLite: extract filename from path
-  if conn:match("^sqlite:") then
-    local path = conn:match("^sqlite:(.*)$") or conn
-    local filename = path:match("([^/\\]+)$") or path
-    return filename
-  end
-
-  -- Handle standard URLs: protocol://user:pass@host:port/db
-  local host, port, db = conn:match("^%w+://[^@]*@([^:]+):(%d+)/([^?]+)")
-  if host and port and db then
-    -- Remove query parameters from db name
-    db = db:match("^[^?]+") or db
-    return string.format("%s:%s/%s", host, port, db)
-  end
-
-  -- Handle URLs without port: protocol://user:pass@host/db
-  host, db = conn:match("^%w+://[^@]*@([^/]+)/([^?]+)")
-  if host and db then
-    db = db:match("^[^?]+") or db
-    return string.format("%s/%s", host, db)
-  end
-
-  -- Fallback: return original connection string
-  return conn
 end
 
 --- Pad a string to a given display width (left-pad with spaces).
@@ -201,6 +167,54 @@ local function cell_to_string(val, col)
   return s
 end
 
+--- Normalize raw DB type name to ctype for editor type-checking.
+--- Maps database-specific type names (INT4, VARCHAR, etc.) to
+--- the normalized forms used in editor.lua's type tables.
+--- @param raw string Raw type name from DB (e.g. "INT4", "VARCHAR", "BOOL")
+--- @return string Normalized type name (e.g. "integer", "varchar", "boolean")
+local function normalize_type(raw)
+  if not raw then return "" end
+  local t = raw:lower()
+  local map = {
+    -- PostgreSQL / generic integer
+    int4 = "integer", int8 = "bigint", int2 = "smallint",
+    integer = "integer", bigint = "bigint", smallint = "smallint",
+    serial = "serial", bigserial = "bigserial", smallserial = "smallserial",
+    tinyint = "integer",
+    -- PostgreSQL/Oracle-style numeric
+    numeric = "numeric", decimal = "decimal",
+    float4 = "real", float8 = "float", real = "real", float = "float",
+    double = "float", ["double precision"] = "float", money = "numeric",
+    -- Boolean
+    bool = "boolean", boolean = "boolean",
+    -- Text
+    text = "text", varchar = "varchar", char = "char", character = "char",
+    ["character varying"] = "varchar",
+    nvarchar = "nvarchar", nchar = "nchar",
+    longtext = "longtext", mediumtext = "mediumtext", tinytext = "tinytext",
+    citext = "text", name = "varchar",
+    -- Date/time
+    date = "date", timestamp = "timestamp", timestamptz = "timestamptz",
+    datetime = "datetime", datetime2 = "datetime",
+    time = "date", timetz = "timestamp", interval = "interval",
+    -- JSON
+    json = "json", jsonb = "jsonb",
+    -- UUID
+    uuid = "uuid",
+    -- Binary / ineditable
+    bytea = "bytea", blob = "blob", binary = "binary", varbinary = "varbinary",
+    tinyblob = "blob", mediumblob = "blob", longblob = "blob",
+    geometry = "geometry", geography = "geography",
+    point = "point", polygon = "polygon", linestring = "linestring",
+    multipolygon = "multipolygon",
+    inet = "inet", cidr = "cidr", macaddr = "macaddr", macaddr8 = "macaddr8",
+    bit = "bit", varbit = "varbit",
+    tsvector = "tsvector", tsquery = "tsquery",
+    xml = "xml", hstore = "hstore",
+  }
+  return map[t] or t
+end
+
 --- Check if a column contains only numeric values (for right-alignment).
 --- Values may arrive as Lua numbers OR as strings (bigints above 2^53 and
 --- large DECIMALs are serialized as JSON strings to preserve precision).
@@ -211,7 +225,7 @@ end
 local function is_numeric_column(rows, col_idx, col_meta)
   local is_numeric_type = false
   if col_meta and col_meta.type then
-    local ctype = M.normalize_type(col_meta.type)
+    local ctype = normalize_type(col_meta.type)
     is_numeric_type = NUMERIC_CTYPES[ctype] == true
   end
   for _, row in ipairs(rows) do
@@ -464,53 +478,6 @@ end
 -- Layout: full-table metadata (scans all rows once)
 ----------------------------------------------------------------------
 
---- Normalize raw DB type name to ctype for editor type-checking.
---- Maps database-specific type names (INT4, VARCHAR, etc.) to
---- the normalized forms used in editor.lua's type tables.
---- @param raw string Raw type name from DB (e.g. "INT4", "VARCHAR", "BOOL")
---- @return string Normalized type name (e.g. "integer", "varchar", "boolean")
-function M.normalize_type(raw)
-  if not raw then return "" end
-  local t = raw:lower()
-  local map = {
-    -- PostgreSQL / generic integer
-    int4 = "integer", int8 = "bigint", int2 = "smallint",
-    integer = "integer", bigint = "bigint", smallint = "smallint",
-    serial = "serial", bigserial = "bigserial", smallserial = "smallserial",
-    tinyint = "integer",
-    -- PostgreSQL/Oracle-style numeric
-    numeric = "numeric", decimal = "decimal",
-    float4 = "real", float8 = "float", real = "real", float = "float",
-    double = "float", ["double precision"] = "float", money = "numeric",
-    -- Boolean
-    bool = "boolean", boolean = "boolean",
-    -- Text
-    text = "text", varchar = "varchar", char = "char", character = "char",
-    ["character varying"] = "varchar",
-    nvarchar = "nvarchar", nchar = "nchar",
-    longtext = "longtext", mediumtext = "mediumtext", tinytext = "tinytext",
-    citext = "text", name = "varchar",
-    -- Date/time
-    date = "date", timestamp = "timestamp", timestamptz = "timestamptz",
-    datetime = "datetime", datetime2 = "datetime",
-    time = "date", timetz = "timestamp", interval = "interval",
-    -- JSON
-    json = "json", jsonb = "jsonb",
-    -- UUID
-    uuid = "uuid",
-    -- Binary / ineditable
-    bytea = "bytea", blob = "blob", binary = "binary", varbinary = "varbinary",
-    tinyblob = "blob", mediumblob = "blob", longblob = "blob",
-    geometry = "geometry", geography = "geography",
-    point = "point", polygon = "polygon", linestring = "linestring",
-    multipolygon = "multipolygon",
-    inet = "inet", cidr = "cidr", macaddr = "macaddr", macaddr8 = "macaddr8",
-    bit = "bit", varbit = "varbit",
-    tsvector = "tsvector", tsquery = "tsquery",
-    xml = "xml", hstore = "hstore",
-  }
-  return map[t] or t
-end
 
 --- Compute layout metadata for a result set. Scans all rows for
 --- column widths and numeric detection, but produces no rendered strings.
@@ -540,7 +507,7 @@ function M.plan_resultset_layout(data)
   for _, col in ipairs(columns) do
     local raw = col.type
     if raw then
-      col.ctype = M.normalize_type(raw)
+      col.ctype = normalize_type(raw)
     end
   end
 
@@ -787,16 +754,6 @@ end
 --- @param row_number number Row number to display
 --- @return string Formatted line with │ separators
 function M.render_row(row, layout, row_number)
-  local cells = { tostring(row_number) }
-  for i = 1, #layout.columns do
-    cells[i + 1] = cell_to_string(row[i], layout.columns[i])
-  end
-  return data_row(cells, layout.col_widths, layout.numeric_cols)
-end
-
---- Returns both line and col_starts (for editor.lua to update single-row cache).
---- @return string line, table col_starts
-function M.render_row_with_starts(row, layout, row_number)
   local cells = { tostring(row_number) }
   for i = 1, #layout.columns do
     cells[i + 1] = cell_to_string(row[i], layout.columns[i])

@@ -10,7 +10,6 @@ M.context = {
 M.last_dataset = nil   -- last parsed dataset JSON for cell navigation
 M.last_error = nil     -- last failed execution: { message, sql, connection, database, at }
 M._sql_session = nil   -- active SQL request session (set/cleared by session.lua)
-M.pagination = {}      -- { page, page_size, total_rows, original_query }
 M.cell = {             -- current cell position in dataset buffer
   row = 1,
   col = 1,

@@ -8,6 +8,8 @@ local C = require("poste.constants")
 local sql_conn = require("poste-db.db_browser.sql_conn")
 local catalog = require("poste-db.db_browser.catalog")
 local notify = require("poste-db.db_browser.notify")
+local ident = require("poste-db.ident")
+local db_util = require("poste-db.db_browser.util")
 
 local M = {}
 
@@ -23,13 +25,8 @@ end
 setup_highlights()
 vim.api.nvim_create_autocmd("ColorScheme", { callback = setup_highlights })
 
-local function quote(name, dialect)
-  if dialect == "mysql" or dialect == "mariadb" then
-    return "`" .. name:gsub("`", "``") .. "`"
-  else
-    return '"' .. name:gsub('"', '""') .. '"'
-  end
-end
+-- Shared identifier quoting (dialect-aware backtick/double-quote).
+local quote = ident.quote
 
 local function has_value(v)
   return v ~= nil and v ~= vim.NIL
@@ -561,13 +558,7 @@ end
 
 -- ------------------------------------------------------------ size display
 
-local function format_bytes(n)
-  if type(n) ~= "number" then return nil end
-  if n < 1024 then return string.format("%d B", n)
-  elseif n < 1024 * 1024 then return string.format("%.1f KB", n / 1024)
-  elseif n < 1024 * 1024 * 1024 then return string.format("%.1f MB", n / (1024 * 1024))
-  else return string.format("%.2f GB", n / (1024 * 1024 * 1024)) end
-end
+local format_bytes = db_util.format_bytes
 
 --- Look up a plan item's byte size from the sizes map (bare and, for PG,
 --- "schema.name" keys).
@@ -1102,7 +1093,6 @@ function M.paste_objects(source, target, items, triggers, routines, opts)
         local start_fn, cancel_fn = show_paste_progress(source, target, jobs, function()
           if opts.on_complete then opts.on_complete() end
         end)
-        _G.poste_db_copy_cancel_last = cancel_fn
         start_fn()
       end, function()
         -- user cancelled at confirm
