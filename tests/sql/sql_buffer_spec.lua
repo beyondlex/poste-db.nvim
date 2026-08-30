@@ -89,3 +89,52 @@ describe("buffer error rendering", function()
     assert.equals("poste://error", vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(D.dataset_window)))
   end)
 end)
+
+describe("buffer autocmd lifecycle", function()
+  before_each(function()
+    buffer._test.reset()
+    if D.dataset_window and vim.api.nvim_win_is_valid(D.dataset_window) then
+      pcall(vim.api.nvim_win_close, D.dataset_window, true)
+    end
+    D.dataset_window = nil
+    D.dataset_tabpage = nil
+  end)
+
+  after_each(function()
+    buffer.close()
+    buffer._test.reset()
+  end)
+
+  local function render_resultset()
+    buffer.render_dataset({ "id", "1" }, {
+      type = "resultset",
+      row_count = 1,
+      columns = { { name = "id" } },
+      data_start_line = 1,
+    }, { layout = { rows = {}, columns = { { name = "id" } } } })
+  end
+
+  it("rotates global autocmds instead of accumulating them per render", function()
+    render_resultset()
+    local resized_after_first = #vim.api.nvim_get_autocmds({ event = "VimResized" })
+    local winclose_after_first = #vim.api.nvim_get_autocmds({ event = "WinClosed" })
+    assert.is_true(resized_after_first > 0, "render registers a VimResized autocmd")
+
+    render_resultset()
+    render_resultset()
+    assert.equals(resized_after_first, #vim.api.nvim_get_autocmds({ event = "VimResized" }),
+      "VimResized must be deleted before re-registration")
+    assert.equals(winclose_after_first, #vim.api.nvim_get_autocmds({ event = "WinClosed" }),
+      "WinClosed must be deleted before re-registration")
+  end)
+
+  it("deletes the global autocmds on close", function()
+    render_resultset()
+    local resized_before = #vim.api.nvim_get_autocmds({ event = "VimResized" })
+    local winclose_before = #vim.api.nvim_get_autocmds({ event = "WinClosed" })
+
+    buffer.close()
+    assert.equals(resized_before - 1, #vim.api.nvim_get_autocmds({ event = "VimResized" }))
+    assert.equals(winclose_before - 1, #vim.api.nvim_get_autocmds({ event = "WinClosed" }))
+  end)
+end)

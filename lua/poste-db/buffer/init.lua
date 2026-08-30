@@ -528,8 +528,6 @@ function M.render_dataset(lines, meta, opts)
 
   local buf = M.get_dataset_buffer()
 
-  sql_highlights.invalidate_sep_cache()
-
   if tab.is_sorting then  -- luacheck: ignore 542
   else
     tab.sort = nil
@@ -664,6 +662,8 @@ function M.render_dataset(lines, meta, opts)
   end
 
   if not is_error then
+    -- Rotate all four ids: re-registering without deleting the previous id
+    -- leaks one global autocmd per render.
     if D.resize_autocmd_id then
       pcall(vim.api.nvim_del_autocmd, D.resize_autocmd_id)
       D.resize_autocmd_id = nil
@@ -671,6 +671,14 @@ function M.render_dataset(lines, meta, opts)
     if D.scroll_autocmd_id then
       pcall(vim.api.nvim_del_autocmd, D.scroll_autocmd_id)
       D.scroll_autocmd_id = nil
+    end
+    if D.vimresized_autocmd_id then
+      pcall(vim.api.nvim_del_autocmd, D.vimresized_autocmd_id)
+      D.vimresized_autocmd_id = nil
+    end
+    if D.winclose_autocmd_id then
+      pcall(vim.api.nvim_del_autocmd, D.winclose_autocmd_id)
+      D.winclose_autocmd_id = nil
     end
     if D.dataset_buffer then
       D.resize_autocmd_id = vim.api.nvim_create_autocmd("WinResized", {
@@ -728,7 +736,7 @@ end
 -- Panel clear / Close
 --------------------------------------------------------------------------------
 
-function M.clear_panel(seq)
+function M.clear_panel()
   -- Keep the active history entry's tabs; only blank the visible panel so
   -- results can stream in. (Tab tables are reset by the request starter /
   -- render_dataset via D.reset_active_entry_tabs().)
@@ -767,6 +775,10 @@ function M.close()
   if D.scroll_autocmd_id then
     pcall(vim.api.nvim_del_autocmd, D.scroll_autocmd_id)
     D.scroll_autocmd_id = nil
+  end
+  if D.winclose_autocmd_id then
+    pcall(vim.api.nvim_del_autocmd, D.winclose_autocmd_id)
+    D.winclose_autocmd_id = nil
   end
   require("poste-db.buffer.header").close()
   if D.dataset_window and vim.api.nvim_win_is_valid(D.dataset_window) then
