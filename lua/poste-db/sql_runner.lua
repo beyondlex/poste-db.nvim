@@ -269,7 +269,7 @@ function M.run_sql_request()
     src_file = file,
     stmt_line = stmt_start,
   })
-  sql_buffer.clear_panel(current_seq)
+  sql_buffer.clear_panel()
 
   -- Set running indicators
   local first_line = stmt_lines[1]
@@ -279,17 +279,33 @@ function M.run_sql_request()
   end
   first_line = math.max(1, math.min(first_line, #buf_lines))
 
-  if #stmt_lines > 0 then
-    for _, ln in ipairs(stmt_lines) do
-      indicators.set_indicator(src_buf, ln - 1, "running")
+  -- Place the running spinner on the same line each statement's completion
+  -- indicator will land (`stmt_indicator_line` for visual blocks, `stmt_end`
+  -- for cursor runs) so ✓/✘ replaces the spinner in place — otherwise the
+  -- spinner freezes on the statement's first line while the result lands on
+  -- its last line, splitting loading/completion across two lines.
+  if is_visual then
+    local max_end = visual_sel_end or #buf_lines
+    if #stmt_lines > 0 then
+      for i, ln in ipairs(stmt_lines) do
+        indicators.set_indicator(src_buf,
+          stmt_indicator_line(buf_lines, ln, stmt_lines[i + 1], max_end), "running")
+      end
+    else
+      indicators.set_indicator(src_buf, first_line - 1, "running")
     end
   else
-    indicators.set_indicator(src_buf, first_line - 1, "running")
+    indicators.set_indicator(src_buf, (stmt_end and (stmt_end - 1)) or (first_line - 1), "running")
   end
-  -- Override running spinner to last line (same position as success indicator)
-  if stmt_end then
-    indicators.clear_all(src_buf)
-    indicators.set_indicator(src_buf, stmt_end - 1, "running")
+
+  -- Line a whole-block failure lands on (the last statement's ending line for
+  -- visual runs), matching where its running spinner sits.
+  local block_result_line
+  if is_visual then
+    local last_start = stmt_lines[#stmt_lines] or first_line
+    block_result_line = stmt_indicator_line(buf_lines, last_start, nil, visual_sel_end or #buf_lines)
+  else
+    block_result_line = (stmt_end and (stmt_end - 1)) or (first_line - 1)
   end
 
   local sql_context = require("poste-db.context")
@@ -530,7 +546,9 @@ function M.run_sql_request()
           at = os.time(),
         }
       end
-      local result_line = stmt_end or first_line
+      local result_line = stmt_end
+        or (is_visual and stmt_indicator_line(buf_lines, first_line, stmt_lines[2], visual_sel_end or #buf_lines) or nil)
+        or first_line
       if has_err then
         indicators.set_indicator(src_buf, result_line - 1, "error")
       else
@@ -576,7 +594,7 @@ end
         database = err_ctx.database,
         at = os.time(),
       }
-      indicators.set_indicator(src_buf, (stmt_end or first_line) - 1, "error")
+      indicators.set_indicator(src_buf, block_result_line, "error")
       vim.notify(message, vim.log.levels.ERROR, { title = "PosteDb" })
       local lines = sql_format.format_error(message, sql_state.context.connection or "")
       sql_buffer.render_dataset(lines, { type = "error" })
@@ -607,7 +625,7 @@ end
     src_file = file,
     on_response = on_response,
     on_error = function(message, parsed)
-      indicators.set_indicator(src_buf, (stmt_end or first_line) - 1, "error")
+      indicators.set_indicator(src_buf, block_result_line, "error")
       on_error(message, parsed)
     end,
   })

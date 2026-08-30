@@ -168,3 +168,51 @@ LEFT JOIN shipment_items si ON si.shipment_id = sh.id
 LEFT JOIN items i ON i.id = si.item_id
 WHERE sh.status != 'delivered'
 GROUP BY sh.id, wf.name, wt.name, sh.status;
+
+-- @database blog
+SELECT
+    a.username,
+    DATE_FORMAT(p.created_at, '%Y-%m') AS month,
+    COUNT(p.id) AS post_count
+FROM
+    authors a
+JOIN
+    posts p ON a.id = p.author_id
+GROUP BY
+    a.username,
+    month
+ORDER BY
+    a.username,
+    month;
+
+-- @connection my-blog
+-- @database blog
+
+CREATE TABLE three_kingdoms_characters (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    courtesy_name VARCHAR(100),
+    birth_year INT,
+    death_year INT,
+    state ENUM('Wei', 'Shu', 'Wu', 'Other'),
+    biography TEXT
+);
+
+SELECT * from three_kingdoms_characters;
+TRUNCATE TABLE three_kingdoms_characters;
+
+-- @connection my-blog
+-- @database blog
+SELECT COUNT(*) AS total_items FROM items;
+
+-- @connection my-blog
+-- @database blog
+INSERT INTO three_kingdoms_characters (name, courtesy_name, birth_year, death_year, state, biography) VALUES
+('曹操', '孟德', 155, 220, 'Wei', '著名的军事家、政治家和诗人，以挟天子以令诸侯著称。'),
+('刘备', '玄德', 161, 223, 'Shu', '蜀汉的开国皇帝，以仁义著称。'),
+('孙权', '仲谋', 182, 252, 'Wu', '东吴的开国皇帝，在三国鼎立中占据江东。'),
+('诸葛亮', '孔明', 181, 234, 'Shu', '蜀汉丞相，著名的战略家和军事家。'),
+('司马懿', '仲达', 179, 251, 'Wei', '曹魏的杰出军事和政治人物，司马家族的奠基者。');
+
+SELECT * from three_kingdoms_characters;
+
