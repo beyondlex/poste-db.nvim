@@ -4,6 +4,7 @@
 local state = require("poste.state")
 local operations = require("poste-db.db_browser.operations")
 local notify = require("poste-db.db_browser.notify")
+local float_window = require("poste-db.float_window")
 
 local M = {}
 
@@ -162,24 +163,21 @@ function M.open(node, context)
     col = math.max(0, vim.o.columns - width - 2)
   end
 
-  local menu_buf = vim.api.nvim_create_buf(false, true)
-  vim.api.nvim_buf_set_lines(menu_buf, 0, -1, false, lines)
-  vim.bo[menu_buf].modifiable = false
+  local close  -- forward declaration: the WinLeave guard may fire before assignment
 
-  local win_opts = {
+  local menu_buf, menu_win = float_window.open({
     relative = "win",
     row = row,
     col = col,
     width = width,
     height = height,
-    style = "minimal",
     border = "none",
-  }
-  local ok, menu_win = pcall(vim.api.nvim_open_win, menu_buf, true, win_opts)
-  if not ok then return end
-
-  vim.wo[menu_win].cursorline = true
-  vim.wo[menu_win].winhl = "Normal:NormalFloat"
+    lines = lines,
+    winhl = "Normal:NormalFloat",
+    win_options = { cursorline = true },
+    on_winleave = function() close() end,
+  })
+  if not menu_win then return end
 
   -- Highlight border lines (top + bottom)
   vim.api.nvim_buf_add_highlight(menu_buf, ns_menu_hl, "PosteDbMenuBorder", 0, 0, -1)
@@ -219,21 +217,13 @@ function M.open(node, context)
 
   local closed = false
 
-  local function close()
+  close = function()
     if closed then return end
     closed = true
     if menu_win and vim.api.nvim_win_is_valid(menu_win) then
       vim.api.nvim_win_close(menu_win, true)
     end
   end
-
-  -- Auto-close on blur
-  local au_group = vim.api.nvim_create_augroup("PosteMenuClose", { clear = true })
-  vim.api.nvim_create_autocmd("WinLeave", {
-    group = au_group,
-    buffer = menu_buf,
-    callback = close,
-  })
 
   local function execute_item(map_entry)
     if not map_entry then return end

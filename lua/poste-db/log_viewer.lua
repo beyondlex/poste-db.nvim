@@ -4,6 +4,7 @@ local M = {}
 
 local const = require("poste-db.constants")
 local syntax = require("poste-db.syntax")
+local float_window = require("poste-db.float_window")
 local ns = vim.api.nvim_create_namespace("poste_db_log")
 local buf = nil
 local win = nil
@@ -568,22 +569,17 @@ function M.toggle()
   entries = load_entries()
   expanded = {}
   filter_text = ""
-  buf = vim.api.nvim_create_buf(false, true)
-  vim.api.nvim_buf_set_option(buf, "buftype", "nofile")
-  vim.api.nvim_buf_set_option(buf, "filetype", "poste_db_log")
-  vim.api.nvim_buf_set_option(buf, "bufhidden", "wipe")
-  vim.api.nvim_buf_set_name(buf, "poste://sql-log")
-  win = vim.api.nvim_open_win(buf, true, {
+  buf, win = float_window.open({
+    filetype = "poste_db_log",
+    buf_options = { buftype = "nofile", bufhidden = "wipe", swapfile = false },
     relative = "editor",
     width = math.floor(vim.o.columns * 0.85),
     height = math.floor(vim.o.lines * 0.75),
     row = math.floor(vim.o.lines * 0.12),
     col = math.floor(vim.o.columns * 0.07),
-    style = "minimal",
-    border = "rounded",
+    win_options = { cursorline = true, breakindent = true },
   })
-  vim.api.nvim_win_set_option(win, "cursorline", true)
-  vim.api.nvim_win_set_option(win, "breakindent", true)
+  vim.api.nvim_buf_set_name(buf, "poste://sql-log")
   render()
   local opts = { buffer = buf, nowait = true, silent = true }
   vim.keymap.set("n", "q", M.close, opts)

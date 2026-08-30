@@ -5,6 +5,7 @@ local D = require("poste-db.dataset")
 local sql_state = require("poste-db.state")
 
 local util = require("poste-db.util")
+local float_window = require("poste-db.float_window")
 
 local M = {}
 
@@ -156,26 +157,21 @@ function M.update()
   end
 
   M.close()
-  float_buf = vim.api.nvim_create_buf(false, true)
-  vim.bo[float_buf].buftype = "nofile"
-  vim.bo[float_buf].bufhidden = "wipe"
-  vim.bo[float_buf].swapfile = false
-  vim.api.nvim_buf_set_lines(float_buf, 0, -1, false, { text })
-  vim.bo[float_buf].modifiable = false
-
-  float_win = vim.api.nvim_open_win(float_buf, false, {
+  float_buf, float_win = float_window.open({
+    lines = { text },
     relative = "win",
     win = D.dataset_window,
     row = 0,
     col = 0,
     width = win_width,
     height = 1,
-    style = "minimal",
     border = "none",
     focusable = false,
     zindex = 40,
+    enter = false,
+    buf_options = { buftype = "nofile", bufhidden = "wipe", swapfile = false },
+    win_options = { winhighlight = "Normal:PosteDbDatasetHeader" },
   })
-  vim.wo[float_win].winhighlight = "Normal:PosteDbDatasetHeader"
 end
 
 M._test = {

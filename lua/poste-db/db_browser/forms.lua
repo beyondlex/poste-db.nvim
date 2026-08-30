@@ -4,6 +4,7 @@
 local M = {}
 
 local state = require("poste.state")
+local float_window = require("poste-db.float_window")
 
 local ns_form = vim.api.nvim_create_namespace("poste_db_form")
 
@@ -140,28 +141,29 @@ function M.open(title, fields, on_submit)
   if row < 0 then row = 0 end
   if col < 0 then col = 0 end
 
-  local form_buf = vim.api.nvim_create_buf(false, true)
-  vim.bo[form_buf].modifiable = true
+  local closed = false
+  local editing = false
+  local close  -- forward declaration: the WinLeave guard may fire before assignment
 
-  local win_opts = {
+  local form_buf, form_win = float_window.open({
     relative = "editor",
     row = row,
     col = col,
     width = width,
     height = height,
-    style = "minimal",
     border = "none",
-  }
-  local ok, form_win = pcall(vim.api.nvim_open_win, form_buf, true, win_opts)
-  if not ok then return end
-
-  vim.wo[form_win].cursorline = false
-  vim.wo[form_win].winhl = "Normal:NormalFloat"
+    modifiable = true,
+    winhl = "Normal:NormalFloat",
+    win_options = { cursorline = false },
+    on_winleave = function()
+      -- Auto-close on blur (unless editing a sub-dialog)
+      if not editing then close() end
+    end,
+  })
+  if not form_win then return end
 
   local field_rows = {}
   local submit_row = 0
-  local closed = false
-  local editing = false
 
   local function refresh()
     field_rows, submit_row = render_form(form_buf, title, fields, current_idx)
@@ -172,23 +174,13 @@ function M.open(title, fields, on_submit)
     end
   end
 
-  local function close()
+  close = function()
     if closed then return end
     closed = true
     if form_win and vim.api.nvim_win_is_valid(form_win) then
       vim.api.nvim_win_close(form_win, true)
     end
   end
-
-  -- Auto-close on blur (unless editing a sub-dialog)
-  local au_group = vim.api.nvim_create_augroup("PosteFormClose", { clear = true })
-  vim.api.nvim_create_autocmd("WinLeave", {
-    group = au_group,
-    buffer = form_buf,
-    callback = function()
-      if not editing then close() end
-    end,
-  })
 
   local function move_cursor(delta)
     local new_idx = current_idx + delta

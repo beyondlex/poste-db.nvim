@@ -10,6 +10,7 @@
 ---   q / <Esc>  close the sidebar
 
 local D = require("poste-db.dataset")
+local float_window = require("poste-db.float_window")
 
 local M = {}
 
@@ -165,28 +166,22 @@ function M.open()
     return
   end
 
-  buf = vim.api.nvim_create_buf(false, true)
-  vim.api.nvim_set_option_value("buftype", "nofile", { buf = buf })
-  vim.api.nvim_set_option_value("bufhidden", "wipe", { buf = buf })
-  vim.api.nvim_set_option_value("swapfile", false, { buf = buf })
-  vim.api.nvim_set_option_value("filetype", "poste_history", { buf = buf })
-
   local dh = vim.api.nvim_win_get_height(dataset_win)
   local winbar_rows = vim.api.nvim_get_option_value("winbar", { win = dataset_win }) ~= "" and 1 or 0
   local height = math.max(2, dh - winbar_rows - 3)
-  win = vim.api.nvim_open_win(buf, true, {
+  buf, win = float_window.open({
     relative = "win",
     win = dataset_win,
     row = 0,
     col = 0,
     width = SIDEBAR_WIDTH,
     height = height,
-    style = "minimal",
-    border = "rounded",
+    filetype = "poste_history",
+    buf_options = { buftype = "nofile", bufhidden = "wipe", swapfile = false },
+    -- Highlight the line under the cursor while navigating (j/k); the active
+    -- request keeps its own background marker via extmark in refresh().
+    win_options = { cursorline = true },
   })
-  -- Highlight the line under the cursor while navigating (j/k); the active
-  -- request keeps its own background marker via extmark in refresh().
-  vim.wo[win].cursorline = true
 
   local km = { buffer = buf, noremap = true, silent = true }
   vim.keymap.set("n", "j", function() move(1) end, km)

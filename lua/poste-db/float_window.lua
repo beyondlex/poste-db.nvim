@@ -1,6 +1,23 @@
+--- Shared floating-window primitives for poste-db.
+--- All scratch floats (previews, dialogs, menus, sidebars) go through
+--- open()/open_centered(); window creation, the title fallback and keymap
+--- binding live here instead of being re-implemented per call site.
 local M = {}
 local const = require("poste-db.constants")
 
+--- Open a buffer window, retrying once without title for clients that
+--- reject title options. Errors from the retry propagate.
+local function open_win(buf, enter, win_opts)
+  if win_opts.title == nil then
+    return vim.api.nvim_open_win(buf, enter, win_opts)
+  end
+  local ok, win = pcall(vim.api.nvim_open_win, buf, enter, win_opts)
+  if ok then return win end
+  local fallback = vim.tbl_extend("force", win_opts, { title = nil, title_pos = nil })
+  return vim.api.nvim_open_win(buf, enter, fallback)
+end
+
+--- Compute centered editor dimensions for `lines`.
 function M.centered_dimensions(lines, opts)
   opts = opts or {}
   local width_ratio = opts.width_ratio or const.FLOAT_WIDTH_RATIO
@@ -28,6 +45,9 @@ function M.centered_dimensions(lines, opts)
   }
 end
 
+--- Legacy centered helper (search prompt). Kept for its option surface
+--- (`win_opts` override, `win_opts_apply` callback); new call sites should
+--- use M.open().
 function M.open_centered(lines, opts)
   opts = opts or {}
   local buf = vim.api.nvim_create_buf(false, true)
@@ -68,6 +88,114 @@ function M.open_centered(lines, opts)
   end
 
   return buf, win
+end
+
+--- Open a scratch floating window.
+---
+--- opts:
+---   lines        string[]        content for the scratch buffer
+---   buf          number          reuse this buffer instead of creating one
+---   filetype     string          buffer filetype
+---   syntax       string          buffer syntax
+---   buf_options  table           buffer-local options (applied after content)
+---   modifiable   boolean         leave the buffer modifiable (default false)
+---   enter        boolean         focus the window (default true)
+---   relative     string          "editor" | "win" | "cursor" (default "editor")
+---   win          number          anchor window for relative="win"
+---   width/height/row/col/anchor/zindex/focusable
+---   border       string|boolean  (default "rounded")
+---   title        string          (enables the title fallback retry)
+---   title_pos    string          (default "left")
+---   winhl        string          window highlight
+---   win_options  table           window-local options applied after open
+---   close_keys   string[]        lhs list bound to close the float
+---   close_modes  string[]        modes for close_keys (default { "n" })
+---   on_winleave  boolean|function  close on WinLeave, or callback(win)
+---
+--- Returns buf, win; win is nil when the open failed (caller decides whether
+--- to clean up the buffer).
+function M.open(opts)
+  opts = opts or {}
+  local buf = opts.buf or vim.api.nvim_create_buf(false, true)
+
+  if opts.lines then
+    vim.api.nvim_set_option_value("modifiable", true, { buf = buf })
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, opts.lines)
+    if not opts.modifiable then
+      vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
+    end
+  end
+  if opts.filetype then
+    vim.api.nvim_set_option_value("filetype", opts.filetype, { buf = buf })
+  end
+  if opts.syntax then
+    vim.api.nvim_set_option_value("syntax", opts.syntax, { buf = buf })
+  end
+  for k, v in pairs(opts.buf_options or {}) do
+    vim.api.nvim_set_option_value(k, v, { buf = buf })
+  end
+
+  local win_opts = {
+    relative = opts.relative or "editor",
+    style = "minimal",
+    border = opts.border ~= nil and opts.border or "rounded",
+  }
+  if opts.win then win_opts.win = opts.win end
+  if opts.anchor then win_opts.anchor = opts.anchor end
+  if opts.width then win_opts.width = opts.width end
+  if opts.height then win_opts.height = opts.height end
+  if opts.row then win_opts.row = opts.row end
+  if opts.col then win_opts.col = opts.col end
+  if opts.zindex then win_opts.zindex = opts.zindex end
+  if opts.focusable ~= nil then win_opts.focusable = opts.focusable end
+  if opts.title then
+    win_opts.title = opts.title
+    win_opts.title_pos = opts.title_pos or "left"
+  end
+  if opts.winhl then win_opts.winhl = opts.winhl end
+
+  local ok, win = pcall(open_win, buf, opts.enter ~= false, win_opts)
+  if not ok then
+    return buf, nil
+  end
+
+  for k, v in pairs(opts.win_options or {}) do
+    vim.api.nvim_set_option_value(k, v, { win = win })
+  end
+
+  if opts.close_keys then
+    local maps = {}
+    for _, key in ipairs(opts.close_keys) do
+      for _, mode in ipairs(opts.close_modes or { "n" }) do
+        maps[#maps + 1] = { mode, key, function()
+          pcall(vim.api.nvim_win_close, win, true)
+        end }
+      end
+    end
+    M.bind_keys(buf, maps)
+  end
+
+  if opts.on_winleave then
+    vim.api.nvim_create_autocmd("WinLeave", {
+      buffer = buf,
+      callback = function()
+        if type(opts.on_winleave) == "function" then
+          opts.on_winleave(win)
+        else
+          pcall(vim.api.nvim_win_close, win, true)
+        end
+      end,
+    })
+  end
+
+  return buf, win
+end
+
+--- Bind a list of { mode, lhs, rhs, opts? } keymaps to a buffer.
+function M.bind_keys(buf, maps)
+  for _, m in ipairs(maps) do
+    vim.keymap.set(m[1], m[2], m[3], m[4] or { buffer = buf, noremap = true, silent = true })
+  end
 end
 
 return M

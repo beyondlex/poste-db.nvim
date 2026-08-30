@@ -1,6 +1,7 @@
 --- Dataset cell preview --- floating window for cell value inspection.
 local M = {}
 local const = require("poste-db.constants")
+local float_window = require("poste-db.float_window")
 
 function M.build_preview_lines(text)
   local lines = {}
@@ -53,12 +54,6 @@ function M.open_preview_float(title, text, ft)
   local lines = M.build_preview_lines(text)
   local width, height = M.compute_preview_size(lines, { title = title })
 
-  local buf = vim.api.nvim_create_buf(false, true)
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-  vim.api.nvim_set_option_value("syntax", ft, { buf = buf })
-  vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
-  vim.api.nvim_set_option_value("bufhidden", "wipe", { buf = buf })
-
   -- Anchor against the whole editor, not the (possibly small) dataset window,
   -- so the preview isn't squashed to the window's height. Use the cursor's
   -- absolute screen position and always show at least 3 rows of a tall value.
@@ -92,31 +87,30 @@ function M.open_preview_float(title, text, ft)
     col = col,
     width = width,
     height = height,
-    style = "minimal",
     border = "rounded",
     title = title,
     title_pos = "left",
+    lines = lines,
+    syntax = ft,
+    buf_options = { bufhidden = "wipe" },
+    win_options = {
+      wrap = true,
+      linebreak = true,
+      smoothscroll = true,
+      scrolloff = 1,
+      cursorline = true,
+    },
   }
-  local ok, win = pcall(vim.api.nvim_open_win, buf, true, win_opts)
-  if not ok then
-    win_opts.title = nil
-    win_opts.title_pos = nil
-    win = vim.api.nvim_open_win(buf, true, win_opts)
-  end
-
-  vim.wo[win].wrap = true
-  vim.wo[win].linebreak = true
-  vim.wo[win].smoothscroll = true
-  vim.wo[win].scrolloff = 1
-  vim.wo[win].cursorline = true
+  local buf, win = float_window.open(win_opts)
 
   return buf, win
 end
 
 function M.set_preview_keymaps(buf, close_fn)
-  local sopts = { buffer = buf, noremap = true, silent = true }
-  vim.keymap.set("n", "q", close_fn, sopts)
-  vim.keymap.set("n", "<Esc>", close_fn, sopts)
+  float_window.bind_keys(buf, {
+    { "n", "q", close_fn },
+    { "n", "<Esc>", close_fn },
+  })
 end
 
 return M

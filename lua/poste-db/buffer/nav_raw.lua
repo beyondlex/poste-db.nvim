@@ -1,5 +1,6 @@
 --- Dataset raw mode — show raw table data in a floating window.
 local C = require("poste-db.constants")
+local float_window = require("poste-db.float_window")
 
 local M = {}
 
@@ -31,55 +32,32 @@ function M.show()
   local width = math.floor(vim.o.columns * 0.9)
   local height = math.min(#lines + 2, vim.o.lines - 8)
   height = math.max(height, 3)
-
-  local buf = vim.api.nvim_create_buf(false, true)
-  vim.api.nvim_set_option_value("buftype", "nofile", { buf = buf })
-  vim.api.nvim_set_option_value("swapfile", false, { buf = buf })
-  vim.api.nvim_set_option_value("modifiable", true, { buf = buf })
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-  vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
-
   local row = math.floor((vim.o.lines - height) / 2)
   local col = math.floor((vim.o.columns - width) / 2)
 
-  local win_opts = {
+  float_window.open({
+    lines = lines,
     relative = "editor",
     width = width,
     height = height,
     row = row,
     col = col,
-    style = "minimal",
-    border = "rounded",
     zindex = 50,
-  }
-
-  local title = string.format(" Raw Mode — %s ", layout.table_name or "")
-  local ok, float_win = pcall(vim.api.nvim_open_win, buf, true, vim.tbl_extend("keep", { title = title, title_pos = "left" }, win_opts))
-  if not ok then
-    float_win = vim.api.nvim_open_win(buf, true, win_opts)
-  end
-
-  vim.wo[float_win].wrap = false
-  vim.wo[float_win].cursorline = true
-  vim.wo[float_win].number = false
-  vim.wo[float_win].relativenumber = false
-  vim.wo[float_win].cursorcolumn = false
-  vim.wo[float_win].signcolumn = "no"
-  vim.wo[float_win].foldcolumn = "0"
-  vim.wo[float_win].sidescrolloff = 0
-
-  local function close()
-    if vim.api.nvim_win_is_valid(float_win) then
-      vim.api.nvim_win_close(float_win, true)
-    end
-  end
-
-  local sopts = { buffer = buf, noremap = true, silent = true }
-  vim.keymap.set("n", "q", close, sopts)
-  vim.keymap.set("n", "<Esc>", close, sopts)
-
-  vim.keymap.set("v", "q", close, sopts)
-  vim.keymap.set("v", "<Esc>", close, sopts)
+    title = string.format(" Raw Mode — %s ", layout.table_name or ""),
+    buf_options = { buftype = "nofile", swapfile = false },
+    win_options = {
+      wrap = false,
+      cursorline = true,
+      number = false,
+      relativenumber = false,
+      cursorcolumn = false,
+      signcolumn = "no",
+      foldcolumn = "0",
+      sidescrolloff = 0,
+    },
+    close_keys = { "q", "<Esc>" },
+    close_modes = { "n", "v" },
+  })
 end
 
 M.toggle = M.show
