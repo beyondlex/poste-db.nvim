@@ -176,7 +176,11 @@ function M.setup()
     require("poste-db.file_exec").run({ filepath = args.args, mode = "greedy" })
   end, { nargs = 1, complete = "file", desc = "Execute a SQL file" })
 
-  if compat.opt("debug") then
+  -- Debug commands were gated behind a debug global when moved out of init.lua
+  -- (fe9d0af), which silently disabled them for anyone who never set the flag.
+  -- Restore the historical always-registered behavior; set g:poste_db_debug to
+  -- false to opt out.
+  if compat.opt("debug") ~= false then
     vim.api.nvim_create_user_command("PosteDbAutoTrigger", function()
       local group = vim.api.nvim_create_augroup("PosteDbAutoComplete", { clear = true })
       vim.api.nvim_create_autocmd("TextChangedI", {
