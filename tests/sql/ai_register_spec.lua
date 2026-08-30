@@ -45,6 +45,12 @@ describe("poste-db.ai.system_prompt", function()
     assert.truthy(prompt:find("my%-blog"))
   end)
 
+  it("names the dialect of the scoped connection", function()
+    local prompt = system_prompt._test.build({ connection = "my-blog", database = "blog" })
+    assert.truthy(prompt:find("mysql dialect"))
+    assert.truthy(prompt:find("mysql%-compatible statements"))
+  end)
+
   it("omits the context section when unset", function()
     local prompt = system_prompt._test.build()
     assert.falsy(prompt:find("Current SQL context"))

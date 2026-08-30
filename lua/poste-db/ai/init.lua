@@ -19,6 +19,9 @@ function M.register()
     system_prompt = function(scope)
       return require("poste-db.ai.system_prompt").build(scope)
     end,
+    auto_context = function(text, scope, cb)
+      require("poste-db.ai.schema").auto_context(text, scope, cb)
+    end,
     commands = require("poste-db.ai.commands").list(),
     mention = {
       match = function(token)

@@ -29,6 +29,19 @@ local KNOWLEDGE = [[You are running inside poste-db.nvim, a SQL execution plugin
 - Use the schema summary injected with the user message; do not invent tables or columns that are not listed. If unsure about a column, ask.
 - Prefer LIMIT on exploratory SELECTs; never write destructive DDL/DML unless explicitly asked.]]
 
+--- Look up the SQL dialect of a connection (postgres / mysql / sqlite), for
+--- telling the model which SQL flavor to write. Nil when unknown.
+--- @param conn string|nil
+--- @return string|nil
+local function dialect_of(conn)
+  if not conn then return nil end
+  local ok, connections = pcall(require, "poste-db.connections")
+  if not ok then return nil end
+  local ok_c, cfg = pcall(connections.get_connection_config, conn)
+  if ok_c and cfg and cfg.dialect and cfg.dialect ~= "" then return cfg.dialect end
+  return nil
+end
+
 --- Build the db-context system prompt (called per request). `chat_scope` is
 --- the poste-ai chat scope map (from /connections, /databases) and takes
 --- precedence over the SQL buffer context.
@@ -42,8 +55,10 @@ function M.build(chat_scope)
   if conn then
     parts[#parts + 1] = "## Current chat scope\n"
       .. "The chat is scoped to connection " .. conn
+      .. (dialect_of(conn) and (" (" .. dialect_of(conn) .. " dialect)") or "")
       .. (db and (", database " .. db) or "")
       .. ". SQL blocks run against this target by default — no @connection directive needed; "
+      .. "write " .. (dialect_of(conn) or "SQL") .. "-compatible statements; "
       .. "qualify objects only when the query crosses databases."
   else
     conn = state.context and state.context.connection
