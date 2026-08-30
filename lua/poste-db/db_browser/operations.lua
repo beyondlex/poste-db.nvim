@@ -1,7 +1,6 @@
 --- Operations dispatched from the DB Browser context menu.
 --- Each function: op(node, context) → performs the action.
 local cli = require("poste.cli")
-local tree = require("poste-db.db_browser.tree")
 local async = require("poste-db.db_browser.async")
 local icons = require("poste-db.db_browser.icons")
 local forms = require("poste-db.db_browser.forms")
@@ -334,20 +333,7 @@ function M.refresh(node, context)
     return
   end
 
-  node.children = nil
-  node.expanded = false
-  node.loading = true
-  local new_map = tree.render_tree(context.browser_buf, context.line_to_node, context.root_nodes, context.conn_label)
-  for i, n in ipairs(new_map) do context.line_to_node[i] = n end
-
-  local search_dir = get_search_dir(context)
-  async.fetch_children(node, function()
-    node.expanded = true
-    vim.schedule(function()
-      local nm = tree.render_tree(context.browser_buf, context.line_to_node, context.root_nodes, context.conn_label)
-      for i, n in ipairs(nm) do context.line_to_node[i] = n end
-    end)
-  end, search_dir)
+  util.refresh_subtree(node, context, node.node_type, get_search_dir(context))
 end
 
 --- Execute SQL File: pick a .sql file and execute it against this database.
@@ -904,19 +890,7 @@ execute_drop = function(table_node, qualified, conn, schema_prefix, context)
         end
         notify.info("Dropped table: " .. qualified)
         if parent then
-          parent.children = nil
-          parent.expanded = false
-          parent.loading = true
-          local nm = tree.render_tree(context.browser_buf, context.line_to_node, context.root_nodes, context.conn_label)
-          for i, n in ipairs(nm) do context.line_to_node[i] = n end
-          local async = require("poste-db.db_browser.async")
-          async.fetch_children(parent, function()
-            parent.expanded = true
-            vim.schedule(function()
-              local nm2 = tree.render_tree(context.browser_buf, context.line_to_node, context.root_nodes, context.conn_label)
-              for i, n in ipairs(nm2) do context.line_to_node[i] = n end
-            end)
-          end, search_dir)
+          util.refresh_subtree(parent, context, parent.node_type, search_dir)
         end
       end)
     end,
@@ -1104,8 +1078,7 @@ local function start_batch_drop(items, conn_label, search_dir, context)
         it.parent.loading = true
       end
     end
-    local nm = tree.render_tree(context.browser_buf, context.line_to_node, context.root_nodes, context.conn_label)
-    for i, n in ipairs(nm) do context.line_to_node[i] = n end
+    util.render_tree(context)
     local parents = {}
     for p in pairs(seen) do table.insert(parents, p) end
     local idx = 0

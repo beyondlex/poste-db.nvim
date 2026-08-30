@@ -83,25 +83,13 @@ function M.toggle_node(buf_line, context)
 
   if node.expanded then
     node.expanded = false
-    local new_map = tree.render_tree(context.browser_buf, context.line_to_node, context.root_nodes, context.conn_label)
-    for i, n in ipairs(new_map) do context.line_to_node[i] = n end
+    util.render_tree(context)
   else
     if node.children then
       node.expanded = true
-      local new_map = tree.render_tree(context.browser_buf, context.line_to_node, context.root_nodes, context.conn_label)
-      for i, n in ipairs(new_map) do context.line_to_node[i] = n end
+      util.render_tree(context)
     else
-      node.loading = true
-      local new_map = tree.render_tree(context.browser_buf, context.line_to_node, context.root_nodes, context.conn_label)
-      for i, n in ipairs(new_map) do context.line_to_node[i] = n end
-      local search_dir = get_search_dir(context.source_buf)
-      async.fetch_children(node, function()
-        node.expanded = true
-        vim.schedule(function()
-          local nm = tree.render_tree(context.browser_buf, context.line_to_node, context.root_nodes, context.conn_label)
-          for i, n in ipairs(nm) do context.line_to_node[i] = n end
-        end)
-      end, search_dir)
+      util.refresh_subtree(node, context, node.node_type, get_search_dir(context.source_buf))
     end
   end
 end
@@ -139,8 +127,7 @@ function M.collapse_or_parent(buf_line, context)
   if not is_leaf and node.expanded then
     -- Collapse: fold children, stay on this node
     node.expanded = false
-    local new_map = tree.render_tree(context.browser_buf, context.line_to_node, context.root_nodes, context.conn_label)
-    for i, n in ipairs(new_map) do context.line_to_node[i] = n end
+    util.render_tree(context)
     -- Keep cursor on the collapsed node
     for i, n in ipairs(context.line_to_node) do
       if n == node then
@@ -168,20 +155,9 @@ function M.expand_or_child(buf_line, context)
     -- Expand node directly (don't call toggle_node which executes SELECT on tables)
     if node.children then
       node.expanded = true
-      local new_map = tree.render_tree(context.browser_buf, context.line_to_node, context.root_nodes, context.conn_label)
-      for i, n in ipairs(new_map) do context.line_to_node[i] = n end
+      util.render_tree(context)
     else
-      node.loading = true
-      local new_map = tree.render_tree(context.browser_buf, context.line_to_node, context.root_nodes, context.conn_label)
-      for i, n in ipairs(new_map) do context.line_to_node[i] = n end
-      local search_dir = vim.fn.getcwd()
-      async.fetch_children(node, function()
-        node.expanded = true
-        vim.schedule(function()
-          local nm = tree.render_tree(context.browser_buf, context.line_to_node, context.root_nodes, context.conn_label)
-          for i, n in ipairs(nm) do context.line_to_node[i] = n end
-        end)
-      end, search_dir)
+      util.refresh_subtree(node, context, node.node_type, vim.fn.getcwd())
     end
   else
     -- Already expanded → jump to first child (next line)
@@ -206,20 +182,7 @@ function M.refresh_node(buf_line, context)
     return
   end
 
-  node.children = nil
-  node.expanded = false
-  node.loading = true
-  local new_map = tree.render_tree(context.browser_buf, context.line_to_node, context.root_nodes, context.conn_label)
-  for i, n in ipairs(new_map) do context.line_to_node[i] = n end
-
-  local search_dir = get_search_dir(context.source_buf)
-  async.fetch_children(node, function()
-    node.expanded = true
-    vim.schedule(function()
-      local nm = tree.render_tree(context.browser_buf, context.line_to_node, context.root_nodes, context.conn_label)
-      for i, n in ipairs(nm) do context.line_to_node[i] = n end
-    end)
-  end, search_dir)
+  util.refresh_subtree(node, context, node.node_type, get_search_dir(context.source_buf))
 end
 
 --- Execute SELECT * on a table node and render results in the dataset buffer.
@@ -345,8 +308,7 @@ local function do_jump(index)
     vim.schedule(function()
       -- Update header with match info
       _G.poste_search_info = { pattern = s.pattern, current = s.current, total = #s.matches }
-      local new_map = tree.render_tree(ctx.browser_buf, ctx.line_to_node, ctx.root_nodes, ctx.conn_label)
-      for i, n in ipairs(new_map) do ctx.line_to_node[i] = n end
+      util.render_tree(ctx)
 
       -- Highlight matching chars on all matches
       highlight_match_chars(ctx.browser_buf, ctx.line_to_node, s.matches)
@@ -391,8 +353,7 @@ function M.search_filter(buf_line, context)
     if not input or input == "" then
       search_state = { matches = {}, current = 0, pattern = "", context = nil }
       _G.poste_search_info = nil
-      local new_map = tree.render_tree(context.browser_buf, context.line_to_node, context.root_nodes, context.conn_label)
-      for i, n in ipairs(new_map) do context.line_to_node[i] = n end
+      util.render_tree(context)
       vim.api.nvim_buf_clear_namespace(context.browser_buf, search_hl_ns, 0, -1)
       vim.api.nvim_buf_clear_namespace(context.browser_buf, search_char_ns, 0, -1)
       return
@@ -413,8 +374,7 @@ function M.search_filter(buf_line, context)
     _G.poste_search_info = { pattern = input, current = 0, total = 0 }
     vim.api.nvim_buf_clear_namespace(context.browser_buf, search_hl_ns, 0, -1)
     vim.api.nvim_buf_clear_namespace(context.browser_buf, search_char_ns, 0, -1)
-    local new_map = tree.render_tree(context.browser_buf, context.line_to_node, context.root_nodes, context.conn_label)
-    for i, n in ipairs(new_map) do context.line_to_node[i] = n end
+    util.render_tree(context)
   end)
 end
 
@@ -423,8 +383,7 @@ function M.search_clear(context)
   if not c then return end
   search_state = { matches = {}, current = 0, pattern = "", context = nil }
   _G.poste_search_info = nil
-  local new_map = tree.render_tree(c.browser_buf, c.line_to_node, c.root_nodes, c.conn_label)
-  for i, n in ipairs(new_map) do c.line_to_node[i] = n end
+  util.render_tree(c)
   vim.api.nvim_buf_clear_namespace(c.browser_buf, search_hl_ns, 0, -1)
   vim.api.nvim_buf_clear_namespace(c.browser_buf, search_char_ns, 0, -1)
 end

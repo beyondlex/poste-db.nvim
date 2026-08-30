@@ -62,7 +62,7 @@ end
 
 --- Invalidate `target_node` up to its `node_type` ancestor, then reload that
 --- ancestor's children and re-render. Shared by every tree-refresh dance.
-function M.refresh_subtree(target_node, context, node_type)
+function M.refresh_subtree(target_node, context, node_type, search_dir)
   local parent = target_node
   while parent and parent.node_type ~= node_type do
     parent = parent.parent
@@ -81,7 +81,7 @@ function M.refresh_subtree(target_node, context, node_type)
     vim.schedule(function()
       M.render_tree(context)
     end)
-  end, vim.fn.getcwd())
+  end, search_dir or vim.fn.getcwd())
 end
 
 --- Execute a DDL statement through exec_run, report the outcome, and refresh
