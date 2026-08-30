@@ -16,12 +16,10 @@ local DUR_WARN_MS = 4000
 local win = nil
 local timer = nil
 
-local function setup_hl()
-  vim.api.nvim_set_hl(0, "PosteDbFlashInfo", { fg = "#9ece6a", bold = true })
-  vim.api.nvim_set_hl(0, "PosteDbFlashWarn", { fg = "#e0af68", bold = true })
-end
-setup_hl()
-vim.api.nvim_create_autocmd("ColorScheme", { callback = setup_hl })
+require("poste-db.db_browser.theme").register({
+  PosteDbFlashInfo = { fg = "#9ece6a", bold = true },
+  PosteDbFlashWarn = { fg = "#e0af68", bold = true },
+})
 
 local function close()
   if timer then

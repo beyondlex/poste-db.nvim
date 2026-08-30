@@ -953,15 +953,20 @@ local function prepare_drop_item(table_node, context)
   }
 end
 
-local function drop_progress_hl()
-  if not vim.api.nvim_get_hl(0, { name = "PosteDbDropProgress" }).fg then
-    vim.api.nvim_set_hl(0, "PosteDbDropProgress", { fg = "#565f89" })
-    vim.api.nvim_set_hl(0, "PosteDbDropError", { fg = "#f7768e" })
-    vim.api.nvim_set_hl(0, "PosteDbDropDone", { fg = "#9ece6a" })
+-- First definition wins: never clobber a colorscheme-provided group.
+local function keep_existing(name, spec)
+  return function()
+    local ok, hl = pcall(vim.api.nvim_get_hl, 0, { name = name })
+    if ok and hl and hl.fg then return nil end
+    return spec
   end
 end
-drop_progress_hl()
-vim.api.nvim_create_autocmd("ColorScheme", { callback = drop_progress_hl })
+
+require("poste-db.db_browser.theme").register({
+  PosteDbDropProgress = keep_existing("PosteDbDropProgress", { fg = "#565f89" }),
+  PosteDbDropError = keep_existing("PosteDbDropError", { fg = "#f7768e" }),
+  PosteDbDropDone = keep_existing("PosteDbDropDone", { fg = "#9ece6a" }),
+})
 
 local function start_batch_drop(items, conn_label, search_dir, context)
   local exec_run = require("poste-db.exec_run")

@@ -1,5 +1,4 @@
 local uv = vim.uv or vim.loop
-local state = require("poste.state")
 local config = require("poste-db.config")
 local cli = require("poste.cli")
 local util = require("poste.util")
@@ -13,17 +12,11 @@ local db_util = require("poste-db.db_browser.util")
 
 local M = {}
 
-local function setup_highlights()
-  vim.api.nvim_set_hl(0, "PosteDbCopySuccess", { fg = "#9ece6a" })
-  vim.api.nvim_set_hl(0, "PosteDbCopyError", { fg = "#f7768e" })
-  vim.api.nvim_set_hl(0, "PosteDbCopyProgress", { fg = "#565f89" })
-  state.apply_highlight_overrides({
-    "PosteDbCopySuccess", "PosteDbCopyError", "PosteDbCopyProgress",
-  })
-end
-
-setup_highlights()
-vim.api.nvim_create_autocmd("ColorScheme", { callback = setup_highlights })
+require("poste-db.db_browser.theme").register({
+  PosteDbCopySuccess = { fg = "#9ece6a" },
+  PosteDbCopyError = { fg = "#f7768e" },
+  PosteDbCopyProgress = { fg = "#565f89" },
+})
 
 -- Shared identifier quoting (dialect-aware backtick/double-quote).
 local quote = ident.quote

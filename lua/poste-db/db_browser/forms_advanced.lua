@@ -1,4 +1,3 @@
-local state = require("poste.state")
 local dialog = require("poste.dialog")
 local layout = require("poste.layout")
 local notify = require("poste-db.db_browser.notify")
@@ -7,15 +6,10 @@ local M = {}
 
 local ns = vim.api.nvim_create_namespace("poste_db_adv_form")
 
-local function setup_hl()
-  vim.api.nvim_set_hl(0, "PosteDbFormShortcut", { fg = 0x98c379, bold = true })
-  vim.api.nvim_set_hl(0, "PosteDbFormDim",      { fg = 0x5c6370 })
-  state.apply_highlight_overrides({
-    "PosteDbFormShortcut", "PosteDbFormDim",
-  })
-end
-setup_hl()
-vim.api.nvim_create_autocmd("ColorScheme", { callback = setup_hl })
+require("poste-db.db_browser.theme").register({
+  PosteDbFormShortcut = { fg = 0x98c379, bold = true },
+  PosteDbFormDim = { fg = 0x5c6370 },
+})
 local active_form = nil
 
 local function close_active()

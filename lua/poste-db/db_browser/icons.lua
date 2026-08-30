@@ -1,4 +1,3 @@
-local state = require("poste.state")
 local util = require("poste-db.util")
 
 local ICONS = {
@@ -37,72 +36,61 @@ local HEADER_LINES = 0
 
 local hl_ns = vim.api.nvim_create_namespace("poste_db_browser")
 
-local function setup_highlights()
-  local function resolve_hl(name)
-    local ok, hl = pcall(vim.api.nvim_get_hl, 0, { name = name })
-    if ok and hl then return hl end
-    return nil
-  end
+--- Dark/light-aware palettes; re-evaluated by theme on every ColorScheme
+--- change.
+local theme = require("poste-db.db_browser.theme")
 
-  local normal = resolve_hl("Normal")
+local DARK_PALETTE = {
+  PosteDbBrowserHeader = { fg = "#7aa2f7", bold = true },
+  PosteDbBrowserSeparator = { fg = "#3b4261" },
+  PosteDbBrowserMarker = { fg = "#565f89" },
+  PosteDbBrowserTable = { fg = "#9ece6a" },
+  PosteDbBrowserType = { fg = "#565f89" },
+  PosteDbBrowserCount = { fg = "#565f89" },
+  PosteDbBrowserIconConn = { fg = "#7aa2f7" },
+  PosteDbBrowserIconDb = { fg = "#e0af68" },
+  PosteDbBrowserIconSchema = { fg = "#7dcfff" },
+  PosteDbBrowserIconTable = { fg = "#9ece6a" },
+  PosteDbBrowserIconCol = { fg = "#a9b1d6" },
+  PosteDbBrowserIconPk = { fg = "#e0af68" },
+  PosteDbBrowserIconFk = { fg = "#7dcfff" },
+  PosteDbBrowserKeyHint = { fg = "#9ece6a", bold = true },
+  PosteDbBrowserSearchMatch = { bg = "#544d33", bold = true },
+  PosteDbBrowserSearchChar = { fg = "#bb9af7", bold = true },
+  PosteDbBrowserSelected = { fg = "#7aa2f7", bold = true },
+  PosteDbBrowserYanked = { fg = "#bb9af7", bold = true },
+  PosteDbBrowserComment = { fg = "#7a7f9c" },
+}
+
+local LIGHT_PALETTE = {
+  PosteDbBrowserHeader = { fg = "#2e7de9", bold = true },
+  PosteDbBrowserSeparator = { fg = "#a8aecb" },
+  PosteDbBrowserMarker = { fg = "#8990b3" },
+  PosteDbBrowserTable = { fg = "#587539" },
+  PosteDbBrowserType = { fg = "#8990b3" },
+  PosteDbBrowserCount = { fg = "#8990b3" },
+  PosteDbBrowserIconConn = { fg = "#2e7de9" },
+  PosteDbBrowserIconDb = { fg = "#8c6c3e" },
+  PosteDbBrowserIconSchema = { fg = "#1880a8" },
+  PosteDbBrowserIconTable = { fg = "#587539" },
+  PosteDbBrowserIconCol = { fg = "#6172b0" },
+  PosteDbBrowserIconPk = { fg = "#8c6c3e" },
+  PosteDbBrowserIconFk = { fg = "#1880a8" },
+  PosteDbBrowserKeyHint = { fg = "#587539", bold = true },
+  PosteDbBrowserSearchMatch = { bg = "#f5e6b8", bold = true },
+  PosteDbBrowserSearchChar = { fg = "#9854f1", bold = true },
+  PosteDbBrowserSelected = { fg = "#2e7de9", bold = true },
+  PosteDbBrowserYanked = { fg = "#9854f1", bold = true },
+  PosteDbBrowserComment = { fg = "#8a90b0" },
+}
+
+local function current_palette()
+  local normal = vim.api.nvim_get_hl(0, { name = "Normal" })
   local is_dark = util.is_dark_color(normal and normal.bg)
-
-  if is_dark then
-    vim.api.nvim_set_hl(0, "PosteDbBrowserHeader", { fg = "#7aa2f7", bold = true })
-    vim.api.nvim_set_hl(0, "PosteDbBrowserSeparator", { fg = "#3b4261" })
-    vim.api.nvim_set_hl(0, "PosteDbBrowserMarker", { fg = "#565f89" })
-    vim.api.nvim_set_hl(0, "PosteDbBrowserTable", { fg = "#9ece6a" })
-    vim.api.nvim_set_hl(0, "PosteDbBrowserType", { fg = "#565f89" })
-    vim.api.nvim_set_hl(0, "PosteDbBrowserCount", { fg = "#565f89" })
-    vim.api.nvim_set_hl(0, "PosteDbBrowserIconConn", { fg = "#7aa2f7" })
-    vim.api.nvim_set_hl(0, "PosteDbBrowserIconDb", { fg = "#e0af68" })
-    vim.api.nvim_set_hl(0, "PosteDbBrowserIconSchema", { fg = "#7dcfff" })
-    vim.api.nvim_set_hl(0, "PosteDbBrowserIconTable", { fg = "#9ece6a" })
-    vim.api.nvim_set_hl(0, "PosteDbBrowserIconCol", { fg = "#a9b1d6" })
-    vim.api.nvim_set_hl(0, "PosteDbBrowserIconPk", { fg = "#e0af68" })
-    vim.api.nvim_set_hl(0, "PosteDbBrowserIconFk", { fg = "#7dcfff" })
-    vim.api.nvim_set_hl(0, "PosteDbBrowserKeyHint", { fg = "#9ece6a", bold = true })
-    vim.api.nvim_set_hl(0, "PosteDbBrowserSearchMatch", { bg = "#544d33", bold = true })
-    vim.api.nvim_set_hl(0, "PosteDbBrowserSearchChar", { fg = "#bb9af7", bold = true })
-    vim.api.nvim_set_hl(0, "PosteDbBrowserSelected", { fg = "#7aa2f7", bold = true })
-    vim.api.nvim_set_hl(0, "PosteDbBrowserYanked", { fg = "#bb9af7", bold = true })
-    vim.api.nvim_set_hl(0, "PosteDbBrowserComment", { fg = "#7a7f9c" })
-  else
-    vim.api.nvim_set_hl(0, "PosteDbBrowserHeader", { fg = "#2e7de9", bold = true })
-    vim.api.nvim_set_hl(0, "PosteDbBrowserSeparator", { fg = "#a8aecb" })
-    vim.api.nvim_set_hl(0, "PosteDbBrowserMarker", { fg = "#8990b3" })
-    vim.api.nvim_set_hl(0, "PosteDbBrowserTable", { fg = "#587539" })
-    vim.api.nvim_set_hl(0, "PosteDbBrowserType", { fg = "#8990b3" })
-    vim.api.nvim_set_hl(0, "PosteDbBrowserCount", { fg = "#8990b3" })
-    vim.api.nvim_set_hl(0, "PosteDbBrowserIconConn", { fg = "#2e7de9" })
-    vim.api.nvim_set_hl(0, "PosteDbBrowserIconDb", { fg = "#8c6c3e" })
-    vim.api.nvim_set_hl(0, "PosteDbBrowserIconSchema", { fg = "#1880a8" })
-    vim.api.nvim_set_hl(0, "PosteDbBrowserIconTable", { fg = "#587539" })
-    vim.api.nvim_set_hl(0, "PosteDbBrowserIconCol", { fg = "#6172b0" })
-    vim.api.nvim_set_hl(0, "PosteDbBrowserIconPk", { fg = "#8c6c3e" })
-    vim.api.nvim_set_hl(0, "PosteDbBrowserIconFk", { fg = "#1880a8" })
-    vim.api.nvim_set_hl(0, "PosteDbBrowserKeyHint", { fg = "#587539", bold = true })
-    vim.api.nvim_set_hl(0, "PosteDbBrowserSearchMatch", { bg = "#f5e6b8", bold = true })
-    vim.api.nvim_set_hl(0, "PosteDbBrowserSearchChar", { fg = "#9854f1", bold = true })
-    vim.api.nvim_set_hl(0, "PosteDbBrowserSelected", { fg = "#2e7de9", bold = true })
-    vim.api.nvim_set_hl(0, "PosteDbBrowserYanked", { fg = "#9854f1", bold = true })
-    vim.api.nvim_set_hl(0, "PosteDbBrowserComment", { fg = "#8a90b0" })
-  end
-
-  state.apply_highlight_overrides({
-    "PosteDbBrowserHeader", "PosteDbBrowserSeparator", "PosteDbBrowserMarker",
-    "PosteDbBrowserTable", "PosteDbBrowserType", "PosteDbBrowserCount",
-    "PosteDbBrowserIconConn", "PosteDbBrowserIconDb", "PosteDbBrowserIconSchema",
-    "PosteDbBrowserIconTable", "PosteDbBrowserIconCol",
-    "PosteDbBrowserIconPk", "PosteDbBrowserIconFk",
-    "PosteDbBrowserKeyHint", "PosteDbBrowserSearchMatch",
-    "PosteDbBrowserSearchChar", "PosteDbBrowserSelected", "PosteDbBrowserYanked",
-    "PosteDbBrowserComment",
-  })
+  return is_dark and DARK_PALETTE or LIGHT_PALETTE
 end
 
-setup_highlights()
-vim.api.nvim_create_autocmd("ColorScheme", { callback = setup_highlights })
+theme.register(current_palette)
 
 return {
   ICONS = ICONS,

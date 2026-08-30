@@ -1,7 +1,6 @@
 --- Context menu for DB Browser nodes.
 --- Single trigger (x) → floating menu with letter-shortcut actions.
 --- Dispatches to operations module.
-local state = require("poste.state")
 local operations = require("poste-db.db_browser.operations")
 local notify = require("poste-db.db_browser.notify")
 local float_window = require("poste-db.float_window")
@@ -79,16 +78,11 @@ local ns_floating = vim.api.nvim_create_namespace("poste_db_context_menu")
 local ns_menu_hl = vim.api.nvim_create_namespace("poste_db_context_menu_hl")
 
 -- Context menu highlight groups — applied at load and on ColorScheme change
-local function setup_menu_hl()
-  vim.api.nvim_set_hl(0, "PosteDbMenuBorder",    { fg = 0x7aa2f7, bold = true })
-  vim.api.nvim_set_hl(0, "PosteDbMenuTitle",     { fg = 0xe0af68, bold = true })
-  vim.api.nvim_set_hl(0, "PosteDbMenuShortcut",  { fg = 0x98c379, bold = true })
-  state.apply_highlight_overrides({
-    "PosteDbMenuBorder", "PosteDbMenuTitle", "PosteDbMenuShortcut",
-  })
-end
-setup_menu_hl()
-vim.api.nvim_create_autocmd("ColorScheme", { callback = setup_menu_hl })
+require("poste-db.db_browser.theme").register({
+  PosteDbMenuBorder = { fg = 0x7aa2f7, bold = true },
+  PosteDbMenuTitle = { fg = 0xe0af68, bold = true },
+  PosteDbMenuShortcut = { fg = 0x98c379, bold = true },
+})
 
 --- Build display lines for a menu.
 --- Returns { lines, item_map } where item_map[i] = { letter, action, node, context }

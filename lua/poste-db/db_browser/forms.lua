@@ -3,23 +3,17 @@
 --- fields: { { label, key, value, kind }, ... }  kind = "text" | "bool" | "select"
 local M = {}
 
-local state = require("poste.state")
 local float_window = require("poste-db.float_window")
 
 local ns_form = vim.api.nvim_create_namespace("poste_db_form")
 
 -- Form visual highlight groups — applied at load and on ColorScheme change
-local function setup_hl()
-  vim.api.nvim_set_hl(0, "PosteDbFormBorder",    { fg = 0x7aa2f7, bold = true })
-  vim.api.nvim_set_hl(0, "PosteDbFormTitle",     { fg = 0xe0af68, bold = true })
-  vim.api.nvim_set_hl(0, "PosteDbFormSubmit",    { fg = 0x98c379, bold = true })
-  vim.api.nvim_set_hl(0, "PosteDbFormCancel",    { fg = 0x5c6370 })
-  state.apply_highlight_overrides({
-    "PosteDbFormBorder", "PosteDbFormTitle", "PosteDbFormSubmit", "PosteDbFormCancel",
-  })
-end
-setup_hl()
-vim.api.nvim_create_autocmd("ColorScheme", { callback = setup_hl })
+require("poste-db.db_browser.theme").register({
+  PosteDbFormBorder = { fg = 0x7aa2f7, bold = true },
+  PosteDbFormTitle = { fg = 0xe0af68, bold = true },
+  PosteDbFormSubmit = { fg = 0x98c379, bold = true },
+  PosteDbFormCancel = { fg = 0x5c6370 },
+})
 
 --- Convert a field value to a displayable string.
 --- nil/vim.NULL → "(not set)" virtual text
