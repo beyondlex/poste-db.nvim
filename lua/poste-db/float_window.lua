@@ -152,13 +152,15 @@ function M.open(opts)
     win_opts.title = opts.title
     win_opts.title_pos = opts.title_pos or "left"
   end
-  if opts.winhl then win_opts.winhl = opts.winhl end
 
   local ok, win = pcall(open_win, buf, opts.enter ~= false, win_opts)
   if not ok then
     return buf, nil
   end
 
+  if opts.winhl then
+    vim.api.nvim_set_option_value("winhl", opts.winhl, { win = win })
+  end
   for k, v in pairs(opts.win_options or {}) do
     vim.api.nvim_set_option_value(k, v, { win = win })
   end
