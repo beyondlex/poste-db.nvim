@@ -88,6 +88,16 @@ describe("find_stmt_span", function()
     -- BEGIN/COMMIT is a transaction node
     assert.same({ 1, 1 }, span)
   end)
+
+  it("reflects buffer edits (cache invalidation)", function()
+    local buf = make_buf({ "SELECT 1;", "SELECT 2;" })
+    assert.same({ 1, 1 }, ts_stmt.find_stmt_span(buf, 1))  -- warm the cache
+    vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "SELECT *", "FROM t;" })
+    -- "SELECT *\nFROM t;" is a fresh 2-line statement; the stale { 1, 1 }
+    -- span must not be returned after the buffer edit
+    assert.same({ 2, 3 }, ts_stmt.find_stmt_span(buf, 2))
+    assert.same({ 2, 3 }, ts_stmt.find_stmt_span(buf, 3))
+  end)
 end)
 
 describe("find_all_stmt_lines", function()

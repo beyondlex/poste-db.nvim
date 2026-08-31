@@ -57,11 +57,16 @@ local function get_top_level_stmts(root, buf)
   return stmts
 end
 
---- Find the statement span containing a given cursor line using Tree-sitter.
---- @param buf number  buffer handle
---- @param cursor_line number  1-based line number
---- @return {start_line: number, end_line: number}|nil  1-based, inclusive
-function M.find_stmt_span(buf, cursor_line)
+-- Per-buffer cache of top-level statement spans, invalidated whenever the
+-- buffer's changedtick advances (i.e. any edit). Lets find_stmt_span do an
+-- O(log n) number lookup instead of re-walking top-level TSNode children
+-- from the root on every cursor move (unmeasurably slow on large files).
+local _span_cache = {}
+
+--- Build the sorted list of top-level statement spans for a buffer.
+--- Mirrors the nodes find_stmt_span used to walk live (statement,
+--- transaction, ERROR). Returns nil when the parser is unavailable.
+local function build_span_list(buf)
   local parser = get_parser(buf)
   if not parser then return nil end
 
@@ -69,20 +74,58 @@ function M.find_stmt_span(buf, cursor_line)
   if not ok or not trees or #trees == 0 then return nil end
 
   local root = trees[1]:root()
-  local cursor_row = cursor_line - 1
-
-  -- Walk top-level children to find the statement containing cursor_row
+  local spans = {}
   for child in root:iter_children() do
     local t = child:type()
     if t == "statement" or t == "transaction" or t == "ERROR" then
-      local s = child:start()
-      local e = child:end_()
-      if s <= cursor_row and cursor_row <= e then
-        return { s + 1, e + 1 }
-      end
+      -- store 0-based rows (TS coordinates); find_stmt_span converts at return
+      spans[#spans + 1] = { child:start(), child:end_() }
+    end
+  end
+  return #spans > 0 and spans or nil
+end
+
+--- Find the statement span containing a given cursor line using Tree-sitter.
+--- @param buf number  buffer handle
+--- @param cursor_line number  1-based line number
+--- @return {start_line: number, end_line: number}|nil  1-based, inclusive
+function M.find_stmt_span(buf, cursor_line)
+  if not buf or not vim.api.nvim_buf_is_valid(buf) then
+    if buf then _span_cache[buf] = nil end
+    return nil
+  end
+
+  local changedtick = vim.api.nvim_buf_get_changedtick(buf)
+  local cache = _span_cache[buf]
+  if not cache or cache.changedtick ~= changedtick then
+    local spans = build_span_list(buf)
+    if not spans then
+      _span_cache[buf] = nil
+      return nil
+    end
+    cache = { changedtick = changedtick, spans = spans }
+    _span_cache[buf] = cache
+  end
+
+  local row = cursor_line - 1
+  local spans = cache.spans
+  -- Binary search for the last (and only) span starting at or above row.
+  -- Top-level spans are ordered and non-overlapping; the row is inside its
+  -- span iff it lands between a span's start and end.
+  local lo, hi, best = 1, #spans, nil
+  while lo <= hi do
+    local mid = math.floor((lo + hi) / 2)
+    if spans[mid][1] <= row then
+      best = mid
+      lo = mid + 1
+    else
+      hi = mid - 1
     end
   end
 
+  if best and row <= spans[best][2] then
+    return { spans[best][1] + 1, spans[best][2] + 1 }
+  end
   return nil
 end
 

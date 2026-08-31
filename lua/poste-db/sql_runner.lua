@@ -6,6 +6,7 @@ local sql_state = require("poste-db.state")
 local config = require("poste-db.config")
 local indicators = require("poste.indicators")
 local statement = require("poste-db.statement")
+local stmt_indicator = require("poste-db.statement_indicator")
 local sql_introspect = require("poste-db.introspect")
 local sql_buffer = require("poste-db.buffer")
 local dml_guard = require("poste-db.dml_guard")
@@ -99,7 +100,9 @@ function M.ensure_sql_keymaps(buf)
     end, keymap_opts)
   end
 
-  -- CursorMoved: update context indicator in statusline + statement highlight
+  -- CursorMoved: update statement boundary highlight synchronously (so it
+  -- tracks the cursor on the same redraw, like cursorline) + context indicator
+  -- in the statusline (debounced to avoid repeated context resolution churn).
   local augroup = "PosteDbCursorMoved_" .. buf
   pcall(vim.api.nvim_del_augroup_by_name, augroup)
   local group = vim.api.nvim_create_augroup(augroup, { clear = true })
@@ -107,6 +110,8 @@ function M.ensure_sql_keymaps(buf)
     group = group,
     buffer = buf,
     callback = function()
+      stmt_indicator.update(buf, vim.fn.line("."))
+
       local pending = _cursor_moved_timers[buf]
       if pending then
         pending:stop()
@@ -123,8 +128,6 @@ function M.ensure_sql_keymaps(buf)
             vim.cmd("redrawstatus")
           end
         end
-        local stmt_indicator = require("poste-db.statement_indicator")
-        stmt_indicator.update(buf, vim.fn.line("."))
       end, CURSOR_MOVED_DEBOUNCE_MS)
     end,
   })
