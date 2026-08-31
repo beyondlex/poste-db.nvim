@@ -174,7 +174,7 @@ function M.run_sql_request()
   local adjusted_line
   local visual_sel_end
   local stmt_start  -- used for session raw SQL extraction
-  local stmt_end  -- used in callbacks for indicator placement on last line
+  local stmt_end  -- used for session raw SQL extraction
   local stmt_lines
   local set_lines  -- preceding SET @var statements found by extract_stmt_at_cursor
 
@@ -250,32 +250,28 @@ function M.run_sql_request()
   first_line = math.max(1, math.min(first_line, #buf_lines))
 
   -- Place the running spinner on the same line each statement's completion
-  -- indicator will land (`stmt_indicator_line` for visual blocks, `stmt_end`
-  -- for cursor runs) so ✓/✘ replaces the spinner in place — otherwise the
-  -- spinner freezes on the statement's first line while the result lands on
-  -- its last line, splitting loading/completion across two lines.
+  -- indicator will land — the statement's FIRST line — so ✓/✘ replaces the
+  -- spinner in place and the sign column stays aligned with the SQL start.
   if is_visual then
-    local max_end = visual_sel_end or #buf_lines
     if #stmt_lines > 0 then
       for i, ln in ipairs(stmt_lines) do
-        indicators.set_indicator(src_buf,
-          stmt_indicator_line(buf_lines, ln, stmt_lines[i + 1], max_end), "running")
+        indicators.set_indicator(src_buf, stmt_indicator_line(ln), "running")
       end
     else
       indicators.set_indicator(src_buf, first_line - 1, "running")
     end
   else
-    indicators.set_indicator(src_buf, (stmt_end and (stmt_end - 1)) or (first_line - 1), "running")
+    indicators.set_indicator(src_buf, first_line - 1, "running")
   end
 
-  -- Line a whole-block failure lands on (the last statement's ending line for
-  -- visual runs), matching where its running spinner sits.
+  -- Line a whole-block failure lands on (the last statement's starting line
+  -- for visual runs), matching where its running spinner sits.
   local block_result_line
   if is_visual then
     local last_start = stmt_lines[#stmt_lines] or first_line
-    block_result_line = stmt_indicator_line(buf_lines, last_start, nil, visual_sel_end or #buf_lines)
+    block_result_line = stmt_indicator_line(last_start)
   else
-    block_result_line = (stmt_end and (stmt_end - 1)) or (first_line - 1)
+    block_result_line = first_line - 1
   end
 
   local sql_context = require("poste-db.context")
@@ -364,7 +360,6 @@ function M.run_sql_request()
     buf_content = buf_content,
     stmt_sql_raw = stmt_sql_raw,
     stmt_lines = stmt_lines,
-    stmt_end = stmt_end,
     first_line = first_line,
     is_visual = is_visual,
     visual_sel_end = visual_sel_end,

@@ -4,7 +4,7 @@
 --- nothing here closes over request locals:
 ---
 ---   entry, current_seq, get_exec_seq, src_buf, src_file, buf_lines,
----   buf_content, stmt_sql_raw, stmt_lines, stmt_end, first_line, is_visual,
+---   buf_content, stmt_sql_raw, stmt_lines, first_line, is_visual,
 ---   visual_sel_end, vis_start, vis_end, set_lines, block_result_line
 local state = require("poste.state")
 local sql_state = require("poste-db.state")
@@ -16,23 +16,13 @@ local sql_buffer = require("poste-db.buffer")
 
 local M = {}
 
---- Compute the indicator line for a statement: `end_nr` exclusive, trimmed
---- past trailing blank lines AND `--` comment lines so the marker lands on the
---- statement itself, never on the section separator or the next statement's
---- comment (which would split pending/success icons across lines).
---- @param buf_lines string[]
---- @param line_nr number statement start line (inclusive)
---- @param next_start number|nil next statement start (exclusive bound)
---- @param max_end number fallback exclusive bound (visual selection end / buffer end)
+--- Compute the indicator line for a statement: the statement's FIRST line
+--- (0-based), so the sign-column spinner / ✓ / ✘ sits beside the statement
+--- start, aligned with where the user ran it from.
+--- @param line_nr number statement start line (inclusive, 1-based)
 --- @return number 0-based line index for indicators.set_indicator
-function M.stmt_indicator_line(buf_lines, line_nr, next_start, max_end)
-  local end_nr = next_start and (next_start - 1) or max_end
-  while end_nr > line_nr do
-    local trimmed = (buf_lines[end_nr] or ""):match("^%s*(.*)$")
-    if trimmed ~= "" and not trimmed:match("^%-%-") then break end
-    end_nr = end_nr - 1
-  end
-  return (end_nr - 1)
+function M.stmt_indicator_line(line_nr)
+  return line_nr - 1
 end
 
 --- True when the first real statement of `sql` is DDL (CREATE/ALTER/DROP/
@@ -129,10 +119,7 @@ function M.handle(deps, parsed)
           }
           tab_idx = tab_idx + 1
           local err_line = deps.stmt_lines[i] or deps.first_line
-          local next_start = deps.stmt_lines[i + 1]
-          indicators.set_indicator(deps.src_buf,
-            M.stmt_indicator_line(deps.buf_lines, err_line, next_start, deps.visual_sel_end or #deps.buf_lines),
-            "error")
+          indicators.set_indicator(deps.src_buf, M.stmt_indicator_line(err_line), "error")
           local lines = sql_format.format_error(err_text, parsed.connection or "")
           sql_buffer.render_dataset(lines, { type = "error" }, { tab_index = tab_idx, exec_seq = deps.current_seq })
         else
@@ -159,9 +146,7 @@ function M.handle(deps, parsed)
             -- Skip statements with no result set (SET, USE, etc.) — they
             -- would otherwise clutter the dataset with empty tabs.
             local line_nr = deps.stmt_lines[i] or deps.first_line
-            local next_start = deps.stmt_lines[i + 1]
-            indicators.set_indicator(deps.src_buf,
-              M.stmt_indicator_line(deps.buf_lines, line_nr, next_start, deps.visual_sel_end or #deps.buf_lines),
+            indicators.set_indicator(deps.src_buf, M.stmt_indicator_line(line_nr),
               "success", result.execution_time_ms)
             goto continue
           else
@@ -179,9 +164,7 @@ function M.handle(deps, parsed)
           })
 
           local line_nr = deps.stmt_lines[i] or deps.first_line
-          local next_start = deps.stmt_lines[i + 1]
-          indicators.set_indicator(deps.src_buf,
-            M.stmt_indicator_line(deps.buf_lines, line_nr, next_start, deps.visual_sel_end or #deps.buf_lines),
+          indicators.set_indicator(deps.src_buf, M.stmt_indicator_line(line_nr),
             "success", result.execution_time_ms)
         end
         ::continue::
@@ -223,9 +206,7 @@ function M.handle(deps, parsed)
           at = os.time(),
         }
       end
-      local result_line = deps.stmt_end
-        or (deps.is_visual and M.stmt_indicator_line(deps.buf_lines, deps.first_line, deps.stmt_lines[2], deps.visual_sel_end or #deps.buf_lines) or nil)
-        or deps.first_line
+      local result_line = deps.first_line
       if has_err then
         indicators.set_indicator(deps.src_buf, result_line - 1, "error")
       else

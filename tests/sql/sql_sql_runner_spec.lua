@@ -120,7 +120,7 @@ describe("sql_runner run_sql_request", function()
     assert.matches("not found", notified.msg)
   end)
 
-  it("visual multi-statement: running spinner lands on each statement's last line (not first)", function()
+  it("visual multi-statement: running spinner lands on each statement's first line", function()
     local lines = {
       "-- 创建能力表",
       "CREATE TABLE abilities (",
@@ -161,15 +161,15 @@ describe("sql_runner run_sql_request", function()
     vim.cmd("normal! ggVG")
     vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<CR>", true, false, true), "x", false)
 
-    -- Running spinners must sit on the statements' last lines (0-indexed
-    -- lines 4 = ");" and 9 = ");") — the same lines completion will touch —
-    -- never on the CREATE TABLE first lines (1 and 7).
+    -- Running spinners must sit on the statements' FIRST lines (0-indexed
+    -- lines 1 = "CREATE TABLE abilities (" and 7 = "CREATE TABLE teams (")
+    -- — the same lines completion will touch — aligned with the SQL start.
     local running_lines = {}
     for _, c in ipairs(indicator_calls) do
       if c[3] == "running" then running_lines[#running_lines + 1] = c[2] end
     end
     table.sort(running_lines)
-    assert.same({ 4, 9 }, running_lines, "spinner must land on each statement's last line")
+    assert.same({ 1, 7 }, running_lines, "spinner must land on each statement's first line")
   end)
 
   after_each(function()
