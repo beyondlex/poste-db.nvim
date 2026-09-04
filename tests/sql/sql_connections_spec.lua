@@ -95,6 +95,15 @@ describe("connections resolve_connection_url", function()
     assert.matches("not found", err or "")
   end)
 
+  it("rejects unsupported dialect (shared connections.toml)", function()
+    package.loaded["poste-db.toml"].parse_file = function()
+      return { cache = { dialect = "elasticsearch", host = "127.0.0.1", port = 9200 } }
+    end
+    local url, err = connections.resolve_connection_url("cache")
+    assert.is_nil(url)
+    assert.matches("unsupported dialect", err or "")
+  end)
+
   it("builds postgres URL from fields", function()
     package.loaded["poste-db.toml"].parse_file = function()
       return { primary = { dialect = "postgres", host = "pg.example.com", port = 5432, database = "blog", user = "alice" } }
@@ -244,6 +253,23 @@ describe("connections list_connections", function()
     assert.equals(1, #captured)
     assert.equals("primary", captured[1].name)
     assert.equals("postgres", captured[1].dialect)
+  end)
+
+  it("skips unsupported dialects from a shared connections.toml", function()
+    local config_path = tmpdir .. "/connections.toml"
+    util_stub.find_file_upwards = function() return config_path end
+    package.loaded["poste-db.toml"].parse_file = function()
+      return {
+        primary = { dialect = "postgres", host = "localhost" },
+        cache = { dialect = "elasticsearch", host = "127.0.0.1" },
+      }
+    end
+    local captured
+    connections.list_connections(function(list) captured = list end)
+    vim.wait(100, function() return captured ~= nil end)
+    assert.is_not_nil(captured)
+    assert.equals(1, #captured)
+    assert.equals("primary", captured[1].name)
   end)
 end)
 

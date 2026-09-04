@@ -41,6 +41,24 @@ M.STATUSLINE_TRUNC_WIDTH = 120
 M.MAX_COL_WIDTH = 30
 M.IMPORT_PREVIEW_HEIGHT_RATIO = 0.6
 
+--- SQL dialects poste-db knows how to connect to. A shared connections.toml
+--- may also carry sections for satellite plugins (redis, elasticsearch, ...);
+--- poste-db must not enumerate those, only its own set.
+M.SUPPORTED_DIALECTS = {
+  postgres = true,
+  mysql = true,
+  mariadb = true,
+  sqlite = true,
+}
+
+--- True when the connection dialect is one poste-db can handle. A nil dialect
+--- is allowed (defaults behave like postgres elsewhere).
+--- @param dialect any
+--- @return boolean
+function M.is_sql_dialect(dialect)
+  return dialect == nil or M.SUPPORTED_DIALECTS[dialect] == true
+end
+
 --- Database-engine built-in schemas/databases holding catalog tables
 --- (pg_catalog.pg_tables, mysql.user, ...) whose contents are version-specific
 --- and not returned by normal schema introspection. Lowercased keys.

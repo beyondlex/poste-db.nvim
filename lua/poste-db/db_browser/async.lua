@@ -4,6 +4,7 @@ local sql_state = require("poste-db.state")
 local tree = require("poste-db.db_browser.tree")
 local async = require("poste-db.async")
 local log = require("poste-db.log")
+local const = require("poste-db.constants")
 
 local M = {}
 
@@ -429,12 +430,16 @@ function M.load_connections(callback, search_dir)
       local parsed, err = toml.parse_file(config_path)
       if parsed then
         for name, conn in pairs(parsed) do
+          -- Skip dialects poste-db does not support (satellite sections from a
+          -- shared connections.toml, e.g. redis)
+          if not const.is_sql_dialect(conn.dialect) then goto continue end
           local entry = { name = name, dialect = conn.dialect or "postgres" }
           if conn.host then entry.host = conn.host end
           if conn.port then entry.port = conn.port end
           if conn.database then entry.database = conn.database end
           if conn.path then entry.path = conn.path end
           table.insert(nodes, tree.make_connection_node(entry))
+          ::continue::
         end
       else
         state.log("WARN", "DB Browser: TOML parse failed: " .. (err or "unknown"))
