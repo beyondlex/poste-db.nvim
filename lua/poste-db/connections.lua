@@ -234,6 +234,13 @@ function M.resolve_connection_url(name)
   if not conn then return nil, "Connection '" .. name .. "' not found in " .. config_path end
   conn = apply_env(conn, M.get_env_vars(search_dir))
 
+  -- Fail loudly for dialects poste-db does not support (a shared
+  -- connections.toml may carry redis/elasticsearch/... sections), instead of
+  -- building a mysql/postgres URL from their fields.
+  if not const.is_sql_dialect(conn.dialect) then
+    return nil, ("Connection '%s' has unsupported dialect '%s'"):format(name, tostring(conn.dialect))
+  end
+
   -- Use url field directly if present
   if conn.url and conn.url ~= "" then
     return conn.url, nil
@@ -289,7 +296,11 @@ function M.list_connections(callback)
   local vars = M.get_env_vars(search_dir)
   for name, conn in pairs(parsed) do
     conn = apply_env(conn, vars)
+    -- Skip dialects poste-db does not support (satellite sections from a
+    -- shared connections.toml, e.g. redis)
+    if not const.is_sql_dialect(conn.dialect) then goto continue end
     table.insert(list, { name = name, dialect = conn.dialect, host = conn.host, port = conn.port, database = conn.database, path = conn.path })
+    ::continue::
   end
   vim.schedule(function() callback(list) end)
 end
