@@ -62,6 +62,19 @@ docker compose up -d
 > re-applies the seed on each boot (tables are dropped and recreated). Hand-written
 > tables survive a restart on postgres/mysql/mariadb but not here.
 
+### ClickHouse (port 18123 HTTP / 19000 native)
+
+> arm64 image — runs natively on Apple Silicon. Seed applies once on first
+> volume init (like postgres/mysql/mariadb).
+
+| Database    | Tables                                                         | Rows             |
+|-------------|----------------------------------------------------------------|------------------|
+| `playground`| users, orders, order_items                                     | 5 / 500 / 1.2k   |
+| `playground`| type_showcase (Map/Nested/TTL on ReplacingMergeTree)           | 3                |
+| `playground`| events_raw, events_daily (+materialized view `events_daily_mv`)| 10 / aggregated  |
+
+- User: `default` / no password (dev container only)
+
 | Database    | Tables                                                         | Rows             |
 |-------------|----------------------------------------------------------------|------------------|
 | `playground`| users, orders, order_items                                     | 5 / 500 / 1.2k   |
@@ -82,6 +95,7 @@ The `queries/` directory contains dialect-specific query files covering each dat
 | `mariadb.sql`     | MariaDB     | maria-dev       | Sequences, RETURNING, INVISIBLE columns, virtual columns, AES encryption, CTE |
 | `sqlite.sql`      | SQLite      | sqlite-dev      | PRAGMA, INSERT OR, GLOB, NATURAL JOIN, SAVEPOINT, JSON functions, WITHOUT ROWID |
 | `mssql.sql`       | SQL Server  | mssql           | TOP, OFFSET/FETCH, MERGE (UPSERT), IDENTITY, CAST/CONVERT, DATEDIFF/DATEADD, TRY_*, STRING_AGG, FORMAT, derived tables, temp tables, FOR JSON, GENERATE_SERIES, window functions, rowversion |
+| `clickhouse.sql`  | ClickHouse  | clickhouse      | FINAL, TOTALS, ARRAY JOIN, arrays/maps/nested, generateRandom, window functions, JSON functions, table functions, quantiles/groupArray, ALTER UPDATE/DELETE (mutations), materialized view |
 
 ## Data Generation Strategy
 

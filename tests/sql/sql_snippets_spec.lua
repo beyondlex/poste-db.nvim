@@ -62,6 +62,7 @@ describe("snippets", function()
       assert.matches("SERIAL", snippets.resolve("ct", "postgres").snippet)
       assert.matches("AUTOINCREMENT", snippets.resolve("ct", "sqlite").snippet)
       assert.matches("IDENTITY%(1,1%)", snippets.resolve("ct", "mssql").snippet)
+      assert.matches("ENGINE = MergeTree", snippets.resolve("ct", "clickhouse").snippet)
     end)
 
     it("falls back to default template when dialect has no variant", function()

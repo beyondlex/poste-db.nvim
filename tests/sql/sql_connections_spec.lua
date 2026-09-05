@@ -178,6 +178,13 @@ describe("connections resolve_connection_url", function()
     assert.equals("postgres://alice@pg.example.com:5432/blog", connections.resolve_connection_url("primary"))
   end)
 
+  it("builds clickhouse URL with default port", function()
+    package.loaded["poste-db.toml"].parse_file = function()
+      return { ch = { dialect = "clickhouse", host = "ch.example.com", database = "playground", user = "default" } }
+    end
+    assert.equals("clickhouse://default@ch.example.com:8123/playground", connections.resolve_connection_url("ch"))
+  end)
+
   it("normalizes compat aliases to their base protocol URL", function()
     package.loaded["poste-db.toml"].parse_file = function()
       return {

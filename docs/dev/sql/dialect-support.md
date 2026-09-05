@@ -9,8 +9,8 @@
 > 6. 容器方案修正：MSSQL arm64/健康检查、Trino tpcds 需挂 properties 且 tpch 只读、ClickHouse 连接端口语义 pin 为 HTTP 8123。
 > 7. 措辞修正：URL 是"构造"不是"解析"；验收标准的"建库/建表"改为"列库/列表"。
 >
-> **实施状态**：Phase 0（别名）与 Phase 1（MSSQL，含 Lua/Rust/容器/playground/diag）已落地；
-> Phase 2-4（HTTP 传输 + ClickHouse → Trino → DuckDB）未开始。Rust 实现暂居
+> **实施状态**：Phase 0（别名）、Phase 1（MSSQL）、Phase 2（HTTP 传输 + ClickHouse，含 Lua/Rust/容器/playground/diag）
+> 已落地；Phase 3（Trino）可复用 reqwest 传输；Phase 4（DuckDB）未开始。Rust 实现暂居
 > `../poste-for-db` worktree（branch `poste-for-db`），发货时合回 poste.nvim main。
 
 ## 背景
@@ -44,8 +44,8 @@ poste-db 目前支持的 dialect：`postgres`（含 `postgresql` 及 PG 系别�
 |-------|---------|----------|--------|------|------|
 | 0 | PG/MySQL 兼容系别名 | 复用现有 TCP 驱动 | ≈0 | 无 | ✅ 已落地（§二） |
 | 1 | MSSQL / SQL Server | `tiberius`（纯 Rust TCP） | 中 | 低-中 | ✅ 已落地。容器侧的坑（arm64 模拟、健康检查）见 §四 |
-| 2 | ClickHouse | `clickhouse` crate（**HTTP-only**，RowBinary over HTTP） | 中等偏高 | 中 | 官方 crate 无 native TCP（`clickhouse-rs` 是另一支且维护差，不用）。本步引入 poste-exec **首个 HTTP 传输层**（HTTP client + TLS + auth header），是后面 Trino 的基建 |
-| 3 | Trino | 自有 HTTP 协议 | 中（复用第 2 步 HTTP 传输后） | 中 | 数据湖联邦查询主流；只做 Trino，**Presto 不在范围**（协议已分叉，不做别名） |
+| 2 | ClickHouse | reqwest 直连 HTTP | 中 | 中 | ✅ 已落地。**实现注记**：官方 `clickhouse` crate 是 SELECT 取向（把 ` FORMAT x` 拼进 SQL、强制 `readonly=1`），无法跑 DDL/DML/临时表/`SET`——改用 reqwest 裸 HTTP（`default_format=JSON`，meta 带列类型），即 poste-exec 首个 HTTP 传输，Trino 直接复用 |
+| 3 | Trino | 复用 reqwest HTTP 传输 | 中 | 中 | 数据湖联邦查询主流；只做 Trino，**Presto 不在范围**（协议已分叉，不做别名） |
 | 4 | DuckDB | `duckdb` crate（链接 libduckdb 原生库） | 高 | 高 | 仅文件模式（见 §四）；链接 libduckdb 构建重，且与服务器连接模型不一致。可延后，延后不阻塞任何验收 |
 
 ## 二、零/近零成本 dialect（纯别名，机制已落地）

@@ -50,6 +50,7 @@ M.SUPPORTED_DIALECTS = {
   mariadb = true,
   sqlite = true,
   mssql = true,
+  clickhouse = true,
 }
 
 --- Dialect-name aliases that normalize to a base dialect before any handling
@@ -103,6 +104,7 @@ M.URL_SCHEMES = {
   { "^mysql://", "mysql" },
   { "^mariadb://", "mysql" },
   { "^mssql://", "mssql" },
+  { "^clickhouse://", "clickhouse" },
 }
 
 --- Sniff the base dialect from a connection URL prefix. nil when the URL
@@ -123,6 +125,7 @@ M.DIALECT_DEFAULT_PORTS = {
   postgres = 5432,
   mysql = 3306,
   mssql = 1433,
+  clickhouse = 8123,
 }
 
 --- Default TCP port for a dialect, or nil when it has none (sqlite).
@@ -145,6 +148,8 @@ M.SYSTEM_SCHEMAS = {
   pg_toast = true,
   -- SQL Server built-in schemas (sys also exists in MySQL)
   guest = true,
+  -- ClickHouse system database (namespace, not a user schema)
+  system = true,
 }
 
 --- True when `name` looks like a PostgreSQL system catalog relation

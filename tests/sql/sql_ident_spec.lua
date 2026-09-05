@@ -48,6 +48,14 @@ describe("ident.quote", function()
   it("quotes each part of a qualified name with brackets for mssql", function()
     assert.equals("[dbo].[users]", ident.quote("dbo.users", "mssql"))
   end)
+
+  it("quotes a simple name with backticks for clickhouse", function()
+    assert.equals("`users`", ident.quote("users", "clickhouse"))
+  end)
+
+  it("escapes backticks inside name for clickhouse", function()
+    assert.equals("`col``name`", ident.quote("col`name", "clickhouse"))
+  end)
 end)
 
 describe("ident.quote_qualified", function()

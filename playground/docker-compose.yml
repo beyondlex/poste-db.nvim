@@ -69,3 +69,19 @@ services:
       timeout: 5s
       retries: 12
       start_period: 120s
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: poste-test-clickhouse
+    # arm64 image exists — runs natively on Apple Silicon.
+    ports:
+      - "18123:8123"
+      - "19000:9000"
+    volumes:
+      - ./init/clickhouse:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "clickhouse-client --query 'SELECT 1' >/dev/null 2>&1 || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 30s

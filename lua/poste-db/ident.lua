@@ -22,7 +22,7 @@ function M.quote(name, dialect, depth)
       return table.concat(parts, ".")
     end
   end
-  if dialect == "mysql" or dialect == "mariadb" then
+  if dialect == "mysql" or dialect == "mariadb" or dialect == "clickhouse" then
     return "`" .. name:gsub("`", "``") .. "`"
   end
   if dialect == "mssql" then

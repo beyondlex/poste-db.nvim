@@ -317,6 +317,7 @@ local dialect_icons = {
   mariadb = "🐬",
   sqlite = "📦",
   mssql = "🏛️",
+  clickhouse = "🧅",
 }
 
 local function format_connection(conn)
