@@ -28,11 +28,21 @@ local state_stub = {
 local function install_stubs()
   package.loaded["poste.state"] = state_stub
   package.loaded["poste-db.editor"] = { clear_pk_cache = function() end }
+  -- commit_edits calls ensure_primary_key before generating DML; the real one
+  -- introspects via the poste binary.
+  package.loaded["poste-db.editor.column"] = { ensure_primary_key = function() end }
   package.loaded["poste-db.sql_runner"] = { get_exec_seq = function() return 42 end }
   package.loaded["poste-db.connections"] = {
     resolve_connection_url = function(name) return "mysql://" .. name, nil end,
   }
   package.loaded["poste-db.statement"] = { extract_table_name = function() return nil end }
+  -- DML generation is stubbed so commit_edits can be exercised end-to-end
+  -- without a real edit_state/table layout.
+  package.loaded["poste-db.dml"] = {
+    generate_dml = function()
+      return { { type = "update", sql = "UPDATE tb SET name = 'x'" } }
+    end,
+  }
   package.loaded["poste-db.format"] = {
     format_dataset = function(parsed)
       local ok, body = pcall(vim.json.decode, parsed.body)
@@ -96,5 +106,58 @@ describe("edit_commit refresh_dataset", function()
     assert.equals("test.sql", captured.opts.src_file)
     assert.equals(7, captured.opts.src_buf)
     assert.equals(42, captured.opts.exec_seq)
+  end)
+end)
+describe("edit_commit commit_edits", function()
+  before_each(function()
+    install_stubs()
+    captured.sql = nil
+    captured.commit_opts = nil
+    -- commit_edits dispatches per call, so replace the refresh-path stub.
+    package.loaded["poste-db.exec_run"] = {
+      run_async = function(sql, opts)
+        captured.sql = sql
+        captured.commit_opts = opts
+        return 7
+      end,
+    }
+    -- Active tab with a dirty edit_state; layout deliberately carries NO
+    -- _conn_name/_database so commit_edits must fall back to the SQL context.
+    local D = require("poste-db.dataset")
+    D.tabs = { {
+      original_sql = "SELECT * FROM tb;",
+      src_file = "test.sql",
+      src_buf = 7,
+      layout = { dialect = "mysql", columns = {}, table_name = "tb" },
+      edit_state = {
+        dirty = true,
+        modified_cells = { ["1:2"] = { col = 2, value = "x" } },
+        deleted_rows = {},
+        added_rows = {},
+        cell_errors = {},
+      },
+    } }
+    D.active_tab_idx = 1
+  end)
+
+  after_each(function()
+    local D = require("poste-db.dataset")
+    D.tabs = {}
+    D.active_tab_idx = 0
+  end)
+
+  it("dispatches the generated DML via exec-file", function()
+    -- Regression: commit_edits read sql_state.context without a local
+    -- require, raising "attempt to index a nil value (global 'sql_state')"
+    -- once the DML had been generated.
+    require("poste-db.edit_commit").commit_edits()
+    assert.equals("UPDATE tb SET name = 'x'", captured.sql)
+    assert.is_not_nil(captured.commit_opts)
+  end)
+
+  it("falls back to the SQL context when the layout has no connection/database", function()
+    require("poste-db.edit_commit").commit_edits()
+    assert.equals("", captured.commit_opts.database)
+    assert.is_nil(captured.commit_opts.conn_url)
   end)
 end)

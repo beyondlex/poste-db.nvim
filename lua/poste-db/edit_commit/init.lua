@@ -54,7 +54,7 @@ end
 --- @param tab table Tab state with original_sql, src_file, src_buf
 function M.refresh_dataset(tab)
   local state = require("poste.state")
-local sql_state = require("poste-db.state")
+  local sql_state = require("poste-db.state")
   local statement = require("poste-db.statement")
 
   local sql = tab.original_sql
@@ -80,7 +80,7 @@ local sql_state = require("poste-db.state")
   local conn_url = nil
   if conn and conn ~= "" then
     local connections = require("poste-db.connections")
-    conn_url, _ = connections.resolve_connection_url(conn)
+    conn_url = connections.resolve_connection_url(conn)
   end
 
   -- Strip directives and ### markers from SQL, since original_sql
@@ -155,6 +155,9 @@ end
 function M.commit_edits()
   local D = require("poste-db.dataset")
   local state = require("poste.state")
+  -- Same request context readers as refresh_dataset: connection/database fall
+  -- back to the plugin's SQL context when the tab layout carries neither.
+  local sql_state = require("poste-db.state")
   local tab = D.T()
   if not tab or not tab.edit_state or not tab.edit_state.dirty then
     vim.notify("No changes to commit", vim.log.levels.INFO)
@@ -223,7 +226,7 @@ function M.commit_edits()
   local conn_url = nil
   if connection and connection ~= "" then
     local connections = require("poste-db.connections")
-    conn_url, _ = connections.resolve_connection_url(connection)
+    conn_url = connections.resolve_connection_url(connection)
   end
 
   local sql_content = sql
