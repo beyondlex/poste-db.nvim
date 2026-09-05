@@ -150,11 +150,15 @@ function M.show_preview(table_info, total_rows, valid_count, bad_rows,
   end
   local min_width = 60
   local text_area = math.max(content_width, min_width)
-  width = math.min(text_area + 4, math.floor(vim.o.columns * 0.8))
+  local width = math.min(text_area + 4, math.floor(vim.o.columns * 0.8))
 
   local lines = content
   local height = math.min(#lines + 2, math.floor(vim.o.lines * const.IMPORT_PREVIEW_HEIGHT_RATIO))
 
+  -- Forward declaration: the keymap closures must capture the local `d`
+  -- upvalue. Declaring `d` only after this table would leave the closures
+  -- reading the (nil) global of the same name and crashing on keypress.
+  local d
   local keymaps = {
     a = function() d:close(); callback(nil) end,
     A = function() d:close(); callback(nil) end,
@@ -166,7 +170,7 @@ function M.show_preview(table_info, total_rows, valid_count, bad_rows,
     keymaps.S = function() d:close(); callback("skip") end
   end
 
-  local d = dialog.open({
+  d = dialog.open({
     title = "Import Preview",
     width = width,
     height = height,
