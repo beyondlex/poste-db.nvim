@@ -27,27 +27,27 @@ local state_stub = {
 
 local function install_stubs()
   package.loaded["poste.state"] = state_stub
-  package.loaded["poste-sql.editor"] = { clear_pk_cache = function() end }
-  package.loaded["poste-sql.sql_runner"] = { get_exec_seq = function() return 42 end }
-  package.loaded["poste-sql.connections"] = {
+  package.loaded["poste-db.editor"] = { clear_pk_cache = function() end }
+  package.loaded["poste-db.sql_runner"] = { get_exec_seq = function() return 42 end }
+  package.loaded["poste-db.connections"] = {
     resolve_connection_url = function(name) return "mysql://" .. name, nil end,
   }
-  package.loaded["poste-sql.statement"] = { extract_table_name = function() return nil end }
-  package.loaded["poste-sql.sql_format"] = {
+  package.loaded["poste-db.statement"] = { extract_table_name = function() return nil end }
+  package.loaded["poste-db.format"] = {
     format_dataset = function(parsed)
       local ok, body = pcall(vim.json.decode, parsed.body)
       return { "│ id │" }, { type = "resultset", row_count = ok and body.results[1].row_count or 0 },
         { rows = ok and body.results[1].rows or {} }
     end,
   }
-  package.loaded["poste-sql.buffer"] = {
+  package.loaded["poste-db.buffer"] = {
     render_dataset = function(lines, meta, opts)
       captured.lines = lines
       captured.meta = meta
       captured.opts = opts
     end,
   }
-  package.loaded["poste-sql.exec_run"] = {
+  package.loaded["poste-db.exec_run"] = {
     run_async = function(sql, opts, callbacks)
       captured.sql = sql
       local resp = {
@@ -69,7 +69,7 @@ describe("edit_commit refresh_dataset", function()
     install_stubs()
     captured.opts = nil
     captured.sql = nil
-    require("poste-sql.edit_commit").refresh_dataset({
+    require("poste-db.edit_commit").refresh_dataset({
       original_sql = "SELECT * FROM tb;",
       src_file = "test.sql",
       src_buf = 7,
