@@ -395,6 +395,9 @@ end
 --- Insert a new query block with connection context.
 function M.new_query(node, context)
   local conn = get_connection_name(node, context)
+  -- Same dialect resolution as set_default: without it the USE statement
+  -- falls back to double quotes even on backtick/bracket dialects.
+  local dialect = get_dialect(node, context)
   local lines = { "" }
   local cursor_offset = 2  -- empty + first blank line
   if conn then

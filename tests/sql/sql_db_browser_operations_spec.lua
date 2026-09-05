@@ -144,3 +144,23 @@ describe("db_browser operations build_alter_column_sql (generic)", function()
     assert.same({ "ALTER TABLE \"users\" ALTER COLUMN \"email\" TYPE TEXT;" }, sql)
   end)
 end)
+describe("db_browser operations new_query", function()
+  it("quotes USE with the dialect of the browsed connection", function()
+    -- Regression: new_query read an undefined `dialect` global, so the USE
+    -- statement fell back to double quotes even on backtick dialects.
+    local src = vim.api.nvim_create_buf(false, true)
+    vim.api.nvim_buf_set_lines(src, 0, -1, false, { "-- existing" })
+    local node = { node_type = "database", name = "mydb", meta = { connection = "dev" } }
+    local context = {
+      source_buf = src,
+      root_nodes = { { name = "dev", meta = { dialect = "mysql" } } },
+    }
+    operations.new_query(node, context)
+    local use_line
+    for _, l in ipairs(vim.api.nvim_buf_get_lines(src, 0, -1, false)) do
+      if l:match("^USE ") then use_line = l end
+    end
+    assert.equals("USE `mydb`;", use_line)
+    vim.api.nvim_buf_delete(src, { force = true })
+  end)
+end)
