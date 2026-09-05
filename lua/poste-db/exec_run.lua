@@ -12,8 +12,6 @@
 local cli = require("poste.cli")
 local state = require("poste.state")
 
-local M = {}
-
 ----------------------------------------------------------------------------
 -- Temp file
 ----------------------------------------------------------------------------
@@ -29,15 +27,17 @@ local function strip_section_markers(sql)
   return table.concat(filtered, "\n")
 end
 
---- Write SQL content to a temp `.sql` file. Prefers the source file's
---- directory so `connections.json` discovery works for bare `@connection`
---- names (echoes the `.poste_refresh_*.sql` pattern). Returns the path.
+--- Write SQL content to a temp `.sql` file (system temp dir). Returns the path.
 ---
 --- `###` section markers (from statement.lua's synthetic-block wrapping) are
 --- stripped before exec-file parses the file; the Rust CLI only strips `-- @`
 --- directives, and a statement left starting with `###` would be misclassified
 --- as a non-query (DML) and rendered as "Query OK".
-local function write_temp_file(sql, src_file)
+---
+--- Note: the file is deliberately NOT placed next to the source buffer's
+--- file — connection resolution happens Lua-side (resolve_connection_url)
+--- before exec-file is invoked, so discovery from the temp dir is fine.
+local function write_temp_file(sql)
   local lines = vim.split(strip_section_markers(sql), "\n", { plain = true })
   local tmp = vim.fn.tempname() .. ".sql"
   vim.fn.writefile(lines, tmp)
@@ -58,8 +58,11 @@ local function detect_use(sql)
   if not name then
     name = trimmed:match("^USE%s+[\"`]([%w_]+)[\"`]%s*;?%s*$")
   end
+  -- `USE db -- comment` / `USE db; -- comment`: the capture is required here
+  -- — a groupless pattern makes match() return the whole statement, which
+  -- then leaks into database_name / state.context.database.
   if not name then
-    name = trimmed:match("^USE%s+[%w_]+%s*%-%-.*$")
+    name = trimmed:match("^USE%s+([%w_]+)%s*;?%s*%-%-.*$")
   end
   return name
 end
@@ -262,7 +265,7 @@ local function run_sql(sql, opts)
   end
   local binary = state.find_poste_binary()
   if not binary then return nil end
-  local tmpfile = write_temp_file(sql, opts.src_file or (opts.conn_url and vim.fn.tempname() .. ".sql" or nil))
+  local tmpfile = write_temp_file(sql)
   local cmd = vim.list_extend({ binary }, build_cmd(tmpfile, opts))
   local ok_sys, result_obj = pcall(vim.system, cmd, { timeout = 30000 })
   if not ok_sys then pcall(vim.fn.delete, tmpfile); return nil end
@@ -318,8 +321,7 @@ local function run_async(sql, opts, callbacks)
     return nil
   end
 
-  local src_file = opts.src_file
-  local tmpfile = write_temp_file(sql, src_file)
+  local tmpfile = write_temp_file(sql)
 
   local cmd = build_cmd(tmpfile, opts)
   local log = require("poste-db.log")
@@ -369,6 +371,12 @@ local function run_async(sql, opts, callbacks)
       end)
     end,
   })
+
+  -- The temp file is deleted by the on_stdout/on_exit paths above; when the
+  -- job never started there is no callback to do it, so clean up here.
+  if not job_id or job_id <= 0 then
+    pcall(vim.fn.delete, tmpfile)
+  end
 
   return job_id
 end

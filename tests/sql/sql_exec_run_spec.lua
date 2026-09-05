@@ -108,6 +108,13 @@ describe("exec_run", function()
       assert.equals("inventory", exec_run.detect_use("  USE inventory  "))
     end)
 
+    it("detects USE with a trailing comment and captures only the db name", function()
+      -- Regression: the comment-tail pattern had no capture group, so match()
+      -- returned the whole statement and it leaked into database_name.
+      assert.equals("mydb", exec_run.detect_use("USE mydb -- switch context"))
+      assert.equals("mydb", exec_run.detect_use("USE mydb; -- switch context"))
+    end)
+
     it("ignores non-USE SQL", function()
       assert.is_nil(exec_run.detect_use("SELECT * FROM t"))
       assert.is_nil(exec_run.detect_use("USE inventory\nSELECT 1"))
