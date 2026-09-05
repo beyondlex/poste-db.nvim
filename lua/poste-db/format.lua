@@ -75,21 +75,43 @@ local function pad_left(s, width)
   return string.rep(" ", width - dw) .. s
 end
 
+--- Local timezone offset (seconds east of UTC), computed by comparing the
+--- local and UTC renderings of the same instant.
+local function local_utc_offset()
+  local now = os.time()
+  return os.time(os.date("*t", now)) - os.time(os.date("!*t", now))
+end
+
 --- Convert a datetime string to local timezone for display.
---- Only converts if the string has a timezone indicator (Z or +/-HH:MM).
+--- Only converts if the string has a timezone indicator (Z or +/-HH:MM);
+--- the indicator is honored — a `Z` timestamp renders as the local wall
+--- clock, not as the raw UTC fields.
 --- @param s string
 --- @return string
 local function format_datetime_local(s)
   if not s or s == "" then return s end
-  local has_tz = s:match("Z$") or s:match("[%+%-]%d%d:%d%d$")
-  if not has_tz then return s end
+  local tz_tail = s:match("(Z)$") or s:match("([%+%-]%d%d:%d%d)$")
+  if not tz_tail then return s end
   local ts = s:match("^(%d%d%d%d%-%d%d%-%d%d[T ]%d%d:%d%d:%d%d)")
   if not ts then return s end
   local y, mo, d, h, mi, sec = ts:match("^(%d%d%d%d)%-(%d%d)%-(%d%d)[T ](%d%d):(%d%d):(%d%d)")
   if not y then return s end
-  local ok, result = pcall(os.date, "%Y-%m-%d %H:%M:%S", os.time({
-    year = y, month = mo, day = d, hour = h, min = mi, sec = sec,
-  }))
+  -- Offset carried by the string: 0 for `Z`, ±seconds for ±hh:mm.
+  local tz_off = 0
+  if tz_tail ~= "Z" then
+    local sign, oh, om = tz_tail:match("^([%+%-])(%d%d):(%d%d)$")
+    if sign then
+      tz_off = tonumber(oh) * 3600 + tonumber(om) * 60
+      if sign == "-" then tz_off = -tz_off end
+    end
+  end
+  -- os.time reads the fields as LOCAL time; shifting by (local_off - tz_off)
+  -- yields the true epoch, which os.date then renders in local time.
+  local ok, result = pcall(function()
+    return os.date("%Y-%m-%d %H:%M:%S",
+      os.time({ year = y, month = mo, day = d, hour = h, min = mi, sec = sec })
+        - tz_off + local_utc_offset())
+  end)
   return ok and result or s
 end
 
@@ -379,6 +401,21 @@ end
 -- Public API
 ---------------------------------------------------------------------------
 
+--- Append the translated-SQL footnote. `original_sql` is flattened to one
+--- line first: nvim_buf_set_lines rejects strings containing newlines, so an
+--- embedded raw multi-line statement would abort the whole render.
+local function append_translated_footnote(lines, layout)
+  local footnote_width = math.max(40, (vim.o.columns or 80) - 4)
+  local original = (layout.original_sql or ""):gsub("%s*\n%s*", " ")
+  lines[#lines + 1] = "  -- " .. original
+  lines[#lines + 1] = ""
+  local wrapped = wrap_line("  ⚡ " .. layout.translated_sql, footnote_width)
+  lines[#lines + 1] = wrapped[1]
+  for i = 2, #wrapped do
+    lines[#lines + 1] = "     " .. wrapped[i]
+  end
+end
+
 --- Format a SQL response as a dataset table.
 --- @param r table Response object (with .body as JSON string)
 --- @return string[] lines Lines to display in the buffer
@@ -458,14 +495,7 @@ function M.format_dataset(r)
     meta.total_rows = layout.total_rows
     meta.table_name = data.table_name
     if layout.translated_sql then
-      local footnote_width = math.max(40, (vim.o.columns or 80) - 4)
-      lines[#lines + 1] = "  -- " .. (layout.original_sql or "")
-      lines[#lines + 1] = ""
-      local wrapped = wrap_line("  ⚡ " .. layout.translated_sql, footnote_width)
-      lines[#lines + 1] = wrapped[1]
-      for i = 2, #wrapped do
-        lines[#lines + 1] = "     " .. wrapped[i]
-      end
+      append_translated_footnote(lines, layout)
     end
     return lines, meta, layout
   end
@@ -729,14 +759,7 @@ function M.format_resultset(data)
   local lines, meta = M.render_page(layout, 1, page_size)
 
   if layout.translated_sql then
-    local footnote_width = math.max(40, (vim.o.columns or 80) - 4)
-    lines[#lines + 1] = "  -- " .. (layout.original_sql or "")
-    lines[#lines + 1] = ""
-    local wrapped = wrap_line("  ⚡ " .. layout.translated_sql, footnote_width)
-    lines[#lines + 1] = wrapped[1]
-    for i = 2, #wrapped do
-      lines[#lines + 1] = "     " .. wrapped[i]
-    end
+    append_translated_footnote(lines, layout)
   end
 
   meta.total_rows = layout.total_rows
@@ -786,5 +809,10 @@ function M.format_error(err, connection)
   table.insert(lines, "")
   return lines
 end
+
+--- Exposed for tests.
+M._test = {
+  format_datetime_local = format_datetime_local,
+}
 
 return M
