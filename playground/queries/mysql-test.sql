@@ -1,5 +1,8 @@
--- @connection my-blog
+-- @connection my-local
 -- @database superheroes
+
+SELECT * FROM characters;
+
 -- 创建数据库
 CREATE DATABASE superheroes;
 

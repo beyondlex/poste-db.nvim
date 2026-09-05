@@ -35,6 +35,14 @@ database = "{{MYSQL_INVENTORY_DB}}"
 user = "{{MYSQL_INVENTORY_USER}}"
 password = "{{MYSQL_INVENTORY_PASSWORD}}"
 
+[my-local]
+dialect = "mysql"
+host = "{{MYSQL_LOCAL_HOST}}"
+port = 13306
+database = ""
+user = "{{MYSQL_LOCAL_USER}}"
+password = "{{MYSQL_LOCAL_PASSWORD}}"
+
 [sqlite-dev]
 dialect = "sqlite"
 path = "./playground/init/sqlite/test.db"
