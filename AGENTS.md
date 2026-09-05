@@ -9,7 +9,8 @@ Independent SQL plugin for Poste. Depends on [poste.nvim](https://github.com/bey
 - Optional: [poste-ai.nvim](https://github.com/beyondlex/poste-ai.nvim) on rtp enables the AI chat (`:PosteDbChat`, `<leader>aa`). `lua/poste-db/ai/` must only `pcall(require, "poste-ai")` and silently skip when absent
 - `plugin/poste-db.lua` calls `require("poste-db.init").setup()`
 - `ftdetect/poste_sql.vim` sets filetypes for `.sql` and `.sqlite`
-- Uses same `poste` Rust binary from poste.nvim
+- Uses same `poste` Rust binary from poste.nvim. Which binary you get is resolved by `poste.state.find_poste_binary()`: `vim.g.poste_binary` → poste config → `target/{debug,release}/poste` next to cwd or the poste.nvim rtp dir → PATH. Point `vim.g.poste_binary` at a worktree build to test unreleased Rust dialect work
+- **Unreleased Rust dialect work lives in the `../poste-for-db` worktree** (branch `poste-for-db`), kept separate so other poste.nvim dependents are unaffected; merge into poste.nvim `main` when a dialect ships. The Lua side here may advertise a dialect the stock main binary does not know yet — if Lua and binary disagree, check which binary you are running first
 - `.opencode/skills/sql/` and `.opencode/skills/sql-completion/` for agent context
 - Harness order:
   1. `.opencode/skills/sql-preflight-harness/SKILL.md`
@@ -76,10 +77,11 @@ nil/false, write an explicit `if`.
 
 | Want | Go to |
 |------|-------|
+| **Adding a SQL dialect (aliases or real)** — touchpoint checklist, priorities, pitfalls | `docs/dev/sql/dialect-support.md` |
 | **Shared infra (state, cli, select, indicators, buffer_setup, help, etc.)** | `../poste.nvim/lua/poste/` |
-| **Rust CLI (crates, build system)** | `../poste.nvim/crates/` |
+| **Rust CLI (crates, build system)** | `../poste.nvim/crates/` — unreleased dialect work: `../poste-for-db` worktree |
 | **AI chat generic layer (chat UI, SSE, markdown, context API)** | `../poste-ai.nvim/lua/poste-ai/` + `docs/dev/sql/ai-chat.md` |
 | **Preflight / audit / test / architecture / refactor / nav / introspect harnesses** | `.opencode/skills/` |
 | Completion rules | `.opencode/skills/sql-completion/SKILL.md` |
-| Build & test | `tests/run.sh` |
+| Build & test | `tests/run.sh` (needs sibling checkouts `../poste.nvim`, optional `../poste-ai.nvim`, and plenary.nvim) |
 | Agent learnings | `LEARNINGS.md` |
