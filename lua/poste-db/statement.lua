@@ -234,7 +234,11 @@ function M.extract_stmt_at_cursor(buf_lines, cursor_line, buf)
         stmt_start = stmt_start + 1
       end
     else
-      stmt_start = cursor_line
+      -- Begin at buffer top; the backward scan pins the start to just after
+      -- the nearest preceding `;` / `###` / directive. Initializing to
+      -- cursor_line instead would chop off the head of the FIRST multi-line
+      -- statement (no `;` above the cursor) and execute a syntax error.
+      stmt_start = 1
       for i = cursor_line - 1, 1, -1 do
         local txt = buf_lines[i] or ""
         if txt:match(";") then

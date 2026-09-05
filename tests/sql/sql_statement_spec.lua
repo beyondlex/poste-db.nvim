@@ -112,3 +112,43 @@ describe("statement get_stmt_sql", function()
     assert.equals("select 1 select 2", statement.get_stmt_sql({ "select 1", "select 2", "select 3" }, { 1 }, 1, 2))
   end)
 end)
+describe("statement extract_stmt_at_cursor (Lua ;-heuristic fallback)", function()
+  local rust_orig
+
+  before_each(function()
+    -- Force the Lua fallback: buf=nil skips Tree-sitter; stub the Rust probe
+    -- (resolved dynamically via M.try_rust_stmt_span at call time).
+    rust_orig = statement.try_rust_stmt_span
+    statement.try_rust_stmt_span = function() return nil end
+  end)
+
+  after_each(function()
+    statement.try_rust_stmt_span = rust_orig
+  end)
+
+  it("keeps the full head of the buffer's first multi-line statement", function()
+    -- Regression: stmt_start used to initialize to cursor_line, chopping off
+    -- the lines above the cursor when no `;`/directive preceded them.
+    local lines = { "SELECT a,", "       b", "FROM t;" }
+    local content, _, stmt_start, stmt_end = statement._test.extract_stmt_at_cursor(lines, 2, nil)
+    assert.is_not_nil(content)
+    assert.equals(1, stmt_start)
+    assert.equals(3, stmt_end)
+    assert.match("SELECT a,", content)
+    assert.match("FROM t;", content)
+  end)
+
+  it("starts after top-of-file directives when no `;` precedes the cursor", function()
+    local lines = { "-- @connection dev", "", "SELECT a,", "FROM t;" }
+    local content, _, stmt_start = statement._test.extract_stmt_at_cursor(lines, 3, nil)
+    assert.equals(3, stmt_start)
+    assert.match("%-%- @connection dev", content)
+    assert.match("SELECT a,", content)
+  end)
+
+  it("still pins the start after a preceding semicolon", function()
+    local lines = { "SELECT 1;", "SELECT x,", "       y;" }
+    local _, _, stmt_start = statement._test.extract_stmt_at_cursor(lines, 3, nil)
+    assert.equals(2, stmt_start)
+  end)
+end)
