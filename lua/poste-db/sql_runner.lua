@@ -304,8 +304,6 @@ function M.run_sql_request()
   if db == vim.NIL then db = nil end
   if db and db == "" then db = nil end
 
-  local exec_run = require("poste-db.exec_run")
-
   -- Detect lone USE statement (handled locally by exec_run, not via session)
   local function is_use_stmt(s)
     if not s then return false end

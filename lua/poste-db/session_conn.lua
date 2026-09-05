@@ -271,7 +271,6 @@ function M.execute(conn_url, sql, callbacks, bufnr, database)
     if callbacks.on_error then callbacks.on_error("SQL session chansend failed") end
     return "not_running"
   end
-  state.log("DEBUG", string.format("SQL session send seq=%d job=%d chansend=%d", seq, session.job_id, sent))
   return "dispatched"
 end
 

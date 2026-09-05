@@ -19,6 +19,7 @@ function M.refresh_page()
   -- Layout-aware path: render page from layout (no padded_full needed)
   if tab.layout then
     local fmt = require("poste-db.format")
+    local lines, meta  -- locals: assigning them without `local` would leak globals
     local total_rows
     if tab.view_indices then
       total_rows = #tab.view_indices

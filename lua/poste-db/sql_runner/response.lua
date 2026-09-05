@@ -240,7 +240,10 @@ end
 
 --- Handle an executor-level failure (transport errors, dead sessions):
 --- record for the AI chat's "ask about this error", surface, log.
-function M.handle_error(deps, message, _parsed)
+--- @param message string
+--- @param parsed table|nil parsed response (session on_sql_error path) — its
+---   dialect is the only reliable source here; state.context has no dialect field.
+function M.handle_error(deps, message, parsed)
   state.log("ERROR", "SQL execution failed: " .. message)
   vim.schedule(function()
     if deps.current_seq < deps.get_exec_seq() then return end
@@ -264,7 +267,7 @@ function M.handle_error(deps, message, _parsed)
     edit_commit.write_log({
       source = "manual_exec",
       connection = context.connection or "",
-      dialect = sql_state.context.dialect or "",
+      dialect = (parsed and parsed.dialect) or "",
       database = context.database or "",
       sql = deps.buf_content or "",
       status = "error",
