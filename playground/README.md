@@ -52,6 +52,25 @@ docker compose up -d
 
 - User: `root` / Password: `poste_test`
 
+### SQL Server (port 11433)
+
+> No official arm64 image: on Apple Silicon it runs under Rosetta/QEMU and
+> startup is slow — the healthcheck allows ~2 minutes (`start_period`).
+>
+> **Unlike the other services, mssql data resets on every restart**: the
+> image ignores `docker-entrypoint-initdb.d`, so `init/mssql/entrypoint.sh`
+> re-applies the seed on each boot (tables are dropped and recreated). Hand-written
+> tables survive a restart on postgres/mysql/mariadb but not here.
+
+| Database    | Tables                                                         | Rows             |
+|-------------|----------------------------------------------------------------|------------------|
+| `playground`| users, orders, order_items                                     | 5 / 500 / 1.2k   |
+| `playground`| type_showcase (MONEY/XML/DATETIMEOFFSET/ROWVERSION types)      | 4                |
+
+- User: `sa` / Password: `Poste_test_2022` (needs `ACCEPT_EULA`; the image
+  ignores `docker-entrypoint-initdb.d`, so `init/mssql/entrypoint.sh` boots
+  `sqlservr`, applies the seed via `sqlcmd`, then keeps serving)
+
 ## Sample Queries
 
 The `queries/` directory contains dialect-specific query files covering each database's syntax:
@@ -62,6 +81,7 @@ The `queries/` directory contains dialect-specific query files covering each dat
 | `mysql.sql`       | MySQL       | my-blog         | GROUP_CONCAT, ELT, JSON functions, window functions, WITH RECURSIVE, wide tables, date functions |
 | `mariadb.sql`     | MariaDB     | maria-dev       | Sequences, RETURNING, INVISIBLE columns, virtual columns, AES encryption, CTE |
 | `sqlite.sql`      | SQLite      | sqlite-dev      | PRAGMA, INSERT OR, GLOB, NATURAL JOIN, SAVEPOINT, JSON functions, WITHOUT ROWID |
+| `mssql.sql`       | SQL Server  | mssql           | TOP, OFFSET/FETCH, MERGE (UPSERT), IDENTITY, CAST/CONVERT, DATEDIFF/DATEADD, TRY_*, STRING_AGG, FORMAT, derived tables, temp tables, FOR JSON, GENERATE_SERIES, window functions, rowversion |
 
 ## Data Generation Strategy
 

@@ -49,14 +49,88 @@ M.SUPPORTED_DIALECTS = {
   mysql = true,
   mariadb = true,
   sqlite = true,
+  mssql = true,
 }
 
---- True when the connection dialect is one poste-db can handle. A nil dialect
---- is allowed (defaults behave like postgres elsewhere).
+--- Dialect-name aliases that normalize to a base dialect before any handling
+--- (mariadb precedent). Everything downstream — whitelist checks, URL
+--- building, icons, completion, the Rust binary — only ever sees base names,
+--- so an alias costs one entry here and nothing else. Values must be keys of
+--- SUPPORTED_DIALECTS.
+M.DIALECT_ALIASES = {
+  mariadb = "mysql",
+  postgresql = "postgres",
+  cockroachdb = "postgres",
+  yugabyte = "postgres",
+  ["aurora-postgres"] = "postgres",
+  neon = "postgres",
+  supabase = "postgres",
+  timescaledb = "postgres",
+  tidb = "mysql",
+  singlestore = "mysql",
+  ["aurora-mysql"] = "mysql",
+  vitess = "mysql",
+  planetscale = "mysql",
+}
+
+--- Resolve a dialect alias to its base dialect. Non-strings and unknown
+--- names pass through unchanged.
+--- @param dialect any
+--- @return any
+function M.normalize_dialect(dialect)
+  if type(dialect) ~= "string" then return dialect end
+  return M.DIALECT_ALIASES[dialect] or dialect
+end
+
+--- True when the connection dialect is one poste-db can handle. Aliases are
+--- accepted (they normalize to a supported base). A nil dialect is allowed
+--- (defaults behave like postgres elsewhere).
 --- @param dialect any
 --- @return boolean
 function M.is_sql_dialect(dialect)
-  return dialect == nil or M.SUPPORTED_DIALECTS[dialect] == true
+  if dialect == nil then return true end
+  return M.SUPPORTED_DIALECTS[M.normalize_dialect(dialect)] == true
+end
+
+--- Connection URL scheme prefixes → base dialect, ordered, first match wins.
+--- The single source for URL sniffing (session_conn, completion/data,
+--- semantic_diagnostics) and, inverted, for URL building in connections.lua.
+--- Keep in sync with the Rust scheme chains (exec_file/session/introspect).
+M.URL_SCHEMES = {
+  { "^sqlite:", "sqlite" },
+  { "^postgres://", "postgres" },
+  { "^postgresql://", "postgres" },
+  { "^mysql://", "mysql" },
+  { "^mariadb://", "mysql" },
+  { "^mssql://", "mssql" },
+}
+
+--- Sniff the base dialect from a connection URL prefix. nil when the URL
+--- does not match any known scheme.
+--- @param url string|nil
+--- @return string|nil
+function M.dialect_from_url(url)
+  if type(url) ~= "string" then return nil end
+  for _, scheme in ipairs(M.URL_SCHEMES) do
+    if url:match(scheme[1]) then return scheme[2] end
+  end
+  return nil
+end
+
+--- Per-dialect default TCP port, used by URL building and display fallbacks.
+--- sqlite is file-based and has no port.
+M.DIALECT_DEFAULT_PORTS = {
+  postgres = 5432,
+  mysql = 3306,
+  mssql = 1433,
+}
+
+--- Default TCP port for a dialect, or nil when it has none (sqlite).
+--- @param dialect string|nil
+--- @return number|nil
+function M.default_port(dialect)
+  if dialect == nil then return nil end
+  return M.DIALECT_DEFAULT_PORTS[dialect]
 end
 
 --- Database-engine built-in schemas/databases holding catalog tables
@@ -69,6 +143,8 @@ M.SYSTEM_SCHEMAS = {
   performance_schema = true,
   sys = true,
   pg_toast = true,
+  -- SQL Server built-in schemas (sys also exists in MySQL)
+  guest = true,
 }
 
 --- True when `name` looks like a PostgreSQL system catalog relation

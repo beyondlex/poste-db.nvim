@@ -3,6 +3,7 @@
 --- (tables/columns/databases via the Rust CLI), and binary helpers.
 local state = require("poste.state")
 local sql_state = require("poste-db.state")
+local const = require("poste-db.constants")
 
 local compat = require("poste-db.compat")
 
@@ -254,15 +255,7 @@ end
 
 local function resolve_conn_url(conn)
   if not conn or conn == "" then return nil end
-  local lower = conn:lower()
-  if lower:match("^sqlite:")
-    or lower:match("^postgres://")
-    or lower:match("^postgresql://")
-    or lower:match("^mysql://")
-    or lower:match("^mariadb://")
-  then
-    return conn
-  end
+  if const.dialect_from_url(conn:lower()) then return conn end
   local ok, conn_mod = pcall(require, "poste-db.connections")
   if ok then
     local url, _ = conn_mod.resolve_connection_url(conn)
@@ -382,13 +375,14 @@ function M.ensure_tables(callback)
 end
 
 --- CLI flag used to scope a table list to a `db.`/`schema.` prefix such as
---- `FROM order_catalog.` or `FROM pg_catalog.`. postgres/sqlite scope by
---- schema; mysql/mariadb (and unknown dialects) by database.
+--- `FROM order_catalog.` or `FROM pg_catalog.`. postgres/sqlite/mssql scope
+--- by schema; mysql/mariadb (and unknown dialects) by database.
 --- @param dialect string|nil
 --- @return string "--schema" or "--database"
 function M.tables_db_flag(dialect)
   dialect = dialect and dialect:lower() or ""
-  if dialect == "postgres" or dialect == "postgresql" or dialect == "sqlite" then
+  if dialect == "postgres" or dialect == "postgresql"
+    or dialect == "sqlite" or dialect == "mssql" then
     return "--schema"
   end
   return "--database"

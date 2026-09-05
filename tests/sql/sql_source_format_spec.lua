@@ -4,7 +4,7 @@
 -- installed) and overriding the cache for specific formatters via
 -- M._test.set_detected().
 
-local state = require("poste-db.state")
+local config_mod = require("poste-db.config")
 local sf = require("poste-db.source_format")
 local t = sf._test
 
@@ -40,34 +40,49 @@ describe("source_format build_formatter_args", function()
   end)
 end)
 
+describe("source_format dialect maps", function()
+  local t = sf._test
+
+  it("maps mssql to tsql in every formatter that knows mssql", function()
+    local mapped = 0
+    for name, fmt in pairs(t.formatters) do
+      if fmt.dialect_map and fmt.dialect_map.mssql then
+        assert.equals("tsql", fmt.dialect_map.mssql, name .. " must map mssql to tsql")
+        mapped = mapped + 1
+      end
+    end
+    assert.is_true(mapped >= 1, "at least one formatter must map mssql")
+  end)
+end)
+
 describe("source_format _get_priority", function()
   local saved
 
   before_each(function()
-    saved = state.config and state.config.sql_formatters
+    saved = config_mod.config and config_mod.config.sql_formatters
   end)
 
   after_each(function()
-    state.config.sql_formatters = saved
+    config_mod.config.sql_formatters = saved
   end)
 
   it("returns the built-in default order when unconfigured", function()
-    state.config.sql_formatters = nil
+    config_mod.config.sql_formatters = nil
     assert.same({ "sqlfluff", "sqlfmt", "sql-formatter", "pg_format" }, t._get_priority())
   end)
 
   it("honors the configured priority order", function()
-    state.config.sql_formatters = { "sqlfmt", "pg_format" }
+    config_mod.config.sql_formatters = { "sqlfmt", "pg_format" }
     assert.same({ "sqlfmt", "pg_format" }, t._get_priority())
   end)
 
   it("filters out unknown formatter names", function()
-    state.config.sql_formatters = { "nope", "sqlfluff", "wat" }
+    config_mod.config.sql_formatters = { "nope", "sqlfluff", "wat" }
     assert.same({ "sqlfluff" }, t._get_priority())
   end)
 
   it("falls back to the default when the configured list is empty", function()
-    state.config.sql_formatters = {}
+    config_mod.config.sql_formatters = {}
     assert.same({ "sqlfluff", "sqlfmt", "sql-formatter", "pg_format" }, t._get_priority())
   end)
 end)

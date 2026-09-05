@@ -23,12 +23,14 @@ local CATEGORIES = {
     mariadb = "CREATE TABLE ${1:table_name} (\n  id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,\n  ${2:column_name} ${3:INTEGER} ${4:NOT NULL}\n);",
     postgres = "CREATE TABLE ${1:table_name} (\n  id SERIAL PRIMARY KEY,\n  ${2:column_name} ${3:INTEGER} ${4:NOT NULL}\n);",
     sqlite = "CREATE TABLE ${1:table_name} (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  ${2:column_name} ${3:INTEGER} ${4:NOT NULL}\n);",
+    mssql = "CREATE TABLE ${1:table_name} (\n  id INT IDENTITY(1,1) PRIMARY KEY,\n  ${2:column_name} ${3:INT} ${4:NOT NULL}\n);",
   },
   create_table_timestamp = {
     label = "create table with timestamp template",
     default = "CREATE TABLE ${1:table_name} (\n  id INTEGER NOT NULL PRIMARY KEY AUTO_INCREMENT,\n  ${2:-- columns}\n  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP\n);",
     postgres = "CREATE TABLE ${1:table_name} (\n  id SERIAL PRIMARY KEY,\n  ${2:-- columns}\n  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP\n);",
     sqlite = "CREATE TABLE ${1:table_name} (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  ${2:-- columns}\n  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP\n);",
+    mssql = "CREATE TABLE ${1:table_name} (\n  id INT IDENTITY(1,1) PRIMARY KEY,\n  ${2:-- columns}\n  updated_at DATETIME2 NOT NULL DEFAULT SYSDATETIME(),\n  created_at DATETIME2 NOT NULL DEFAULT SYSDATETIME()\n);",
   },
   create_database = {
     label = "create database",
@@ -37,18 +39,21 @@ local CATEGORIES = {
     mariadb = "CREATE DATABASE IF NOT EXISTS ${1:db_name} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;",
     postgres = "CREATE DATABASE ${1:db_name} ENCODING 'UTF8' LC_COLLATE '${2:en_US.UTF-8}' LC_CTYPE '${3:en_US.UTF-8}';",
     sqlite = "ATTACH DATABASE '${1:/path/to/db.sqlite}' AS ${2:db_name};",
+    mssql = "CREATE DATABASE ${1:db_name};",
   },
   column = {
     label = "column",
     default = "${1:col_name} ${2:INT} NOT NULL DEFAULT ${3:0} COMMENT '${4}' ${5:,}",
     postgres = "${1:col_name} ${2:INT} NOT NULL DEFAULT ${3:0} ${5:,}",
     sqlite = "${1:col_name} ${2:INTEGER} ${3:NOT NULL} DEFAULT ${4:0} ${5:,}",
+    mssql = "${1:col_name} ${2:INT} ${3:NOT NULL} DEFAULT ${4:0} ${5:,}",
   },
   column_varchar = {
     label = "column varchar",
     default = "${1:col_name} VARCHAR(${2:255}) NOT NULL DEFAULT '${3}' COMMENT '${4}' ${5:,}",
     postgres = "${1:col_name} VARCHAR(${2:255}) NOT NULL DEFAULT '${3}' ${5:,}",
     sqlite = "${1:col_name} TEXT ${3:NOT NULL} DEFAULT '${4}' ${5:,}",
+    mssql = "${1:col_name} NVARCHAR(${2:255}) ${3:NOT NULL} DEFAULT '${4}' ${5:,}",
   },
   select_from = {
     label = "select * from",
@@ -83,12 +88,14 @@ local CATEGORIES = {
     default = "ALTER TABLE ${1:table_name} ADD COLUMN ${2:column_name} ${3:INTEGER} ${4:NOT NULL} DEFAULT ${5:0} COMMENT '${6}';",
     postgres = "ALTER TABLE ${1:table_name} ADD COLUMN ${2:column_name} ${3:INTEGER} ${4:NOT NULL} DEFAULT ${5:0};",
     sqlite = "ALTER TABLE ${1:table_name} ADD COLUMN ${2:column_name} ${3:INTEGER} ${4:NOT NULL} DEFAULT ${5:0};",
+    mssql = "ALTER TABLE ${1:table_name} ADD ${2:column_name} ${3:INT} ${4:NOT NULL} DEFAULT ${5:0};",
   },
   alter_modify_column = {
     label = "alter table modify column",
     default = "ALTER TABLE ${1:table_name} MODIFY COLUMN ${2:column_name} ${3:INTEGER} ${4:NOT NULL} DEFAULT ${5:0} COMMENT '${6}';",
     postgres = "ALTER TABLE ${1:table_name} ALTER COLUMN ${2:column_name} SET ${3:INTEGER} ${4:NOT NULL} DEFAULT ${5:0};",
     sqlite = "ALTER TABLE ${1:table_name} MODIFY COLUMN ${2:column_name} ${3:INTEGER} ${4:NOT NULL} DEFAULT ${5:0};",
+    mssql = "ALTER TABLE ${1:table_name} ALTER COLUMN ${2:column_name} ${3:INT} ${4:NOT NULL};",
   },
   union_all = {
     label = "union all",
@@ -162,7 +169,7 @@ end
 
 --- Pick a category template for a dialect (lowercased), falling back
 --- mariadb -> mysql -> default.
---- @param cat {default:string, mysql?:string, mariadb?:string, postgres?:string, sqlite?:string}
+--- @param cat {default:string, mysql?:string, mariadb?:string, postgres?:string, sqlite?:string, mssql?:string}
 --- @param dialect string|nil
 --- @return string
 local function pick_template(cat, dialect)

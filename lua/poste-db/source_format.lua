@@ -33,6 +33,7 @@ local FORMATTERS = {
       postgres = "postgres",
       postgresql = "postgres",
       sqlite = "sqlite",
+      mssql = "tsql",
       bigquery = "bigquery",
       snowflake = "snowflake",
       redshift = "redshift",
@@ -69,6 +70,7 @@ local FORMATTERS = {
       mysql = "mysql",
       postgres = "postgresql",
       sqlite = "sqlite",
+      mssql = "tsql",
       bigquery = "bigquery",
       db2 = "db2",
       hive = "hive",
@@ -563,6 +565,7 @@ M._test = {
   build_formatter_args = build_formatter_args,
   resolve_dialect = M.resolve_dialect,
   format_text = M.format_text,
+  formatters = FORMATTERS,
   -- Override the detection cache so availability is deterministic in tests.
   set_detected = function(map) _detected = map or {} end,
   rediscover = M.rediscover,

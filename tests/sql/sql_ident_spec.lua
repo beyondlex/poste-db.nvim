@@ -36,6 +36,18 @@ describe("ident.quote", function()
   it("quotes three-part qualified names", function()
     assert.equals('"db"."schema"."table"', ident.quote("db.schema.table", "postgres"))
   end)
+
+  it("quotes a simple name with brackets for mssql", function()
+    assert.equals("[users]", ident.quote("users", "mssql"))
+  end)
+
+  it("escapes closing brackets inside name for mssql", function()
+    assert.equals("[col]]name]", ident.quote("col]name", "mssql"))
+  end)
+
+  it("quotes each part of a qualified name with brackets for mssql", function()
+    assert.equals("[dbo].[users]", ident.quote("dbo.users", "mssql"))
+  end)
 end)
 
 describe("ident.quote_qualified", function()
@@ -49,6 +61,10 @@ describe("ident.quote_qualified", function()
 
   it("uses backticks for mysql", function()
     assert.equals("`public`.`users`", ident.quote_qualified("public", "users", "mysql"))
+  end)
+
+  it("uses brackets for mssql", function()
+    assert.equals("[dbo].[users]", ident.quote_qualified("dbo", "users", "mssql"))
   end)
 end)
 

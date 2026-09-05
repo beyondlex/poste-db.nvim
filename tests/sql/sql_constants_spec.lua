@@ -27,6 +27,7 @@ describe("constants helpers", function()
     assert.is_true(const.SYSTEM_SCHEMAS["mysql"])
     assert.is_true(const.SYSTEM_SCHEMAS["performance_schema"])
     assert.is_true(const.SYSTEM_SCHEMAS["sys"])
+    assert.is_true(const.SYSTEM_SCHEMAS["guest"], "SQL Server guest schema is exempt")
     assert.is_nil(const.SYSTEM_SCHEMAS["blog"], "regular databases are not exempt")
   end)
 
@@ -59,8 +60,63 @@ describe("constants helpers", function()
     assert.is_true(const.is_sql_dialect("mysql"))
     assert.is_true(const.is_sql_dialect("mariadb"))
     assert.is_true(const.is_sql_dialect("sqlite"))
+    assert.is_true(const.is_sql_dialect("mssql"))
     assert.is_true(const.is_sql_dialect(nil), "nil dialect defaults like postgres")
     assert.is_false(const.is_sql_dialect("redis"))
     assert.is_false(const.is_sql_dialect("elasticsearch"))
+  end)
+
+  it("normalizes dialect aliases to their base dialect", function()
+    assert.equals("mysql", const.normalize_dialect("mariadb"))
+    for _, alias in ipairs({ "cockroachdb", "yugabyte", "aurora-postgres", "neon", "supabase", "timescaledb" }) do
+      assert.equals("postgres", const.normalize_dialect(alias), alias .. " must normalize to postgres")
+    end
+    for _, alias in ipairs({ "tidb", "singlestore", "aurora-mysql", "vitess", "planetscale" }) do
+      assert.equals("mysql", const.normalize_dialect(alias), alias .. " must normalize to mysql")
+    end
+    assert.equals("postgres", const.normalize_dialect("postgres"), "base names pass through")
+    assert.equals("nosuchdialect", const.normalize_dialect("nosuchdialect"), "unknown names pass through")
+    assert.is_nil(const.normalize_dialect(nil))
+  end)
+
+  it("every alias maps to a supported base dialect", function()
+    for alias, base in pairs(const.DIALECT_ALIASES) do
+      assert.is_true(const.SUPPORTED_DIALECTS[base] == true,
+        alias .. " aliases " .. base .. " which must be in SUPPORTED_DIALECTS")
+    end
+  end)
+
+  it("accepts aliases in is_sql_dialect", function()
+    assert.is_true(const.is_sql_dialect("cockroachdb"))
+    assert.is_true(const.is_sql_dialect("planetscale"))
+    assert.is_true(const.is_sql_dialect("timescaledb"))
+    assert.is_false(const.is_sql_dialect("redis"))
+  end)
+
+  it("accepts the postgresql spelling as a postgres alias", function()
+    assert.equals("postgres", const.normalize_dialect("postgresql"))
+    assert.is_true(const.is_sql_dialect("postgresql"))
+  end)
+
+  it("sniffs the base dialect from a connection URL prefix", function()
+    assert.equals("sqlite", const.dialect_from_url("sqlite:/data/app.db?mode=rwc"))
+    assert.equals("sqlite", const.dialect_from_url("sqlite::memory:"))
+    assert.equals("postgres", const.dialect_from_url("postgres://alice@h:5432/blog"))
+    assert.equals("postgres", const.dialect_from_url("postgresql://alice@h/blog"))
+    assert.equals("mysql", const.dialect_from_url("mysql://root@h:3306/shop"))
+    assert.equals("mysql", const.dialect_from_url("mariadb://root@h/shop"))
+    assert.equals("mssql", const.dialect_from_url("mssql://sa@h:1433/playground"))
+    assert.is_nil(const.dialect_from_url("redis://localhost:6379"), "satellite schemes are not SQL dialects")
+    assert.is_nil(const.dialect_from_url("oracle://h/free"))
+    assert.is_nil(const.dialect_from_url(nil))
+  end)
+
+  it("exposes per-dialect default ports", function()
+    assert.equals(5432, const.default_port("postgres"))
+    assert.equals(3306, const.default_port("mysql"))
+    assert.equals(1433, const.default_port("mssql"))
+    assert.is_nil(const.default_port("sqlite"), "sqlite is file-based")
+    assert.is_nil(const.default_port("nosuch"))
+    assert.is_nil(const.default_port(nil))
   end)
 end)

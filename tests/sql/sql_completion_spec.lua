@@ -929,6 +929,11 @@ describe("completion mode integration", function()
       assert.equals("--schema", comp_data.tables_db_flag("sqlite"))
     end)
 
+    it("scopes mssql prefixes by schema", function()
+      assert.equals("--schema", comp_data.tables_db_flag("mssql"))
+      assert.equals("--schema", comp_data.tables_db_flag("MSSQL"))
+    end)
+
     it("scopes mysql/mariadb (and unknown) prefixes by database", function()
       assert.equals("--database", comp_data.tables_db_flag("mysql"))
       assert.equals("--database", comp_data.tables_db_flag("mariadb"))

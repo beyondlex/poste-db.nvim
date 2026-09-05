@@ -210,9 +210,7 @@ function M.get_connection_config(name)
   local conn = _config_cache[name]
   if not conn then return nil end
   conn = apply_env(conn, M.get_env_vars(search_dir))
-  if conn.dialect == "mariadb" then
-    conn.dialect = "mysql"
-  end
+  conn.dialect = const.normalize_dialect(conn.dialect)
   return conn
 end
 
@@ -233,6 +231,7 @@ function M.resolve_connection_url(name)
   local conn = parsed[name]
   if not conn then return nil, "Connection '" .. name .. "' not found in " .. config_path end
   conn = apply_env(conn, M.get_env_vars(search_dir))
+  conn.dialect = const.normalize_dialect(conn.dialect)
 
   -- Fail loudly for dialects poste-db does not support (a shared
   -- connections.toml may carry redis/elasticsearch/... sections), instead of
@@ -246,7 +245,10 @@ function M.resolve_connection_url(name)
     return conn.url, nil
   end
 
-  -- Build URL from individual fields
+  -- Build URL from individual fields. sqlite is file-based; every other
+  -- whitelisted dialect is scheme://user:pass@host:port/db with the default
+  -- port from constants (single source — also consumed by display and
+  -- URL-sniffing paths).
   if conn.dialect == "sqlite" then
     local path = conn.path or ":memory:"
     if path == ":memory:" then
@@ -255,10 +257,9 @@ function M.resolve_connection_url(name)
     return "sqlite:" .. path .. "?mode=rwc", nil
   end
 
-  local scheme = conn.dialect == "postgres" and "postgres" or "mysql"
+  local scheme = conn.dialect
   local host = conn.host or "localhost"
-  local default_port = conn.dialect == "postgres" and 5432 or 3306
-  local port = conn.port or default_port
+  local port = conn.port or const.default_port(conn.dialect)
   local db = conn.database or ""
   local auth = ""
   if conn.user and conn.password then
@@ -292,11 +293,12 @@ function M.list_connections(callback)
     vim.schedule(function() callback({}) end)
     return
   end
-  local list = {}
-  local vars = M.get_env_vars(search_dir)
-  for name, conn in pairs(parsed) do
-    conn = apply_env(conn, vars)
-    -- Skip dialects poste-db does not support (satellite sections from a
+    local list = {}
+    local vars = M.get_env_vars(search_dir)
+    for name, conn in pairs(parsed) do
+      conn = apply_env(conn, vars)
+      conn.dialect = const.normalize_dialect(conn.dialect)
+      -- Skip dialects poste-db does not support (satellite sections from a
     -- shared connections.toml, e.g. redis)
     if not const.is_sql_dialect(conn.dialect) then goto continue end
     table.insert(list, { name = name, dialect = conn.dialect, host = conn.host, port = conn.port, database = conn.database, path = conn.path })
@@ -314,6 +316,7 @@ local dialect_icons = {
   mysql = "🐬",
   mariadb = "🐬",
   sqlite = "📦",
+  mssql = "🏛️",
 }
 
 local function format_connection(conn)
@@ -324,7 +327,7 @@ local function format_connection(conn)
     return string.format("%s %s — %s", icon, name, conn.path or "?")
   else
     local host = conn.host or "localhost"
-    local port = conn.port or (conn.dialect == "postgres" and 5432 or 3306)
+    local port = conn.port or const.default_port(conn.dialect) or 3306
     local db = conn.database or ""
     return string.format("%s %s — %s:%d/%s", icon, name, host, port, db)
   end

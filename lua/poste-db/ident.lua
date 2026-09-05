@@ -25,6 +25,9 @@ function M.quote(name, dialect, depth)
   if dialect == "mysql" or dialect == "mariadb" then
     return "`" .. name:gsub("`", "``") .. "`"
   end
+  if dialect == "mssql" then
+    return "[" .. name:gsub("]", "]]") .. "]"
+  end
   return '"' .. name:gsub('"', '""') .. '"'
 end
 

@@ -160,6 +160,41 @@ describe("connections resolve_connection_url", function()
     assert.equals("sqlite::memory:", url)
   end)
 
+  it("builds mssql URL from fields with default port", function()
+    package.loaded["poste-db.toml"].parse_file = function()
+      return {
+        m1 = { dialect = "mssql", host = "sql.example.com", database = "shop", user = "sa" },
+        m2 = { dialect = "mssql", host = "localhost", port = 11433, database = "shop", user = "sa", password = "p@ss" },
+      }
+    end
+    assert.equals("mssql://sa@sql.example.com:1433/shop", connections.resolve_connection_url("m1"))
+    assert.equals("mssql://sa:p%40ss@localhost:11433/shop", connections.resolve_connection_url("m2"))
+  end)
+
+  it("accepts the postgresql spelling as postgres", function()
+    package.loaded["poste-db.toml"].parse_file = function()
+      return { primary = { dialect = "postgresql", host = "pg.example.com", database = "blog", user = "alice" } }
+    end
+    assert.equals("postgres://alice@pg.example.com:5432/blog", connections.resolve_connection_url("primary"))
+  end)
+
+  it("normalizes compat aliases to their base protocol URL", function()
+    package.loaded["poste-db.toml"].parse_file = function()
+      return {
+        crdb = { dialect = "cockroachdb", host = "crdb.example.com", database = "blog", user = "alice" },
+        yb = { dialect = "yugabyte", host = "yb.example.com", database = "blog", user = "alice", password = "pw" },
+        ps = { dialect = "planetscale", host = "aws.connect.psdb.cloud", database = "shop", user = "root" },
+        maria = { dialect = "mariadb", host = "localhost", database = "shop", user = "root" },
+      }
+    end
+    -- Aliases must land on their base protocol URL, never the binary
+    -- fallback scheme (the old `postgres or mysql` default).
+    assert.equals("postgres://alice@crdb.example.com:5432/blog", connections.resolve_connection_url("crdb"))
+    assert.equals("postgres://alice:pw@yb.example.com:5432/blog", connections.resolve_connection_url("yb"))
+    assert.equals("mysql://root@aws.connect.psdb.cloud:3306/shop", connections.resolve_connection_url("ps"))
+    assert.equals("mysql://root@localhost:3306/shop", connections.resolve_connection_url("maria"))
+  end)
+
   it("uses url field directly when present", function()
     package.loaded["poste-db.toml"].parse_file = function()
       return { custom = { dialect = "postgres", url = "postgres://custom@localhost/mydb" } }

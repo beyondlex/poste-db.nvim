@@ -44,3 +44,28 @@ services:
       interval: 2s
       timeout: 3s
       retries: 10
+
+  mssql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: poste-test-mssql
+    # No official arm64 image — runs under Rosetta/QEMU emulation on
+    # Apple Silicon, so startup is slow: generous start_period + retries.
+    platform: linux/amd64
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "Poste_test_2022"
+      MSSQL_PID: Developer
+    ports:
+      - "11433:1433"
+    volumes:
+      - ./init/mssql:/docker-entrypoint-initdb.d:ro
+    # The mssql image ignores /docker-entrypoint-initdb.d; our entrypoint
+    # boots sqlservr, applies the seed scripts, then hands over.
+    entrypoint: ["/bin/bash", "/docker-entrypoint-initdb.d/entrypoint.sh"]
+    healthcheck:
+      # -C trusts the container's self-signed cert (required by mssql-tools18)
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Poste_test_2022' -Q 'SELECT 1' -C -b || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 120s

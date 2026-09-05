@@ -61,6 +61,7 @@ describe("snippets", function()
       assert.matches("AUTO_INCREMENT", snippets.resolve("ct", "mysql").snippet)
       assert.matches("SERIAL", snippets.resolve("ct", "postgres").snippet)
       assert.matches("AUTOINCREMENT", snippets.resolve("ct", "sqlite").snippet)
+      assert.matches("IDENTITY%(1,1%)", snippets.resolve("ct", "mssql").snippet)
     end)
 
     it("falls back to default template when dialect has no variant", function()
