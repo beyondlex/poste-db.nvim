@@ -41,7 +41,7 @@ end
 
 local function fmt_elapsed()
   if not S.start_time then return "0s" end
-  local elapsed = vim.loop.now() - S.start_time
+  local elapsed = (vim.uv or vim.loop).now() - S.start_time
   return fmt_time(elapsed)
 end
 
@@ -317,7 +317,7 @@ function M.run(opts)
   S.total_affected = 0
   S.total = 0
   S.results = {}
-  S.start_time = vim.loop.now()
+  S.start_time = (vim.uv or vim.loop).now()
   S.filepath = filepath
   S.conn = conn
   S.db = db

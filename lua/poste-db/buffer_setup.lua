@@ -50,7 +50,7 @@ function M.setup_buffer_keymaps(buf)
   end
 
   -- Snippet tab-stop navigation (insert mode, only intercept when snippet active)
-  local ft = vim.api.nvim_buf_get_option(buf, "filetype")
+  local ft = vim.bo[buf].filetype
   if ft == "poste_sql" or ft == "poste_sqlite" then
     local sopts = { buffer = buf, noremap = true, silent = true }
     vim.keymap.set({ "i", "s" }, "<Tab>", function()

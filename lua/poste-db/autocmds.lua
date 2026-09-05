@@ -116,12 +116,12 @@ function M.setup_existing_buffers()
   for _, buf in ipairs(vim.api.nvim_list_bufs()) do
     local name = vim.api.nvim_buf_get_name(buf)
     if name:match("%.sqlite$") then
-      vim.api.nvim_buf_set_option(buf, "filetype", "poste_sqlite")
+      vim.bo[buf].filetype = "poste_sqlite"
       buffer_setup.setup_buffer_keymaps(buf)
       sql_runner.ensure_sql_keymaps(buf)
       setup_db_browser_keymap(buf)
     elseif name:match("%.sql$") then
-      vim.api.nvim_buf_set_option(buf, "filetype", "poste_sql")
+      vim.bo[buf].filetype = "poste_sql"
       buffer_setup.setup_buffer_keymaps(buf)
       sql_runner.ensure_sql_keymaps(buf)
       setup_db_browser_keymap(buf)

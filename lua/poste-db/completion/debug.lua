@@ -10,7 +10,7 @@ local _snap = nil
 
 local function alloc_buf()
   local b = vim.api.nvim_create_buf(false, true)
-  vim.api.nvim_buf_set_option(b, "bufhidden", "wipe")
+  vim.bo[b].bufhidden = "wipe"
   return b
 end
 
@@ -25,7 +25,7 @@ local function open_win(b)
   end
   vim.api.nvim_set_option_value("wrap", true, { win = 0 })
   vim.api.nvim_set_option_value("cursorline", false, { win = 0 })
-  vim.api.nvim_win_set_option(0, "winfixheight", true)
+  vim.wo[0].winfixheight = true
   vim.bo[b].filetype = "poste_db_cmp_debug"
   local w = vim.api.nvim_get_current_win()
   vim.api.nvim_set_current_win(prev)
@@ -107,9 +107,9 @@ local function render()
     table.insert(lines, "Each keystroke updates the debug data.")
   end
 
-  vim.api.nvim_buf_set_option(_buf, "modifiable", true)
+  vim.bo[_buf].modifiable = true
   vim.api.nvim_buf_set_lines(_buf, 0, -1, false, lines)
-  vim.api.nvim_buf_set_option(_buf, "modifiable", false)
+  vim.bo[_buf].modifiable = false
 end
 
 local M = {}

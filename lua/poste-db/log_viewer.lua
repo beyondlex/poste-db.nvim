@@ -422,9 +422,9 @@ local function render()
   if #lines == 0 then
     lines = { "  <empty>" }
   end
-  vim.api.nvim_buf_set_option(buf, "modifiable", true)
+  vim.bo[buf].modifiable = true
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-  vim.api.nvim_buf_set_option(buf, "modifiable", false)
+  vim.bo[buf].modifiable = false
   vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
   if #filtered == 0 then
     local line_len = #(lines[1] or "")
@@ -448,7 +448,7 @@ local function render()
       end
     end
   end
-  vim.api.nvim_buf_set_option(buf, "modifiable", false)
+  vim.bo[buf].modifiable = false
   update_winbar()
 end
 

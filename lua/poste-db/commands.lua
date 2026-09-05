@@ -46,7 +46,7 @@ function M.setup()
     local binary = state.find_poste_binary()
     if binary then
       parts[#parts + 1] = "poste_binary: " .. binary
-      local mtime = vim.loop.fs_stat(binary)
+      local mtime = (vim.uv or vim.loop).fs_stat(binary)
       if mtime then
         parts[#parts + 1] = "built:       " .. os.date("%Y-%m-%d %H:%M:%S", mtime.mtime.sec)
       end

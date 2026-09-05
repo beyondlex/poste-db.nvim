@@ -8,6 +8,7 @@
 --- Sessions are pooled keyed by `connection_url` and shared across buffers.
 
 local state = require("poste.state")
+local const = require("poste-db.constants")
 
 local M = {}
 
@@ -26,12 +27,9 @@ local M = {}
 -- }
 local pool = {}
 
--- Mapping connection URL prefix → dialect name
+-- Mapping connection URL prefix → dialect name (single source in constants).
 local function dialect_from_url(url)
-  if url:match("^sqlite:") then return "sqlite" end
-  if url:match("^mysql://") then return "mysql" end
-  if url:match("^postgres://") or url:match("^postgresql://") then return "postgres" end
-  return "unknown"
+  return const.dialect_from_url(url) or "unknown"
 end
 
 -- Extract database name from connection URL for display.

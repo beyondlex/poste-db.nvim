@@ -86,7 +86,7 @@ function M.check()
   end
 
   -- Platform
-  local uname = vim.loop.os_uname()
+  local uname = (vim.uv or vim.loop).os_uname()
   local sys = uname.sysname
   local machine = uname.machine
   local supported = false

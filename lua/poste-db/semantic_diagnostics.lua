@@ -352,15 +352,7 @@ end
 --- Resolve connection URL from a connection name.
 local function resolve_conn_url(conn)
   if not conn or conn == "" then return nil end
-  local lower = conn:lower()
-  if lower:match("^sqlite:")
-    or lower:match("^postgres://")
-    or lower:match("^postgresql://")
-    or lower:match("^mysql://")
-    or lower:match("^mariadb://")
-  then
-    return conn
-  end
+  if const.dialect_from_url(conn:lower()) then return conn end
   local url, _ = connections.resolve_connection_url(conn)
   return url
 end

@@ -110,7 +110,7 @@ end
 --- Detect context via async vim.system(). Calls callback(rust_ctx).
 --- Uses _ctx_cache to avoid re-running the binary on repeated calls.
 local function try_rust_context_async(bufnr, line_before, cursor_line, callback)
-  local ok_ft, ft = pcall(vim.api.nvim_buf_get_option, bufnr, "filetype")
+  local ok_ft, ft = pcall(function() return vim.bo[bufnr].filetype end)
   if not ok_ft or (ft ~= "poste_sql" and ft ~= "poste_sqlite") then callback(nil); return end
 
   local sql_text, offset = extract_sql_block(bufnr, line_before, cursor_line)
