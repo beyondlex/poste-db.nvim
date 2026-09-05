@@ -54,3 +54,18 @@ port = 13307
 database = "{{MARIADB_DB}}"
 user = "{{MARIADB_USER}}"
 password = "{{MARIADB_PASSWORD}}"
+
+[mssql]
+dialect = "mssql"
+host = "localhost"
+port = 11433
+database = "playground"
+user = "sa"
+password = "Poste_test_2022"
+
+[clickhouse]
+dialect = "clickhouse"
+host = "localhost"
+port = 18123          # 宿主端口，容器内是 8123（HTTP）
+database = "playground"
+user = "default"      # 密码省略 = 空

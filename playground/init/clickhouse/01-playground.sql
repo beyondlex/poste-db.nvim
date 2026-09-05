@@ -49,42 +49,45 @@ INSERT INTO users (id, username, email, is_active) VALUES
 
 INSERT INTO orders (id, user_id, status, total, ordered_at)
 SELECT
-  n,
-  (n % 5) + 1,
-  arrayElement(['pending', 'paid', 'shipped', 'done'], (n % 4) + 1),
-  toDecimal64(((n % 9000) + 100), 2) / 10,
-  now64() - n
+  number,
+  (number % 5) + 1,
+  arrayElement(['pending', 'paid', 'shipped', 'done'], (number % 4) + 1),
+  toDecimal64(((number % 9000) + 100), 2) / 10,
+  now64() - number
 FROM numbers(1, 500);
 
 INSERT INTO order_items (id, order_id, product, qty, unit_price)
 SELECT
-  n,
-  (n % 500) + 1,
-  concat('SKU-', toString((n % 40) + 1)),
-  (n % 3) + 1,
-  toDecimal64(((n % 4000) + 150), 2) / 100
+  number,
+  (number % 500) + 1,
+  concat('SKU-', toString((number % 40) + 1)),
+  (number % 3) + 1,
+  toDecimal64(((number % 4000) + 150), 2) / 100
 FROM numbers(1, 1200);
 
 -- ── ClickHouse-specific feature tables ─────────────────────────────────────
--- Map / Nested / Array / TTL columns on a ReplacingMergeTree with TTL
+-- Map / Array / TTL columns on a ReplacingMergeTree with TTL
+-- (plain Array columns — Nested VALUES insertion has parsing quirks with
+-- empty arrays; ARRAY JOIN works the same on multiple arrays)
 CREATE TABLE type_showcase (
   id UInt64,
   label String,
   attrs Map(String, String),
   tags Array(String),
-  measurements Nested(sensor String, value Float64),
+  sensors Array(String),
+  readings Array(Float64),
   amount Decimal(10, 4),
   seen_at DateTime64(3),
   ttl_days UInt8 TTL seen_at + INTERVAL 365 DAY
 ) ENGINE = ReplacingMergeTree ORDER BY id;
 
-INSERT INTO type_showcase (id, label, attrs, tags, measurements, amount, seen_at) VALUES
+INSERT INTO type_showcase (id, label, attrs, tags, sensors, readings, amount, seen_at) VALUES
   (1, 'first',  map('env', 'prod', 'tier', '1'), ['a', 'b'],
-     [('cpu', 0.42), ('mem', 0.81)], 12.3456, '2026-01-15 10:30:00'),
-  (2, 'second', map('env', 'dev'), [], [],
-     3.14159, '2025-12-31 23:59:59'),
+     ['cpu', 'mem'], [0.42, 0.81], 12.3456, '2026-01-15 10:30:00'),
+  (2, 'second', map('env', 'dev'), ['x'],
+     [], [], 3.14159, '2025-12-31 23:59:59'),
   (3, 'third',  map('env', 'staging', 'owner', 'platform'), ['c'],
-     [('cpu', 0.10)], -1.5, '2026-06-01 00:00:00');
+     ['cpu'], [0.10], -1.5, '2026-06-01 00:00:00');
 
 -- AggregatingMergeTree + materialized view source (events_daily)
 CREATE TABLE events_daily (

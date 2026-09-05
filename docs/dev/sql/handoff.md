@@ -31,7 +31,7 @@
 - **Docker Hub 与各镜像源 CDN 在本网络不可达**（mcr.microsoft.com 可达——mssql 镜像能拉）。clickhouse 镜像拉不下来，Phase 2 用 `/tmp/ch_mock_server.py`（python3 本地 mock，端口 18123）验证了驱动全链路。真实容器验证待网络恢复后执行：
   ```bash
   cd playground && docker compose up -d clickhouse   # 等 healthy
-  CLICKHOUSE_TEST_URL='clickhouse://default@localhost:18123/playground' \
+  CLICKHOUSE_TEST_URL='clickhouse://default:poste_test@localhost:18123/playground' \
   POSTE_BINARY=$HOME/code/github/poste-for-db/target/debug/poste \
   nvim --headless -u NONE -l tests/diag/diag_clickhouse.lua
   ```

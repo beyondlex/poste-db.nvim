@@ -73,7 +73,7 @@ docker compose up -d
 | `playground`| type_showcase (Map/Nested/TTL on ReplacingMergeTree)           | 3                |
 | `playground`| events_raw, events_daily (+materialized view `events_daily_mv`)| 10 / aggregated  |
 
-- User: `default` / no password (dev container only)
+- User: `default` / Password: `poste_test` (recent images disable network access for default unless credentials are set)
 
 | Database    | Tables                                                         | Rows             |
 |-------------|----------------------------------------------------------------|------------------|

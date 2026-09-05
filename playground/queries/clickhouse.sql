@@ -7,6 +7,7 @@
 --   port = 18123
 --   database = "playground"
 --   user = "default"
+--   password = "poste_test"
 --
 -- Covered: MergeTree FINAL, TOTALS, ARRAY JOIN, arrays/maps/nested ops,
 -- generateRandom, window functions, JSON functions, table functions
@@ -35,9 +36,10 @@ SELECT id, label, amount FROM type_showcase FINAL ORDER BY id;
 SELECT id, tag, length(tags) AS tag_count
 FROM type_showcase ARRAY JOIN tags AS tag ORDER BY id, tag;
 
--- Nested 列展开（measurements Nested(sensor, value)）
-SELECT id, sensor, value
-FROM type_showcase ARRAY JOIN measurements ORDER BY id, sensor;
+-- ARRAY JOIN 多数组展开（sensors/readings 两个数组对齐展开）
+SELECT id, sensor, reading
+FROM type_showcase ARRAY JOIN sensors AS sensor, readings AS reading
+ORDER BY id, sensor;
 
 -- Map 操作
 SELECT id, label, attrs['env'] AS env, mapKeys(attrs) AS keys
