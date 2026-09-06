@@ -225,6 +225,26 @@ local function extract_connection_directive(filepath)
   return nil
 end
 
+--- Build `exec-file` args as an argv list (jobstart's list form — no shell,
+--- so values pass through unquoted). Binary is prepended by the caller.
+local function build_cmd(filepath, opts)
+  local cmd = {
+    "exec-file", filepath,
+    "--env", state.current_env or "dev",
+    "--mode", opts.mode or "greedy",
+    "--timeout", tostring(opts.timeout or 30),
+    "--max-rows", tostring(opts.max_rows or 1000),
+    "--json",
+  }
+  if opts.conn_url and opts.conn_url ~= "" then
+    table.insert(cmd, "--connection"); table.insert(cmd, opts.conn_url)
+  end
+  if opts.database and opts.database ~= "" then
+    table.insert(cmd, "--database"); table.insert(cmd, opts.database)
+  end
+  return cmd
+end
+
 function M.cancel()
   if not S.is_running or not S.job_id then return end
   S.cancelled = true
@@ -337,39 +357,34 @@ function M.run(opts)
     return
   end
 
-  local cmd = string.format("%s exec-file %s --env %s --mode %s --timeout %d --max-rows %d --json",
-    vim.fn.shellescape(binary),
-    vim.fn.shellescape(filepath),
-    vim.fn.shellescape(state.current_env),
-    vim.fn.shellescape(mode),
-    timeout,
-    max_rows
-  )
-
   local resolved_conn = conn
   if not resolved_conn then
     resolved_conn = extract_connection_directive(filepath)
   end
 
+  local conn_url
   if resolved_conn then
     local url, err = connections.resolve_connection_url(resolved_conn)
-    if url then
-      S.conn = resolved_conn
-      cmd = cmd .. " --connection " .. vim.fn.shellescape(url)
-    else
+    if not url then
       if S.dialog then S.dialog:close(); S.dialog = nil end
       S.is_running = false
       vim.notify("Connection '" .. resolved_conn .. "' not found: " .. (err or "create a connections.toml in your project root"), vim.log.levels.ERROR, { title = "PosteDb" })
       return
     end
+    S.conn = resolved_conn
+    conn_url = url
   end
 
-  if db then
-    cmd = cmd .. " --database " .. vim.fn.shellescape(db)
-  end
+  local cmd = vim.list_extend({ binary }, build_cmd(filepath, {
+    mode = mode,
+    timeout = timeout,
+    max_rows = max_rows,
+    conn_url = conn_url,
+    database = db,
+  }))
 
   local log = require("poste-db.log")
-  log.info("ExecFile cmd: " .. log.redact_cmd_str(cmd))
+  log.info("ExecFile cmd: " .. log.redact_cmd(cmd))
 
   local partial = ""
   S.job_id = vim.fn.jobstart(cmd, {
