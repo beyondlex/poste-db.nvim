@@ -150,18 +150,18 @@ function M.handle(deps, parsed)
               "success", result.execution_time_ms)
             goto continue
           else
-            tab_idx = tab_idx + 1
-            lines, meta = sql_format.format_resultset(single_data)
-          end
-          sql_buffer.render_dataset(lines, meta, {
-            tab_index = tab_idx,
-            exec_seq = deps.current_seq,
-            data = single_data,
-            layout = layout,
-            original_sql = deps.buf_content,
-            src_file = deps.src_file,
-            src_buf = deps.src_buf,
-          })
+          tab_idx = tab_idx + 1
+          lines, meta, layout = sql_format.format_resultset(single_data)
+        end
+        sql_buffer.render_dataset(lines, meta, {
+          tab_index = tab_idx,
+          exec_seq = deps.current_seq,
+          data = single_data,
+          layout = layout,
+          original_sql = deps.buf_content,
+          src_file = deps.src_file,
+          src_buf = deps.src_buf,
+        })
 
           local line_nr = deps.stmt_lines[i] or deps.first_line
           indicators.set_indicator(deps.src_buf, M.stmt_indicator_line(line_nr),

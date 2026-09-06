@@ -746,13 +746,15 @@ end
 --- @param data table Parsed JSON with results, columns, rows
 --- @return string[] lines
 --- @return DatasetMeta meta
+--- @return table|nil layout planned layout (nil for empty results), so
+---   callers can render layout-aware (pagination, filtering, sorting)
 function M.format_resultset(data)
   local layout = M.plan_resultset_layout(data)
   if not layout then
-    return { "", "  (no results)", "" }, { type = "empty" }
+    return { "", "  (no results)", "" }, { type = "empty" }, nil
   end
   if #layout.columns == 0 then
-    return { "", "  (empty result set)", "" }, { type = "empty" }
+    return { "", "  (empty result set)", "" }, { type = "empty" }, layout
   end
 
   local page_size = #layout.rows
@@ -764,7 +766,7 @@ function M.format_resultset(data)
 
   meta.total_rows = layout.total_rows
 
-  return lines, meta
+  return lines, meta, layout
 end
 
 --- Format a SQL error response.
