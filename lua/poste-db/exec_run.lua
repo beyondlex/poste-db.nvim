@@ -50,6 +50,9 @@ end
 
 --- Detect a lone `USE <db>;` statement (exec-file skips USE statements, so we
 --- handle context switching without hitting the database).
+--- Broader than sql_runner.is_use_stmt (routing): here the matched name is
+--- *applied* to state.context.database, so quoted and commented forms must
+--- resolve too. Don't unify the two blindly.
 --- @param sql string
 --- @return string|nil database_name
 local function detect_use(sql)

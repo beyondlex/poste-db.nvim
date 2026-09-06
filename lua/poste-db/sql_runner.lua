@@ -304,7 +304,10 @@ function M.run_sql_request()
   if db == vim.NIL then db = nil end
   if db and db == "" then db = nil end
 
-  -- Detect lone USE statement (handled locally by exec_run, not via session)
+  -- Detect lone USE statement. Intentionally narrower than exec_run.detect_use
+  -- (which also matches quoted/commented forms): here a USE only decides
+  -- *routing* (session vs one-shot run) — a quoted `USE "db"` is executed by
+  -- the session, which applies it persistently. Don't unify the two blindly.
   local function is_use_stmt(s)
     if not s then return false end
     local trimmed = s:match("^%s*(.*)%s*$") or ""
