@@ -304,3 +304,60 @@ describe("buffer_nav horizontal scroll", function()
     vim.o.columns = saved_columns
   end)
 end)
+
+describe("buffer_nav empty resultset", function()
+  before_each(function()
+    D.tabs = {}
+    D.active_tab_idx = 0
+    if D.dataset_window and vim.api.nvim_win_is_valid(D.dataset_window) then
+      pcall(vim.api.nvim_win_close, D.dataset_window, true)
+    end
+    D.dataset_window = nil
+    require("poste-db.buffer.header").close()
+    state.cell = { row = 1, col = 1 }
+  end)
+
+  it("move_cell and position_cursor survive a 0-row resultset", function()
+    local format = require("poste-db.format")
+    local buffer = require("poste-db.buffer")
+    local body = vim.json.encode({
+      type = "resultset",
+      total_rows = 0,
+      results = {
+        {
+          columns = {
+            { name = "day", type = "DATE" },
+            { name = "event", type = "TEXT" },
+            { name = "n", type = "BIGINT" },
+          },
+          rows = {},
+        },
+      },
+      connection = "clickhouse://localhost:18123/playground",
+      database = "playground",
+      dialect = "clickhouse",
+    })
+    local data = vim.json.decode(body)
+    local layout = format.plan_resultset_layout(data)
+    local lines, meta = format.render_page(layout, 1, 50)
+    assert.equals(0, meta.row_count or 0, "fixture must render 0 rows")
+    buffer.render_dataset(lines, meta, { layout = layout, data = data })
+
+    assert.is_not_nil(D.dataset_window)
+
+    -- h/j/k/l on an empty table used to crash in position_cursor
+    -- ("attempt to compare number with nil" on the col_starts lookup).
+    local ok, err = pcall(nav.move_cell, 0, 1)
+    assert.is_true(ok, "move_cell right crashed on empty resultset: " .. tostring(err))
+    assert.same({ row = 1, col = 1 }, state.cell)
+
+    assert.has_no_errors(function()
+      nav.move_cell(0, -1)
+      nav.move_cell(1, 0)
+      nav.move_cell(-1, 0)
+    end)
+
+    -- goto_* handlers reach position_cursor directly, past the move_cell guard.
+    assert.has_no_errors(function() nav.position_cursor(1, 2) end)
+  end)
+end)

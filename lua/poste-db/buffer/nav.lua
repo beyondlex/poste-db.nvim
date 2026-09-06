@@ -63,6 +63,9 @@ end
 function M.move_cell(drow, dcol)
   local tab = D.T()
   if not tab or not tab.meta or tab.meta.type ~= "resultset" then return end
+  -- No cells to focus in an empty resultset (matches the render-side
+  -- row_count > 0 guards); focusing would crash the cursor placement.
+  if (tab.meta.row_count or 0) == 0 or (tab.meta.col_count or 0) == 0 then return end
 
   if sql_state._trace then T_clear() end
   T_mark("move_cell")
@@ -120,14 +123,14 @@ function M.position_cursor(row, col)
   -- Use pre-computed column byte/display offsets when available (O(1), no │ scan)
   local col_starts = tab.buffer_col_starts and tab.buffer_col_starts[line_idx]
   local target_col, target_disp, line, ranges
-  if col_starts then
+  if col_starts and col_starts[col + 1] then
     local tc = col_starts[col + 1]
-    if tc then
-      target_col = tc.ext_start
-      target_disp = tc.disp_start
-    end
+    target_col = tc.ext_start
+    target_disp = tc.disp_start
     T_mark("  pos:col_starts_lookup")
   else
+    -- No mapped cell at this position (empty resultsets, short rows) —
+    -- fall back to scanning the rendered line so target_disp stays a number.
     T_mark("  pos:get_line_fallback")
     line = vim.api.nvim_buf_get_lines(buf, line_idx - 1, line_idx, false)[1] or ""
     T_mark("  pos:find_cell_ranges")
