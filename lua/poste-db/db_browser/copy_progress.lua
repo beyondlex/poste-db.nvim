@@ -172,6 +172,7 @@ function M.show_paste_progress(source, target, jobs, on_close)
   height = math.min(height, 24)
 
   local spinner_timer = nil
+  local cancelled = false
 
   local function stop_spinner()
     if spinner_timer then
@@ -181,12 +182,20 @@ function M.show_paste_progress(source, target, jobs, on_close)
     end
   end
 
+  -- Forward-declared: the `c` keymap closes over this; the body is defined
+  -- once the dialog handle exists. Unlike plain `q` (close, copy keeps
+  -- running), `c` stops the queue after the in-flight job finishes.
+  local cancel_copy
+
   local opts = {
     title = "Copying",
     width = popts.width,
     height = height,
     border = "rounded",
     backdrop = true,
+    keymaps = {
+      c = function() cancel_copy() end,
+    },
     on_close = function()
       stop_spinner()
       if on_close then on_close() end
@@ -199,8 +208,13 @@ function M.show_paste_progress(source, target, jobs, on_close)
   local completed = 0
   local failed = 0
   local errors = {}
-  local cancelled = false
   local spinner_frame = 1
+
+  cancel_copy = function()
+    if cancelled then return end
+    cancelled = true
+    dlg:close()
+  end
 
   for _, j in ipairs(jobs) do
     results[j.label] = { status = "pending", row_count = "", elapsed = "" }
@@ -263,6 +277,9 @@ function M.show_paste_progress(source, target, jobs, on_close)
       if failed > 0 then
         table.insert(lines, "  Press [q] to see errors")
       end
+    else
+      table.insert(lines, "")
+      table.insert(lines, "  [c] cancel remaining   [q] close")
     end
 
     dlg:update(lines, highlights)
@@ -343,11 +360,7 @@ function M.show_paste_progress(source, target, jobs, on_close)
     process_next()
   end
 
-  return start_copy, function()
-    cancelled = true
-    stop_spinner()
-    dlg:close()
-  end
+  return start_copy, cancel_copy
 end
 
 return M

@@ -574,7 +574,8 @@ function M.paste_objects(source, target, items, triggers, routines, opts)
           }
         end
 
-        local start_fn, cancel_fn = show_paste_progress(source, target, jobs, function()
+        -- cancel now lives on the progress dialog itself (the `c` key)
+        local start_fn = show_paste_progress(source, target, jobs, function()
           if opts.on_complete then opts.on_complete() end
         end)
         start_fn()

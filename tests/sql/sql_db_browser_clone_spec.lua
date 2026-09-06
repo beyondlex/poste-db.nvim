@@ -82,3 +82,88 @@ describe("db_browser copy progress spinner", function()
     end
   end)
 end)
+
+describe("db_browser copy progress cancel", function()
+  local function collect_dialog_lines()
+    local lines = {}
+    for _, win in ipairs(vim.api.nvim_list_wins()) do
+      local buf = vim.api.nvim_win_get_buf(win)
+      if vim.api.nvim_buf_is_valid(buf) then
+        for _, l in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do
+          table.insert(lines, l)
+        end
+      end
+    end
+    return lines
+  end
+
+  local function close_all_floats()
+    for _, win in ipairs(vim.api.nvim_list_wins()) do
+      if vim.api.nvim_win_is_valid(win)
+        and pcall(vim.api.nvim_win_get_config, win)
+        and vim.api.nvim_win_get_config(win).relative ~= "" then
+        pcall(vim.api.nvim_win_close, win, true)
+      end
+    end
+  end
+
+  it("exposes a cancel handle and stops the queue without running later jobs", function()
+    local copy = require("poste-db.db_browser.copy")
+    local t = copy._test
+    local source = { conn = "s", db = "blog", dialect = "postgres" }
+    local target = { conn = "t", db = "other", dialect = "postgres" }
+    local ran = {}
+    local gate -- first job signals once it has STARTED, then we cancel
+    local jobs = {
+      { label = "first", work = function(cb)
+          ran[#ran + 1] = "first"
+          gate = true
+          vim.defer_fn(function() cb(true, "1", "1ms") end, 50)
+        end },
+      { label = "second", work = function(cb)
+          ran[#ran + 1] = "second"
+          cb(true, "2", "2ms")
+        end },
+    }
+    local on_close_called = false
+    local start_fn, cancel_fn = t.show_paste_progress(source, target, jobs, function()
+      on_close_called = true
+    end)
+    assert.is_function(start_fn)
+    assert.is_function(cancel_fn, "show_paste_progress must return a cancel handle")
+    start_fn()
+
+    vim.wait(1000, function() return gate == true end)
+    cancel_fn()  -- queue must stop after the in-flight job
+
+    vim.wait(600, function() return on_close_called end)
+    close_all_floats()
+    assert.is_true(on_close_called, "cancel must close the dialog (firing on_close)")
+    assert.are.same({ "first" }, ran, "jobs after cancel must not start")
+  end)
+
+  it("renders the cancel hint while jobs are pending", function()
+    local copy = require("poste-db.db_browser.copy")
+    local t = copy._test
+    local source = { conn = "s", db = "blog", dialect = "postgres" }
+    local target = { conn = "t", db = "other", dialect = "postgres" }
+    local release
+    local jobs = {
+      { label = "hold", work = function(cb) release = cb end },
+      { label = "next", work = function(cb) cb(true, "2", "2ms") end },
+    }
+    local start_fn = t.show_paste_progress(source, target, jobs, function() end)
+    start_fn()
+
+    local hinted = false
+    vim.wait(500, function()
+      for _, l in ipairs(collect_dialog_lines()) do
+        if l:find("[c] cancel", 1, true) then hinted = true; return true end
+      end
+      return false
+    end)
+    assert.is_true(hinted, "pending copy must show the [c] cancel hint")
+    if release then release(true, "1", "1ms") end
+    close_all_floats()
+  end)
+end)
