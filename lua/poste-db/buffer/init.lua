@@ -503,6 +503,123 @@ function M.apply_rendered_page(tab, lines, meta)
   finalize_rendered_page(tab, padded, new_meta)
 end
 
+--- Create the bottom split on first render (or after the old window's
+--- tabpage died) and point it at the rendered buffer, restoring the source
+--- window's view.
+local function ensure_dataset_window(buf, is_error)
+  if not D.dataset_window or not vim.api.nvim_win_is_valid(D.dataset_window)
+      or (D.dataset_tabpage and vim.api.nvim_win_get_tabpage(D.dataset_window) ~= D.dataset_tabpage) then
+    local src_win = vim.api.nvim_get_current_win()
+    local src_view = vim.fn.winsaveview()
+    local height = math.floor(vim.o.lines * C.DATASET_HEIGHT_RATIO)
+    vim.cmd("botright " .. height .. "split")
+    D.dataset_window = vim.api.nvim_get_current_win()
+    D.dataset_tabpage = vim.api.nvim_get_current_tabpage()
+    vim.api.nvim_set_current_win(src_win)
+    vim.fn.winrestview(src_view)
+  end
+
+  vim.api.nvim_win_set_buf(D.dataset_window, is_error and M.get_error_buffer() or buf)
+  pcall(vim.api.nvim_win_call, D.dataset_window, function()
+    vim.fn.winrestview({ leftcol = 0 })
+  end)
+end
+
+--- Window-local options for the dataset split; the error variant wraps long
+--- messages instead of scrolling horizontally.
+local function apply_dataset_win_options(win, is_error)
+  if is_error then
+    vim.api.nvim_set_option_value("wrap", true, { win = win })
+    vim.api.nvim_set_option_value("cursorline", false, { win = win })
+    vim.api.nvim_set_option_value("conceallevel", 0, { win = win })
+    vim.api.nvim_set_option_value("number", true, { win = win })
+    vim.api.nvim_set_option_value("relativenumber", false, { win = win })
+    vim.api.nvim_set_option_value("signcolumn", "auto", { win = win })
+    pcall(vim.api.nvim_set_option_value, "statuscolumn", "", { win = win })
+    vim.api.nvim_set_option_value("foldcolumn", "0", { win = win })
+    vim.api.nvim_set_option_value("foldenable", false, { win = win })
+  else
+    vim.api.nvim_set_option_value("wrap", false, { win = win })
+    vim.api.nvim_set_option_value("sidescrolloff", 0, { win = win })
+    vim.api.nvim_set_option_value("cursorline", false, { win = win })
+    vim.api.nvim_set_option_value("cursorcolumn", false, { win = win })
+    vim.api.nvim_set_option_value("conceallevel", 0, { win = win })
+    vim.api.nvim_set_option_value("number", false, { win = win })
+    vim.api.nvim_set_option_value("relativenumber", false, { win = win })
+    vim.api.nvim_set_option_value("signcolumn", "no", { win = win })
+    pcall(vim.api.nvim_set_option_value, "statuscolumn", "", { win = win })
+    vim.api.nvim_set_option_value("foldcolumn", "0", { win = win })
+    vim.api.nvim_set_option_value("foldenable", false, { win = win })
+  end
+end
+
+--- Rotate all four render autocmds: re-registering without deleting the
+--- previous id leaks one global autocmd per render.
+local function register_dataset_autocmds()
+  if D.resize_autocmd_id then
+    pcall(vim.api.nvim_del_autocmd, D.resize_autocmd_id)
+    D.resize_autocmd_id = nil
+  end
+  if D.scroll_autocmd_id then
+    pcall(vim.api.nvim_del_autocmd, D.scroll_autocmd_id)
+    D.scroll_autocmd_id = nil
+  end
+  if D.vimresized_autocmd_id then
+    pcall(vim.api.nvim_del_autocmd, D.vimresized_autocmd_id)
+    D.vimresized_autocmd_id = nil
+  end
+  if D.winclose_autocmd_id then
+    pcall(vim.api.nvim_del_autocmd, D.winclose_autocmd_id)
+    D.winclose_autocmd_id = nil
+  end
+  if D.dataset_buffer then
+    D.resize_autocmd_id = vim.api.nvim_create_autocmd("WinResized", {
+      callback = function()
+        require("poste-db.buffer.header").update()
+        ensure_dataset_visible()
+      end,
+    })
+    -- Whole-editor resize (terminal grew/shrunk): re-apply the dataset's
+    -- share so the split cannot collapse to just its winbar.
+    D.vimresized_autocmd_id = vim.api.nvim_create_autocmd("VimResized", {
+      callback = function()
+        ensure_dataset_visible()
+      end,
+    })
+    D.scroll_autocmd_id = vim.api.nvim_create_autocmd("WinScrolled", {
+      buffer = D.dataset_buffer,
+      callback = function()
+        require("poste-db.buffer.header").update()
+      end,
+    })
+    D.winclose_autocmd_id = vim.api.nvim_create_autocmd("WinClosed", {
+      callback = function()
+        vim.schedule(function()
+          require("poste-db.buffer.header").update()
+        end)
+      end,
+    })
+  end
+end
+
+--- Initial cursor: errors park on line 1; resultsets focus the first cell
+--- (unless a sort re-render should keep the cursor untouched).
+local function place_dataset_cursor(tab, meta, is_error)
+  if is_error then
+    pcall(vim.api.nvim_win_set_cursor, D.dataset_window, { 1, 0 })
+  elseif not tab.is_sorting then
+    if meta and meta.type == "resultset" and meta.row_count > 0 then
+      sql_state.cell.row = 1
+      sql_state.cell.col = 1
+      pcall(vim.api.nvim_win_set_cursor, D.dataset_window, { meta.data_start_line, 0 })
+      local cs = tab.buffer_col_starts and tab.buffer_col_starts[meta.data_start_line]
+      sql_highlights.highlight_cell(D.dataset_buffer, 1, 1, meta, nil, cs)
+    else
+      pcall(vim.api.nvim_win_set_cursor, D.dataset_window, { 1, 0 })
+    end
+  end
+end
+
 function M.render_dataset(lines, meta, opts)
   opts = opts or {}
   local tab_idx = opts.tab_index or 1
@@ -609,46 +726,9 @@ function M.render_dataset(lines, meta, opts)
     render_dataset_legacy(tab, lines, meta)
   end
 
-  if not D.dataset_window or not vim.api.nvim_win_is_valid(D.dataset_window)
-      or (D.dataset_tabpage and vim.api.nvim_win_get_tabpage(D.dataset_window) ~= D.dataset_tabpage) then
-    local src_win = vim.api.nvim_get_current_win()
-    local src_view = vim.fn.winsaveview()
-    local height = math.floor(vim.o.lines * C.DATASET_HEIGHT_RATIO)
-    vim.cmd("botright " .. height .. "split")
-    D.dataset_window = vim.api.nvim_get_current_win()
-    D.dataset_tabpage = vim.api.nvim_get_current_tabpage()
-    vim.api.nvim_set_current_win(src_win)
-    vim.fn.winrestview(src_view)
-  end
+  ensure_dataset_window(buf, is_error)
 
-  vim.api.nvim_win_set_buf(D.dataset_window, is_error and M.get_error_buffer() or buf)
-  pcall(vim.api.nvim_win_call, D.dataset_window, function()
-    vim.fn.winrestview({ leftcol = 0 })
-  end)
-
-  if is_error then
-    vim.api.nvim_set_option_value("wrap", true, { win = D.dataset_window })
-    vim.api.nvim_set_option_value("cursorline", false, { win = D.dataset_window })
-    vim.api.nvim_set_option_value("conceallevel", 0, { win = D.dataset_window })
-    vim.api.nvim_set_option_value("number", true, { win = D.dataset_window })
-    vim.api.nvim_set_option_value("relativenumber", false, { win = D.dataset_window })
-    vim.api.nvim_set_option_value("signcolumn", "auto", { win = D.dataset_window })
-    pcall(vim.api.nvim_set_option_value, "statuscolumn", "", { win = D.dataset_window })
-    vim.api.nvim_set_option_value("foldcolumn", "0", { win = D.dataset_window })
-    vim.api.nvim_set_option_value("foldenable", false, { win = D.dataset_window })
-  else
-    vim.api.nvim_set_option_value("wrap", false, { win = D.dataset_window })
-    vim.api.nvim_set_option_value("sidescrolloff", 0, { win = D.dataset_window })
-    vim.api.nvim_set_option_value("cursorline", false, { win = D.dataset_window })
-    vim.api.nvim_set_option_value("cursorcolumn", false, { win = D.dataset_window })
-    vim.api.nvim_set_option_value("conceallevel", 0, { win = D.dataset_window })
-    vim.api.nvim_set_option_value("number", false, { win = D.dataset_window })
-    vim.api.nvim_set_option_value("relativenumber", false, { win = D.dataset_window })
-    vim.api.nvim_set_option_value("signcolumn", "no", { win = D.dataset_window })
-    pcall(vim.api.nvim_set_option_value, "statuscolumn", "", { win = D.dataset_window })
-    vim.api.nvim_set_option_value("foldcolumn", "0", { win = D.dataset_window })
-    vim.api.nvim_set_option_value("foldenable", false, { win = D.dataset_window })
-  end
+  apply_dataset_win_options(D.dataset_window, is_error)
 
   if not is_error then
     local winbar_text = require("poste-db.buffer.nav").build_status_winbar(meta)
@@ -662,67 +742,10 @@ function M.render_dataset(lines, meta, opts)
   end
 
   if not is_error then
-    -- Rotate all four ids: re-registering without deleting the previous id
-    -- leaks one global autocmd per render.
-    if D.resize_autocmd_id then
-      pcall(vim.api.nvim_del_autocmd, D.resize_autocmd_id)
-      D.resize_autocmd_id = nil
-    end
-    if D.scroll_autocmd_id then
-      pcall(vim.api.nvim_del_autocmd, D.scroll_autocmd_id)
-      D.scroll_autocmd_id = nil
-    end
-    if D.vimresized_autocmd_id then
-      pcall(vim.api.nvim_del_autocmd, D.vimresized_autocmd_id)
-      D.vimresized_autocmd_id = nil
-    end
-    if D.winclose_autocmd_id then
-      pcall(vim.api.nvim_del_autocmd, D.winclose_autocmd_id)
-      D.winclose_autocmd_id = nil
-    end
-    if D.dataset_buffer then
-      D.resize_autocmd_id = vim.api.nvim_create_autocmd("WinResized", {
-        callback = function()
-          require("poste-db.buffer.header").update()
-          ensure_dataset_visible()
-        end,
-      })
-      -- Whole-editor resize (terminal grew/shrunk): re-apply the dataset's
-      -- share so the split cannot collapse to just its winbar.
-      D.vimresized_autocmd_id = vim.api.nvim_create_autocmd("VimResized", {
-        callback = function()
-          ensure_dataset_visible()
-        end,
-      })
-      D.scroll_autocmd_id = vim.api.nvim_create_autocmd("WinScrolled", {
-        buffer = D.dataset_buffer,
-        callback = function()
-          require("poste-db.buffer.header").update()
-        end,
-      })
-      D.winclose_autocmd_id = vim.api.nvim_create_autocmd("WinClosed", {
-        callback = function()
-          vim.schedule(function()
-            require("poste-db.buffer.header").update()
-          end)
-        end,
-      })
-    end
+    register_dataset_autocmds()
   end
 
-  if is_error then
-    pcall(vim.api.nvim_win_set_cursor, D.dataset_window, { 1, 0 })
-  elseif not tab.is_sorting then
-    if meta and meta.type == "resultset" and meta.row_count > 0 then
-      sql_state.cell.row = 1
-      sql_state.cell.col = 1
-      pcall(vim.api.nvim_win_set_cursor, D.dataset_window, { meta.data_start_line, 0 })
-      local cs = tab.buffer_col_starts and tab.buffer_col_starts[meta.data_start_line]
-      sql_highlights.highlight_cell(D.dataset_buffer, 1, 1, meta, nil, cs)
-    else
-      pcall(vim.api.nvim_win_set_cursor, D.dataset_window, { 1, 0 })
-    end
-  end
+  place_dataset_cursor(tab, meta, is_error)
 
   if not is_error then
     vim.api.nvim_set_option_value("sidescrolloff", 5, { win = D.dataset_window })
