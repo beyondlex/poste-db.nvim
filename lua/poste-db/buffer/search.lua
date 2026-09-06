@@ -208,6 +208,10 @@ function M.filter_by_current_cell()
   end
   local res = tab.data.results and tab.data.results[1]
   if not res or not res.rows or #res.rows == 0 then return end
+  -- Resultset tabs are always layout-aware now (render_dataset guarantees
+  -- tab.layout); bail before mutating filter state if one somehow isn't.
+  local layout = tab.layout
+  if not layout then return end
   local row, col = sql_state.cell.row, sql_state.cell.col
   local paginated = tab.pagination_enabled and tab.num_pages and tab.num_pages > 1
     and tab.layout
@@ -233,11 +237,6 @@ function M.filter_by_current_cell()
   end
   tab.filtered_indices = indices
   D.compute_view_indices(tab)
-
-  -- Resultset tabs are always layout-aware now (render_dataset guarantees
-  -- tab.layout); a layout-less tab has nothing to filter against.
-  local layout = tab.layout
-  if not layout then return end
 
   local page_limit = tab.pagination_enabled and tab.page_size or #tab.view_indices
   local lines, meta = sql_format.render_view(
