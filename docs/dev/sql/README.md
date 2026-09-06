@@ -79,8 +79,12 @@ see `.opencode/skills/sql-architecture-harness/SKILL.md` for the house rules
 | Module | Role |
 |--------|------|
 | `db_browser/init.lua` | Browser tree window + buffer setup |
-| `db_browser/operations.lua` | Table/column DDL operations (SQL builders + confirm dialogs + batch jobs) |
-| `db_browser/copy.lua` | Cross-server table clone (DDL rewrite + data copy + progress dialogs) |
+| `db_browser/operations.lua` | Context-menu dispatch surface (M entry points; helpers/delegations below) |
+| `db_browser/ops_sql.lua` | Shared node/SQL-generation helpers for browser operations |
+| `db_browser/ops_drop.lua` | Table-drop flows (confirm, batch progress, parent refresh) |
+| `db_browser/copy.lua` | Cross-server table clone orchestration (probe → conflict → paste pipeline) |
+| `db_browser/copy_ddl.lua` | Pure DDL/result transforms for copy (rename, sequences, quoting) |
+| `db_browser/copy_progress.lua` | Copy confirm/progress/summary dialogs (caller-injected jobs) |
 | `db_browser/actions.lua` / `context_menu.lua` / `flash.lua` | Tree actions, menu, flash highlight |
 | `db_browser/catalog.lua` | Per-dialect catalog SQL (views/triggers/routines/sizes) |
 | `db_browser/forms.lua` / `forms_advanced.lua` / `schema_create.lua` / `db_create.lua` | Create/alter form dialogs |
