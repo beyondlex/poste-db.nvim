@@ -149,7 +149,27 @@ ERROR 节点的 text/parent/祖先链）确认形状，同构造多形状各配�
 **完整重跑一遍**（不只验首次 init），再抽验每张表的行数 > 0；涉及 MV/CTAS/
 触发器类"由数据驱动"的对象时，把建对象和灌数据的先后顺序当显式测试点。
 
+## 13. gsub 字面查找必须 pesc；特征测试用全串 equals
+
+**发生了什么**：给拆分出的 `copy_ddl.lua` 补特征测试，一次抓到三个潜伏
+bug：① `rename_seq_reference`（copy_ddl.lua:93）把 `nextval('...')` 直接当
+`gsub` 的 pattern——括号是魔法字符，**从未匹配过**，复制出的表 DEFAULT 仍指
+向旧序列（同服务器靠旧序列存在侥幸可用，计数器却已错乱；跨服务器 DDL 直接
+失败）；② `rename_routine_in_def` mysql 分支（copy_ddl.lua:159）`sub(1,
+open)` 多含一个反引号又手拼一个，产出 `` ``proc_copy`` ``——MySQL 把双反引
+号解析成转义的字面反引号，DDL 无效；③ `prepare_table_ddl` 对 schema 限定
+的 nextval 引用再拼一次 schema 前缀，`CREATE SEQUENCE "public"."public".…`
+与改写后的 DEFAULT 指向不一致。三者都在生产路径上存活了很久，因为拆分前
+没有任何测试，且 ①③ 的损坏形态（"旧值仍在" / "多一层前缀"）不报错。
+
+**约束**：`gsub/gmatch/match` 的 needle 里含 `(` `)` `'` `%` `-` 等字符时
+必须 `vim.pesc`（replacement 侧转义 `%%`）；判定"替换/重写生效"要断言旧值
+**不再出现**（`select(2, gsub(...))` 计数或全串 equals），不能只 matches 新
+值——`matches("``proc_copy`\\(`")` 就放过过 ② 的双反引号。给"纯函数"补测试
+时优先全串 equals，子串 matches 只用于宽松冒烟。
+
 ---
 
-*Latest: 2026-09-05 mssql/clickhouse 误报修复 + clickhouse 种子时序会话。
+*Latest: 2026-09-06 db_browser 拆分 + copy_ddl 特征测试（gsub pesc/双反引号/
+双 schema 前缀三个潜伏 bug）会话。
 新增条目时保持同一格式：发生了什么（带 file:line）→ 约束（可执行的检查动作）。*
