@@ -232,6 +232,7 @@ local KNOWN_CONSTRUCT_MARKERS = {
   "or abort", "or fail", "or rollback", "percentile_", "within group",
   "interval", "separator", "show ",
   "create or replace", "invisible", "collate", "character set",
+  "with totals", "array join", "group (order by",
 }
 
 local CONSTRUCT_KEYWORDS = {
@@ -242,6 +243,9 @@ local CONSTRUCT_KEYWORDS = {
   WITHIN = true, GROUP = true, ORDER = true, SELECT = true, FROM = true,
   WHERE = true, JOIN = true, LIMIT = true, AS = true, ASC = true, DESC = true,
   INTERVAL = true, SEPARATOR = true, SHOW = true,
+  OFFSET = true, FETCH = true, NEXT = true, FIRST = true,
+  ROWS = true, ONLY = true, JSON = true, XML = true,
+  TOTALS = true, ARRAY = true,
   PERCENTILE_CONT = true, PERCENTILE_DISC = true,
   CREATE = true, TABLE = true, SEQUENCE = true, INVISIBLE = true, INT = true,
   PRIMARY = true, KEY = true, AUTO_INCREMENT = true, VARCHAR = true,
@@ -320,6 +324,14 @@ function M.highlight_known_error_constructs(buf, dialect)
       if not known and lower:match("^%d+%s*,") then known = true end
       -- statement-terminator cascades (e.g. `; USE` after a CREATE DATABASE)
       if not known and lower:match("^%s*;") then known = true end
+      -- leading-dot fragments (mssql `SELECT TOP (N) alias.column` artifact)
+      if not known and lower:match("^%.[%w_]") then known = true end
+      -- mssql OFFSET-FETCH pagination / FOR JSON-XML tails and the plain
+      -- ARRAY JOIN strand (`JOIN <array> ...` after ARRAY became an alias)
+      if not known and (lower:match("offset%s*%d+%s*rows")
+        or lower:match("fetch%s*next") or lower:match("fetch%s*first")
+        or lower:match("for%s+json") or lower:match("for%s+xml")
+        or lower:match("^join%s")) then known = true end
       if known then
           local sr, sc, er, ec = node:range()
           pcall(vim.api.nvim_buf_set_extmark, buf, ERROR_CONSTRUCT_NS, sr, sc, {

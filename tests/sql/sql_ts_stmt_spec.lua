@@ -406,6 +406,128 @@ describe("find_error_nodes", function()
     local errors = ts_stmt.find_error_nodes(buf)
     assert.same({}, errors, "neither the WITHIN GROUP head nor the bare total fragment may be flagged")
   end)
+
+  it("suppresses MSSQL SELECT TOP (N) alias.column dot fragments", function()
+    local buf = make_buf({
+      "SELECT TOP (10) o.id, u.username, o.status, o.total",
+      "FROM dbo.orders o",
+      "JOIN dbo.users u ON u.id = o.user_id",
+      "ORDER BY o.total DESC;",
+    })
+    local errors = ts_stmt.find_error_nodes(buf, "mssql")
+    assert.same({}, errors, "TOP (N) is valid T-SQL; the .id fragment is a parser artifact")
+  end)
+
+  it("suppresses paren-less MSSQL SELECT TOP count digits", function()
+    local buf = make_buf({ "SELECT TOP 100 o.id FROM dbo.orders o;" })
+    local errors = ts_stmt.find_error_nodes(buf, "mssql")
+    assert.same({}, errors, "TOP 100 is valid T-SQL")
+  end)
+
+  it("suppresses MSSQL OFFSET-FETCH pagination", function()
+    local buf = make_buf({
+      "SELECT o.id, o.status, o.total",
+      "FROM dbo.orders o",
+      "ORDER BY o.id",
+      "OFFSET 10 ROWS FETCH NEXT 10 ROWS ONLY;",
+    })
+    local errors = ts_stmt.find_error_nodes(buf, "mssql")
+    assert.same({}, errors, "OFFSET-FETCH is valid T-SQL pagination")
+  end)
+
+  it("suppresses MSSQL FETCH FIRST without a qualified ORDER BY column", function()
+    -- Exercises the OFFSET/FETCH text rule, not the leading-dot rule.
+    local buf = make_buf({ "SELECT id FROM dbo.orders o ORDER BY id", "FETCH FIRST 5 ROWS ONLY;" })
+    local errors = ts_stmt.find_error_nodes(buf, "mssql")
+    assert.same({}, errors, "FETCH FIRST 5 ROWS ONLY is valid T-SQL")
+  end)
+
+  it("suppresses MSSQL FOR JSON result suffix", function()
+    local buf = make_buf({
+      "SELECT u.username, o.total",
+      "FROM dbo.orders o",
+      "JOIN dbo.users u ON u.id = o.user_id",
+      "ORDER BY o.id",
+      "FOR JSON PATH, INCLUDE_NULL_VALUES;",
+    })
+    local errors = ts_stmt.find_error_nodes(buf, "mssql")
+    assert.same({}, errors, "FOR JSON PATH is valid T-SQL")
+  end)
+
+  it("suppresses STRING_AGG ... WITHIN GROUP tail", function()
+    local buf = make_buf({
+      "SELECT STRING_AGG(o.status, ', ') WITHIN GROUP (ORDER BY o.status) AS statuses",
+      "FROM dbo.orders o",
+      "GROUP BY o.status;",
+    })
+    local errors = ts_stmt.find_error_nodes(buf, "mssql")
+    assert.same({}, errors, "the GROUP (ORDER BY ...) ERROR head is a WITHIN GROUP artifact")
+  end)
+
+  it("keeps real MSSQL syntax errors intact", function()
+    local buf = make_buf({ "SELECT * FORM users;" })
+    local errors = ts_stmt.find_error_nodes(buf, "mssql")
+    assert.is_true(#errors > 0, "FORM typo must still be flagged for mssql")
+  end)
+
+  it("suppresses ClickHouse GROUP BY ... WITH TOTALS", function()
+    local buf = make_buf({ "SELECT status, count() AS n FROM orders GROUP BY status WITH TOTALS ORDER BY status;" })
+    local errors = ts_stmt.find_error_nodes(buf, "clickhouse")
+    assert.same({}, errors, "WITH TOTALS is a valid ClickHouse modifier")
+  end)
+
+  it("suppresses ClickHouse ORDER BY ... WITH TOTALS", function()
+    local buf = make_buf({ "SELECT status FROM orders ORDER BY total DESC WITH TOTALS LIMIT 5;" })
+    local errors = ts_stmt.find_error_nodes(buf, "clickhouse")
+    assert.same({}, errors, "WITH TOTALS after ORDER BY is valid ClickHouse")
+  end)
+
+  it("keeps a truncated WITH for clickhouse", function()
+    -- `GROUP BY x WITH` without TOTALS is a real error; the stray-field
+    -- sibling check must not suppress it.
+    local buf = make_buf({ "SELECT status FROM orders GROUP BY status WITH;" })
+    local errors = ts_stmt.find_error_nodes(buf, "clickhouse")
+    assert.is_true(#errors > 0, "truncated WITH modifier must stay flagged")
+  end)
+
+  it("suppresses ClickHouse ARRAY JOIN", function()
+    local buf = make_buf({
+      "SELECT id, tag, length(tags) AS tag_count",
+      "FROM type_showcase ARRAY JOIN tags AS tag ORDER BY id, tag;",
+    })
+    local errors = ts_stmt.find_error_nodes(buf, "clickhouse")
+    assert.same({}, errors, "ARRAY JOIN is valid ClickHouse")
+  end)
+
+  it("suppresses ClickHouse multi-array ARRAY JOIN", function()
+    local buf = make_buf({
+      "SELECT id, sensor, reading",
+      "FROM type_showcase ARRAY JOIN sensors AS sensor, readings AS reading",
+      "ORDER BY id, sensor;",
+    })
+    local errors = ts_stmt.find_error_nodes(buf, "clickhouse")
+    assert.same({}, errors, "multi-array ARRAY JOIN is valid ClickHouse")
+  end)
+
+  it("suppresses ClickHouse LEFT ARRAY JOIN", function()
+    local buf = make_buf({
+      "SELECT id, sensor FROM type_showcase LEFT ARRAY JOIN sensors AS sensor ORDER BY id;",
+    })
+    local errors = ts_stmt.find_error_nodes(buf, "clickhouse")
+    assert.same({}, errors, "LEFT ARRAY JOIN is valid ClickHouse (outer + nested ARRAY fragment)")
+  end)
+
+  it("suppresses ClickHouse ALTER TABLE DELETE mutation", function()
+    local buf = make_buf({ "ALTER TABLE type_showcase DELETE WHERE label = 'second';" })
+    local errors = ts_stmt.find_error_nodes(buf, "clickhouse")
+    assert.same({}, errors, "ALTER TABLE ... DELETE WHERE is a valid ClickHouse mutation")
+  end)
+
+  it("keeps real ClickHouse syntax errors intact", function()
+    local buf = make_buf({ "SELECT * FORM users;" })
+    local errors = ts_stmt.find_error_nodes(buf, "clickhouse")
+    assert.is_true(#errors > 0, "FORM typo must still be flagged for clickhouse")
+  end)
 end)
 
 local sem_ok, sem = pcall(require, "poste-db.semantic_diagnostics")
@@ -739,6 +861,24 @@ describe("known-error-construct re-highlight (syntax.highlight_known_error_const
     local kinds = construct_marks(buf)
     assert.is_true(vim.tbl_contains(kinds, "Normal"))
     assert.is_true(vim.tbl_contains(kinds, "Statement"), "INVISIBLE keyword must be highlighted")
+  end)
+
+  it("recolors the mssql SELECT TOP dot fragment", function()
+    local buf = make_buf({ "SELECT TOP (10) o.id FROM dbo.orders o;" })
+    syntax.highlight_known_error_constructs(buf)
+    assert.is_true(vim.tbl_contains(construct_marks(buf), "Normal"),
+      "the .id fragment must not stay @error red")
+  end)
+
+  it("recolors the mssql OFFSET-FETCH tail", function()
+    local buf = make_buf({
+      "SELECT o.id FROM dbo.orders o ORDER BY o.id",
+      "OFFSET 10 ROWS FETCH NEXT 10 ROWS ONLY;",
+    })
+    syntax.highlight_known_error_constructs(buf)
+    local kinds = construct_marks(buf)
+    assert.is_true(vim.tbl_contains(kinds, "Normal"))
+    assert.is_true(vim.tbl_contains(kinds, "Statement"), "OFFSET/FETCH/ROWS keywords must be highlighted")
   end)
 end)
 

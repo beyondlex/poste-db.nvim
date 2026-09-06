@@ -31,6 +31,60 @@ local function get_parser(buf)
   return nil
 end
 
+--- Text of a TSNode ("" when unavailable).
+local function node_text(node, buf)
+  return vim.treesitter.get_node_text(node, buf) or ""
+end
+
+--- True for the digit tail of a paren-less MSSQL `SELECT TOP 100 alias.col`:
+--- tree-sitter-sql has no TOP clause, so the count lands in a term right
+--- after a bare `top` identifier (`TOP (100)` parses cleanly instead).
+local function is_top_digit_fragment(node, buf)
+  local parent = node:parent()
+  if not parent or parent:type() ~= "term" then return false end
+  local prev = node:prev_named_sibling()
+  return prev ~= nil and node_text(prev, buf):lower() == "top"
+end
+
+--- True when a trailing-`WITH` ERROR is the ClickHouse WITH TOTALS modifier:
+--- the grammar leaves `<expr> WITH` as an ERROR and TOTALS survives as a
+--- stray field sibling. A truncated `x WITH` (no TOTALS sibling) is a real
+--- error and stays reported.
+local function is_with_totals_fragment(node, buf)
+  local nxt = node:next_named_sibling()
+  return nxt ~= nil and node_text(nxt, buf):lower() == "totals"
+end
+
+--- True when `stmt` contains the misparsed ClickHouse
+--- `ALTER TABLE t DELETE WHERE <pred>` shape: DELETE consumed as a
+--- column_definition name inside an alter_table.
+local function has_alter_delete_column(stmt, buf)
+  local outer = { stmt }
+  while #outer > 0 do
+    local n = table.remove(outer)
+    if n:type() == "alter_table" then
+      local inner = { n }
+      while #inner > 0 do
+        local m = table.remove(inner)
+        if m:type() == "column_definition" then
+          local name = m:named_child(0)
+          if name and node_text(name, buf):lower() == "delete" then
+            return true
+          end
+        end
+        for i = 0, m:named_child_count() - 1 do
+          inner[#inner + 1] = m:named_child(i)
+        end
+      end
+    else
+      for i = 0, n:named_child_count() - 1 do
+        outer[#outer + 1] = n:named_child(i)
+      end
+    end
+  end
+  return false
+end
+
 --- Walk the program root's children to find top-level statement-like nodes.
 --- Treats ERROR nodes as statement-like (they include USE, SET, etc.
 --- that tree-sitter-sql doesn't recognize).
@@ -229,8 +283,9 @@ function M.find_error_nodes(buf, dialect)
     -- Filter bare-word fragments nested inside the fake `GROUP (...)` call
     -- tree-sitter-sql produces for `WITHIN GROUP (ORDER BY ...)`: the ERROR
     -- head is consumed earlier and the ORDER BY target survives as a
-    -- standalone word (e.g. `total`) which is not an error by itself.
-    if upper:match("^[%w_]+$") then
+    -- standalone word (e.g. `total`) or a plain qualified column
+    -- (`o.status`) which is not an error by itself.
+    if upper:match("^[%w_]+$") or upper:match("^[%w_]+%.[%w_]+$") then
       local anc = node:parent()
       while anc do
         if anc:type() == "invocation" then
@@ -295,6 +350,76 @@ function M.find_error_nodes(buf, dialect)
   -- ERROR nodes; a function-call head needs its own check.
   if upper:match("^PERCENTILE_[A-Z_]+%(") then
     goto continue
+  end
+
+  -- Filter leading-dot fragments (`.id`, `.username`, `.value AS n`). No SQL
+  -- token starts with `.`, and these arise when the grammar eats the
+  -- identifier *before* the dot — e.g. mssql `SELECT TOP (10) o.id` parses
+  -- `TOP (10) o` as an invocation + alias and strands `.id`. A genuine
+  -- `t. col` typo produces no such node, so the fragment is always a
+  -- parser artifact.
+  if upper:match("^%.%w") then
+    goto continue
+  end
+
+  -- Filter the paren-less mssql `SELECT TOP 100` count digit (see
+  -- is_top_digit_fragment). Dialect-gated: a standalone digit ERROR can be
+  -- a real error elsewhere (e.g. MySQL digit-leading table fragments).
+  if dialect == "mssql" and upper:match("^%d+$") and is_top_digit_fragment(node, buf) then
+    goto continue
+  end
+
+  -- Filter T-SQL OFFSET-FETCH pagination (`ORDER BY ... OFFSET 10 ROWS
+  -- FETCH NEXT ...`) and FOR JSON / FOR XML result suffixes, which
+  -- tree-sitter-sql cannot express.
+  if dialect == "mssql"
+    and (upper:match("OFFSET%s*%d+%s*ROWS")
+      or upper:match("FETCH%s*NEXT%s*%d+%s*ROWS")
+      or upper:match("FETCH%s*FIRST%s*%d+%s*ROWS")
+      or upper:match("FOR%s+JSON")
+      or upper:match("FOR%s+XML")) then
+    goto continue
+  end
+
+  -- Filter the WITHIN GROUP tail of `agg(...) WITHIN GROUP (ORDER BY x)`:
+  -- the grammar folds `WITHIN` into the invocation and the rest surfaces as
+  -- an ERROR head `GROUP (ORDER BY x) ...` (STRING_AGG in mssql, ordered-set
+  -- aggregates elsewhere). Mirrors the PERCENTILE_/bare-word filters above.
+  if upper:match("^GROUP%s*%(") then
+    goto continue
+  end
+  -- Alternate recovery for the same construct: the invocation plus the
+  -- stranded WITHIN become the ERROR (`STRING_AGG(x, ', ') WITHIN`).
+  if upper:match("WITHIN%s*$") then
+    goto continue
+  end
+
+  -- Filter the ClickHouse WITH TOTALS modifier on GROUP BY / ORDER BY
+  -- (`GROUP BY status WITH TOTALS` → ERROR `status WITH` + stray field
+  -- `TOTALS`; see is_with_totals_fragment).
+  if dialect == "clickhouse" then
+    if (upper:match("WITH%s*$") and is_with_totals_fragment(node, buf))
+      or upper:match("WITH%s+TOTALS") then
+      goto continue
+    end
+
+    -- ClickHouse ARRAY JOIN: the plain form consumes ARRAY as a table alias
+    -- and strands `JOIN <array> [AS alias]`; LEFT ARRAY JOIN strands
+    -- `LEFT ARRAY JOIN ...` plus a nested bare `ARRAY` fragment.
+    if upper:match("^JOIN%s") or upper:match("^LEFT%s+ARRAY%s+JOIN") then
+      goto continue
+    end
+    if upper == "ARRAY" and node:parent() and node:parent():type() == "ERROR" then
+      goto continue
+    end
+
+    -- ClickHouse `ALTER TABLE t DELETE WHERE <pred>`: DELETE parses as an
+    -- added column (custom_type WHERE) and the predicate surfaces as a
+    -- top-level ERROR right after the misparsed statement.
+    local prev = node:prev_named_sibling()
+    if prev and prev:type() == "statement" and has_alter_delete_column(prev, buf) then
+      goto continue
+    end
   end
 
   -- Filter the mysql-client `\G`/`\g` statement terminator (vertical
