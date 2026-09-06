@@ -11,26 +11,19 @@ function M.next_sort_state(tab, col)
   end
 end
 
-function M.build_sort_render_payload(tab, data, active_idx)
+function M.build_sort_render_payload(tab, active_idx)
   local sql_format = require("poste-db.format")
-  if tab.layout then
-    local lines, meta = sql_format.render_view(
-      tab.layout, tab.view_indices, tab.page, tab.page_size,
-      { row_number_mode = tab.row_number_mode or "source" }
-    )
-    return lines, meta, {
-      keep_tabs = true,
-      tab_index = active_idx,
-      layout = tab.layout,
-      view_indices = tab.view_indices,
-    }
-  end
-
-  local new_data = vim.deepcopy(data)
-  local lines, meta = sql_format.format_resultset(new_data)
+  -- Resultset tabs are always layout-aware now (render_dataset guarantees
+  -- tab.layout); render the current page of the sorted view.
+  local lines, meta = sql_format.render_view(
+    tab.layout, tab.view_indices, tab.page, tab.page_size,
+    { row_number_mode = tab.row_number_mode or "source" }
+  )
   return lines, meta, {
-      keep_tabs = true,
-      tab_index = active_idx,
+    keep_tabs = true,
+    tab_index = active_idx,
+    layout = tab.layout,
+    view_indices = tab.view_indices,
   }
 end
 
@@ -49,7 +42,7 @@ function M.prepare_current_col_sort(tab, data, active_idx, col)
 
   tab.rows_source = tab.rows_source or res.rows
   require("poste-db.dataset").compute_view_indices(tab)
-  return M.build_sort_render_payload(tab, data, active_idx)
+  return M.build_sort_render_payload(tab, active_idx)
 end
 
 return M

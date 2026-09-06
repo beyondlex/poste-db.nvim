@@ -119,7 +119,7 @@ function M.build_status_left(meta, tab)
     end
   end
 
-  if tab and tab.num_pages and tab.num_pages > 1 and (tab.padded_full or tab.layout) then
+  if tab and tab.num_pages and tab.num_pages > 1 and tab.layout then
     if tab.pagination_enabled then
       left = left .. string.format("  %sP:%d/%d%s",
         "%#PosteDbDatasetMetaDim#", tab.page, tab.num_pages, "%#PosteDbDatasetMeta#")

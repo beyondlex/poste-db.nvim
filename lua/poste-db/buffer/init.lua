@@ -463,38 +463,6 @@ local function render_dataset_layout(tab, lines, meta)
   finalize_rendered_page(tab, padded, new_meta)
 end
 
-local function render_dataset_legacy(tab, lines, meta)
-  local padded, new_meta = render.normalize_rendered_page(tab, lines, meta)
-  tab.padded_full = vim.deepcopy(padded)
-  tab.meta_full = vim.deepcopy(new_meta)
-  if new_meta and new_meta.type == "resultset" and new_meta.row_count then
-    if tab.pagination_enabled and new_meta.row_count > tab.page_size then
-      local total_rows = new_meta.row_count
-      tab.num_pages = math.ceil(total_rows / tab.page_size)
-      tab.page = math.min(tab.page or 1, tab.num_pages)
-      local page_rows = math.min(tab.page_size, total_rows - (tab.page - 1) * tab.page_size)
-      tab.visible_rows = page_rows
-      local data_start = new_meta.data_start_line
-      local page_start_idx = data_start + (tab.page - 1) * tab.page_size + 1 - 1
-      local page_end_idx = page_start_idx + page_rows - 1
-      local sliced = {}
-      for i = 1, data_start - 1 do
-        sliced[#sliced + 1] = padded[i]
-      end
-      for i = page_start_idx, page_end_idx do
-        sliced[#sliced + 1] = padded[i]
-      end
-      padded = sliced
-      new_meta.row_count = page_rows
-      new_meta.data_end_line = data_start + page_rows - 1
-      tab.padded = padded
-    else
-      tab.visible_rows = new_meta.row_count
-    end
-  end
-  finalize_rendered_page(tab, padded, new_meta)
-end
-
 --- Process rendered table lines and write to buffer. Shared by
 --- render_dataset and buffer_page.refresh_page. Handles header
 --- extraction, padding, buffer write, highlights, winbar.
@@ -671,7 +639,9 @@ function M.render_dataset(lines, meta, opts)
     tab.cursor = { row = 1, col = 1 }
   end
 
-  -- Layout-aware path: store layout, render current page, no padded_full
+  -- Layout-aware path: store layout, render current page. All resultset
+  -- renders arrive with a layout (format_dataset/format_resultset provide
+  -- one); non-resultset pages (error/affected/use/raw) just normalize+write.
   if opts.layout and meta and meta.type == "resultset" then
     tab.layout = opts.layout
     tab.rows_source = tab.rows_source or opts.layout.rows
@@ -723,7 +693,7 @@ function M.render_dataset(lines, meta, opts)
 
     render_dataset_layout(tab, lines, meta)
   else
-    render_dataset_legacy(tab, lines, meta)
+    M.apply_rendered_page(tab, lines, meta)
   end
 
   ensure_dataset_window(buf, is_error)

@@ -180,7 +180,6 @@ function M.alloc_tab(idx)
       data = nil,
       cursor = { row = 1, col = 1 },
       leftcol = 0,
-      padded_full = nil, meta_full = nil,
       page = 1, page_size = 50, num_pages = 1,
       pagination_enabled = true, visible_rows = nil,
       filter_col = nil, filter_val = nil, filter_col_name = nil,

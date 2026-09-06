@@ -27,7 +27,7 @@ describe("buffer_nav_sort", function()
     D.compute_view_indices = function(tab)
       computed = true
     end
-    sort.build_sort_render_payload = function(tab, data, active_idx)
+    sort.build_sort_render_payload = function(tab, active_idx)
       return { "x" }, { type = "resultset" }, { keep_tabs = true, tab_index = active_idx }
     end
 

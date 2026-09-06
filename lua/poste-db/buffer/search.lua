@@ -106,7 +106,7 @@ jump_to_search_match = function(idx)
   tab.search_idx = idx
 
   local paginated = tab.pagination_enabled and tab.num_pages and tab.num_pages > 1
-    and (tab.padded_full or tab.layout)
+    and tab.layout
   if paginated then
     local match_page = math.ceil(match.row / tab.page_size)
     if match_page ~= tab.page then
@@ -210,7 +210,7 @@ function M.filter_by_current_cell()
   if not res or not res.rows or #res.rows == 0 then return end
   local row, col = sql_state.cell.row, sql_state.cell.col
   local paginated = tab.pagination_enabled and tab.num_pages and tab.num_pages > 1
-    and (tab.padded_full or tab.layout)
+    and tab.layout
   if paginated then
     row = row + (tab.page - 1) * tab.page_size
   end
@@ -234,33 +234,25 @@ function M.filter_by_current_cell()
   tab.filtered_indices = indices
   D.compute_view_indices(tab)
 
+  -- Resultset tabs are always layout-aware now (render_dataset guarantees
+  -- tab.layout); a layout-less tab has nothing to filter against.
   local layout = tab.layout
-  if layout then
-    local page_limit = tab.pagination_enabled and tab.page_size or #tab.view_indices
-    local lines, meta = sql_format.render_view(
-      layout, tab.view_indices, 1, page_limit,
-      { row_number_mode = "view" }
-    )
-    tab.page = 1
-    require("poste-db.buffer").render_dataset(lines, meta, {
-      data = tab.data,
-      keep_tabs = true,
-      tab_index = D.active_tab_idx,
-      layout = layout,
-      view_indices = tab.view_indices,
-      row_number_mode = "view",
-    })
-  else
-    local data = vim.deepcopy(tab.data)
-    local fr = {}
-    for _, idx in ipairs(tab.filtered_indices) do
-      fr[#fr + 1] = tab.rows_source[idx]
-    end
-    data.results[1].rows = fr
-    data.results[1].row_count = #fr
-    local lines, meta = sql_format.format_resultset(data)
-    require("poste-db.buffer").render_dataset(lines, meta, { data = data, keep_tabs = true, tab_index = D.active_tab_idx })
-  end
+  if not layout then return end
+
+  local page_limit = tab.pagination_enabled and tab.page_size or #tab.view_indices
+  local lines, meta = sql_format.render_view(
+    layout, tab.view_indices, 1, page_limit,
+    { row_number_mode = "view" }
+  )
+  tab.page = 1
+  require("poste-db.buffer").render_dataset(lines, meta, {
+    data = tab.data,
+    keep_tabs = true,
+    tab_index = D.active_tab_idx,
+    layout = layout,
+    view_indices = tab.view_indices,
+    row_number_mode = "view",
+  })
 end
 
 function M.clear_filter_search()
