@@ -309,14 +309,6 @@ function M.extract_stmt_at_cursor(buf_lines, cursor_line, buf)
   end
 
   -- If the detected statement contains only comment lines, nothing to execute
-  local has_sql = false
-  for _, l in ipairs(stmt_lines) do
-    local trimmed = l:match("^%s*(.*)$")
-    if trimmed ~= "" and not trimmed:match("^%-%-") then
-      has_sql = true
-      break
-    end
-  end
   if not has_sql_content(buf_lines, stmt_start, stmt_end) then
     return nil, nil, stmt_start, stmt_end
   end
