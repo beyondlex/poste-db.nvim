@@ -142,11 +142,17 @@ function M.show_table_ddl()
       return nil
     end
 
-    local dial = ""
+    -- dialect-aware detection: without this flag the CLI falls back to
+    -- generic function filtering, so e.g. MSSQL/MySQL builtins were missing
+    -- from completion candidates
     local cc = require("poste-db.connections").get_connection_config(conn)
-    if cc and cc.dialect then dial = " --dialect " .. cc.dialect end
+    local args = { binary, "context", "detect", tostring(payload.offset) }
+    if cc and cc.dialect and cc.dialect ~= "" then
+      table.insert(args, "--dialect")
+      table.insert(args, cc.dialect)
+    end
 
-    local ok_sys, result_obj = pcall(vim.system, { binary, "context", "detect", tostring(payload.offset) }, {
+    local ok_sys, result_obj = pcall(vim.system, args, {
       stdin = payload.sql_text,
       timeout = 5000,
     })

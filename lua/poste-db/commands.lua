@@ -209,7 +209,13 @@ function M.setup()
       local line = vim.api.nvim_get_current_line()
       local line_before = line:sub(1, cursor[2])
       local cursor_lnum = cursor[1]
-      local tbls, alias_map = sql_comp._test.get_tables_and_alias and sql_comp._test.get_tables_and_alias(buf, cursor_lnum) or {}
+      -- NB: `A and f(...) or {}` would truncate the multi-value return and
+      -- always leave alias_map nil — resolve through an explicit binding
+      local get_tables = sql_comp._test.get_tables_and_alias
+      local tbls, alias_map = {}, nil
+      if type(get_tables) == "function" then
+        tbls, alias_map = get_tables(buf, cursor_lnum)
+      end
       local conn = sql_comp._test.conn_key()
       local blink_src = require("poste-db.completion.adapter").get_source_lib()
       local blink_config = require("poste-db.completion.adapter").get_config()
