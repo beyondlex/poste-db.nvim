@@ -159,7 +159,40 @@ describe("buffer_nav_raw", function()
     assert.matches("more row%(s%) omitted", joined)
   end)
 
-  it("toggle aliases show", function()
-    assert.equals(raw.show, raw.toggle)
+  it("toggle closes an open raw float instead of stacking a second one", function()
+    package.loaded["poste-db.buffer.nav_state"] = {
+      get_tab = function()
+        return { layout = { rows = { 1 }, table_name = "users" } }
+      end,
+      has_layout = function() return true end,
+    }
+    package.loaded["poste-db.format"] = {
+      render_page = function() return { "header" } end,
+    }
+
+    local open_count, close_calls = 0, {}
+    vim.api.nvim_create_buf = function() return 77 end
+    vim.api.nvim_set_option_value = function() end
+    vim.api.nvim_buf_set_lines = function() end
+    vim.api.nvim_open_win = function()
+      open_count = open_count + 1
+      return 100 + open_count
+    end
+    -- only the window from the first toggle is live; later ids are stale
+    vim.api.nvim_win_is_valid = function(win) return win == 101 end
+    vim.api.nvim_win_close = function(win, force)
+      close_calls[#close_calls + 1] = { win = win, force = force }
+    end
+    vim.keymap.set = function() end
+
+    raw.toggle()
+    assert.equals(1, open_count)
+
+    raw.toggle()
+    assert.equals(1, open_count, "second toggle must close, not stack a window")
+    assert.same({ { win = 101, force = true } }, close_calls)
+
+    raw.toggle()
+    assert.equals(2, open_count, "toggle after q-close must reopen")
   end)
 end)

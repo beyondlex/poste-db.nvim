@@ -6,6 +6,8 @@ local M = {}
 
 local RAW_MAX_ROWS = 500
 
+local raw_win = nil
+
 function M.show()
   local nav_state = require("poste-db.buffer.nav_state")
   local tab = nav_state.get_tab()
@@ -35,7 +37,7 @@ function M.show()
   local row = math.floor((vim.o.lines - height) / 2)
   local col = math.floor((vim.o.columns - width) / 2)
 
-  float_window.open({
+  local _, win = float_window.open({
     lines = lines,
     relative = "editor",
     width = width,
@@ -58,8 +60,19 @@ function M.show()
     close_keys = { "q", "<Esc>" },
     close_modes = { "n", "v" },
   })
+  if win then raw_win = win end
 end
 
-M.toggle = M.show
+--- Show the raw float, or close it when already open (q-closed floats leave a
+--- stale id behind; the validity check makes that a no-op).
+function M.toggle()
+  if raw_win and vim.api.nvim_win_is_valid(raw_win) then
+    vim.api.nvim_win_close(raw_win, true)
+    raw_win = nil
+    return
+  end
+  raw_win = nil
+  M.show()
+end
 
 return M
