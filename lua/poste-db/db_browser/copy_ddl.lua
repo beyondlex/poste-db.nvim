@@ -93,7 +93,9 @@ end
 function M.rename_seq_reference(ddl, seq_name, new_seq_name)
   local old = "nextval('" .. seq_name .. "'::regclass)"
   local new = "nextval('" .. new_seq_name .. "'::regclass)"
-  return ddl:gsub(old, new, 1)
+  -- old/new contain parens and quotes; gsub would treat them as pattern
+  -- magic and never match — escape both sides for a literal replacement.
+  return (ddl:gsub(vim.pesc(old), new:gsub("%%", "%%%%"), 1))
 end
 
 function M.prepare_table_ddl(ddl, target_table_name, table_name, schema, dialect)
@@ -114,8 +116,11 @@ function M.prepare_table_ddl(ddl, target_table_name, table_name, schema, dialect
   for _, seq_name in ipairs(sequences) do
     local new_seq_name = seq_name:gsub(table_name, target_table_name)
     local seq_type = M.column_type_for_seq(ddl, seq_name)
+    -- Qualified nextval refs leave new_seq_name carrying the schema already
+    -- (quote() splits on the dot); prepending schema again would emit
+    -- "schema"."schema"."seq", disagreeing with the rewritten DEFAULT ref.
     local qualified
-    if schema then
+    if schema and not new_seq_name:find(".", 1, true) then
       qualified = q(schema) .. "." .. q(new_seq_name)
     else
       qualified = q(new_seq_name)
@@ -157,7 +162,9 @@ function M.rename_routine_in_def(dialect, def, src, tgt)
       local close = def:find("`", open + 1, true)
       if not close then break end
       if def:sub(open + 1, close - 1) == src then
-        return def:sub(1, open) .. "`" .. tgt .. "`" .. def:sub(close + 1)
+        -- open sits on the original backtick; drop it (the appended "`"
+        -- replaces it) or MySQL reads a doubled backtick as a literal.
+        return def:sub(1, open - 1) .. "`" .. tgt .. "`" .. def:sub(close + 1)
       end
       open = def:find("`", close + 1, true)
       if open and open > close and open < kw_pos + 200 then
@@ -169,7 +176,7 @@ function M.rename_routine_in_def(dialect, def, src, tgt)
     -- Fallback: any direct `src` mention right after the keyword.
     local plain_idx = def:find("`" .. src .. "`", kw_pos, true)
     if plain_idx then
-      return def:sub(1, plain_idx) .. "`" .. tgt .. "`" .. def:sub(plain_idx + #src + 2)
+      return def:sub(1, plain_idx - 1) .. "`" .. tgt .. "`" .. def:sub(plain_idx + #src + 2)
     end
     return def
   end
