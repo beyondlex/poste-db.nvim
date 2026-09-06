@@ -66,10 +66,10 @@ function M.parse_csv(text)
   local header = parsed_rows[1]
   local num_cols = #header
   local data_rows = {}
-  for i = 2, #parsed_rows do
-    local row = parsed_rows[i]
+  for ri = 2, #parsed_rows do
+    local row = parsed_rows[ri]
     if #row ~= num_cols then
-      return nil, string.format("Row %d: expected %d columns, got %d", i, num_cols, #row)
+      return nil, string.format("Row %d: expected %d columns, got %d", ri, num_cols, #row)
     end
     table.insert(data_rows, row)
   end

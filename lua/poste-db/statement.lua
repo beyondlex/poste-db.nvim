@@ -4,7 +4,7 @@
 --- Extracted from sql/init.lua to reduce module size and improve testability.
 
 local cli = require("poste.cli")
-local state = require("poste.state")
+local log = require("poste-db.log")
 local ts_stmt = require("poste-db.ts_stmt")
 local const = require("poste-db.constants")
 local compat = require("poste-db.compat")
@@ -55,7 +55,10 @@ function M.try_rust_stmt_span(buf_lines, cursor_line)
   -- Call Rust binary
   local input = table.concat(block_lines, "\n")
   local parsed, err = cli.run_json({ "context", "stmt", tostring(rel_cursor) }, { stdin = input })
-  if not parsed then return nil end
+  if not parsed then
+    log.warn("context stmt failed: " .. tostring(err))
+    return nil
+  end
 
   -- Convert Rust 0-based lines to absolute Lua 1-based lines
   local rust_start = parsed.start_line
@@ -85,7 +88,10 @@ function M.try_rust_stmt_ranges(buf_lines, start_line, end_line)
 
   local input = table.concat(range_lines, "\n")
   local parsed, err = cli.run_json({ "context", "stmt-ranges" }, { stdin = input })
-  if not parsed then return nil end
+  if not parsed then
+    log.warn("context stmt-ranges failed: " .. tostring(err))
+    return nil
+  end
 
   if type(parsed) ~= "table" or #parsed == 0 then return nil end
 
@@ -175,7 +181,7 @@ function M.extract_stmt_at_cursor(buf_lines, cursor_line, buf)
   for _, l in ipairs(buf_lines) do
     if const.is_directive_comment(l) or l:match("^%s*$") then
       table.insert(directives, l)
-    elseif l:match("^%s*%-%-") then
+    elseif l:match("^%s*%-%-") then -- luacheck: ignore 542
       -- skip non-directive comments (e.g. -- drop database ...)
     else
       break
@@ -471,10 +477,10 @@ function M.extract_label(buf_lines, stmt_start)
   if not buf_lines or not stmt_start or stmt_start < 1 then return nil end
   for i = stmt_start - 1, 1, -1 do
     local trimmed = (buf_lines[i] or ""):match("^%s*(.-)%s*$") or ""
-    if trimmed == "" then
+    if trimmed == "" then -- luacheck: ignore 542
       -- blank line: keep walking up
-    elseif trimmed:match("^%-%-") then
-      if trimmed:match("^%-%-%s*@") then
+    elseif trimmed:match("^%-%-") then -- luacheck: ignore 542
+      if trimmed:match("^%-%-%s*@") then -- luacheck: ignore 542
         -- directive comment: not a label, keep walking
       else
         -- plain comment: nearest one wins

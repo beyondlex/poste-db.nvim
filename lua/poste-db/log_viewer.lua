@@ -224,9 +224,9 @@ local function apply_highlights(line_idx, entry, _)
   if filter_text ~= "" and line_len > 0 then
     local lower = line:lower()
     local ftext = filter_text:lower()
-    local pos = 1
-    while pos <= line_len do
-      local start = lower:find(ftext, pos, true)
+    local scan_pos = 1
+    while scan_pos <= line_len do
+      local start = lower:find(ftext, scan_pos, true)
       if not start then break end
       vim.api.nvim_buf_set_extmark(buf, ns, line_idx - 1, start - 1, {
         end_col = start - 1 + #filter_text,
@@ -234,7 +234,7 @@ local function apply_highlights(line_idx, entry, _)
         priority = 180,
         hl_mode = "combine",
       })
-      pos = start + #filter_text
+      scan_pos = start + #filter_text
     end
   end
 end
@@ -320,9 +320,9 @@ local function apply_detail_highlights(line_idx, entry, detail_idx)
   if filter_text ~= "" and line_len > 0 then
     local lower = line:lower()
     local ftext = filter_text:lower()
-    local pos = 1
-    while pos <= line_len do
-      local start = lower:find(ftext, pos, true)
+    local scan_pos = 1
+    while scan_pos <= line_len do
+      local start = lower:find(ftext, scan_pos, true)
       if not start then break end
       vim.api.nvim_buf_set_extmark(buf, ns, line_idx - 1, start - 1, {
         end_col = start - 1 + #filter_text,
@@ -330,7 +330,7 @@ local function apply_detail_highlights(line_idx, entry, detail_idx)
         priority = 180,
         hl_mode = "combine",
       })
-      pos = start + #filter_text
+      scan_pos = start + #filter_text
     end
   end
 end

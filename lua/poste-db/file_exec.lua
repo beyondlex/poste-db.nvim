@@ -179,21 +179,6 @@ local function render_progress()
   S.dialog:update(lines, highlights)
 end
 
-local function close_progress(force)
-  if not force and S.is_running then
-    vim.ui.input({ prompt = "Close anyway? (y/N): " }, function(input)
-      if input and input:lower() == "y" then
-        close_progress(true)
-      end
-    end)
-    return
-  end
-  if S.dialog then
-    S.dialog:close()
-  end
-  S.dialog = nil
-end
-
 local function create_progress_win()
   if S.dialog then
     S.dialog:update({}, {})

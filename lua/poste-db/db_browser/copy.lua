@@ -153,7 +153,6 @@ function M.resolve_conflict_names(target, items, on_resolved, on_cancel, opts)
 
   -- Pre-collect all collisions up-front so dialogs only appear when needed.
   local collision_state = {} --- [i] = {base=<new base or nil>}
-  local checked = 0
   if #items == 0 then on_resolved({}) return end
 
   local function proceed_with_resolution()
@@ -365,11 +364,11 @@ local function copy_data_cross_server(source, target, schema, table_name, target
         .. ";"
 
       run_sql_on_conn(target.conn, target.db, insert_sql, function(insert_output)
-        local ok_insert, decoded = check_response(insert_output, "INSERT", on_error)
+        local ok_insert, ins_decoded = check_response(insert_output, "INSERT", on_error)
         if not ok_insert then return end
-        local r = decoded.results and decoded.results[1]
-        if r then
-          total_elapsed = extract_elapsed(r)
+        local ins_row = ins_decoded.results and ins_decoded.results[1]
+        if ins_row then
+          total_elapsed = extract_elapsed(ins_row)
         end
         total_rows = total_rows + (end_idx - start_idx + 1)
         insert_batch(end_idx + 1)
@@ -401,9 +400,9 @@ local function copy_one_table(source, target, table_name, target_table_name, on_
     local schema = extract_schema_from_ddl(ddl, table_name, source.dialect)
     local ddl_prepared = prepare_table_ddl(ddl, target_table_name, table_name, schema, source.dialect)
 
-    run_sql_on_conn(target.conn, target.db, ddl_prepared, function(ddl_output)
-      local ok = check_response(ddl_output, "DDL", on_error)
-      if not ok then return end
+    run_sql_on_conn(target.conn, target.db, ddl_prepared, function(ddl_resp)
+      local ok_ddl = check_response(ddl_resp, "DDL", on_error)
+      if not ok_ddl then return end
       if same_server and same_db then
         copy_data_same_server(source, target, schema, table_name, target_table_name, on_done, on_error)
       else

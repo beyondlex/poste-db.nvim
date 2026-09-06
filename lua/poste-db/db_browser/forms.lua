@@ -198,17 +198,17 @@ function M.open(title, fields, on_submit)
     local current_val = (v == nil or v == vim.NULL or type(v) == "userdata") and "" or tostring(v)
 
     if f.kind == "select" and f.choices then
+      -- pick from the declared choices (same as the `t` key); a free-text
+      -- input here would let arbitrary values into the form
       editing = true
-      local v = f.value
-      local current_val = (v == nil or v == vim.NULL or type(v) == "userdata") and "" or tostring(v)
-      vim.ui.input({
-        prompt = f.label .. ": ",
-        default = current_val,
-      }, function(input)
+      vim.ui.select(f.choices, {
+        prompt = f.label .. ":",
+        format_item = function(item) return item end,
+      }, function(choice)
         editing = false
         if closed then return end
-        if input ~= nil then
-          f.value = input
+        if choice then
+          f.value = choice
         end
         if form_win and vim.api.nvim_win_is_valid(form_win) then
           vim.api.nvim_set_current_win(form_win)

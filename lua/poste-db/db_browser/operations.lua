@@ -73,7 +73,6 @@ function M.show_ddl(node, context)
   end
 
   local conn = get_connection_name(table_node, context)
-  local search_dir = get_search_dir(context)
   local schema = table_node.meta and table_node.meta.schema
   local database = table_node.meta and table_node.meta.database
 

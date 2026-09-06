@@ -253,11 +253,11 @@ local function is_numeric_column(rows, col_idx, col_meta)
   for _, row in ipairs(rows) do
     local val = row[col_idx]
     if val ~= nil and val ~= vim.NIL then
-      if type(val) == "number" then
-        -- ok
-      elseif is_numeric_type and type(val) == "string" and val:match("^%-?%d+%.?%d*$") then
-        -- ok: numeric string (bigint/decimal preserved as string)
-      else
+      local is_number = type(val) == "number"
+      -- numeric string (bigint/decimal preserved as string)
+      local numeric_string = is_numeric_type and type(val) == "string"
+        and val:match("^%-?%d+%.?%d*$") ~= nil
+      if not is_number and not numeric_string then
         return false
       end
     end

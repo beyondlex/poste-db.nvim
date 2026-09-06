@@ -226,9 +226,10 @@ execute_table_select = function(node, context)
         if ok then data = d end
       end
       sql_buffer.render_dataset(lines, meta, {
-        data = parsed,
-        layout = layout,
+        -- opts.data is the DECODED body (a previous `data = parsed` duplicate
+        -- key here was silently overwritten — keep only the decoded value)
         data = data,
+        layout = layout,
         original_sql = sql,
         src_file = "poste://db_browser",
         src_buf = context.source_buf,

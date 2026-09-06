@@ -283,9 +283,6 @@ function M.format_text(text, opts)
 
       -- Run the formatter
       local cmd = fmt.bin
-      local stdout_data = {}
-      local stderr_data = {}
-      local exit_code
 
       local ok_sys, sys_obj = pcall(vim.system, { cmd, unpack(args) }, {
         stdin = text,

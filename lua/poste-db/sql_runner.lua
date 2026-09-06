@@ -171,7 +171,6 @@ function M.run_sql_request()
   _vis_active = false
 
   local buf_content
-  local adjusted_line
   local visual_sel_end
   local stmt_start  -- used for session raw SQL extraction
   local stmt_end  -- used for session raw SQL extraction
@@ -184,26 +183,16 @@ function M.run_sql_request()
     sel_start = math.max(1, sel_start)
     sel_end = math.min(#buf_lines, sel_end)
     visual_sel_end = sel_end
-    local directive_count
-    buf_content, stmt_lines, directive_count = statement.extract_visual_block(buf_lines, sel_start, sel_end)
-
-    -- Find adjusted_line: first non-blank/non-comment line after ### in buf_content
-    local content_lines = vim.split(buf_content, "\n")
-    adjusted_line = 0
-    for j, ln in ipairs(content_lines) do
-      local trimmed = ln:match("^%s*(.*)$")
-      if trimmed ~= "" and not trimmed:match("^%-%-") and not trimmed:match("^###") then
-        adjusted_line = j
-        break
-      end
-    end
-    if adjusted_line == 0 then
-      adjusted_line = directive_count + 2
-    end
-    adjusted_line = math.max(1, adjusted_line)
+    -- NB: statement start lines come back via stmt_lines; indicator and
+    -- response placement consume those, not the raw directive count
+    buf_content, stmt_lines = statement.extract_visual_block(buf_lines, sel_start, sel_end)
   else
     local line = vim.fn.line(".")
-    buf_content, adjusted_line, stmt_start, stmt_end, set_lines = statement.extract_stmt_at_cursor(buf_lines, line, src_buf)
+    local extracted = table.pack(statement.extract_stmt_at_cursor(buf_lines, line, src_buf))
+    buf_content = extracted[1]
+    stmt_start = extracted[3]
+    stmt_end = extracted[4]
+    set_lines = extracted[5]
     if not buf_content then return end
     stmt_lines = { stmt_start or 1 }
     stmt_end = stmt_end or stmt_start

@@ -1,9 +1,6 @@
 --- Shared async SQL runner for DB Browser copy/catalog operations.
 --- Extracted from db_browser/copy.lua so catalog.lua can reuse the same
 --- connection resolution + job plumbing.
-local cli = require("poste.cli")
-local util = require("poste.util")
-
 local M = {}
 
 local function find_search_dir()

@@ -202,7 +202,12 @@ function M.get_connection_config(name)
   if _config_cache_path ~= config_path or _config_cache_mtime ~= mtime then
     local toml = require("poste-db.toml")
     local parsed, err = toml.parse_file(config_path)
-    if not parsed then return nil end
+    if not parsed then
+      -- state.log, not poste-db.log: this module is intentionally
+      -- stub-isolated in tests and must not grow module dependencies
+      state.log("WARN", "connections.toml parse failed: " .. tostring(err))
+      return nil
+    end
     _config_cache = parsed
     _config_cache_path = config_path
     _config_cache_mtime = mtime

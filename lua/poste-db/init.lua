@@ -20,7 +20,6 @@ M._test = statement._test
 
 function M.setup(opts)
   opts = opts or {}
-  local config = require("poste-db.config")
   config.merge(opts)
   require("poste-db.snippets").setup(opts)
   require("poste-db.insert_hint").setup()

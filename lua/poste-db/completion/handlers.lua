@@ -53,7 +53,6 @@ function M.handle_directives(line_before, callback)
 
   if line_before:match(const.DIRECTIVE_PREFIX_PATTERN .. "%w*$") then
     local partial = line_before:match("@(%w*)$") or ""
-    local low = partial:lower()
     local directives = {
       "@" .. const.DIRECTIVE_CONNECTION,
       "@" .. const.DIRECTIVE_DATABASE,

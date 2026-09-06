@@ -7,7 +7,6 @@
 local state = require("poste.state")
 local util = require("poste.util")
 local config = require("poste-db.config")
-local helpers = require("poste-db.introspect.helpers")
 local route = require("poste-db.introspect.route")
 local detect = require("poste-db.introspect.detect")
 local target_resolver = require("poste-db.introspect.target")
@@ -92,12 +91,12 @@ function M.show_table_ddl()
 
   if directive_action and directive_action.kind == "connection" then
     local conn_name = directive_action.conn_name
-    local config = require("poste-db.connections").get_connection_config(conn_name)
-    if not config then
+    local conn_cfg = require("poste-db.connections").get_connection_config(conn_name)
+    if not conn_cfg then
       vim.notify("Connection '" .. conn_name .. "' not found in connections.toml", vim.log.levels.WARN, { title = const.PLUGIN_TITLE })
       return
     end
-    ui.show_connection(config, conn_name, M.show_float)
+    ui.show_connection(conn_cfg, conn_name, M.show_float)
     return
   end
 

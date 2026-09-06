@@ -865,8 +865,8 @@ function M.is_open()
   return browser_win and vim.api.nvim_win_is_valid(browser_win)
 end
 
-local function find_refresh_node(root_nodes, conn_name, db_name)
-  for _, conn_node in ipairs(root_nodes) do
+local function find_refresh_node(nodes, conn_name, db_name)
+  for _, conn_node in ipairs(nodes) do
     if conn_node.name == conn_name then
       if db_name then
         if not conn_node.children then return nil end

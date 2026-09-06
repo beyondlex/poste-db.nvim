@@ -94,10 +94,10 @@ local function extract_references_from_node(stmt_node, buf)
   --- @param tbl_name string
   --- @param id_node TSNode  the identifier node inside the relation
   --- @return string tbl_name, TSNode|nil span_start
-  local function merge_digit_fragment(buf, node, tbl_name, id_node)
+  local function merge_digit_fragment(src_buf, node, tbl_name, id_node)
     local prev = node:prev_sibling()
     if not (prev and prev:type() == "ERROR") then return tbl_name, nil end
-    local err_text = vim.treesitter.get_node_text(prev, buf) or ""
+    local err_text = vim.treesitter.get_node_text(prev, src_buf) or ""
     if not err_text:match("^%d+$") then return tbl_name, nil end
     local _, _, per, pec = prev:range()
     local isr, isc = id_node:range()

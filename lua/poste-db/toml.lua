@@ -72,7 +72,7 @@ function M.parse(content)
 
   for line in content:gmatch("([^\n]*)\n?") do
     local trimmed = trim(line)
-    if trimmed == "" or trimmed:sub(1, 1) == "#" then
+    if trimmed == "" or trimmed:sub(1, 1) == "#" then -- luacheck: ignore 542
     elseif trimmed:sub(1, 1) == "[" then
       local close = trimmed:find("]", 2)
       if not close then

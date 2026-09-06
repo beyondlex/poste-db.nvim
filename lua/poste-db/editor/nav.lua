@@ -265,9 +265,9 @@ function M.edit_cell()
   local tab = get_dataset().T()
   if not check_edit_guards(tab) then return end
 
-  local state = get_state()
-  local row_idx = state.cell.row
-  local col_idx = state.cell.col
+  local cs = get_state()
+  local row_idx = cs.cell.row
+  local col_idx = cs.cell.col
   local col_meta = tab.layout.columns[col_idx]
 
   if not M.is_data_row(tab, row_idx) then return end
@@ -287,8 +287,8 @@ function M.delete_row()
   local tab = get_dataset().T()
   if not check_edit_guards(tab) then return end
 
-  local state = get_state()
-  local row_idx = state.cell.row
+  local cs = get_state()
+  local row_idx = cs.cell.row
 
   if not M.is_data_row(tab, row_idx) then return end
 

@@ -88,8 +88,8 @@ function M.run_introspect(conn_name, introspect_type, schema, table_name, databa
     on_exit = function(code)
       if code ~= 0 then
         vim.schedule(function()
-          local err = table.concat(stderr_buf, "\n")
-          vim.notify("Introspect failed: " .. (err ~= "" and err or "exit " .. code),
+          local err_text = table.concat(stderr_buf, "\n")
+          vim.notify("Introspect failed: " .. (err_text ~= "" and err_text or "exit " .. code),
             vim.log.levels.ERROR)
         end)
         parsed_result = nil

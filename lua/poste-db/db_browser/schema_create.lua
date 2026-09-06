@@ -53,7 +53,7 @@ local function build_sections(dialect, db_name)
   local schema_info_fields = {
     { key = "name", label = "Name", kind = "text", value = "" },
     { key = "owner", label = "Owner", kind = "text", value = "", dialect = "postgres" },
-    
+
   }
 
   local grant_privileges = { "SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE", "USAGE" }

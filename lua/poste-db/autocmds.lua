@@ -103,7 +103,6 @@ end
 
 function M.setup_existing_buffers()
   local sql_runner = require("poste-db.sql_runner")
-  local buffer_setup = require("poste-db.buffer_setup")
 
   local function setup_db_browser_keymap(buf)
     local k = config.get_keymap("sql_source", "toggle_db_browser", "<leader>db")

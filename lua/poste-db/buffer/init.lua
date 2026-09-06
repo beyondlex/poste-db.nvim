@@ -737,8 +737,8 @@ function M.clear_panel()
     local all_wins = vim.api.nvim_tabpage_list_wins(0)
     for _, win in ipairs(all_wins) do
       if win ~= D.dataset_window then
-        local ok, config = pcall(vim.api.nvim_win_get_config, win)
-        if ok and config.relative == "win" and config.win == D.dataset_window then
+        local ok, wconfig = pcall(vim.api.nvim_win_get_config, win)
+        if ok and wconfig.relative == "win" and wconfig.win == D.dataset_window then
           local wbuf = vim.api.nvim_win_get_buf(win)
           -- keep the request-history sidebar open across executions
           if not (vim.api.nvim_buf_is_valid(wbuf) and vim.bo[wbuf].filetype == "poste_history") then
@@ -778,8 +778,8 @@ function M.close()
     local all_wins = vim.api.nvim_tabpage_list_wins(0)
     for _, win in ipairs(all_wins) do
       if win ~= D.dataset_window then
-        local ok, config = pcall(vim.api.nvim_win_get_config, win)
-        if ok and config.relative == "win" and config.win == D.dataset_window then
+        local ok, wconfig = pcall(vim.api.nvim_win_get_config, win)
+        if ok and wconfig.relative == "win" and wconfig.win == D.dataset_window then
           pcall(vim.api.nvim_win_close, win, true)
         end
       end
