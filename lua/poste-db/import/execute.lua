@@ -85,7 +85,7 @@ function M.execute_import(table_info, valid_rows, col_map, table_cols, callback)
   if table_info.connection and table_info.connection ~= "" then
     conn_prefix = "-- @connection " .. table_info.connection .. "\n"
     local connections = require("poste-db.connections")
-    conn_url, _ = connections.resolve_connection_url(table_info.connection)
+    conn_url = connections.resolve_connection_url(table_info.connection)
   end
   local db_prefix = ""
   if table_info.database and table_info.database ~= "" then

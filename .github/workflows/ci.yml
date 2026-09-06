@@ -7,6 +7,39 @@ on:
     branches: [main]
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout poste-db.nvim
+        uses: actions/checkout@v4
+
+      - name: Install Lua + LuaRocks
+        uses: leafo/gh-actions-lua@v10
+        with:
+          luaVersion: "5.4"
+
+      - name: Install LuaRocks
+        uses: leafo/gh-actions-luarocks@v4
+
+      - name: Install luacheck
+        run: luarocks install luacheck
+
+      # The 47-ish remaining warnings are benign classes (shadowing, unused
+      # vars) tracked for a dedicated cleanup; errors (E*) and W111 (write to
+      # an undefined global — the review's finding-1/2/3/10 bug class) fail
+      # the build.
+      - name: Lint
+        run: |
+          output=$(luacheck --codes lua plugin ftplugin || true)
+          echo "$output"
+          fatal=$(echo "$output" | grep -E "\((E[0-9]+|W111)\)" || true)
+          if [ -n "$fatal" ]; then
+            echo "::error::luacheck found errors or undefined-global writes:"
+            echo "$fatal"
+            exit 1
+          fi
+
   test:
     strategy:
       fail-fast: false
