@@ -66,6 +66,7 @@ password = "Poste_test_2022"
 [clickhouse]
 dialect = "clickhouse"
 host = "localhost"
-port = 18123          # 宿主端口，容器内是 8123（HTTP）
+port = 18123
 database = "playground"
-user = "default"      # 密码省略 = 空
+user = "default"
+password = "poste_test"

@@ -118,7 +118,38 @@ error loading module 'X'"时，真错误在 X 的加载过程里，不在引用�
 自己的重构分批 commit，绝不混在一个 diff 里。会话中随时可能冒出新的用户
 编辑——收尾时如发现不认识的改动，不要动它。
 
+## 11. tree-sitter 误报过滤器：同一构造有多种 recovery 形状
+
+**发生了什么**：给 `ts_stmt.find_error_nodes` 补 mssql/clickhouse 误报过滤时，
+`STRING_AGG(x, ', ') WITHIN GROUP (ORDER BY y)` 一个构造在树上留下
+**三种** ERROR 形状，取决于上下文：① `GROUP (ORDER BY y) AS z`（head 被
+invocation 吞掉，多列 select 时）；② `STRING_AGG(x, ', ') WITHIN`
+（invocation + 孤立 WITHIN，末列时）；③ 残片 `o.status`（伪 `GROUP (...)`
+invocation 内的限定列，已有 bare-word 过滤只匹配 `^[%w_]+$` 覆盖不到）。
+第一版过滤器只覆盖 ①，套件跑出 ②③。另外 `syntax.lua` 的去红高亮是
+`find_error_nodes` 的**手写镜像**（`KNOWN_CONSTRUCT_MARKERS` +
+`CONSTRUCT_KEYWORDS`），新过滤器不同步它就会出现"诊断没了但还红着"；
+本次 OFFSET/FETCH 着色缺失就是因为 `CONSTRUCT_KEYWORDS` 里没有这几个词。
+
+**约束**：加误报过滤器前先用探针脚本（headless nvim 解析目标 SQL、dump 全部
+ERROR 节点的 text/parent/祖先链）确认形状，同构造多形状各配一条规则；每个
+过滤器配一对测试（误报被吞 + 真实错误 `SELECT * FORM users` 仍要报）。
+同步改 `syntax.lua` 的两个表；改动含结构判定的（prev/next sibling）至少在
+两个方向各验一次——临时 stash 修复跑新测试，确认真能抓到原 bug。
+
+## 12. 种子脚本的时序 bug 在首次 init 时不可见
+
+**发生了什么**：`playground/init/clickhouse/01-playground.sql` 先 INSERT 进
+`events_raw`、后建 `TO events_daily` 型物化视图——TO 型 MV 只聚合**创建之后**
+的插入，首次 init 没有任何报错，但 `events_daily` 永远是空的
+（`countMerge(cnt)` 查询返回 0 行）。同一文件还有第二个时序坑：顶层 DROP
+清单漏了 `events_raw`，首次 init 一切正常，重跑才炸 TABLE_ALREADY_EXISTS。
+
+**约束**：新方言种子落盘后，立即对真实容器 `docker exec -i ... < seed.sql`
+**完整重跑一遍**（不只验首次 init），再抽验每张表的行数 > 0；涉及 MV/CTAS/
+触发器类"由数据驱动"的对象时，把建对象和灌数据的先后顺序当显式测试点。
+
 ---
 
-*Latest: 2026-08-30 架构重构会话（P-A～P-F）。新增条目时保持同一格式：
-发生了什么（带 file:line）→ 约束（可执行的检查动作）。*
+*Latest: 2026-09-05 mssql/clickhouse 误报修复 + clickhouse 种子时序会话。
+新增条目时保持同一格式：发生了什么（带 file:line）→ 约束（可执行的检查动作）。*

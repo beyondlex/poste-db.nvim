@@ -12,6 +12,7 @@ DROP TABLE IF EXISTS order_items;
 DROP TABLE IF EXISTS orders;
 DROP TABLE IF EXISTS users;
 DROP TABLE IF EXISTS type_showcase;
+DROP TABLE IF EXISTS events_raw;
 DROP TABLE IF EXISTS events_daily;
 DROP VIEW  IF EXISTS events_daily_mv;
 
@@ -96,15 +97,18 @@ CREATE TABLE events_daily (
   cnt AggregateFunction(count)
 ) ENGINE = AggregatingMergeTree ORDER BY (day, event);
 
--- plain source table + a materialized view feeding the aggregate table
+-- plain source table + a materialized view feeding the aggregate table.
+-- The MV must exist BEFORE the inserts: a TO-table MV only aggregates rows
+-- inserted after its creation, so seeding first would leave events_daily
+-- empty (countMerge queries would return 0 rows).
 CREATE TABLE events_raw (
   event String,
   at DateTime DEFAULT now()
 ) ENGINE = MergeTree ORDER BY at;
 
-INSERT INTO events_raw (event) VALUES
-  ('click'), ('click'), ('view'), ('click'), ('view'), ('view'), ('purchase'), ('click'), ('view'), ('purchase');
-
 CREATE MATERIALIZED VIEW events_daily_mv TO events_daily AS
 SELECT toDate(at) AS day, event, countState() AS cnt
 FROM events_raw GROUP BY day, event;
+
+INSERT INTO events_raw (event) VALUES
+  ('click'), ('click'), ('view'), ('click'), ('view'), ('view'), ('purchase'), ('click'), ('view'), ('purchase');
