@@ -37,6 +37,18 @@ local function strip_inline_comment(s)
   return s
 end
 
+local BASIC_ESCAPES = {
+  ['"'] = '"', ["\\"] = "\\", n = "\n", t = "\t", r = "\r", b = "\b", f = "\f",
+}
+
+local function unescape_basic(s)
+  -- single pass: sequential gsubs re-process what earlier ones produced
+  -- ("D:\\tables\\notes" — the \t of \tables must stay backslash + t)
+  return (s:gsub("\\(.)", function(c)
+    return BASIC_ESCAPES[c] or ("\\" .. c)
+  end))
+end
+
 local function parse_value(v)
   v = trim(strip_inline_comment(v))
   if v == "" then return nil end
@@ -46,15 +58,7 @@ local function parse_value(v)
   if n then return n end
   if v:sub(1, 1) == '"' then
     if v:sub(-1, -1) ~= '"' then return nil, "Unclosed string: " .. v end
-    v = v:sub(2, -2)
-    v = v:gsub('\\"', '"')
-    v = v:gsub("\\\\", "\\")
-    v = v:gsub("\\n", "\n")
-    v = v:gsub("\\t", "\t")
-    v = v:gsub("\\r", "\r")
-    v = v:gsub("\\b", "\b")
-    v = v:gsub("\\f", "\f")
-    return v
+    return unescape_basic(v:sub(2, -2))
   end
   if v:sub(1, 1) == "'" then
     if v:sub(-1, -1) ~= "'" then return nil, "Unclosed string: " .. v end

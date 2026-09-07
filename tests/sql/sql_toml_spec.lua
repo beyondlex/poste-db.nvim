@@ -42,6 +42,20 @@ describe("toml.parse", function()
     assert.equals("line1\nline2", res.text)
   end)
 
+  it("does not re-process backslashes produced by an earlier unescape step", function()
+    -- sequential gsubs turned the literal backslash + 'n' of \tables into a
+    -- newline (the \\n → \n double-substitution), mangling Windows paths
+    local res = toml.parse('path = "D:\\\\tables\\\\notes"')
+    assert.equals("D:\\tables\\notes", res.path)
+    local wal = toml.parse('mode = "\\\\new"') -- \\n must stay backslash + n
+    assert.equals("\\new", wal.mode)
+  end)
+
+  it("keeps unknown escapes verbatim", function()
+    local res = toml.parse('v = "a\\qb"')
+    assert.equals("a\\qb", res.v)
+  end)
+
   it("skips comment lines", function()
     local res = toml.parse('# this is a comment\nkey = "value"')
     assert.equals("value", res.key)
