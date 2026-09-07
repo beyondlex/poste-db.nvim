@@ -69,6 +69,19 @@ describe("poste-db.ai.schema", function()
     assert.truthy(got:find("%- products %(goods%): id: int, price: decimal"))
   end)
 
+  it("re-uses cached column lines when a table is mentioned again", function()
+    schema._test.auto_context("show users", { connection = "c", database = "d" }, function(md) end)
+    -- second request mentions users again: its columns are cached, so no new
+    -- introspection — but the rendered block must keep the FULL column line
+    -- (it used to degrade to the plain "- users" form because only newly
+    -- introspected tables were marked expanded)
+    local got
+    schema._test.auto_context("users again", { connection = "c", database = "d" }, function(md) got = md end)
+    assert.truthy(got:find("%- users %(user accounts%): id: int, email: varchar"))
+    local columns_calls = vim.tbl_count(vim.tbl_filter(function(c) return c.kind == "columns" end, calls))
+    assert.are.equal(1, columns_calls)              -- only the first request introspected
+  end)
+
   it("respects word boundaries (user vs user_id)", function()
     local got
     schema._test.auto_context("analyze user_id trends", { connection = "c", database = "d" },

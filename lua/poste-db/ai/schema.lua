@@ -79,21 +79,30 @@ end
 --- yet, then render. Sequential introspection, then cb.
 local function expand_and_render(text, scope, entry, cb)
   local text_l = (text or ""):lower()
+  -- tables named in the text whose columns are already cached still render
+  -- their column lines: `expanded` must include them, or a table mentioned a
+  -- second time degraded to its one-line form even though its columns sit
+  -- in the cache (defeating the cache's whole purpose)
+  local expanded = {}
+  for _, t in ipairs(entry.tables) do
+    if entry.columns[t.name] and word_in_text(t.name, text_l) then
+      expanded[t.name] = true
+    end
+  end
   local candidates = {}
   for _, t in ipairs(entry.tables) do
-    if #candidates >= M._test.MAX_EXPAND then break end
+    if #candidates >= MAX_EXPAND then break end
     if not entry.columns[t.name] and word_in_text(t.name, text_l) then
       candidates[#candidates + 1] = t.name
     end
   end
   if #candidates == 0 then
-    cb(render(entry, {}, scope))
+    cb(render(entry, expanded, scope))
     return
   end
-  local expanded = {}
-  local idx = 0
   local conn = scope.connection
   local db = scope.database
+  local idx = 0
   local function next_table()
     idx = idx + 1
     local name = candidates[idx]
