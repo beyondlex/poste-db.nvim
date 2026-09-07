@@ -79,6 +79,20 @@ describe("poste-db.ai.actions", function()
       assert.is_false(actions._test.is_readonly("DROP TABLE users"))
       assert.is_false(actions._test.is_readonly("CREATE TABLE t (id int)"))
     end)
+
+    it("flags CTE-wrapped writes as not read-only", function()
+      -- Postgres/SQLite allow WITH ... INSERT/UPDATE/DELETE/MERGE: the bare
+      -- `with` kind used to bypass the confirm gate for these
+      assert.is_false(actions._test.is_readonly(
+        "WITH del AS (DELETE FROM users RETURNING *) SELECT * FROM del"))
+      assert.is_false(actions._test.is_readonly(
+        "WITH t AS (SELECT 1) INSERT INTO archive SELECT * FROM t"))
+      assert.is_false(actions._test.is_readonly(
+        "with x as (select 1) update t set a = 1"))
+      -- whole-word matching: a column name like last_update must NOT trip it
+      assert.is_true(actions._test.is_readonly(
+        "WITH t AS (SELECT last_update FROM u) SELECT * FROM t"))
+    end)
   end)
 
   describe("strip_directives", function()

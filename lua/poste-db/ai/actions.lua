@@ -12,12 +12,30 @@ local READONLY_KINDS = {
   desc = true, analyze = true, pragma = true, table = true,
 }
 
+--- Write keywords that make a WITH (CTE) statement data-changing.
+--- Postgres and SQLite allow WITH ... INSERT/UPDATE/DELETE/MERGE, so a bare
+--- `with` kind must not skip the confirm gate. A false positive (one of
+--- these words inside a string literal or comment) only costs an extra
+--- confirmation — the safe direction.
+local WRITE_WORDS = { "insert", "update", "delete", "merge", "replace" }
+
 --- Heuristic read-only check for the confirm gate.
 --- @param sql string
 --- @return boolean
 function M.is_readonly(sql)
-  local kind = (sql:lower()):match("^%s*(%a+)")
-  return kind ~= nil and READONLY_KINDS[kind] == true
+  local lowered = sql:lower()
+  local kind = lowered:match("^%s*(%a+)")
+  if not kind then return false end
+  if kind == "with" then
+    for _, w in ipairs(WRITE_WORDS) do
+      -- %f[%w_]…%f[^%w_] = whole-word match; note Lua's %w excludes `_`,
+      -- and identifiers like `last_update` must not read as containing
+      -- the write word `update`
+      if lowered:find("%f[%w_]" .. w .. "%f[^%w_]") then return false end
+    end
+    return true
+  end
+  return READONLY_KINDS[kind] == true
 end
 
 --- Confirm gate used by poste-ai's codeblock action. Read-only statements
