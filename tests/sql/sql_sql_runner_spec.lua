@@ -172,6 +172,103 @@ describe("sql_runner run_sql_request", function()
     assert.same({ 1, 7 }, running_lines, "spinner must land on each statement's first line")
   end)
 
+  it("cancelled run (no statement at cursor) keeps last_response/last_dataset", function()
+    poste_state_stub.find_poste_binary = function() return "poste" end
+    config_stub.get_keymap = function(area, name, default) return default end
+    config_stub.config = {}
+    package.loaded["poste-db.statement"].extract_stmt_at_cursor = function() return nil end
+    package.loaded["poste-db.executor"] = { execute = function()
+      error("executor must not run for a cancelled request")
+    end }
+
+    -- A previous request's results must survive the cancel
+    poste_state_stub.last_response = { body = "{}" }
+    sql_state_stub.last_dataset = { type = "resultset" }
+
+    local begin_calls = 0
+    package.loaded["poste-db.session"] = {
+      begin = function()
+        begin_calls = begin_calls + 1
+        return {}
+      end,
+    }
+
+    runner.run_sql_request()
+
+    assert.equals(0, begin_calls, "cancelled run must not begin a new session")
+    assert.same({ body = "{}" }, poste_state_stub.last_response)
+    assert.same({ type = "resultset" }, sql_state_stub.last_dataset)
+  end)
+
+  it("DML-guard rejection keeps last_response/last_dataset", function()
+    poste_state_stub.find_poste_binary = function() return "poste" end
+    config_stub.get_keymap = function(area, name, default) return default end
+    config_stub.config = {}  -- confirm_unfiltered_dml defaults on
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "DELETE FROM t;" })
+
+    local stmt_stub = package.loaded["poste-db.statement"]
+    stmt_stub.extract_stmt_at_cursor = function() return "DELETE FROM t;", nil, 1, 1 end
+    stmt_stub.extract_label = function() return "del" end
+    stmt_stub.fallback_label = function() return "test_1" end
+    package.loaded["poste-db.executor"] = { execute = function()
+      error("executor must not run after a DML-guard cancel")
+    end }
+
+    poste_state_stub.last_response = { body = "{}" }
+    sql_state_stub.last_dataset = { type = "resultset" }
+
+    local begin_calls = 0
+    package.loaded["poste-db.session"] = {
+      begin = function()
+        begin_calls = begin_calls + 1
+        return {}
+      end,
+    }
+
+    local real_confirm = vim.fn.confirm
+    local confirm_calls = 0
+    vim.fn.confirm = function()
+      confirm_calls = confirm_calls + 1
+      return 2  -- No, cancel
+    end
+    runner.run_sql_request()
+    vim.fn.confirm = real_confirm
+
+    assert.equals(1, confirm_calls, "guard must ask before executing")
+    assert.equals(0, begin_calls, "cancelled run must not begin a new session")
+    assert.same({ body = "{}" }, poste_state_stub.last_response)
+    assert.same({ type = "resultset" }, sql_state_stub.last_dataset)
+  end)
+
+  it("accepted run begins the session and clears request-scoped state", function()
+    poste_state_stub.find_poste_binary = function() return "poste" end
+    config_stub.get_keymap = function(area, name, default) return default end
+    config_stub.config = {}
+
+    local stmt_stub = package.loaded["poste-db.statement"]
+    stmt_stub.extract_stmt_at_cursor = function() return "SELECT 1", nil, 1, 1 end
+    stmt_stub.extract_label = function() return "sel" end
+    stmt_stub.fallback_label = function() return "test_1" end
+
+    poste_state_stub.last_response = { body = "stale" }
+    sql_state_stub.last_dataset = { type = "resultset" }
+
+    -- Real session module: begin() must clear both request-scoped fields.
+    package.loaded["poste-db.session"] = nil
+
+    local executed = {}
+    package.loaded["poste-db.executor"] = {
+      execute = function(opts) executed[#executed + 1] = opts end,
+    }
+
+    runner.run_sql_request()
+
+    assert.equals(1, #executed, "clean SELECT must reach the executor")
+    assert.is_nil(poste_state_stub.last_response)
+    assert.is_nil(sql_state_stub.last_dataset)
+    assert.is_not_nil(sql_state_stub._sql_session)
+  end)
+
   after_each(function()
     package.loaded["poste.state"] = saved_state
     package.loaded["poste-db.state"] = saved_sql_state

@@ -160,13 +160,6 @@ function M.run_sql_request()
     file = vim.fn.getcwd() .. "/untitled.sql"
   end
 
-  -- Fresh SQL session: clears request-scoped dataset/response state (Phase 2b)
-  require("poste-db.session").begin({
-    buf = src_buf,
-    line = vim.fn.line("."),
-    file = file,
-  })
-
   local is_visual = _vis_active
   _vis_active = false
 
@@ -188,7 +181,9 @@ function M.run_sql_request()
     buf_content, stmt_lines = statement.extract_visual_block(buf_lines, sel_start, sel_end)
   else
     local line = vim.fn.line(".")
-    local extracted = table.pack(statement.extract_stmt_at_cursor(buf_lines, line, src_buf))
+    -- NB: plain table capture — table.pack is absent on some nvim builds
+    -- (0.12 nightly) and .n is never read here.
+    local extracted = { statement.extract_stmt_at_cursor(buf_lines, line, src_buf) }
     buf_content = extracted[1]
     stmt_start = extracted[3]
     stmt_end = extracted[4]
@@ -333,6 +328,16 @@ function M.run_sql_request()
       end
     end
   end
+
+  -- Fresh SQL session: clears request-scoped dataset/response state (Phase 2b).
+  -- Deliberately after every cancel path above (no statement at cursor, dirty
+  -- edits, missing connection, DML-guard rejection) so a cancelled run keeps
+  -- the previous response/dataset instead of wiping it.
+  require("poste-db.session").begin({
+    buf = src_buf,
+    line = vim.fn.line("."),
+    file = file,
+  })
 
   -- Route: single non-USE statement with a resolved connection → session
   --         visual selection, USE, or no connection → exec-file
