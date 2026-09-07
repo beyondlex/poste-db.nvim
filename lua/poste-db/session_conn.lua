@@ -5,14 +5,25 @@
 --- session variables (`SET @a=1; SELECT @a;`), temporary tables, and `USE db`
 --- persist across separate `<CR>` executions.
 ---
---- Sessions are pooled keyed by `connection_url` and shared across buffers.
+--- Sessions are pooled keyed by `connection_url` + selected database and
+--- shared across buffers targeting the same pair.
 
 local state = require("poste.state")
 local const = require("poste-db.constants")
 
 local M = {}
 
--- pool[connection_url] = {
+-- Pool key: connection URL + selected database. A session holds per-database
+-- state (USE/SET vars, temp tables, current database), so the same connection
+-- with a different @database directive needs its OWN session — reusing the
+-- first one silently ran the SQL against the wrong database. \0 cannot occur
+-- inside a URL, so the two parts stay unambiguous.
+local function pool_key(conn_url, database)
+  return conn_url .. "\0" .. (database or "")
+end
+
+-- pool[pool_key] = {
+--   key         = string,  -- pool_key(conn_url, database)
 --   job_id      = number,
 --   conn_url    = string,
 --   dialect     = string,
@@ -167,8 +178,8 @@ local function on_session_exit(session, code)
     if cb.on_error then cb.on_error("SQL session exited (code " .. code .. ")") end
   end
   -- Remove from pool if still referenced
-  if pool[session.conn_url] == session then
-    pool[session.conn_url] = nil
+  if pool[session.key] == session then
+    pool[session.key] = nil
   end
 end
 
@@ -179,6 +190,7 @@ local function start(conn_url, database)
   local db = database or database_from_url(conn_url)
   local now = os.time()
   local session = {
+    key = pool_key(conn_url, db),
     job_id = nil,
     conn_url = conn_url,
     dialect = dialect_from_url(conn_url),
@@ -217,17 +229,17 @@ local function start(conn_url, database)
 
   if job_id <= 0 then return nil end
   session.job_id = job_id
-  pool[conn_url] = session
+  pool[session.key] = session
   return session
 end
 
---- Get the session for a connection_url, starting one if needed.
+--- Get the session for a connection_url + database, starting one if needed.
 --- @param conn_url string
 --- @param bufnr number|nil buffer that will use this session
 --- @param database string|nil database context to connect to (default: from URL)
 --- @return table|nil session
 function M.get(conn_url, bufnr, database)
-  local session = pool[conn_url]
+  local session = pool[pool_key(conn_url, database)]
   if not session or not session.alive then
     session = start(conn_url, database)
     if not session then return nil end
@@ -274,16 +286,25 @@ function M.execute(conn_url, sql, callbacks, bufnr, database)
   return "dispatched"
 end
 
---- Close a session for a connection_url.
---- @param conn_url string
-function M.stop(conn_url)
-  local session = pool[conn_url]
-  if not session then return end
-  session.alive = false
-  pool[conn_url] = nil
-  if session.job_id and vim.fn.jobwait({ session.job_id }, 0)[1] == -1 then
-    pcall(vim.fn.chansend, session.job_id, "")
-    pcall(vim.fn.chanclose, session.job_id, "stdin")
+--- Close a session by pool key, or every session of a connection URL
+--- (any database) when given a bare URL — `:PosteDbSessionStop <arg>` takes
+--- whatever `:PosteDbSessionList` shows.
+--- @param key_or_url string
+function M.stop(key_or_url)
+  local targets = {}
+  for key, session in pairs(pool) do
+    if key == key_or_url or session.conn_url == key_or_url then
+      targets[#targets + 1] = key
+    end
+  end
+  for _, key in ipairs(targets) do
+    local session = pool[key]
+    session.alive = false
+    pool[key] = nil
+    if session.job_id and vim.fn.jobwait({ session.job_id }, 0)[1] == -1 then
+      pcall(vim.fn.chansend, session.job_id, "")
+      pcall(vim.fn.chanclose, session.job_id, "stdin")
+    end
   end
 end
 
@@ -297,20 +318,22 @@ end
 --- Remove a buffer from all sessions; close sessions with no remaining buffers.
 --- @param bufnr number
 function M.cleanup_buf(bufnr)
-  for conn_url, session in pairs(pool) do
+  for key, session in pairs(pool) do
     session.bufs[bufnr] = nil
     if not next(session.bufs) then
-      M.stop(conn_url)
+      M.stop(key)
     end
   end
 end
 
 --- List active sessions (for debugging / :PosteDbSessionList).
---- @return { [conn_url] = { job_id, dialect, created_at, last_active } }
+--- @return { [key] = { conn_url, database, job_id, dialect, created_at, last_active } }
 function M.list()
   local out = {}
-  for conn_url, session in pairs(pool) do
-    out[conn_url] = {
+  for key, session in pairs(pool) do
+    out[key] = {
+      conn_url = session.conn_url,
+      database = session.database,
       job_id = session.job_id,
       dialect = session.dialect,
       created_at = session.created_at,
