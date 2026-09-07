@@ -23,6 +23,7 @@ function M.complete_connections(prefix, _scope, cb)
   local connections = require("poste-db.connections")
   connections.list_connections(function(list)
     local items = {}
+    local prefix_l = prefix:lower()
     for _, c in ipairs(list or {}) do
       local desc = c.dialect or ""
       if c.host and c.host ~= "" then
@@ -30,7 +31,7 @@ function M.complete_connections(prefix, _scope, cb)
       elseif c.path and c.path ~= "" then
         desc = desc .. " " .. c.path
       end
-      if c.name:sub(1, #prefix) == prefix then
+      if c.name:lower():sub(1, #prefix) == prefix_l then
         items[#items + 1] = { label = c.name, description = desc }
       end
     end
@@ -53,10 +54,11 @@ function M.complete_databases(prefix, scope, cb)
   local async = require("poste-db.db_browser.async")
   async.run_introspect(conn, "databases", nil, nil, nil, function(parsed)
     local items = {}
+    local prefix_l = prefix:lower()
     if type(parsed) == "table" and type(parsed.items) == "table" then
       for _, item in ipairs(parsed.items) do
         if type(item) == "table" and item.name and not SKIP_DATABASES[item.name]
-          and item.name:sub(1, #prefix) == prefix then
+          and item.name:lower():sub(1, #prefix) == prefix_l then
           items[#items + 1] = { label = item.name, description = conn }
         end
       end
