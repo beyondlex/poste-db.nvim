@@ -25,20 +25,12 @@ jobs:
       - name: Install luacheck
         run: luarocks install luacheck
 
-      # The 47-ish remaining warnings are benign classes (shadowing, unused
-      # vars) tracked for a dedicated cleanup; errors (E*) and W111 (write to
-      # an undefined global — the review's finding-1/2/3/10 bug class) fail
-      # the build.
+      # Zero-warning baseline since the 2026-09-07 cleanup (review report
+      # docs/REVIEW-2026-09-07.md): any luacheck warning or error fails the
+      # build. W111 (write to an undefined global) was the bug class behind
+      # review-2026-09-06 findings 1/2/3/10.
       - name: Lint
-        run: |
-          output=$(luacheck --codes lua plugin ftplugin || true)
-          echo "$output"
-          fatal=$(echo "$output" | grep -E "\((E[0-9]+|W111)\)" || true)
-          if [ -n "$fatal" ]; then
-            echo "::error::luacheck found errors or undefined-global writes:"
-            echo "$fatal"
-            exit 1
-          fi
+        run: luacheck --codes lua plugin ftplugin
 
   test:
     strategy:
