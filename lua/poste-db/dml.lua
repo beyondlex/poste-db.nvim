@@ -90,6 +90,9 @@ local function build_where(columns, pk_cols, row_values, dialect)
   return table.concat(parts, " AND ")
 end
 
+--- Generate one UPDATE statement.
+--- @return string|nil sql nil when no safe statement can be generated
+--- @return string|nil err why generation was refused
 function M.generate_update(schema, table_name, columns, modifications, row_values, dialect)
   local set_parts = {}
   for _, mod in ipairs(modifications or {}) do
@@ -98,18 +101,25 @@ function M.generate_update(schema, table_name, columns, modifications, row_value
       set_parts[#set_parts + 1] = ident.quote(col.name, dialect) .. " = " .. quote_val(mod.new_val, dialect)
     end
   end
+  if #set_parts == 0 then
+    return nil, "no settable columns"
+  end
 
   local where = ""
   if row_values then
     local pk_cols = find_pk_columns(columns)
     where = build_where(columns, pk_cols, row_values, dialect)
   end
+  -- A missing WHERE target means a WHERE-less UPDATE — a full-table rewrite.
+  -- Refuse instead: an all-NULL row (no PK, nothing to match on) cannot be
+  -- addressed safely.
+  if where == "" then
+    return nil, "no WHERE target (no primary key and no non-NULL column values)"
+  end
 
   local sql = "UPDATE " .. quote_schema(schema, dialect) .. ident.quote(table_name, dialect)
     .. " SET " .. table.concat(set_parts, ", ")
-  if where ~= "" then
-    sql = sql .. " WHERE " .. where
-  end
+    .. " WHERE " .. where
   return sql .. ";"
 end
 
@@ -130,20 +140,35 @@ function M.generate_insert(schema, table_name, columns, row_values, dialect)
     .. " VALUES (" .. table.concat(val_parts, ", ") .. ");"
 end
 
+--- Generate one DELETE statement.
+--- @return string|nil sql nil when no safe WHERE target exists
+--- @return string|nil err why generation was refused
 function M.generate_delete(schema, table_name, columns, row_values, dialect)
   local pk_cols = find_pk_columns(columns)
   local where = build_where(columns, pk_cols, row_values or {}, dialect)
+  if where == "" then
+    -- previously produced a broken `WHERE ;` (syntax error); a silent
+    -- WHERE-less DELETE would be a full-table wipe, so refuse outright
+    return nil, "no WHERE target (no primary key and no non-NULL column values)"
+  end
   return "DELETE FROM " .. quote_schema(schema, dialect) .. ident.quote(table_name, dialect)
     .. " WHERE " .. where .. ";"
 end
 
+--- Generate the DML statements for pending dataset edits.
+--- @param es table edit_state
+--- @param tab table Tab state (layout.columns / rows_source)
+--- @param dialect string
+--- @return table stmts { { sql, type } }
+--- @return string[] skipped human-readable reasons for refused statements
 function M.generate_dml(es, tab, dialect)
   local stmts = {}
-  if not tab or not tab.layout then return stmts end
+  local skipped = {}
+  if not tab or not tab.layout then return stmts, skipped end
 
   local columns = tab.layout.columns
   local rows_source = tab.rows_source
-  if not columns or not rows_source then return stmts end
+  if not columns or not rows_source then return stmts, skipped end
 
   local schema = tab.layout.schema or ""
   local table_name = tab.layout.table_name or ""
@@ -166,19 +191,23 @@ function M.generate_dml(es, tab, dialect)
       for _, mod in ipairs(mods) do
         original_row[mod.col] = mod.old_val
       end
-      stmts[#stmts + 1] = {
-        sql = M.generate_update(schema, table_name, columns, mods, original_row, dialect),
-        type = "update",
-      }
+      local sql, err = M.generate_update(schema, table_name, columns, mods, original_row, dialect)
+      if sql then
+        stmts[#stmts + 1] = { sql = sql, type = "update" }
+      else
+        skipped[#skipped + 1] = ("update row %d skipped: %s"):format(row_idx, err)
+      end
     end
   end
 
   for row_idx, _ in pairs(es.deleted_rows or {}) do
     if row_idx <= #rows_source then
-      stmts[#stmts + 1] = {
-        sql = M.generate_delete(schema, table_name, columns, rows_source[row_idx], dialect),
-        type = "delete",
-      }
+      local sql, err = M.generate_delete(schema, table_name, columns, rows_source[row_idx], dialect)
+      if sql then
+        stmts[#stmts + 1] = { sql = sql, type = "delete" }
+      else
+        skipped[#skipped + 1] = ("delete row %d skipped: %s"):format(row_idx, err)
+      end
     end
   end
 
@@ -195,7 +224,7 @@ function M.generate_dml(es, tab, dialect)
     }
   end
 
-  return stmts
+  return stmts, skipped
 end
 
 return M

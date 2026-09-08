@@ -29,11 +29,13 @@ function M.set_log_path(path) return log.set_log_path(path) end
 --- @param es table edit_state
 --- @param tab table Tab state
 --- @param dialect string Dialect
---- @return string|nil combined SQL, table summary
+--- @return string|nil combined SQL (nil when nothing survived)
+--- @return table summary
+--- @return string[] skipped reasons for refused statements
 function M.generate_combined_dml(es, tab, dialect)
-  local stmts = dml.generate_dml(es, tab, dialect)
+  local stmts, skipped = dml.generate_dml(es, tab, dialect)
   if #stmts == 0 then
-    return nil, { updates = 0, inserts = 0, deletes = 0 }
+    return nil, { updates = 0, inserts = 0, deletes = 0 }, skipped
   end
 
   local sql_parts = {}
@@ -46,7 +48,7 @@ function M.generate_combined_dml(es, tab, dialect)
     end
   end
 
-  return table.concat(sql_parts, "\n"), summary
+  return table.concat(sql_parts, "\n"), summary, skipped
 end
 
 --- Re-execute original SELECT and refresh the dataset in-place.
@@ -185,9 +187,18 @@ function M.commit_edits()
   local column = require("poste-db.editor.column")
   column.ensure_primary_key(tab)
 
-  local sql, summary = M.generate_combined_dml(es, tab, dialect)
+  local sql, summary, skipped = M.generate_combined_dml(es, tab, dialect)
+  if skipped and #skipped > 0 then
+    -- statements that could not target a row safely (e.g. an all-NULL row
+    -- with no primary key) were refused by the generator, never executed
+    vim.notify("Skipped " .. #skipped .. " edit(s) — no safe WHERE target:\n"
+      .. table.concat(skipped, "\n"), vim.log.levels.WARN)
+  end
   if not sql then
-    vim.notify("No changes to commit", vim.log.levels.INFO)
+    vim.notify(skipped and #skipped > 0
+        and "Nothing to commit — every edit was skipped (see warning)"
+        or "No changes to commit",
+      vim.log.levels.INFO)
     return
   end
 
