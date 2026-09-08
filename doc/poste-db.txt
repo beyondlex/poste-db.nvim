@@ -218,7 +218,8 @@ The commit, with its SQL and outcome, is appended to the edit log
 
 `E` in the dataset buffer (or `:PosteDbExport [format] [dest] [path]`)
 exports the current result set. Formats: csv, tsv, json, md, sql (INSERT
-statements). Destination: file or clipboard. The last path is remembered.
+statements). Destination: file or clipboard. The last export directory is
+remembered.
 
 CSV/JSON can be imported into a table from the DB browser's context menu
 ("Import data") — a preview maps columns before anything is written.
