@@ -144,8 +144,62 @@ describe("export complete", function()
     assert.same({ "csv", "tsv", "json", "md", "sql" }, formats)
   end)
 
-  it("offers clipboard destination after a format", function()
+  it("offers clipboard and file destinations after a format", function()
     local dests = export.complete("", "PosteDbExport csv")
-    assert.same({ "clipboard" }, dests)
+    assert.same({ "clipboard", "file" }, dests)
+  end)
+end)
+
+describe("export run", function()
+  local dataset = require("poste-db.dataset")
+
+  after_each(function()
+    dataset.tabs = {}
+    dataset.active_tab_idx = 0
+  end)
+
+  local function install_tab()
+    dataset.tabs[1] = {
+      meta = {},
+      data = {
+        type = "resultset",
+        results = {
+          {
+            columns = { { name = "id" }, { name = "name" } },
+            rows = { { 1, "Alice" } },
+            row_count = 1,
+          },
+        },
+      },
+    }
+    dataset.active_tab_idx = 1
+    return dataset.tabs[1]
+  end
+
+  it("writes the file when a path is given (command form)", function()
+    install_tab()
+    local out = vim.fn.tempname() .. "/out/users.csv"
+    export.run("csv", "file", out)
+    assert.equals(1, vim.fn.filereadable(out))
+    local lines = vim.fn.readfile(out)
+    assert.equals("id,name", lines[1])
+    assert.equals("1,Alice", lines[2])
+  end)
+
+  it("copies to the clipboard for destination=clipboard", function()
+    install_tab()
+    local saved = vim.fn.getreg("+")
+    export.run("csv", "clipboard")
+    assert.truthy(vim.fn.getreg("+"):find("id,name"))
+    vim.fn.setreg("+", saved)
+  end)
+
+  it("exports only the first result set", function()
+    local tab = install_tab()
+    tab.data.results[1].columns = { { name = "x" } }
+    tab.data.results[1].rows = { { "only" } }
+    local out = vim.fn.tempname() .. "/out2/users.csv"
+    export.run("csv", "file", out)
+    assert.equals("x\nonly", table.concat(vim.fn.readfile(out), "\n"))
   end)
 end)

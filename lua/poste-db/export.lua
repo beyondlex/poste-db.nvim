@@ -404,6 +404,20 @@ function M.run(format_value, destination, path)
     return
   end
 
+  if format_value and destination == "file" then
+    -- documented as `:PosteDbExport [format] file [path]` — the path argument
+    -- used to be accepted and silently ignored (interactive picker instead)
+    local data_result = get_current_data()
+    if not data_result then return end
+    if path and path ~= "" then
+      export_to_file(data_result, format_value, vim.fn.expand(path))
+    else
+      -- path omitted: prompt via the directory browser (generated filename)
+      P.browse_path(format_value)
+    end
+    return
+  end
+
   if format_value then
     P.destination_picker(format_value)
     return
@@ -425,7 +439,7 @@ function M.complete(ArgLead, CmdLine)
     return vim.tbl_filter(function(f) return f:find(ArgLead) ~= nil end, { "csv", "tsv", "json", "md", "sql" })
   end
   if n == 1 or (n == 2 and not CmdLine:match("%s$")) then
-    return vim.tbl_filter(function(d) return d:find(ArgLead) ~= nil end, { "clipboard" })
+    return vim.tbl_filter(function(d) return d:find(ArgLead) ~= nil end, { "clipboard", "file" })
   end
   return vim.fn.getcompletion(ArgLead, "file")
 end
