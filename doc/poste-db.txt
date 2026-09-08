@@ -1,0 +1,362 @@
+*poste-db.txt*   SQL execution, dataset browser, and schema introspection for Neovim
+
+Author:  Lex <https://github.com/beyondlex/poste-db.nvim>
+License: MIT
+
+==============================================================================
+CONTENTS                                                      *poste-db-contents*
+
+  1.  Introduction ............................ |poste-db-intro|
+  2.  Requirements ............................ |poste-db-requirements|
+  3.  Setup ................................... |poste-db-setup|
+  4.  Connections ............................. |poste-db-connections|
+  5.  SSH tunnels ............................. |poste-db-tunnel|
+  6.  SQL source buffer ....................... |poste-db-source|
+  7.  Executing SQL ........................... |poste-db-execution|
+  8.  Dataset buffer .......................... |poste-db-dataset|
+  9.  Editing data ............................ |poste-db-editing|
+  10. Export and import ....................... |poste-db-export|
+  11. DB browser .............................. |poste-db-browser|
+  12. EXPLAIN ................................. |poste-db-explain|
+  13. Completion and snippets ................. |poste-db-completion|
+  14. Diagnostics ............................. |poste-db-diagnostics|
+  15. Sessions and logging .................... |poste-db-sessions|
+  16. AI chat ................................. |poste-db-ai|
+  17. Statusline .............................. |poste-db-statusline|
+  18. Commands ................................ |poste-db-commands|
+  19. Configuration ........................... |poste-db-config|
+
+==============================================================================
+1. INTRODUCTION                                                  *poste-db-intro*
+
+poste-db.nvim turns Neovim into a SQL workstation: execute statements from
+`.sql` buffers into a paginated dataset grid, browse and edit data, explore
+schemas in a tree browser, and ask an AI about your database — without
+leaving the editor.
+
+It is part of the Poste family and shares infrastructure (state, binary
+resolution, pickers, indicators) with |poste.nvim|, which drives the `poste`
+Rust binary that actually talks to the databases.
+
+Supported dialects: PostgreSQL, MySQL/MariaDB, SQLite, SQL Server,
+ClickHouse, plus PostgreSQL/MySQL-compatible aliases (cockroachdb, tidb,
+supabase, planetscale, ...). MySQL-family dialects are normalized to `mysql`
+and PG-family to `postgres`.
+
+==============================================================================
+2. REQUIREMENTS                                            *poste-db-requirements*
+
+- Neovim >= 0.10
+- poste.nvim (shared infra + the `poste` Rust binary)
+- blink.cmp (recommended) or nvim-cmp for completion
+- Optional: poste-ai.nvim for the AI chat, sqlfluff/sqlfmt/sql-formatter or
+  pg_format for `:PosteDbFormat`
+
+Run `:checkhealth poste-db` to verify your installation.
+
+==============================================================================
+3. SETUP                                                        *poste-db-setup*
+
+>lua
+    -- lazy.nvim
+    {
+      "beyondlex/poste-db.nvim",
+      dependencies = { "beyondlex/poste.nvim", "saghen/blink.cmp" },
+      config = function()
+        require("poste-db.init").setup()
+      end,
+    }
+<
+
+See |poste-db-config| for every option. All keymaps accept `false` to
+disable.
+
+==============================================================================
+4. CONNECTIONS                                            *poste-db-connections*
+
+Connections are defined in a `connections.toml`, discovered by walking up
+from the SQL file (or cwd):
+
+>toml
+    [pg-dev]
+    dialect = "postgres"
+    host = "localhost"
+    port = 5432
+    database = "myapp"
+    user = "{{PG_DEV_USER}}"
+    password = "{{PG_DEV_PASSWORD}}"
+<
+
+Sensitive fields support `{{VAR}}` references resolved at runtime from a
+`.env` file (discovered like connections.toml, gitignore it) and `env.json`,
+with real OS environment variables taking precedence. Unknown references
+stay literal. `user` and `password` are percent-encoded when building
+connection URLs.
+
+A connection may also carry a `tunnel` section — see |poste-db-tunnel| — and
+a `color` field for per-connection statusline coloring.
+
+Reference a connection from SQL with a directive:
+
+>sql
+    -- @connection pg-dev
+    SELECT * FROM users;
+<
+
+`-- @database <name>` scopes further; `USE database;` switches the active
+database as the cursor moves. `###` on its own line starts a new section.
+`gd` on a connection/database/table word jumps to its definition
+(connections.toml entry, database listing, or table DDL).
+
+==============================================================================
+5. SSH TUNNELS                                                *poste-db-tunnel*
+
+Databases behind a bastion can declare an ssh forward directly in the
+connection section:
+
+>toml
+    [pg-prod]
+    dialect = "postgres"
+    host = "db.internal"
+    port = 5432
+    database = "app"
+    tunnel = "jump@bastion.corp"          -- or:
+    tunnel = { to = "jump@bastion.corp", port = 2222, key = "~/.ssh/id_ed25519" }
+<
+
+On first use, a local port is allocated and `ssh -N -L` is spawned
+(`ExitOnForwardFailure=yes`, `ServerAliveInterval=30`); the connection URL
+only ever sees `127.0.0.1:<local port>`, so the whole plugin — execution,
+browser, completion, editing, AI — works through the tunnel unchanged.
+
+- Tunnels are reused for the session (like pooled SQL sessions).
+- `:PosteDbTunnel` lists active tunnels; `:PosteDbTunnel <name>` or
+  `:PosteDbTunnel --all` stops them. They are also torn down when nvim exits.
+- A raw `url` field cannot be combined with `tunnel` (there is no host/port
+  to rewrite) — connections fail loudly instead of bypassing the jump host.
+- sqlite connections ignore `tunnel`.
+- Note `:PosteDbConnection`'s "Test connection" routes tunneled connections
+  through a `SELECT 1` probe, since the binary's own test subcommand cannot
+  use the tunnel.
+
+==============================================================================
+6. SQL SOURCE BUFFER                                           *poste-db-source*
+
+Opening a `.sql` (filetype `poste_sql`) or `.sqlite` file sets up these
+buffer-local keymaps (names are `keymaps.sql_source` config keys):
+
+    |<CR>|         Run the statement under the cursor; visual selection runs
+                   every selected statement, each into its own dataset tab
+    |K|            Show DDL / column info for the word under the cursor
+    <leader>ep     EXPLAIN the statement under the cursor (|poste-db-explain|)
+    <leader>ff     Format buffer/selection via an external formatter
+    gd             Go to definition (connection/database/table)
+    <C-Space>      Trigger SQL completion
+    <leader>aa     Ask the AI about the visual selection
+    <leader>l      Toggle the execution log viewer
+    g?             Show this buffer's keymap help
+
+The statement the cursor is in can be highlighted with `:PosteDbBoundary`.
+
+==============================================================================
+7. EXECUTING SQL                                            *poste-db-execution*
+
+`<CR>` routes the statement through the `poste` binary. Long-lived SQL
+sessions are pooled per connection+database pair, so temp tables, `USE`, and
+session variables persist between runs. `:PosteDbRunFile <file>` executes a
+whole file with a cancelable progress dialog.
+
+Each statement's result opens as a tab in the dataset window; `SET`-only
+preambles don't get tabs. DML confirmation: DELETE/UPDATE without WHERE asks
+for confirmation (see `confirm_unfiltered_dml`).
+
+==============================================================================
+8. DATASET BUFFER                                            *poste-db-dataset*
+
+The result grid (filetype `poste_dataset`) supports:
+
+    q              Close            |  h/j/k/l      Move cell
+    H/L            Page up/down     |  0/$          First/last column
+    gg/G           First/last row   |  K            Preview cell
+    yy / yc        Yank cell/column |  s            Sort by column
+    <leader>gp     Raw cell float   |  <Tab>/<S-Tab> Next/prev result tab
+    R              Re-run query     |  gs           Show the SQL of this result
+    <leader>hh/ll  First/last page  |  <leader>pa   Toggle pagination
+    <leader>fc     Find column      |  <leader>ce   Filter by cell value
+    <leader>/      Search           |  <leader>cr   Clear filter/search
+    n/N            Next/prev match  |  <leader>ph   Toggle history sidebar
+    <leader>n/p    History next/prev
+    E              Export (|poste-db-export|)
+    a              Ask the AI about this result (or the last error)
+    g?             Keymap help
+
+The history sidebar (JetBrains-style) lists this session's requests; `<CR>`
+switches between them, `d` deletes an entry.
+
+==============================================================================
+9. EDITING DATA                                              *poste-db-editing*
+
+With a table result open (primary keys are introspected automatically):
+
+    i / cc         Edit cell (insert / replace)
+    dd             Delete row
+    o              Insert row below
+    <leader>w      Commit all pending edits
+
+`<leader>w` generates UPDATE/INSERT/DELETE DML from the pending edits and
+executes it as one transaction (`BEGIN`/`COMMIT`, with `ROLLBACK` when any
+statement fails — nothing is applied on failure). When fewer rows are
+affected than edited, the commit warns that some rows were concurrently
+changed or deleted. ClickHouse has no transaction semantics; commits there
+run per-statement and say so.
+
+The commit, with its SQL and outcome, is appended to the edit log
+(`edit_commit/log.lua`).
+
+==============================================================================
+10. EXPORT AND IMPORT                                      *poste-db-export*
+
+`E` in the dataset buffer (or `:PosteDbExport [format] [dest] [path]`)
+exports the current result set. Formats: csv, tsv, json, md, sql (INSERT
+statements). Destination: file or clipboard. The last path is remembered.
+
+CSV/JSON can be imported into a table from the DB browser's context menu
+("Import data") — a preview maps columns before anything is written.
+
+==============================================================================
+11. DB BROWSER                                              *poste-db-browser*
+
+`<leader>db` in a SQL buffer (or `:PosteDbBrowser`) toggles the schema tree:
+connections → databases/schemas → tables/views → columns/indexes/triggers.
+
+    <CR>           Expand/collapse        |  h/l   Collapse/go to child
+    r              Refresh node           |  /     Search filter
+    n/N            Next/prev match        |  i     Table/column info
+    x              Context menu           |  a     Ask AI about this node
+    Tab            Multi-select toggle    |  Esc   Exit multi-select
+    y              Yank node              |  p     Paste/clone (cross-connection)
+    D              Batch-drop selected tables
+    gd             Open connections.toml at this entry
+    ma             Generate ALTER TABLE ... ADD COLUMN
+    mr             Generate ... RENAME COLUMN
+    md             Generate ... DROP COLUMN
+    mt             Generate ... ALTER COLUMN ...TYPE
+    q              Close browser
+
+The `ma`/`mr`/`md`/`mt` DDL generators insert their statement into the
+source SQL buffer (dialect-aware), they don't execute it. The context menu
+(x) exposes per-node actions: create database/schema/table, DESCRIBE/SELECT
+generation, import data, drop confirmations, and more.
+
+==============================================================================
+12. EXPLAIN                                                  *poste-db-explain*
+
+`<leader>ep` or `:PosteDbExplain` wraps the statement under the cursor in
+the dialect's plan-only form — `EXPLAIN` (postgres/mysql/clickhouse),
+`EXPLAIN QUERY PLAN` (sqlite) — and shows the plan in a float. Plan forms
+never execute the statement, so explaining a write is safe. mssql is not
+supported (its SET SHOWPLAN_TEXT needs a separate batch).
+
+==============================================================================
+13. COMPLETION AND SNIPPETS                            *poste-db-completion*
+
+The `poste_db` completion source (blink.cmp or nvim-cmp) offers keywords,
+dialect functions, and schema-aware tables/columns introspected from the
+active connection — reflecting `@connection`/`@database`/`USE` context.
+Built-in snippets (`ct`, `ins`, `upd`, `cte`, ...) carry per-dialect
+variants and can be overridden or extended via `setup({ snippets = ... })`.
+
+==============================================================================
+14. DIAGNOSTICS                                            *poste-db-diagnostics*
+
+Statement-boundary diagnostics (tree-sitter based) plus semantic checks:
+tables/columns referenced in a statement are validated against the
+introspected schema cache, with known system schemas ignored.
+
+==============================================================================
+15. SESSIONS AND LOGGING                                *poste-db-sessions*
+
+`:PosteDbSessionList`     Show pooled sessions (per connection+database)
+`:PosteDbSessionStop`     Stop sessions: `--all`, a connection URL, or an
+                          exact key
+`:PosteDbLog`             Execution log viewer (sql_log.jsonl) with timing,
+                          filtering, and re-run
+`:PosteDbShowSql`         The SQL behind the active dataset tab
+`:PosteDbInfo`            Environment summary (binary, parsers, completion)
+
+==============================================================================
+16. AI CHAT                                                      *poste-db-ai*
+
+With poste-ai.nvim installed, `:PosteDbChat` (or `<leader>aa` on a
+selection, `a` on a dataset/browser node) opens the chat with database
+context. Inside chat:
+
+- `/connections` and `/databases` scope the conversation
+- `@connection/database[/table]` mentions inject schema summaries
+- Table names mentioned in your message automatically pull in their columns
+- ```sql code blocks can be executed from the chat; anything not obviously
+  read-only asks for confirmation first (writes inside CTEs included)
+
+Pressing `a` on a failed result prefills the error context; on a result set
+it attaches the data (capped).
+
+==============================================================================
+17. STATUSLINE                                              *poste-db-statusline*
+
+The current `[connection/database]` context is shown in mini.statusline or
+lualine as the cursor moves. Per-connection colors come from a `color`
+(hex/CSS/highlight-group) or `link` field in connections.toml. Disable with
+`setup({ statusline = false })`.
+
+==============================================================================
+18. COMMANDS                                                *poste-db-commands*
+
+    :PosteDbConnection       Connection manager (select / test)
+    :PosteDbBrowser          Toggle the DB browser sidebar
+    :PosteDbExplain          EXPLAIN statement under cursor
+    :PosteDbFormat           Format SQL buffer/selection
+    :PosteDbFormatStatus     Formatter backend status
+    :PosteDbExport           Export the active dataset
+    :PosteDbRunFile <file>   Execute a SQL file
+    :PosteDbShowSql          Show the active dataset's SQL
+    :PosteDbLog              Toggle the execution log viewer
+    :PosteDbChat             AI chat with database context
+    :PosteDbTunnel [name|--all]  List or stop SSH tunnels
+    :PosteDbSessionList      List pooled SQL sessions
+    :PosteDbSessionStop      Stop pooled SQL sessions
+    :PosteDbBoundary         Toggle statement-boundary highlight
+    :PosteDbInfo             Environment info
+    :PosteDbCmpStatus        Completion status
+    :PosteDbCmpReload        Re-register the completion provider
+
+Debug-only commands (`PosteDbDiag`, `PosteDbCmpTest`, ...) require
+`setup({ debug = true })` or `g:poste_db_debug`.
+
+==============================================================================
+19. CONFIGURATION                                            *poste-db-config*
+
+All options go to `require("poste-db.init").setup(opts)`; defaults shown:
+
+>lua
+    {
+      sql_formatters = { "sqlfluff", "sqlfmt", "sql-formatter", "pg_format" },
+      hide_empty_result_tabs = true,
+      default_max_rows = 0,          -- 0 = unlimited (client-side paging)
+      export_path = nil,             -- default export directory
+      import_chunk_size = 100,
+      debug = false,
+      confirm_unfiltered_dml = true, -- gate DELETE/UPDATE without WHERE
+      db_browser = { split_position = "left", split_width = 40 },
+      keymaps = { sql_source = {...}, sql_dataset = {...},
+                  sql_table_ops = {...}, sql_db_browser = {...},
+                  sql_introspect = {...} },  -- see :h poste-db keymaps per buffer
+    }
+<
+
+Extras: `icons` (dataset icons), `history_max` (session request history),
+`snippets` (see |poste-db-completion|), `statusline = false` to opt out.
+
+Legacy globals `g:poste_db_{config,debug,legacy_completion,dialect,autoformat}`
+are honored; old `g:poste_sql_*` spellings are deprecated aliases.
+
+ vim:tw=78:ts=8:noet:ft=help:norl:

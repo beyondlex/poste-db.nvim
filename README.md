@@ -4,17 +4,22 @@
 
 **Requires**: [poste.nvim](https://github.com/beyondlex/poste.nvim) (shared infra + Rust binary)
 
+Full documentation is in `doc/poste-db.txt` (`:h poste-db` after installing helptags).
+
 ## Features
 
-- **Execute SQL statements** from `.sql` files (PostgreSQL, MySQL, SQLite)
+- **Execute SQL statements** from `.sql` files — PostgreSQL, MySQL/MariaDB, SQLite, SQL Server, ClickHouse, and PG/MySQL-compatible aliases
 - **Dataset panel** — Paginated results, cell navigation (hjkl), vim-style search/filter, sorting
-- **Inline editing** — Edit cells, insert/delete rows, generate DML with transaction commit
-- **DB Browser** — Tree-view of schemas, tables, columns; generate SELECT/DESCRIBE queries
-- **SQL completion** — Keywords, tables, columns, functions (blink.cmp)
-- **Schema introspection** — PKs, FKs, indexes, DDL
-- **Export/import** — CSV, JSON, SQL INSERT statements
+- **Inline editing** — Edit cells, insert/delete rows, commit as one **transaction** (BEGIN/COMMIT/ROLLBACK) with affected-row verification
+- **DB Browser** — Tree view of schemas, tables, columns; context menu with create/import/drop/clone actions and DDL generators
+- **SSH tunnels** — Declare a jump host per connection; everything works through `127.0.0.1:<local port>`
+- **EXPLAIN** — Dialect-aware query plan in a float (`<leader>ep`)
+- **SQL completion** — Keywords, tables, columns, functions, snippets (blink.cmp / nvim-cmp)
+- **Semantic diagnostics** — Table/column references validated against the live schema
+- **Export/import** — CSV, TSV, JSON, Markdown, SQL INSERT; paste CSV/JSON into a table
 - **Multi-result tabs** — Each statement gets its own tab
-- **Execution log viewer** — Query history with timing
+- **History** — Session request sidebar + persistent execution log viewer
+- **AI chat** — Schema-aware chat with guarded SQL execution ([poste-ai.nvim](https://github.com/beyondlex/poste-ai.nvim))
 
 ## Installation
 
@@ -68,6 +73,24 @@ SELECT * FROM users WHERE active = true;
 
 The `USE database;` statement switches the active database for parsing/completion context.
 
+#### SSH tunnels
+
+Connections behind a bastion declare a jump host directly in the section; the
+plugin spawns `ssh -N -L` on first use and everything (execution, browser,
+completion, AI) works through the local forward:
+
+```toml
+[pg-prod]
+dialect = "postgres"
+host = "db.internal"
+port = 5432
+database = "app"
+tunnel = "jump@bastion.corp"
+# or: tunnel = { to = "jump@bastion.corp", port = 2222, key = "~/.ssh/id_ed25519" }
+```
+
+`:PosteDbTunnel` lists active tunnels, `:PosteDbTunnel <name|--all>` stops them.
+
 ### Statusline context
 
 The current connection and database are shown in the statusline as `[connection/database]` when `mini.statusline` is installed. The context updates as you move the cursor (respects `@connection`, `@database`, and `USE` statements).
@@ -108,7 +131,11 @@ Auto-detection: `color` values that are valid Neovim highlight groups are linked
 | `K` | Preview cell |
 | `yy` / `yc` | Yank cell / column |
 | `R` | Re-run query |
+| `gs` | Show the SQL of this result |
 | `<Tab>`/`<S-Tab>` | Next/previous tab |
+| `<leader>ph` | Toggle request history sidebar |
+| `E` | Export the result set |
+| `a` | Ask AI about this result (or the last error) |
 
 ### Dataset editing
 
@@ -117,15 +144,13 @@ Auto-detection: `color` values that are valid Neovim highlight groups are linked
 | `i` / `cc` | Enter edit mode |
 | `dd` | Delete row |
 | `o` | Insert row below |
-| `<leader>w` | Commit changes (generate DML) |
+| `<leader>w` | Commit changes as one transaction (BEGIN/COMMIT/ROLLBACK) |
 
 ### Export
 
-| Key | Action |
-|-----|--------|
-| `<leader>ec` | Export as CSV |
-| `<leader>ej` | Export as JSON |
-| `<leader>es` | Export as SQL INSERT |
+`E` in the dataset buffer, or `:PosteDbExport [format] [destination] [path]`.
+Formats: `csv`, `tsv`, `json`, `md`, `sql` (INSERT statements). Destination:
+file or clipboard.
 
 ### DB Browser
 
@@ -135,8 +160,12 @@ Press `<leader>db` in a SQL file to open the database tree browser.
 |-----|--------|
 | `<CR>` | Toggle node expand/collapse |
 | `x` | Context menu |
-| `d` | Generate DESCRIBE |
+| `i` | Table/column info |
 | `/` | Search filter |
+| `Tab` | Multi-select toggle |
+| `y` / `p` | Yank node / paste-clone (cross-connection) |
+| `D` | Batch-drop selected tables |
+| `gd` | Open `connections.toml` at this entry |
 | `q` | Close |
 
 Context menu (`x`) shows node-specific actions. On **schema/database** nodes, `T` inserts a **CREATE TABLE template** with tab-stop placeholders:
@@ -148,6 +177,29 @@ create table table_name (
 ```
 
 Press `<Tab>` to jump between placeholders, `<S-Tab>` to go back.
+
+On **table nodes**, the DDL generators write dialect-aware statements into
+your SQL buffer: `ma` add column, `mr` rename column, `md` drop column,
+`mt` alter column type.
+
+### EXPLAIN
+
+`<leader>ep` (or `:PosteDbExplain`) shows the query plan of the statement
+under the cursor in a float — `EXPLAIN` on postgres/mysql/clickhouse,
+`EXPLAIN QUERY PLAN` on sqlite. Plan-only forms never execute the statement.
+
+### AI chat
+
+With [poste-ai.nvim](https://github.com/beyondlex/poste-ai.nvim) installed,
+`:PosteDbChat` opens a schema-aware chat:
+
+- `/connections` / `/databases` scope the conversation
+- `@connection/database[/table]` mentions inject schema summaries; tables
+  named in your message pull in their columns automatically
+- `<leader>aa` asks about a selection; `a` on a dataset tab asks about the
+  result set (or the last error, with full context)
+- ```sql blocks from the chat can be executed into the dataset view —
+  anything not obviously read-only asks for confirmation first
 
 ### SQL completion
 
@@ -221,6 +273,9 @@ require("poste-db").setup({
 - [poste.nvim](https://github.com/beyondlex/poste.nvim) (sibling directory or on rtp)
 - `poste` binary (from poste.nvim)
 - blink.cmp (recommended) or nvim-cmp for completion
+- `ssh` on PATH for `tunnel` connections
+
+Run `:checkhealth poste-db` to verify your installation.
 
 ## Integration Tests
 
