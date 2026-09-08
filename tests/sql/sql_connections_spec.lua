@@ -523,3 +523,37 @@ describe("connections apply_connection", function()
     assert.equals("### query", lines[3])
   end)
 end)
+
+describe("connections format_connection", function()
+  it("renders the host/port/database line for host connections", function()
+    local line = connections._test.format_connection({
+      name = "pg-dev", dialect = "postgres", host = "db.internal", port = 5432, database = "app",
+    })
+    assert.equals("🐘 pg-dev — db.internal:5432/app", line)
+  end)
+
+  it("coerces a quoted (string) port instead of throwing on %d", function()
+    -- a connections.toml `port = "5433"` used to error inside string.format,
+    -- killing the whole connection picker
+    local line = connections._test.format_connection({
+      name = "pg-q", dialect = "postgres", host = "h", port = "5433", database = "app",
+    })
+    assert.equals("🐘 pg-q — h:5433/app", line)
+  end)
+
+  it("renders sqlite paths and the tunnel mark", function()
+    local line = connections._test.format_connection({
+      name = "lite", dialect = "sqlite", path = "data.db", tunnel = "jump@bastion",
+    })
+    assert.equals("📦 lite — data.db 🔒", line)
+  end)
+end)
+
+describe("connections percent_encode", function()
+  it("encodes reserved bytes but keeps unreserved characters", function()
+    local enc = connections._test.percent_encode
+    assert.equals("p%40ss%3Aw%2Frd", enc("p@ss:w/rd"))
+    assert.equals("keep_-~.12", enc("keep_-~.12"))
+    assert.equals("caf%C3%A9", enc("café"))
+  end)
+end)

@@ -349,7 +349,9 @@ local function format_connection(conn)
     return string.format("%s %s — %s%s", icon, name, conn.path or "?", tunnel_mark)
   else
     local host = conn.host or "localhost"
-    local port = conn.port or const.default_port(conn.dialect) or 3306
+    -- tonumber: a quoted `port = "5432"` in connections.toml is a string and
+    -- would make %d throw, killing the whole picker
+    local port = tonumber(conn.port) or const.default_port(conn.dialect) or 3306
     local db = conn.database or ""
     return string.format("%s %s — %s:%d/%s%s", icon, name, host, port, db, tunnel_mark)
   end
@@ -527,5 +529,10 @@ function M.show_menu()
     end
   end)
 end
+
+M._test = {
+  format_connection = format_connection,
+  percent_encode = percent_encode,
+}
 
 return M
