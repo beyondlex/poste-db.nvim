@@ -51,6 +51,14 @@ function M.setup()
     end,
   })
 
+  vim.api.nvim_create_autocmd("BufWritePost", {
+    group = vim.api.nvim_create_augroup("PosteDbConnectionsReload", { clear = true }),
+    pattern = "connections.toml",
+    callback = function()
+      require("poste-db.ai.mentions").invalidate()
+    end,
+  })
+
   vim.api.nvim_create_autocmd({ "BufRead", "BufNewFile" }, {
     pattern = { "*.sql", "*.sqlite" },
     callback = function()

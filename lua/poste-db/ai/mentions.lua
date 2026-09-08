@@ -29,6 +29,13 @@ end
 
 local cached_list = nil
 
+--- Drop the cached @-completion candidate list. Invoked from autocmds.lua
+--- when a connections.toml is written, so newly added connections show up
+--- in @-completion without restarting the session.
+function M.invalidate()
+  cached_list = nil
+end
+
 --- Completion candidates: "connection/defaultdb" for every connection in
 --- connections.toml. Cached after the first async fetch.
 --- @param _prefix string
