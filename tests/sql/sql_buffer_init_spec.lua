@@ -6,14 +6,14 @@
 --- intentionally enlarged dataset.
 
 package.loaded["poste.state"] = { sql = {}, config = {} }
-package.loaded["poste-sql.dataset"] = {}
-package.loaded["poste-sql.highlights"] = {}
-package.loaded["poste-sql.buffer.render"] = {}
+package.loaded["poste-db.dataset"] = {}
+package.loaded["poste-db.highlights"] = {}
+package.loaded["poste-db.buffer.render"] = {}
 
-local init = require("poste-sql.buffer.init")
+local init = require("poste-db.buffer.init")
 
 describe("buffer_init dataset window height", function()
-  -- Ratio (0.4) and floor (4) come from the real poste-sql.constants.
+  -- Ratio (0.4) and floor (4) come from the real poste-db.constants.
   it("restores the ratio share after the editor shrinks", function()
     -- dataset squeezed to 1 row on a 50 → 30 line terminal
     assert.equals(12, init._test.compute_dataset_height(1, 30))
