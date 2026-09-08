@@ -53,6 +53,13 @@ M.SUPPORTED_DIALECTS = {
   clickhouse = true,
 }
 
+--- Dialects whose engine has no transaction semantics. The Rust exec-file
+--- rejects `--mode transaction` for these ("ClickHouse has no transactions"),
+--- so edit commit falls back to per-statement greedy execution there.
+M.DIALECTS_WITHOUT_TRANSACTIONS = {
+  clickhouse = true,
+}
+
 --- Dialect-name aliases that normalize to a base dialect before any handling
 --- (mariadb precedent). Everything downstream — whitelist checks, URL
 --- building, icons, completion, the Rust binary — only ever sees base names,
@@ -91,6 +98,15 @@ end
 function M.is_sql_dialect(dialect)
   if dialect == nil then return true end
   return M.SUPPORTED_DIALECTS[M.normalize_dialect(dialect)] == true
+end
+
+--- True when the dialect can run BEGIN/COMMIT/ROLLBACK. A nil dialect
+--- (defaults behave like postgres elsewhere) counts as transactional.
+--- @param dialect any
+--- @return boolean
+function M.supports_transactions(dialect)
+  if dialect == nil then return true end
+  return not M.DIALECTS_WITHOUT_TRANSACTIONS[M.normalize_dialect(dialect)]
 end
 
 --- Connection URL scheme prefixes → base dialect, ordered, first match wins.

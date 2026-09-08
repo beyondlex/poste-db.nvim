@@ -138,6 +138,7 @@ local function build_response(events, conn, shown_db)
   local failed = 0
   local total_rows = 0
   local total_affected = 0
+  local rolled_back = false
 
   for _, ev in ipairs(events) do
     if ev.type == "result" then
@@ -158,6 +159,9 @@ local function build_response(events, conn, shown_db)
       dialect = ev.dialect or dialect
       connection = ev.connection or connection
       database = ev.database or database
+      -- exec-file sets rolled_back=true when --mode transaction aborted
+      -- with a ROLLBACK after a failed statement.
+      rolled_back = ev.rolled_back == true or rolled_back
     end
   end
 
@@ -190,6 +194,7 @@ local function build_response(events, conn, shown_db)
     dialect = dialect,
   }
   if has_error then body_obj.has_error = true end
+  if rolled_back then body_obj.rolled_back = true end
 
   return {
     status = has_error and "error" or "ok",

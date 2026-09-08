@@ -100,6 +100,31 @@ describe("exec_run", function()
       assert.equals("affected", body.type)
       assert.equals(1, body.total_affected)
     end)
+
+    it("propagates rolled_back from the transaction-mode summary", function()
+      local resp = exec_run.build_response({
+        { type = "result", seq = 1, status = "error", sql = "UPDATE t SET x=1",
+          row_count = 0, affected_rows = vim.NIL, execution_time_ms = 1,
+          error = "constraint failed" },
+        { type = "summary", total_time_ms = 4, dialect = "postgres",
+          connection = "pg://x", database = "app", rolled_back = true },
+      }, "pg://x", "app")
+
+      assert.equals("error", resp.status)
+      assert.is_true(vim.json.decode(resp.body).rolled_back)
+    end)
+
+    it("omits rolled_back when the summary does not carry it", function()
+      local resp = exec_run.build_response({
+        { type = "result", seq = 1, status = "ok", sql = "UPDATE t SET x=1",
+          row_count = 0, affected_rows = 1, execution_time_ms = 1 },
+        { type = "summary", total_time_ms = 4, dialect = "postgres",
+          connection = "pg://x", database = "app" },
+      }, "pg://x", "app")
+
+      assert.equals("ok", resp.status)
+      assert.is_nil(vim.json.decode(resp.body).rolled_back)
+    end)
   end)
 
   describe("detect_use", function()

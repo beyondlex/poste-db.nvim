@@ -1,4 +1,4 @@
---- Dataset edit commit — DML generation, commit, rollback, SQL logging.
+--- Dataset edit commit — DML generation, transactional commit, SQL logging.
 
 local editor = require("poste-db.editor")
 local sql_format = require("poste-db.format")
@@ -233,22 +233,36 @@ function M.commit_edits()
   local start_time = vim.uv.now()
   local exec_run = require("poste-db.exec_run")
 
+  -- Transactional commit: exec-file wraps the batch in BEGIN/COMMIT and
+  -- rolls back on the first failed statement (summary.rolled_back=true).
+  -- Dialects without transaction semantics (clickhouse) keep the old
+  -- per-statement greedy behavior — partial application is possible there.
+  local transactional = const.supports_transactions(dialect)
+  local exec_mode = transactional and "transaction" or "greedy"
+
   local job_id = exec_run.run_async(sql_content, {
     src_file = src_file,
     conn_url = conn_url,
     database = database,
-    mode = "greedy",
+    mode = exec_mode,
   }, {
     on_response = function(resp)
       local elapsed = vim.uv.now() - start_time
 
-      -- Decode inner body to get per-statement errors
       local body = exec.decode_body(resp)
       local errors = exec.collect_statement_errors(body)
+      local kind, detail = exec.commit_outcome(summary, body, errors)
 
-      if resp.has_error or body.has_error or #errors > 0 then
-        local err_msg = exec.build_commit_error_message(body, errors)
-        vim.notify("Commit failed:\n" .. err_msg:sub(1, 500), vim.log.levels.ERROR)
+      if kind == "rolled_back" or kind == "error" then
+        local prefix
+        if kind == "rolled_back" then
+          prefix = "Commit failed — rolled back, no changes applied:\n"
+        else
+          prefix = transactional
+            and "Commit failed — rolled back, no changes applied:\n"
+            or "Commit failed (partial changes may have been applied):\n"
+        end
+        vim.notify(prefix .. detail:sub(1, 500), vim.log.levels.ERROR)
         log.write_log({
           source = "dataset_commit",
           table_name = table_name,
@@ -259,16 +273,24 @@ function M.commit_edits()
           status = "error",
           elapsed_ms = elapsed,
           edit_summary = summary,
-          error_msg = err_msg:sub(1, 500),
+          rolled_back = kind == "rolled_back",
+          error_msg = detail:sub(1, 500),
         })
         return
       end
 
-      -- Success
+      -- Success (or partial: statements succeeded, some matched no rows)
       local affected = exec.count_affected_rows(body)
 
-      vim.notify(string.format("Committed: %d update(s), %d insert(s), %d delete(s) (%d row(s) affected)",
-        summary.updates, summary.inserts, summary.deletes, affected), vim.log.levels.INFO)
+      local msg = string.format("Committed: %d update(s), %d insert(s), %d delete(s) (%d row(s) affected)",
+        summary.updates, summary.inserts, summary.deletes, affected)
+      if kind == "partial" then
+        msg = msg .. " — " .. detail
+      end
+      if not transactional then
+        msg = msg .. " [no transaction support — committed per-statement]"
+      end
+      vim.notify(msg, kind == "partial" and vim.log.levels.WARN or vim.log.levels.INFO)
       log.write_log({
         source = "dataset_commit",
         table_name = table_name,
@@ -280,6 +302,7 @@ function M.commit_edits()
         elapsed_ms = elapsed,
         edit_summary = summary,
         affected_rows = affected,
+        mode = exec_mode,
       })
       -- Clear edit state and refresh dataset in-place
       require("poste-db.editor").reset_edit_state(tab.edit_state)

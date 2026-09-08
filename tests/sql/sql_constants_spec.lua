@@ -68,6 +68,16 @@ describe("constants helpers", function()
     assert.is_false(const.is_sql_dialect("elasticsearch"))
   end)
 
+  it("classifies transactional dialects (clickhouse is not one)", function()
+    assert.is_true(const.supports_transactions("postgres"))
+    assert.is_true(const.supports_transactions("mysql"))
+    assert.is_true(const.supports_transactions("mariadb"))
+    assert.is_true(const.supports_transactions("sqlite"))
+    assert.is_true(const.supports_transactions("mssql"))
+    assert.is_true(const.supports_transactions(nil), "nil dialect defaults like postgres")
+    assert.is_false(const.supports_transactions("clickhouse"))
+  end)
+
   it("normalizes dialect aliases to their base dialect", function()
     assert.equals("mysql", const.normalize_dialect("mariadb"))
     for _, alias in ipairs({ "cockroachdb", "yugabyte", "aurora-postgres", "neon", "supabase", "timescaledb" }) do
