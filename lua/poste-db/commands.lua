@@ -174,6 +174,10 @@ function M.setup()
     require("poste-db.buffer.nav_ui").show_dataset_sql()
   end, { desc = "Show the SQL of the active dataset request in a floating window" })
 
+  vim.api.nvim_create_user_command("PosteDbExplain", function()
+    require("poste-db.explain").explain()
+  end, { desc = "EXPLAIN the statement under the cursor (plan in a float)" })
+
   vim.api.nvim_create_user_command("PosteDbLog", function()
     require("poste-db.log_viewer").toggle()
   end, { desc = "Toggle SQL execution log viewer" })

@@ -24,6 +24,7 @@ M.defaults = {
     sql_source = {
       run = "<CR>",
       show_ddl = "K",
+      explain = "<leader>ep",
       format = "<leader>ff",
       clear_filter = "<leader>cr",
       toggle_db_browser = "<leader>db",

@@ -8,10 +8,12 @@ local DESCRIPTIONS = {
   sql_source = {
     run = "Execute SQL statement(s)",
     show_ddl = "Show DDL / column info",
+    explain = "EXPLAIN statement under cursor (plan float)",
     format = "Format SQL buffer/selection",
     clear_filter = "Clear filter / search",
     toggle_db_browser = "Toggle DB Browser panel",
     trigger_completion = "Trigger SQL completion",
+    ask_ai = "Ask AI about the selection",
     toggle_log = "Toggle execution log",
     help = "Show this help window",
   },

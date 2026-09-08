@@ -58,6 +58,14 @@ function M.ensure_sql_keymaps(buf)
     end, keymap_opts)
   end
 
+  -- <leader>ep: EXPLAIN the statement under the cursor (plan-only form)
+  k = config.get_keymap("sql_source", "explain", "<leader>ep")
+  if k then
+    vim.keymap.set("n", k, function()
+      require("poste-db.explain").explain()
+    end, keymap_opts)
+  end
+
   -- Visual mode: execute selected statements (uses same key as normal run)
   k = config.get_keymap("sql_source", "run", "<CR>")
   if k then
