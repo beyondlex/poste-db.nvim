@@ -53,19 +53,22 @@ end
 --- Broader than sql_runner.is_use_stmt (routing): here the matched name is
 --- *applied* to state.context.database, so quoted and commented forms must
 --- resolve too. Don't unify the two blindly.
+--- Case-insensitive like lex.find_use_database and the Rust side — a lowercase
+--- `use db;` must not fall through to the database as real SQL (a syntax error
+--- on postgres) while the uppercase form switches context.
 --- @param sql string
 --- @return string|nil database_name
 local function detect_use(sql)
   local trimmed = sql:match("^%s*(.*)%s*$") or ""
-  local name = trimmed:match("^USE%s+([%w_]+)%s*;?%s*$")
+  local name = trimmed:match("^[Uu][Ss][Ee]%s+([%w_]+)%s*;?%s*$")
   if not name then
-    name = trimmed:match("^USE%s+[\"`]([%w_]+)[\"`]%s*;?%s*$")
+    name = trimmed:match("^[Uu][Ss][Ee]%s+[\"`]([%w_]+)[\"`]%s*;?%s*$")
   end
   -- `USE db -- comment` / `USE db; -- comment`: the capture is required here
   -- — a groupless pattern makes match() return the whole statement, which
   -- then leaks into database_name / state.context.database.
   if not name then
-    name = trimmed:match("^USE%s+([%w_]+)%s*;?%s*%-%-.*$")
+    name = trimmed:match("^[Uu][Ss][Ee]%s+([%w_]+)%s*;?%s*%-%-.*$")
   end
   return name
 end
@@ -113,11 +116,29 @@ local QUERY_PREFIXES = {
   "SELECT", "WITH", "EXPLAIN", "SHOW", "VALUES", "PRAGMA", "DESCRIBE",
   "TABLE", "DESC", "RETURNING", "CALL", "EXEC",
 }
+
+--- Strip string literals and comments so keyword detection only sees SQL
+--- structure (a `'RETURNING …'` inside a literal must not flip the type).
+local function strip_literals_and_comments(sql)
+  local out = sql:gsub("'[^']*'", "''")
+  out = out:gsub('"[^"]*"', '""')
+  out = out:gsub("%-%-[^\n]*", " ")
+  return out
+end
+
 local function is_query_sql(sql)
   if not sql or sql == "" then return false end
-  local head = sql:gsub("^%s*([A-Za-z]+).*", "%1"):upper()
+  -- DML with RETURNING returns rows (pg/sqlite): classify as a query. The
+  -- word-boundary check keeps a column like `my_returning_col` from matching;
+  -- lowercasing covers the common lowercase style — the old substring find
+  -- misclassified lowercase `update … returning` as affected while flipping
+  -- anything with an uppercase RETURNING literal into a query.
+  local flat = strip_literals_and_comments(sql):lower()
+  if flat:find("%f[%w_]returning%f[^%w_]") then return true end
+  local head = sql:match("^%s*([A-Za-z]+)")
+  head = head and head:upper() or ""
   for _, p in ipairs(QUERY_PREFIXES) do
-    if head == p or sql:find("RETURNING", 1, true) then return true end
+    if head == p then return true end
   end
   return false
 end

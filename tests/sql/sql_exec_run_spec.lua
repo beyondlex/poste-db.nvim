@@ -140,9 +140,41 @@ describe("exec_run", function()
       assert.equals("mydb", exec_run.detect_use("USE mydb; -- switch context"))
     end)
 
+    it("detects lowercase use statements (case-insensitive SQL keywords)", function()
+      -- A lowercase `use db;` used to fall through: detect_use missed it, the
+      -- statement reached the database as real SQL (syntax error on postgres)
+      -- while the uppercase form switched the context.
+      assert.equals("inventory", exec_run.detect_use("use inventory;"))
+      assert.equals("inventory", exec_run.detect_use("Use inventory"))
+      assert.equals("mydb", exec_run.detect_use("use mydb -- switch context"))
+    end)
+
     it("ignores non-USE SQL", function()
       assert.is_nil(exec_run.detect_use("SELECT * FROM t"))
       assert.is_nil(exec_run.detect_use("USE inventory\nSELECT 1"))
+    end)
+  end)
+
+  describe("is_query_sql", function()
+    it("classifies DML with RETURNING (any case) as a query", function()
+      -- pg/sqlite `update … returning x` returns rows; the classification
+      -- used to depend on the keyword being uppercase.
+      assert.is_true(exec_run.is_query_sql("update t set x = 1 returning x"))
+      assert.is_true(exec_run.is_query_sql("UPDATE t SET x = 1 RETURNING x"))
+      assert.is_true(exec_run.is_query_sql("with del as (delete from t returning *) select * from del"))
+    end)
+
+    it("does not let identifiers or literals flip the classification", function()
+      -- word boundaries keep `my_returning_col` from matching, and literals
+      -- are stripped before the keyword scan
+      assert.is_false(exec_run.is_query_sql("update t set note = 'RETURNING user'"))
+      assert.is_false(exec_run.is_query_sql("update t set my_returning_col = 1"))
+      assert.is_false(exec_run.is_query_sql("update t set x = 1 -- RETURNING later"))
+    end)
+
+    it("keeps plain DML as affected", function()
+      assert.is_false(exec_run.is_query_sql("insert into t values (1)"))
+      assert.is_false(exec_run.is_query_sql("  update t set x = 1"))
     end)
   end)
 
