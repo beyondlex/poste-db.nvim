@@ -54,6 +54,7 @@ function M.setup(opts)
   end })
   require("poste-db.autocmds").setup()
   require("poste-db.commands").setup()
+  require("poste-db.tunnel").setup()
   -- Optional AI chat integration (poste-ai.nvim). Silent when absent; the
   -- registration is retried on :PosteDbChat in case poste-ai loads later.
   pcall(function() require("poste-db.ai").register() end)

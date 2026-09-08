@@ -245,8 +245,13 @@ function M.resolve_connection_url(name)
     return nil, ("Connection '%s' has unsupported dialect '%s'"):format(name, tostring(conn.dialect))
   end
 
-  -- Use url field directly if present
+  -- Use url field directly if present. A `tunnel` section cannot apply to a
+  -- raw URL — there is no host/port to rewrite — so fail loudly instead of
+  -- silently bypassing the jump host.
   if conn.url and conn.url ~= "" then
+    if conn.tunnel then
+      return nil, ("Connection '%s': tunnel requires the host/port form, not a raw url"):format(name)
+    end
     return conn.url, nil
   end
 
@@ -265,6 +270,16 @@ function M.resolve_connection_url(name)
   local scheme = conn.dialect
   local host = conn.host or "localhost"
   local port = conn.port or const.default_port(conn.dialect)
+  -- A `tunnel` section forwards host:port through an ssh jump host; the URL
+  -- (and thus the Rust binary) only ever sees the local end of the forward.
+  if conn.tunnel then
+    local tunnel = require("poste-db.tunnel")
+    local local_port, terr = tunnel.ensure(name, conn.tunnel, host, port)
+    if not local_port then
+      return nil, ("Connection '%s': %s"):format(name, terr)
+    end
+    host, port = "127.0.0.1", local_port
+  end
   local db = conn.database or ""
   local auth = ""
   if conn.user and conn.password then
@@ -328,14 +343,15 @@ local dialect_icons = {
 local function format_connection(conn)
   local icon = dialect_icons[conn.dialect] or "❓"
   local name = conn.name or "?"
+  local tunnel_mark = conn.tunnel and " 🔒" or ""
 
   if conn.dialect == "sqlite" then
-    return string.format("%s %s — %s", icon, name, conn.path or "?")
+    return string.format("%s %s — %s%s", icon, name, conn.path or "?", tunnel_mark)
   else
     local host = conn.host or "localhost"
     local port = conn.port or const.default_port(conn.dialect) or 3306
     local db = conn.database or ""
-    return string.format("%s %s — %s:%d/%s", icon, name, host, port, db)
+    return string.format("%s %s — %s:%d/%s%s", icon, name, host, port, db, tunnel_mark)
   end
 end
 
@@ -444,8 +460,36 @@ function M.test_connection()
   end)
 end
 
+--- Test a tunneled connection. The Rust `connection test` subcommand reads
+--- connections.toml directly and cannot route through the Lua-side tunnel,
+--- so probe with a trivial SELECT on the rewritten URL instead.
+function M.run_test_via_tunnel(conn)
+  vim.notify(string.format("Testing '%s' (via tunnel)...", conn.name), vim.log.levels.INFO)
+
+  local url, err = M.resolve_connection_url(conn.name)
+  if not url then
+    vim.notify(string.format("✗ Connection '%s': %s", conn.name, err or "unresolved"), vim.log.levels.ERROR)
+    return
+  end
+
+  local resp = require("poste-db.exec_run").run_sql("SELECT 1", {
+    conn_url = url,
+    database = conn.database or "",
+  })
+  local ok = resp ~= nil and not resp.has_error
+  vim.notify(
+    ok and string.format("✓ Connection '%s' OK (via tunnel)", conn.name)
+      or string.format("✗ Connection '%s' FAILED (via tunnel)", conn.name),
+    ok and vim.log.levels.INFO or vim.log.levels.ERROR)
+end
+
 --- Run the test for a specific connection.
 function M.run_test(conn)
+  if conn.tunnel and conn.dialect ~= "sqlite" then
+    M.run_test_via_tunnel(conn)
+    return
+  end
+
   local search_dir = get_search_dir()
   local cmd = { "connection", "test", conn.name, "--path", search_dir }
 

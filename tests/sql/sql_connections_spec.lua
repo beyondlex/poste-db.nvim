@@ -209,6 +209,90 @@ describe("connections resolve_connection_url", function()
     local url = connections.resolve_connection_url("custom")
     assert.equals("postgres://custom@localhost/mydb", url)
   end)
+
+  describe("with a tunnel section", function()
+    local saved_parse, saved_tunnel
+
+    before_each(function()
+      saved_parse = package.loaded["poste-db.toml"].parse_file
+      saved_tunnel = package.loaded["poste-db.tunnel"]
+      package.loaded["poste-db.tunnel"] = {
+        ensure = function(name, cfg, host, port)
+          return 15432
+        end,
+      }
+    end)
+
+    after_each(function()
+      package.loaded["poste-db.toml"].parse_file = saved_parse
+      package.loaded["poste-db.tunnel"] = saved_tunnel
+    end)
+
+    it("rewrites host/port to the tunnel's local end", function()
+      package.loaded["poste-db.toml"].parse_file = function()
+        return { primary = {
+          dialect = "postgres", host = "db.internal", port = 5432,
+          database = "blog", user = "alice", tunnel = "jump@bastion",
+        } }
+      end
+      assert.equals("postgres://alice@127.0.0.1:15432/blog",
+        connections.resolve_connection_url("primary"))
+    end)
+
+    it("passes the connection host/port to tunnel.ensure", function()
+      local seen
+      package.loaded["poste-db.tunnel"] = {
+        ensure = function(name, cfg, host, port)
+          seen = { name = name, cfg = cfg, host = host, port = port }
+          return 16000
+        end,
+      }
+      package.loaded["poste-db.toml"].parse_file = function()
+        return { primary = {
+          dialect = "mysql", host = "db.internal", port = 3306,
+          database = "shop", user = "root", tunnel = { to = "jump@bastion", port = 2222 },
+        } }
+      end
+      connections.resolve_connection_url("primary")
+      assert.same({ name = "primary", cfg = { to = "jump@bastion", port = 2222 },
+        host = "db.internal", port = 3306 }, seen)
+    end)
+
+    it("propagates tunnel failures", function()
+      package.loaded["poste-db.tunnel"] = {
+        ensure = function() return nil, "ssh tunnel failed" end,
+      }
+      package.loaded["poste-db.toml"].parse_file = function()
+        return { primary = {
+          dialect = "postgres", host = "db.internal", port = 5432,
+          database = "blog", tunnel = "jump@bastion",
+        } }
+      end
+      local url, err = connections.resolve_connection_url("primary")
+      assert.is_nil(url)
+      assert.matches("ssh tunnel failed", err or "")
+    end)
+
+    it("rejects tunnel combined with a raw url field", function()
+      package.loaded["poste-db.toml"].parse_file = function()
+        return { custom = {
+          dialect = "postgres", url = "postgres://custom@localhost/mydb",
+          tunnel = "jump@bastion",
+        } }
+      end
+      local url, err = connections.resolve_connection_url("custom")
+      assert.is_nil(url)
+      assert.matches("host/port form", err or "")
+    end)
+
+    it("ignores tunnel for sqlite file connections", function()
+      package.loaded["poste-db.toml"].parse_file = function()
+        return { localdb = { dialect = "sqlite", path = "/data/test.db", tunnel = "jump@bastion" } }
+      end
+      assert.equals("sqlite:/data/test.db?mode=rwc",
+        connections.resolve_connection_url("localdb"))
+    end)
+  end)
 end)
 
 describe("connections get_connection_config", function()

@@ -178,6 +178,36 @@ function M.setup()
     require("poste-db.explain").explain()
   end, { desc = "EXPLAIN the statement under the cursor (plan in a float)" })
 
+  vim.api.nvim_create_user_command("PosteDbTunnel", function(args)
+    local tunnel = require("poste-db.tunnel")
+    local name = args.args:match("%S+")
+    if name == "--all" then
+      local n = tunnel.stop_all()
+      vim.notify(n > 0 and string.format("Stopped %d tunnel(s)", n) or "No active tunnels",
+        vim.log.levels.INFO)
+    elseif name and name ~= "" then
+      vim.notify(tunnel.stop(name) and string.format("Tunnel stopped: %s", name)
+        or string.format("No active tunnel: %s", name), vim.log.levels.INFO)
+    else
+      local list = tunnel.status_list()
+      if #list == 0 then
+        vim.notify("No active tunnels", vim.log.levels.INFO)
+        return
+      end
+      local lines = { "Active SSH tunnels:" }
+      for _, t in ipairs(list) do
+        lines[#lines + 1] = ("  %s — 127.0.0.1:%d → %s"):format(t.name, t.port, t.target)
+      end
+      vim.notify(table.concat(lines, "\n"), vim.log.levels.INFO)
+    end
+  end, { nargs = "?", complete = function()
+    local out = { "--all" }
+    for _, t in ipairs(require("poste-db.tunnel").status_list()) do
+      out[#out + 1] = t.name
+    end
+    return out
+  end, desc = "List or stop SSH tunnels (:PosteDbTunnel [name|--all])" })
+
   vim.api.nvim_create_user_command("PosteDbLog", function()
     require("poste-db.log_viewer").toggle()
   end, { desc = "Toggle SQL execution log viewer" })
