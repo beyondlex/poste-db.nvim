@@ -1,0 +1,46 @@
+<clickhouse>
+    <!-- Playground: idle server burned CPU in a profiler/trace_log self-feed
+         loop. Global profiler walked all ~240 threads every 10s; every sample
+         was symbolized and written to trace_log, flushing/merging tiny parts
+         continuously. Fix: disable global sampling, skip symbolization, raise
+         memory-step thresholds, and keep per-query sampling at 1s. -->
+    <profiles>
+        <default>
+            <query_profiler_real_time_period_ns>1000000000</query_profiler_real_time_period_ns>
+            <query_profiler_cpu_time_period_ns>1000000000</query_profiler_cpu_time_period_ns>
+        </default>
+    </profiles>
+    <text_log>
+        <level>error</level>
+    </text_log>
+    <trace_log>
+        <flush_interval_milliseconds>60000</flush_interval_milliseconds>
+        <symbolize>false</symbolize>
+    </trace_log>
+    <metric_log>
+        <flush_interval_milliseconds>60000</flush_interval_milliseconds>
+    </metric_log>
+    <asynchronous_metric_log>
+        <flush_interval_milliseconds>60000</flush_interval_milliseconds>
+    </asynchronous_metric_log>
+    <query_log>
+        <flush_interval_milliseconds>60000</flush_interval_milliseconds>
+    </query_log>
+    <query_thread_log>
+        <flush_interval_milliseconds>60000</flush_interval_milliseconds>
+    </query_thread_log>
+    <query_views_log>
+        <flush_interval_milliseconds>60000</flush_interval_milliseconds>
+    </query_views_log>
+    <part_log>
+        <flush_interval_milliseconds>60000</flush_interval_milliseconds>
+    </part_log>
+    <processors_profile_log>
+        <flush_interval_milliseconds>60000</flush_interval_milliseconds>
+    </processors_profile_log>
+    <asynchronous_metrics_update_period_s>60</asynchronous_metrics_update_period_s>
+    <background_schedule_pool_size>16</background_schedule_pool_size>
+    <global_profiler_real_time_period_ns>0</global_profiler_real_time_period_ns>
+    <global_profiler_cpu_time_period_ns>0</global_profiler_cpu_time_period_ns>
+    <total_memory_profiler_step>1073741824</total_memory_profiler_step>
+</clickhouse>
