@@ -11,9 +11,10 @@ services:
       - ./init/postgres:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U poste"]
-      interval: 2s
-      timeout: 3s
-      retries: 10
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
   mysql:
     image: mysql:8.0
@@ -26,9 +27,10 @@ services:
       - ./init/mysql:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-pposte_test"]
-      interval: 2s
-      timeout: 3s
-      retries: 10
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
   mariadb:
     image: mariadb:lts-ubi10
@@ -41,9 +43,10 @@ services:
       - ./init/mariadb:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-pposte_test"]
-      interval: 2s
-      timeout: 3s
-      retries: 10
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
   mssql:
     image: mcr.microsoft.com/mssql/server:2022-latest
@@ -65,10 +68,10 @@ services:
     healthcheck:
       # -C trusts the container's self-signed cert (required by mssql-tools18)
       test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Poste_test_2022' -Q 'SELECT 1' -C -b || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 120s
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
   clickhouse:
     image: clickhouse/clickhouse-server:latest
@@ -85,9 +88,10 @@ services:
       - "19000:9000"
     volumes:
       - ./init/clickhouse:/docker-entrypoint-initdb.d:ro
+      - ./config/clickhouse:/etc/clickhouse-server/config.d:ro
     healthcheck:
       test: ["CMD-SHELL", "clickhouse-client --user default --password poste_test --query 'SELECT 1' >/dev/null 2>&1 || exit 1"]
-      interval: 5s
-      timeout: 5s
-      retries: 12
-      start_period: 30s
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
