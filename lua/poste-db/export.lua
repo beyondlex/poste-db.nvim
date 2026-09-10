@@ -110,7 +110,9 @@ end
 
 local function csv_escape(v)
   local s = export_val(v)
-  if s:find('["\n,]') then
+  -- \r must quote too: a bare CR inside a field breaks the record
+  -- structure just like a bare \n does.
+  if s:find('["\r\n,]') then
     return '"' .. s:gsub('"', '""') .. '"'
   end
   return s
@@ -141,13 +143,13 @@ local function format_tsv(data_result)
   local lines = {}
   local header = {}
   for _, col in ipairs(cols) do
-    table.insert(header, (tostring(col.name):gsub("[\t\n]", " ")))
+    table.insert(header, (tostring(col.name):gsub("[\t\r\n]", " ")))
   end
   table.insert(lines, table.concat(header, "\t"))
   for _, row in ipairs(rows) do
     local vals = {}
     for i = 1, #cols do
-      table.insert(vals, (export_val(row[i]):gsub("[\t\n]", " ")))
+      table.insert(vals, (export_val(row[i]):gsub("[\t\r\n]", " ")))
     end
     table.insert(lines, table.concat(vals, "\t"))
   end

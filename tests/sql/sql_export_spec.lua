@@ -38,6 +38,13 @@ describe("export format_csv", function()
     local out = export._test.format_csv(data_result({ rows = { { nil, "", nil } } }))
     assert.equals("id,name,bio\n,,", out)
   end)
+
+  it("quotes fields containing a bare carriage return", function()
+    -- a bare CR inside an unquoted field corrupts the record structure,
+    -- same as a bare newline would
+    local out = export._test.format_csv(data_result({ rows = { { "a\rb" } } }))
+    assert.equals('id,name,bio\n"a\rb",,', out)
+  end)
 end)
 
 describe("export format_tsv", function()
@@ -46,9 +53,9 @@ describe("export format_tsv", function()
     assert.equals("a\tb\nx\t5", out)
   end)
 
-  it("replaces tabs and newlines in cell values with spaces", function()
-    local out = export._test.format_tsv(data_result({ columns = { { name = "a" } }, rows = { { "l1\nl2" }, { "t\tab" } } }))
-    assert.equals("a\nl1 l2\nt ab", out)
+  it("replaces tabs, newlines and carriage returns in cells with spaces", function()
+    local out = export._test.format_tsv(data_result({ columns = { { name = "a" } }, rows = { { "l1\nl2" }, { "t\tab" }, { "c\rd" } } }))
+    assert.equals("a\nl1 l2\nt ab\nc d", out)
   end)
 end)
 
