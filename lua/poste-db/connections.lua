@@ -203,15 +203,23 @@ function M.get_connection_config(name)
     local toml = require("poste-db.toml")
     local parsed, err = toml.parse_file(config_path)
     if not parsed then
+      -- Cache the failure (keyed on mtime like the success path): this runs
+      -- from the statusline and completion on every redraw/keystroke, and a
+      -- broken file would otherwise re-read, re-parse and re-log each time
+      -- until it is fixed.
       -- state.log, not poste-db.log: this module is intentionally
       -- stub-isolated in tests and must not grow module dependencies
       state.log("WARN", "connections.toml parse failed: " .. tostring(err))
+      _config_cache = false
+      _config_cache_path = config_path
+      _config_cache_mtime = mtime
       return nil
     end
     _config_cache = parsed
     _config_cache_path = config_path
     _config_cache_mtime = mtime
   end
+  if _config_cache == false then return nil end
   local conn = _config_cache[name]
   if not conn then return nil end
   conn = apply_env(conn, M.get_env_vars(search_dir))
@@ -413,7 +421,10 @@ function M.apply_connection(conn)
   end
 
   if not found then
-    -- Insert at the top of the file (before first ### or at line 1)
+    -- No existing directive: insert before the first ### section marker, or
+    -- append after the last line when the file has no markers (tested
+    -- behavior — appending keeps the user's SQL untouched and directive
+    -- extraction scans the whole buffer anyway).
     local insert_line = 1
     for i, line in ipairs(lines) do
       if const.is_section_marker(line) then

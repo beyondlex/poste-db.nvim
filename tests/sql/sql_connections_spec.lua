@@ -324,6 +324,19 @@ describe("connections get_connection_config", function()
     assert.is_nil(connections.get_connection_config("missing"))
   end)
 
+  it("caches parse failures until the file changes", function()
+    -- get_connection_config runs from the statusline on every redraw; a
+    -- broken connections.toml must not re-read + re-parse + re-log per call.
+    local calls = 0
+    package.loaded["poste-db.toml"].parse_file = function()
+      calls = calls + 1
+      return nil, "parse error"
+    end
+    assert.is_nil(connections.get_connection_config("primary"))
+    assert.is_nil(connections.get_connection_config("primary"))
+    assert.equals(1, calls, "second call must be served from the failure cache")
+  end)
+
   it("returns connection config when found", function()
     package.loaded["poste-db.toml"].parse_file = function()
       return { primary = { dialect = "postgres", host = "localhost", port = 5432, database = "blog", user = "alice" } }
