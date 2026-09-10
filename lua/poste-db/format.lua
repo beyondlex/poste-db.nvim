@@ -790,10 +790,22 @@ local function wrap_text(text, width)
   if not text or #text == 0 then return {} end
   local lines = {}
   for line in (text .. "\n"):gmatch("(.-)\n") do
-    while #line > width do
-      local split = line:sub(1, width)
-      line = line:sub(width + 1)
-      table.insert(lines, split)
+    -- Cut on character boundaries by display width. The old byte-based
+    -- `line:sub(1, width)` split multibyte characters in half and put
+    -- invalid UTF-8 into the buffer (error messages routinely contain
+    -- non-ASCII table/column names).
+    while vim.fn.strdisplaywidth(line) > width do
+      local fit, w = 0, 0
+      local nchars = vim.fn.strchars(line)
+      for i = 0, nchars - 1 do
+        local cw = vim.fn.strdisplaywidth(vim.fn.strcharpart(line, i, 1))
+        if w + cw > width then break end
+        w = w + cw
+        fit = i + 1
+      end
+      if fit == 0 then fit = 1 end -- single char wider than the line
+      table.insert(lines, vim.fn.strcharpart(line, 0, fit))
+      line = vim.fn.strcharpart(line, fit)
     end
     table.insert(lines, line)
   end
@@ -815,6 +827,8 @@ end
 --- Exposed for tests.
 M._test = {
   format_datetime_local = format_datetime_local,
+  wrap_text = wrap_text,
+  format_error = M.format_error,
 }
 
 return M

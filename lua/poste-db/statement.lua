@@ -420,7 +420,10 @@ function M.extract_table_name(sql)
   local join_count = 0
   local idx = 1
   while true do
-    local pos = upper:find("JOIN", idx, { plain = true })
+    -- plain find: LuaJIT coerces any non-nil 4th arg (e.g. the table
+    -- {plain=true} this used to pass) to truthy, so behavior was
+    -- accidentally right — make it read as the plain find it is.
+    local pos = upper:find("JOIN", idx, true)
     if not pos then break end
     local before = upper:sub(pos - 1, pos - 1)
     if before == "" or before == " " or before == "\n" or before == "\t" then

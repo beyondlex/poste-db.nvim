@@ -78,3 +78,36 @@ describe("format translated-SQL footnote", function()
     end, { predicate = true }))
   end)
 end)
+
+describe("format wrap_text (error box)", function()
+  it("wraps ASCII at the width boundary", function()
+    local wrapped = sql_format._test.wrap_text(string.rep("a", 200), 78)
+    assert.equals(3, #wrapped)
+    assert.equals(78, #wrapped[1])
+    assert.equals(78, #wrapped[2])
+    assert.equals(string.rep("a", 44), wrapped[3])
+  end)
+
+  it("never splits a multibyte character (valid UTF-8 only)", function()
+    -- CJK chars are 3 bytes / 2 display columns: a byte cut at width 78
+    -- landed mid-character and put invalid UTF-8 into the buffer.
+    local cjk = string.rep("数", 60) -- 120 display columns, 180 bytes
+    local wrapped = sql_format._test.wrap_text(cjk, 78)
+    assert.is_true(#wrapped >= 2)
+    for _, l in ipairs(wrapped) do
+      assert.equals(cjk:sub(1, 1), l:sub(1, #cjk:sub(1, 1)), "line kept its character")
+      assert.equals(0, vim.fn.strchars(l) - vim.fn.strcharlen(l), "line is char-aligned")
+    end
+    local recombined = table.concat(wrapped)
+    assert.equals(cjk, recombined)
+  end)
+
+  it("wraps a mixed ASCII/CJK error message without corrupting it", function()
+    local err = "relation 「ユーザーマスタ」 does not exist 数" .. string.rep("x", 100)
+    local wrapped = sql_format._test.wrap_text(err, 78)
+    assert.equals(err, table.concat(wrapped))
+    for _, l in ipairs(wrapped) do
+      assert.is_true(vim.fn.strdisplaywidth(l) <= 78)
+    end
+  end)
+end)
