@@ -56,12 +56,14 @@ local function parse_value(v)
   if v == "false" then return false end
   local n = tonumber(v)
   if n then return n end
+  -- NB: the error must not quote the value — connections.toml values are
+  -- frequently secrets, and the message goes to the log file.
   if v:sub(1, 1) == '"' then
-    if v:sub(-1, -1) ~= '"' then return nil, "Unclosed string: " .. v end
+    if v:sub(-1, -1) ~= '"' then return nil, "Unclosed double-quoted string" end
     return unescape_basic(v:sub(2, -2))
   end
   if v:sub(1, 1) == "'" then
-    if v:sub(-1, -1) ~= "'" then return nil, "Unclosed string: " .. v end
+    if v:sub(-1, -1) ~= "'" then return nil, "Unclosed single-quoted string" end
     return v:sub(2, -2)
   end
   return v
