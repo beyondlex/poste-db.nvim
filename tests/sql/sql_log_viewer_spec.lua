@@ -39,6 +39,44 @@ describe("log viewer _preview_sql", function()
   it("shows first line with ellipsis for multi-line SQL", function()
     assert.equals("a…", log._preview_sql("a\nb", 50))
   end)
+
+  it("never splits a multi-byte character (CJK preview)", function()
+    -- 15 CJK chars = 45 bytes / 30 display columns. The byte-slicing version
+    -- cut at byte 9 and emitted half a character.
+    local cjk = string.rep("数", 15)
+    -- budget 10 columns: 4 chars (8 cols) + "…" (1 col), next char needs 2
+    assert.equals(string.rep("数", 4) .. "…", log._preview_sql(cjk, 10))
+  end)
+end)
+
+describe("log viewer display-width helpers", function()
+  it("_fit_width keeps short text unchanged", function()
+    assert.equals("abc", log._fit_width("abc", 10))
+  end)
+
+  it("_fit_width truncates CJK on a char boundary with an ellipsis", function()
+    local cjk = string.rep("数", 20) -- 40 display columns
+    local result = log._fit_width(cjk, 10)
+    assert.equals(string.rep("数", 4) .. "…", result)
+    assert.equals(9, vim.fn.strdisplaywidth(result))
+  end)
+
+  it("_pad_table pads ASCII to the column width", function()
+    assert.equals("users     ", log._pad_table("users", 10))
+  end)
+
+  it("_pad_table truncates a CJK name on a char boundary", function()
+    local cjk = string.rep("数", 15) -- 30 columns / 45 bytes
+    local out = log._pad_table(cjk, 10)
+    -- 4 chars (8 cols) + "…" (1 col) — one column reserved for the ellipsis
+    assert.equals(string.rep("数", 4) .. "…", out)
+    assert.equals(9, vim.fn.strdisplaywidth(out))
+  end)
+
+  it("_pad_table keeps a CJK name that fits and pads with spaces", function()
+    -- 3 chars = 6 columns; width 10 → 4 trailing spaces
+    assert.equals(string.rep("数", 3) .. "    ", log._pad_table(string.rep("数", 3), 10))
+  end)
 end)
 
 describe("log viewer _filter_matches", function()

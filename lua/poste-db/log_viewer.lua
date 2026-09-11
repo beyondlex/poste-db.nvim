@@ -65,18 +65,37 @@ local function format_time(ts)
 end
 M._format_time = format_time
 
+--- Truncate to a display-width budget on a character boundary, marking the
+--- cut with an ellipsis. Byte-based `sub` split multibyte characters in half
+--- and wrote invalid UTF-8 into the summary buffer. Defined BEFORE its first
+--- caller (preview_sql): a local declared after the call site resolves to a
+--- nil global there (see AGENTS.md).
+local function fit_width(s, max_w)
+  local dw = vim.fn.strdisplaywidth(s)
+  if dw <= max_w then return s end
+  local width, fit = 0, 0
+  local nchars = vim.fn.strchars(s)
+  for i = 0, nchars - 1 do
+    local cw = vim.fn.strdisplaywidth(vim.fn.strcharpart(s, i, 1))
+    if width + cw > max_w - 1 then break end -- reserve one column for "…"
+    width = width + cw
+    fit = fit + 1
+  end
+  return vim.fn.strcharpart(s, 0, fit) .. "…"
+end
+
 local function preview_sql(sql, max_len)
   if not sql or sql == "" then return "" end
   -- Show only the first line for multi-line SQL
   local first_line = sql:match("^(.-)\n")
   if first_line then
     first_line = first_line:gsub("%s+$", "")
-    if #first_line <= max_len - 1 then
+    if vim.fn.strdisplaywidth(first_line) <= max_len - 1 then
       return first_line .. "…"
     end
   end
-  if #sql <= max_len then return sql end
-  return sql:sub(1, max_len - 1) .. "…"
+  if vim.fn.strdisplaywidth(sql) <= max_len then return sql end
+  return fit_width(sql, max_len)
 end
 M._preview_sql = preview_sql
 
@@ -181,14 +200,38 @@ local function compute_table_width()
   local max_w = 0
   for _, entry in ipairs(entries) do
     local db = entry_database(entry) or entry_table(entry) or "?"
-    max_w = math.max(max_w, #db)
+    -- display width, not byte length: CJK names count 2 columns per char
+    max_w = math.max(max_w, vim.fn.strdisplaywidth(db))
   end
   TBL_W = math.min(math.max(max_w, 4), 25)
 end
 
 local function pad_table(s)
-  if #s > TBL_W then return s:sub(1, TBL_W - 1) .. "…" end
-  return s .. string.rep(" ", TBL_W - #s)
+  local dw = vim.fn.strdisplaywidth(s)
+  if dw > TBL_W then return fit_width(s, TBL_W) end
+  return s .. string.rep(" ", TBL_W - dw)
+end
+
+--- Summary-line segments, shared by render and apply_highlights so the
+--- highlight byte offsets derive from the real parts. Fixed arithmetic used
+--- to assume a 15-byte timestamp (actual: 14) and a db segment of exactly
+--- TBL_W bytes — both wrong once a name has multibyte characters, since
+--- pad_table pads to display width, not bytes.
+local function summary_parts(entry)
+  local time = format_time(entry.ts)
+  local db = pad_table(entry_database(entry) or entry_table(entry) or "?")
+  local ms = string.format("%5s", tostring(entry.elapsed_ms or 0) .. "ms")
+  local src_tag = string.format("%-6s", entry.source == "dataset_commit" and "commit" or entry.source == "import" and "import" or "exec")
+  local display_sql = clean_sql(entry.sql)
+  local sql = preview_sql(display_sql, 70)
+  return { "  ", time, "  ", db, "  ", ms, "  ", src_tag, " ", sql }
+end
+
+--- Byte range [start, end) of part `n` (1-based) in the concatenated summary.
+local function part_range(parts, n)
+  local start = 0
+  for i = 1, n - 1 do start = start + #parts[i] end
+  return start, start + #parts[n]
 end
 
 local function apply_highlights(line_idx, entry, _)
@@ -203,21 +246,27 @@ local function apply_highlights(line_idx, entry, _)
     })
   end
 
-  -- Timestamp cols 2-17 (gray)
-  vim.api.nvim_buf_set_extmark(buf, ns, line_idx - 1, 2, {
-    end_col = 17, hl_group = "PosteDbDatasetMetaDim", priority = 150,
+  local parts = summary_parts(entry)
+  local time_s, time_e = part_range(parts, 2)
+  local db_s, db_e = part_range(parts, 4)
+  local ms_s, ms_e = part_range(parts, 6)
+  local src_s, src_e = part_range(parts, 8)
+
+  -- Timestamp (gray)
+  vim.api.nvim_buf_set_extmark(buf, ns, line_idx - 1, time_s, {
+    end_col = time_e, hl_group = "PosteDbDatasetMetaDim", priority = 150,
   })
-  -- Table name cols 19 to 19+TBL_W
-  vim.api.nvim_buf_set_extmark(buf, ns, line_idx - 1, 18, {
-    end_col = 18 + TBL_W, hl_group = "PosteDbDatasetMeta", priority = 150,
+  -- Table/db name
+  vim.api.nvim_buf_set_extmark(buf, ns, line_idx - 1, db_s, {
+    end_col = db_e, hl_group = "PosteDbDatasetMeta", priority = 150,
   })
-  -- Duration cols 21+TBL_W to 26+TBL_W (yellow)
-  vim.api.nvim_buf_set_extmark(buf, ns, line_idx - 1, 20 + TBL_W, {
-    end_col = 25 + TBL_W, hl_group = "PosteDbDatasetWinbarModified", priority = 150,
+  -- Duration (yellow)
+  vim.api.nvim_buf_set_extmark(buf, ns, line_idx - 1, ms_s, {
+    end_col = ms_e, hl_group = "PosteDbDatasetWinbarModified", priority = 150,
   })
-  -- Source tag cols 28+TBL_W to 34+TBL_W (gray)
-  vim.api.nvim_buf_set_extmark(buf, ns, line_idx - 1, 27 + TBL_W, {
-    end_col = 33 + TBL_W, hl_group = "PosteDbDatasetMetaDim", priority = 150,
+  -- Source tag (gray)
+  vim.api.nvim_buf_set_extmark(buf, ns, line_idx - 1, src_s, {
+    end_col = src_e, hl_group = "PosteDbDatasetMetaDim", priority = 150,
   })
 
   -- Filter word highlight
@@ -366,14 +415,7 @@ local function build_lines()
   local line_idx = 1
   for _, idx in ipairs(filtered) do
     local entry = entries[idx]
-    local time = format_time(entry.ts)
-    local db = pad_table(entry_database(entry) or entry_table(entry) or "?")
-    local ms = string.format("%5s", tostring(entry.elapsed_ms or 0) .. "ms")
-    local src_tag = string.format("%-6s", entry.source == "dataset_commit" and "commit" or entry.source == "import" and "import" or "exec")
-    local display_sql = clean_sql(entry.sql)
-    local sql = preview_sql(display_sql, 70)
-    local parts = { "  ", time, "  ", db, "  ", ms, "  ", src_tag, " ", sql }
-    local summary = table.concat(parts)
+    local summary = table.concat(summary_parts(entry))
     table.insert(lines, summary)
     line_idx = line_idx + 1
     if expanded[idx] then
@@ -592,6 +634,19 @@ function M.toggle()
   vim.keymap.set("n", "r", M.re_run, opts)
   vim.keymap.set("n", "y", M.yank_sql, opts)
   vim.keymap.set("n", "C", M.clear_logs, opts)
+end
+
+--- Test hooks for the display-width helpers. Kept at the bottom of the file:
+--- a hook defined before its helper resolves the helper's local name as a
+--- nil global (AGENTS.md forward-declaration pitfall).
+function M._fit_width(s, max_w)
+  return fit_width(s, max_w)
+end
+
+--- Pad/truncate to the given width (defaults to the computed TBL_W).
+function M._pad_table(s, width)
+  if width then TBL_W = width end
+  return pad_table(s)
 end
 
 return M
