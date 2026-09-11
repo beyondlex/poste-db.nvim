@@ -18,6 +18,7 @@ local function cache_key(scope)
 end
 
 local introspect = require("poste-db.ai.introspect").run
+local util = require("poste-db.util")
 
 local function pattern_esc(s)
   return (s:lower():gsub("[%W]", "%%%1"))
@@ -70,7 +71,7 @@ local function render(entry, expanded, scope)
         md = md:gsub(vim.pesc(entry.columns[t.name]) .. "\n", short:gsub("%%", "%%%%") .. "\n", 1)
       end
     end
-    if #md > MAX_CHARS then md = md:sub(1, MAX_CHARS) .. "\n(truncated)" end
+    if #md > MAX_CHARS then md = util.utf8_safe_cut(md, MAX_CHARS) .. "\n(truncated)" end
   end
   return md
 end

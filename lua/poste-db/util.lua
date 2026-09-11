@@ -31,4 +31,19 @@ function M.truncate_displaywidth(s, max_dw)
   return s:sub(1, i - 1)
 end
 
+--- Truncate at a BYTE budget without splitting a UTF-8 character: the cut
+--- point backs up over continuation bytes. (No ellipsis appended.) A plain
+--- `sub` cut emitted invalid UTF-8 whenever the budget landed inside a CJK
+--- character — schema summaries and AI context blocks are routinely CJK.
+function M.utf8_safe_cut(s, max_bytes)
+  if not s or #s <= max_bytes then return s or "" end
+  local cut = max_bytes
+  while cut > 0 do
+    local b = s:byte(cut + 1)
+    if not b or b < 0x80 or b >= 0xC0 then break end -- not a continuation byte
+    cut = cut - 1
+  end
+  return s:sub(1, cut)
+end
+
 return M

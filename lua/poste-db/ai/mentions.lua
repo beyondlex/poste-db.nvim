@@ -155,7 +155,8 @@ function M.resolve(ref, cb)
           local md = header
           for _, l in ipairs(lines) do md = md .. l .. "\n" end
           if #md > MAX_OUTPUT_CHARS then
-            md = md:sub(1, MAX_OUTPUT_CHARS) .. "\n… (schema truncated)"
+            md = require("poste-db.util").utf8_safe_cut(md, MAX_OUTPUT_CHARS)
+              .. "\n… (schema truncated)"
           end
           cb(md, nil)
         end
