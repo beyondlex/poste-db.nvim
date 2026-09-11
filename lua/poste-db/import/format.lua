@@ -82,10 +82,12 @@ function M.parse_tsv(text)
   local raw_lines = vim.split(text, "\n")
   local rows = {}
   for _, raw in ipairs(raw_lines) do
-    local trimmed = raw:gsub("^%s+", ""):gsub("%s+$", "")
-    if trimmed ~= "" then
-      local row = vim.split(trimmed, "\t")
-      table.insert(rows, row)
+    -- Split the RAW line: a leading/trailing empty cell ("a\tb\t") is real
+    -- data, and trimming the line used to delete that column — a spurious
+    -- "expected N columns" error, or silent column misalignment when every
+    -- row shared the empty edge cell. Only blank lines are skipped.
+    if raw:match("^%s*$") == nil then
+      table.insert(rows, vim.split(raw, "\t"))
     end
   end
 

@@ -12,11 +12,15 @@ function M.coerce_value(str, col_type)
 
   if s == "" then return nil end
 
-  if s == "NULL" or s == "(NULL)" then return vim.NIL end
+  -- NULL/true/false literals match case-insensitively: CSV exports write
+  -- NULL (databases), null (JSON tools), True/False (Python csv), and only
+  -- the all-lower and all-upper spellings used to coerce.
+  local lower = s:lower()
+  if lower == "null" or lower == "(null)" then return vim.NIL end
 
   local ctype = (col_type or ""):lower()
-  if s == "true" or s == "TRUE" then return true end
-  if s == "false" or s == "FALSE" then return false end
+  if lower == "true" then return true end
+  if lower == "false" then return false end
   if ctype == "boolean" or ctype == "bool" then
     if s == "1" then return true end
     if s == "0" then return false end

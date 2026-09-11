@@ -87,6 +87,16 @@ describe("TSV parsing", function()
     assert.is_nil(result)
     assert.is_not_nil(err)
   end)
+
+  it("keeps empty leading/trailing cells as columns", function()
+    -- The old line-level trim deleted the empty edge columns, so these rows
+    -- failed with "expected 3 columns, got 2" (or silently misaligned when
+    -- every row shared the empty cell).
+    local tsv = "a\tb\tc\n\tx\ty\n1\t2\t"
+    local result = import._parse_tsv_for_test(tsv)
+    assert.same({ "", "x", "y" }, result.rows[1])
+    assert.same({ "1", "2", "" }, result.rows[2])
+  end)
 end)
 
 describe("JSON parsing", function()

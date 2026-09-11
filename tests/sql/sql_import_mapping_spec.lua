@@ -14,6 +14,20 @@ describe("import mapping coerce_value", function()
     assert.equals("NULLish", mapping.coerce_value("NULLish", "text"), "prefix is not NULL")
   end)
 
+  it("maps NULL/boolean spellings case-insensitively", function()
+    -- CSV producers disagree on case: null (JSON tools), Null (report
+    -- exports), True/False (Python csv). Only the all-lower and all-upper
+    -- spellings used to coerce.
+    assert.equals(vim.NIL, mapping.coerce_value("null", "int"))
+    assert.equals(vim.NIL, mapping.coerce_value("Null", "text"))
+    assert.equals(vim.NIL, mapping.coerce_value("(null)", "text"))
+    assert.is_true(mapping.coerce_value("True", "varchar"))
+    assert.is_true(mapping.coerce_value("TRUE", "varchar"))
+    assert.is_false(mapping.coerce_value("False", "int"))
+    assert.equals("true-ish", mapping.coerce_value("true-ish", "text"), "prefix is not a boolean")
+    assert.equals("nullify", mapping.coerce_value("nullify", "text"), "prefix is not NULL")
+  end)
+
   it("coerces booleans before numeric parsing", function()
     assert.is_true(mapping.coerce_value("true", "varchar"))
     assert.is_false(mapping.coerce_value("FALSE", "int"))
