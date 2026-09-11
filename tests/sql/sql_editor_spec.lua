@@ -974,3 +974,28 @@ describe("edit guards", function()
     assert.is_nil(editor.pending_changes_text(es))
   end)
 end)
+
+describe("has_join", function()
+  it("detects real joins in every spelling", function()
+    assert.is_true(editor.has_join("SELECT * FROM a JOIN b ON a.id = b.id"))
+    assert.is_true(editor.has_join("SELECT * FROM a LEFT JOIN b USING (id)"))
+    assert.is_true(editor.has_join("select * from a inner join b on a.x = b.x"))
+    assert.is_true(editor.has_join("SELECT * FROM a\n  CROSS JOIN b"))
+  end)
+
+  it("does not match column names containing join", function()
+    -- join_date/joined_at contain the substring; the bare find blocked
+    -- editing with a bogus multi-table warning
+    assert.is_false(editor.has_join("SELECT id, join_date, joined_at FROM users"))
+    assert.is_false(editor.has_join("SELECT adjoining_room FROM rooms"))
+  end)
+
+  it("does not match the word inside string literals", function()
+    assert.is_false(editor.has_join("SELECT * FROM events WHERE note = 'join pending'"))
+    assert.is_false(editor.has_join('SELECT * FROM events WHERE tag = "left join"'))
+  end)
+
+  it("handles nil", function()
+    assert.is_false(editor.has_join(nil))
+  end)
+end)

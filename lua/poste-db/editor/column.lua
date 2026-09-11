@@ -10,30 +10,6 @@ local function get_state()
 end
 
 ---------------------------------------------------------------------------
--- JOIN detection
----------------------------------------------------------------------------
-
---- Check if the original SQL contains JOIN (multi-table query).
---- @param sql string Original SQL text
---- @return boolean has_join
-function M.has_join(sql)
-  if not sql or sql == "" then return false end
-  local upper = sql:upper()
-  local count = 0
-  local idx = 1
-  while true do
-    local pos = upper:find("JOIN", idx, true)
-    if not pos then break end
-    local before = pos > 1 and upper:sub(pos - 1, pos - 1) or " "
-    if before == " " or before == "\n" or before == "\t" or before == "" then
-      count = count + 1
-    end
-    idx = pos + 4
-  end
-  return count >= 1
-end
-
----------------------------------------------------------------------------
 -- Metadata query templates
 ---------------------------------------------------------------------------
 

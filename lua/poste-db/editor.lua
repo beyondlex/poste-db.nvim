@@ -37,7 +37,9 @@ M.format_json_input        = cell.format_json_input
 M.parse_json_input         = cell.parse_json_input
 
 -- Re-export column functions ------------------------------------------------
-M.has_join                 = column.has_join
+-- has_join comes from cell.lua: the live edit guard (nav.lua) uses the cell
+-- implementation, and column.lua carried a divergent weaker copy.
+M.has_join                 = cell.has_join
 M.ensure_primary_key       = column.ensure_primary_key
 M.clear_pk_cache           = column.clear_pk_cache
 
