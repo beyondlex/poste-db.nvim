@@ -73,7 +73,6 @@ function M.setup()
   vim.api.nvim_set_hl(0, "PosteDbDatasetInsertHint", { fg = dark and 0xe5c07b or 0x0550ae, bold = true, underline = true })
   vim.api.nvim_set_hl(0, "PosteDbHistorySQLKeyword", { fg = fg_of("Keyword", dark and 0xc586c0 or 0x8250df), bold = true })
   vim.api.nvim_set_hl(0, "PosteDbHistoryFilter", { fg = fg_of("DiagnosticWarn", dark and 0xd7d700 or 0x9a7d00), bold = true })
-  vim.api.nvim_set_hl(0, "PosteDbHistoryDetailBg", { bg = dark and 0x1a3a1a or 0xe8f5e9 })
 
   local completion_kind_links = {
     Text = "String",
@@ -107,7 +106,6 @@ function M.setup()
     "PosteDbDatasetWinbarAdded", "PosteDbDatasetWinbarModified", "PosteDbDatasetWinbarDeleted",
     "PosteDbMissingWhere",
     "PosteDbHistorySuccess", "PosteDbHistoryError", "PosteDbHistorySQL", "PosteDbHistorySQLKeyword", "PosteDbHistoryFilter",
-    "PosteDbHistoryDetailBg",
     "PosteDbDatasetTotal", "PosteDbDatasetSucceeded", "PosteDbDatasetFailed", "PosteDbDatasetConstant", "PosteDbDatasetFilepath",
     "PosteDbCompletionKindText", "PosteDbCompletionKindField", "PosteDbCompletionKindVariable",
     "PosteDbCompletionKindClass", "PosteDbCompletionKindInterface",

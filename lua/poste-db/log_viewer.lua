@@ -317,12 +317,6 @@ local function apply_detail_highlights(line_idx, entry, detail_idx)
   local line = vim.api.nvim_buf_get_lines(buf, line_idx - 1, line_idx, false)[1] or ""
   local line_len = #line
 
-  -- Green bg for all non-blank detail lines
-  if line_len > 0 then
-    vim.api.nvim_buf_set_extmark(buf, ns, line_idx - 1, 0, {
-      end_col = line_len, hl_group = "PosteDbHistoryDetailBg", priority = 80, hl_mode = "combine",
-    })
-  end
   if line_len == 0 then return end
 
   -- Determine line type by position (order: SQL → error → meta → edit)
