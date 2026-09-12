@@ -347,12 +347,29 @@ All options go to `require("poste-db.init").setup(opts)`; defaults shown:
       import_chunk_size = 100,
       debug = false,
       confirm_unfiltered_dml = true, -- gate DELETE/UPDATE without WHERE
+      width_mode = "nvim",           -- or "terminal" — see |poste-db-width-mode|
       db_browser = { split_position = "left", split_width = 40 },
       keymaps = { sql_source = {...}, sql_dataset = {...},
                   sql_table_ops = {...}, sql_db_browser = {...},
                   sql_introspect = {...} },  -- see :h poste-db keymaps per buffer
     }
 <
+
+                                                              *poste-db-width-mode*
+`width_mode` picks the width oracle for dataset/table cell padding. Neovim
+folds Indic spacing marks (Devanagari ि ा ी ...) to zero width while
+wcwidth-based terminals advance each a full cell — and nvim paints a line
+two ways: a fresh full-line draw follows the terminal's advance, partial
+repaints (cursor/highlight moves) follow nvim's own grid. No padding
+satisfies both:
+    "nvim"      default. Cursor, cell navigation and repaints always agree;
+                rows with Indic cells overhang right when freshly drawn
+                until repainted.
+    "terminal"  fresh paints stay aligned; rows with Indic cells may drift
+                left after cursor/highlight repaints on those rows.
+Pick whichever artifact bothers you less. The clean fix belongs upstream
+(neovim's width tables) or in a GUI client, where nvim's grid is the only
+truth.
 
 Extras: `icons` (dataset icons), `history_max` (session request history),
 `page_size` (default dataset rows per page), `snippets`

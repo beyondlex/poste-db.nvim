@@ -1,5 +1,7 @@
 local M = {}
 
+local width = require("poste-db.width")
+
 function M.utf8_char_bytes(byte)
   if byte < 0x80 then return 1 end
   if byte < 0xE0 then return 2 end
@@ -15,20 +17,11 @@ function M.is_dark_color(color)
   return (0.299 * r + 0.587 * g + 0.114 * b) < 0.5
 end
 
+--- Deprecated: kept for callers of the old util API. strdisplaywidth()-based
+--- truncation under-counts Indic spacing marks — width.truncate() is the
+--- maintained implementation (see lua/poste-db/width.lua and LEARNINGS #16).
 function M.truncate_displaywidth(s, max_dw)
-  if not s or s == "" then return s or "" end
-  local dw = 0
-  local i = 1
-  while i <= #s do
-    local b = s:byte(i)
-    local char_byte_len = M.utf8_char_bytes(b)
-    local char = s:sub(i, i + char_byte_len - 1)
-    local char_dw = vim.fn.strdisplaywidth(char)
-    if dw + char_dw > max_dw then break end
-    dw = dw + char_dw
-    i = i + char_byte_len
-  end
-  return s:sub(1, i - 1)
+  return width.truncate(s, max_dw)
 end
 
 --- Truncate at a BYTE budget without splitting a UTF-8 character: the cut

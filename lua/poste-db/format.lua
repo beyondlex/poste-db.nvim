@@ -1,8 +1,8 @@
 --- SQL Dataset formatter — renders query results as Unicode tables.
 --- Used by the Dataset buffer (bottom horizontal split).
-local util = require("poste-db.util")
 local C = require("poste-db.constants")
 local dataset = require("poste-db.dataset")
+local width = require("poste-db.width")
 local M = {}
 
 --- Normalized numeric ctypes (see normalize_type) eligible for right-alignment
@@ -25,22 +25,17 @@ local function split_lines(s)
   return lines
 end
 
---- Calculate display width of a string (handles wide CJK characters).
---- Uses Neovim's built-in strdisplaywidth() which correctly handles CJK, emoji, etc.
+--- Calculate display width of a string. strdisplaywidth() alone under-counts
+--- Devanagari/Indic spacing marks (vim folds them to 0, the terminal paints
+--- them) — width.display_width() corrects that; see lua/poste-db/width.lua.
 local function displaywidth(s)
-  if not s then return 0 end
-  if type(s) ~= "string" then
-    s = tostring(s)
-  end
-  local ok, result = pcall(vim.fn.strdisplaywidth, s)
-  if ok then return result end
-  return #s
+  return width.display_width(s)
 end
 
 --- Truncate a string to fit within a given display width, preserving UTF-8 validity.
 --- Walks character-by-character so multi-byte chars like CJK are never split.
 local function truncate_to_displaywidth(s, max_dw)
-  return util.truncate_displaywidth(s, max_dw)
+  return width.truncate(s, max_dw)
 end
 
 --- Pad a string to a given display width (right-pad with spaces).

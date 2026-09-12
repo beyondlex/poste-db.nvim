@@ -16,6 +16,14 @@ M.defaults = {
   debug = false,
   -- Confirm before executing DELETE/UPDATE statements that lack a WHERE clause
   confirm_unfiltered_dml = true,
+  -- Width oracle for dataset/table cell padding. Neovim folds Indic spacing
+  -- marks (Devanagari ि ा ी ...) to 0 while wcwidth terminals advance them a
+  -- full cell, and nvim paints a line two ways (linear fresh draws follow the
+  -- terminal; partial repaints follow nvim's grid) — no padding satisfies
+  -- both. "nvim" (default) keeps the cursor, cell navigation and repaints
+  -- aligned; "terminal" keeps freshly drawn rows aligned instead.
+  -- See LEARNINGS.md #16.
+  width_mode = "nvim",
   db_browser = {
     split_position = "left",  -- "left" or "right"
     split_width = 40,

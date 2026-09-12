@@ -213,3 +213,36 @@ MSSQL/ClickHouse 在用）还有一份同款转换器，也要一起改（现已
 
 *Latest: 2026-09-12 MySQL 种子乱码（init 连接 latin1 双重编码）会话。
 新增条目时保持同一格式：发生了什么（带 file:line）→ 约束（可执行的检查动作）。*
+
+## 16. Devanagari 顶掉 dataset 右边框：strdisplaywidth 折叠了 Mc 间隔标记
+
+**发生了什么**：`सिंधु घाटी`（10 码点）被 `strdisplaywidth` 算成 5 格，终端却画
+8 格——vim 的 composing 表不区分 Mn 非间隔标记（ं ु，两边都算 0，无害）和
+Mc 间隔标记（ि ा ी，终端各占 1 格），凡是含印度语系 Mc 标记的 cell，pad 少补、
+行尾 `│` 被字形盖掉，后续列全部错位。CJK-safe 截断救不了：这不是"算 1 实画 2"
+（同源偏差），而是 vim 0 vs 终端 1，`strdisplaywidth` 本身就是错的 oracle。
+
+**约束**：dataset 渲染路径的宽度/截断一律走 `lua/poste-db/width.lua`
+（`display_width`/`truncate`，按 `width_mode` 在终端口径与 nvim 口径间切换），
+不要直接调 `vim.fn.strdisplaywidth`。`MC_FOLDED` 区间表是
+"Unicode Mc ∧ 本机 nvim 折叠"的探测产物——vim 未折叠的 Mc 已被它自己算 1，
+再修就重复计宽；nvim 捆绑的 Unicode 表升级后需重新生成。回归测试在
+`tests/sql/width_spec.lua`（不变量：所有含 `│` 的行 display_width 相等）。
+注意 `l:sub(-1)` 拿的是 `│` 的尾字节 0x82 不是字符，断言边框用 `vim.endswith`。
+
+**两套绘制路径（2026-09-13，Ghostty 1.3.1 实证）**：nvim 对同一行有两种
+画法——整行首次绘制/滚动进屏是线性写，光标跟随**终端**推进（Ghostty 对
+Mc 记 1 格）；光标/高亮触发的**局部重绘**按 nvim 自己的网格绝对定位（Mc
+折叠为 0）。两种补位各满足一条路径、各错另一条：按 vim 宽度补 → 首绘右漂
+3 格（原始 bug：边框被盖）；按修正宽度补 → 重绘后左移 3 格（"向左缩进"）。
+纯 padding 无解，落为 `setup({ width_mode = "nvim" | "terminal" })`
+（默认 nvim，与光标/导航/重绘一致；terminal 首绘正确）。教训：A/B 探测表
+只能验证首绘路径，"看起来对齐"不代表所有路径都对——判定前先分清用户看的
+是哪种绘制。真正的修复在上游（nvim 宽度表对 Mc 的折叠）或 GUI 客户端
+（网格即唯一真相）。另外注意：复制到终端外的文本按各自渲染器折叠 Mc，
+看起来错位是假象，别据此下结论。
+
+---
+
+*Latest: 2026-09-13 Devanagari Mc 标记宽度（dataset 右边框被盖）会话。
+新增条目时保持同一格式：发生了什么（带 file:line）→ 约束（可执行的检查动作）。*

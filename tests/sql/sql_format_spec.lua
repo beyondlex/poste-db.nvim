@@ -7,6 +7,7 @@
 --- aborted with "SQL execution error".
 
 local sql_format = require("poste-db.format")
+local width = require("poste-db.width")
 
 --- Local UTC offset (seconds east of UTC), derived independently of the
 --- module under test by comparing local and UTC renderings of one instant.
@@ -148,11 +149,23 @@ describe("format dataset default page size", function()
 end)
 
 describe("format bordered table width stability", function()
-  -- Regression: rows containing Devanagari/Persian and CJK cells rendered one
-  -- cell wider than the border — strdisplaywidth of a composed line is not
-  -- always the sum of its individually-padded cells (two-byte glyphs flush a
-  -- box-drawing neighbor differently in context). The trailing │ sat past the
-  -- right border and the border was invisible on those rows.
+  local config = require("poste-db.config")
+  before_each(function()
+    -- The strictest invariant (rows exactly as wide as the border under the
+    -- terminal oracle) is only guaranteed in "terminal" mode; pin it so the
+    -- test does not float with the configured default.
+    config.config.width_mode = "terminal"
+  end)
+  after_each(function()
+    config.config.width_mode = nil
+  end)
+
+  -- Regression: rows containing Devanagari/Persian and CJK cells rendered
+  -- past the border — strdisplaywidth() folds Indic Mc spacing marks (ि ा ी)
+  -- to zero width while the terminal paints each into a real cell, so those
+  -- rows were padded short and the trailing │ was overwritten. Line widths
+  -- here are measured with width.display_width(), the terminal-consistent
+  -- oracle (see lua/poste-db/width.lua and LEARNINGS #16).
   local function civilisations()
     return {
       type = "resultset",
@@ -174,9 +187,12 @@ describe("format bordered table width stability", function()
   it("keeps every rendered line exactly as wide as the table border", function()
     local layout = sql_format.plan_resultset_layout(civilisations())
     local lines = sql_format.render_page(layout, 1, 50)
-    local border_w = vim.fn.strdisplaywidth(lines[1])
+    -- Terminal-visible width (width.display_width), not strdisplaywidth:
+    -- vim folds Indic spacing marks to 0 while the terminal paints them, so
+    -- a row can be strdisplaywidth-equal to the border yet 3 cells over.
+    local border_w = width.display_width(lines[1])
     for i, l in ipairs(lines) do
-      assert.equals(border_w, vim.fn.strdisplaywidth(l),
+      assert.equals(border_w, width.display_width(l),
         "line " .. i .. " must be exactly the border width")
     end
   end)
@@ -184,11 +200,11 @@ describe("format bordered table width stability", function()
   it("closes every data row with a right border beneath the border line", function()
     local layout = sql_format.plan_resultset_layout(civilisations())
     local lines, meta = sql_format.render_page(layout, 1, 50)
-    local border_w = vim.fn.strdisplaywidth(lines[1])
+    local border_w = width.display_width(lines[1])
     assert.matches("┐$", lines[1])
     assert.matches("┘$", lines[#lines])
     for i = meta.data_start_line, meta.data_end_line do
-      assert.equals(border_w, vim.fn.strdisplaywidth(lines[i]),
+      assert.equals(border_w, width.display_width(lines[i]),
         "data row " .. i .. " must match the border width")
       assert.matches("│$", lines[i], "data row " .. i .. " must end with the right border")
     end
