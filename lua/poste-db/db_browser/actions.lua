@@ -217,6 +217,15 @@ execute_table_select = function(node, context)
       local lines, meta, layout = sql_format.format_dataset(parsed)
       meta = meta or {}
       meta.table_name = node.name
+      -- The browser runs the SELECT directly (not through sql_state.context),
+      -- so bake its connection/database into the layout: the dataset edit
+      -- path needs them for PK introspection / DML-commit.
+      if layout then
+        layout._conn_name = conn
+        if not layout._database then
+          layout._database = node.meta and node.meta.database
+        end
+      end
       -- Pass the fresh resultset explicitly: render_dataset otherwise falls
       -- back to state.last_response.body (only the sql_runner path updates
       -- it), so cell preview (K) / yank / sort would read stale rows.

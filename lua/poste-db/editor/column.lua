@@ -5,7 +5,7 @@ local M = {}
 
 local state = nil
 local function get_state()
-  if not state then state = require("poste.state") end
+  if not state then state = require("poste-db.state") end
   return state
 end
 
@@ -238,9 +238,14 @@ function M.ensure_primary_key(tab)
   local table_name = layout.table_name
   if not table_name or table_name == "" then return end
 
-  local connection = layout._conn_name or get_state().sql.context.connection or ""
+  local sql_state = get_state()
+  local connection = layout._conn_name
+      or (sql_state.context and sql_state.context.connection) or ""
   local database = layout._database or layout.database or ""
-  if database == "" then database = get_state().sql.context.database or "" end
+  if database == "" and sql_state.context then
+    database = sql_state.context.database or ""
+  end
+  if connection == "" then return end
   local cache_key = connection .. ":" .. database .. ":" .. table_name
   if pk_cache[cache_key] then return end
 
