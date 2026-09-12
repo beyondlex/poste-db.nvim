@@ -78,7 +78,7 @@ nil/false, write an explicit `if`.
 | Want | Go to |
 |------|-------|
 | **Adding a SQL dialect (aliases or real)** — touchpoint checklist, priorities, pitfalls | `docs/dev/sql/dialect-support.md` |
-| **Shared infra (state, cli, select, indicators, buffer_setup, help, etc.)** | `../poste.nvim/lua/poste/` |
+| **Shared infra + family contracts (state ownership rules, statusline provider contract, semver)** | `../poste.nvim/lua/poste/` + `../poste.nvim/AGENTS.md` |
 | **Rust CLI (crates, build system)** | `../poste.nvim/crates/` — unreleased dialect work: `../poste-for-db` worktree |
 | **AI chat generic layer (chat UI, SSE, markdown, context API)** | `../poste-ai.nvim/lua/poste-ai/` + `docs/dev/sql/ai-chat.md` |
 | **Preflight / audit / test / architecture / refactor / nav / introspect harnesses** | `.opencode/skills/` |

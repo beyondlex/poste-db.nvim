@@ -123,8 +123,10 @@ There are exactly THREE spellings to know, and they mean different things:
   `poste_db` (and highlight groups use the `PosteDb*` prefix).
 - **`sql` → the filetype only.** `poste_sql` / `poste_sqlite` are reserved for
   the buffer filetype value and the `ftdetect/`/`syntax/`/`ftplugin/`/`after/queries/`
-  files named after it. This is the same contract poste.nvim relies on
-  (`lua/poste/buffer_setup.lua` switches on these filetypes), so it must NOT change.
+  files named after it. The filetype handling itself lives in this repo
+  (`buffer_setup.lua`, `autocmds.lua`, `ftdetect/`) — poste.nvim's shared Lua
+  is protocol-agnostic and knows nothing about these filetypes, so the value
+  must NOT change casually (config surface, ftdetect, queries all key on it).
 - Never introduce a new `poste_sql_*`-prefixed global, buffer var, namespace, or
   provider name. The `poste_sql_*` globals that still exist are **deprecated
   aliases** read only by `lua/poste-db/compat.lua` (they log a deprecation
@@ -148,6 +150,26 @@ conform.formatters_by_ft["poste_sql"] = ...
 vim.g.poste_db_legacy_completion = "rust"
 ```
 
+## Shared infra (poste.nvim) contracts
+
+Siblings (poste-redis, poste-es, ...) co-load in one Neovim session, so every
+`lua/poste/` module is a single-instance global surface. Two rules this repo
+must respect; full text in `../poste.nvim/AGENTS.md` ("Shared-Surface
+Contracts"):
+
+- **statusline** — `poste.statusline` is the ONE owner of the mini.statusline
+  context hooks; this repo only registers a provider
+  (`lua/poste-db/statusline.lua`, hl namespace `PosteDb*Ctx*`). Never wire
+  mini.statusline directly. The provider contract (scope semantics, re-register
+  and error-isolation guarantees, resolve-cheap rule) lives in the
+  `../poste.nvim/lua/poste/statusline.lua` header and is pinned by its
+  `tests/poste/statusline_spec.lua` with two coexisting providers.
+- **poste.state** — read-only sharing only: config, binary resolution,
+  keymap helpers. Never attach mutable fields to the shared singleton
+  (per-plugin state lives in `lua/poste-db/state.lua`) — a field two siblings
+  write becomes last-writer-wins and silently changes the other's behaviour
+  (the redis/es `poste_state.connection` lesson).
+
 ## Design Docs
 
 | Document | Description |
@@ -168,4 +190,4 @@ vim.g.poste_db_legacy_completion = "rust"
 
 ---
 
-*SQL developer documentation — Last updated: 2026-09-05 (module index rewritten; naming section unchanged)*
+*SQL developer documentation — Last updated: 2026-09-13 (added Shared infra contracts section; module index unchanged)*
