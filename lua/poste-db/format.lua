@@ -356,24 +356,59 @@ local function border_line(widths, left, mid, right, fill)
   return left .. table.concat(parts, mid) .. right
 end
 
+--- Total display width of a complete bordered row for the given column
+--- widths (already including the +2 padding margin). Matches border_line()
+--- and the two padding spaces every data cell gets.
+local function row_total_width(widths)
+  local total = #widths + 1
+  for _, w in ipairs(widths) do total = total + w + 2 end
+  return total
+end
+
 --- Build a data row line.
 --- @param cells string[] Cell display strings
 --- @param widths number[] Column widths
 --- @param numeric_cols boolean[] Which columns are numeric (right-align)
+---
+--- Note on rendering consistency: `strdisplaywidth` of a composed line is not
+--- always the sum of its individually-padded cells (two-byte glyphs adjacent
+--- to box-drawing characters can flush a cell differently in context). When
+--- that happens the trailing `│` lands one cell past the right border, hiding
+--- it. The rightmost column absorbs the exact remainder so every row has
+--- exactly the border width.
 local function data_row(cells, widths, numeric_cols)
   local line_buf = { "│" }
   local col_starts = {}
   local byte_pos = 3
+  local total = row_total_width(widths)
+  local last = #widths
   for i, cell in ipairs(cells) do
     if i > #widths then break end
     local w = widths[i]
-    local s = displaywidth(cell) > w
-      and (truncate_to_displaywidth(cell, w - 1) .. "…")
-      or cell
-    if numeric_cols[i] then
-      s = " " .. pad_left(s, w) .. " "
+    local s
+    if i == last then
+      local prefix_w = displaywidth(table.concat(line_buf))
+      local avail = total - prefix_w - 3
+      local content = cell
+      if displaywidth(content) > avail then
+        content = truncate_to_displaywidth(content, math.max(2, avail - 1)) .. "…"
+      end
+      local cw = displaywidth(content)
+      local pad = math.max(0, total - prefix_w - cw - 3)
+      if numeric_cols[i] then
+        s = " " .. pad_left(content, cw + pad) .. " "
+      else
+        s = " " .. content .. string.rep(" ", pad) .. " "
+      end
     else
-      s = " " .. pad_right(s, w) .. " "
+      s = displaywidth(cell) > w
+        and (truncate_to_displaywidth(cell, w - 1) .. "…")
+        or cell
+      if numeric_cols[i] then
+        s = " " .. pad_left(s, w) .. " "
+      else
+        s = " " .. pad_right(s, w) .. " "
+      end
     end
     line_buf[#line_buf + 1] = s
     col_starts[i] = { ext_start = byte_pos, ext_end = byte_pos + #s }

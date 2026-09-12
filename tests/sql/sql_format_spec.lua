@@ -146,3 +146,62 @@ describe("format dataset default page size", function()
     assert.equals(50, meta.row_count)
   end)
 end)
+
+describe("format bordered table width stability", function()
+  -- Regression: rows containing Devanagari/Persian and CJK cells rendered one
+  -- cell wider than the border — strdisplaywidth of a composed line is not
+  -- always the sum of its individually-padded cells (two-byte glyphs flush a
+  -- box-drawing neighbor differently in context). The trailing │ sat past the
+  -- right border and the border was invisible on those rows.
+  local function civilisations()
+    return {
+      type = "resultset",
+      total_rows = 5,
+      results = { {
+        columns = {
+          { name = "id" }, { name = "id2" }, { name = "id3" }, { name = "name" },
+          { name = "native_name" }, { name = "chinese_name" }, { name = "start" },
+          { name = "end" }, { name = "writing_system" }, { name = "capital" },
+        },
+        rows = {
+          { 4, 4, 4, "Indus Valley civilization", "सिंधु घाटी", "印度河谷文明", -2600, -1900, "ideographic", "摩亨佐-达罗" },
+          { 5, 5, 5, "Persian civilization", "تمدن ایران", "波斯文明", -550, 1979, "alphabet", "波斯波利斯" },
+        },
+      } },
+    }
+  end
+
+  it("keeps every rendered line exactly as wide as the table border", function()
+    local layout = sql_format.plan_resultset_layout(civilisations())
+    local lines = sql_format.render_page(layout, 1, 50)
+    local border_w = vim.fn.strdisplaywidth(lines[1])
+    for i, l in ipairs(lines) do
+      assert.equals(border_w, vim.fn.strdisplaywidth(l),
+        "line " .. i .. " must be exactly the border width")
+    end
+  end)
+
+  it("closes every data row with a right border beneath the border line", function()
+    local layout = sql_format.plan_resultset_layout(civilisations())
+    local lines, meta = sql_format.render_page(layout, 1, 50)
+    local border_w = vim.fn.strdisplaywidth(lines[1])
+    assert.matches("┐$", lines[1])
+    assert.matches("┘$", lines[#lines])
+    for i = meta.data_start_line, meta.data_end_line do
+      assert.equals(border_w, vim.fn.strdisplaywidth(lines[i]),
+        "data row " .. i .. " must match the border width")
+      assert.matches("│$", lines[i], "data row " .. i .. " must end with the right border")
+    end
+  end)
+
+  it("keeps last-column byte offsets consistent after rebalancing", function()
+    local layout = sql_format.plan_resultset_layout(civilisations())
+    local lines, meta = sql_format.render_page(layout, 1, 50)
+    local last = #layout.col_widths
+    for i, starts in ipairs(meta.col_starts) do
+      local line = lines[meta.data_start_line + i - 1]
+      -- The final separator is 3 bytes after the last cell's end.
+      assert.equals(#line, starts[last].ext_end + 3,
+        "last column byte end must sit right before the trailing │")
+    end
+  end)end)
