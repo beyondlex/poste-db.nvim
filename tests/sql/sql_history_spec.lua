@@ -292,6 +292,19 @@ describe("dataset history sidebar keymaps", function()
     assert.is_false(history.is_open())
   end)
 
+  it("sidebar uses a square border and a History title", function()
+    make_env()
+    add_entry("one")
+    history.open()
+    local cfg = vim.api.nvim_win_get_config(history.win())
+    assert.same("┌", cfg.border[1])
+    assert.same("└", cfg.border[7])
+    local title = cfg.title
+    if type(title) == "table" then title = table.concat(vim.tbl_flatten(title)) end
+    assert.equals("History", title)
+    assert.same("left", cfg.title_pos)
+  end)
+
   it("sidebar survives clear_panel and header.close floating-window sweeps", function()
     make_env()
     add_entry("one")

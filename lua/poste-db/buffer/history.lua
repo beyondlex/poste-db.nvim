@@ -177,6 +177,9 @@ function M.open()
     width = SIDEBAR_WIDTH,
     height = height,
     filetype = "poste_history",
+    border = "single",
+    title = "History",
+    title_pos = "left",
     buf_options = { buftype = "nofile", bufhidden = "wipe", swapfile = false },
     -- Highlight the line under the cursor while navigating (j/k); the active
     -- request keeps its own background marker via extmark in refresh().
