@@ -129,7 +129,14 @@ function M.update(browser_buf, path, comment, multi_select)
 
   for _, win in ipairs(vim.api.nvim_list_wins()) do
     if vim.api.nvim_win_get_buf(win) == browser_buf then
-      local width = vim.api.nvim_win_get_width(win)
+      -- Under globalstatus the browser's statusline spans the full editor
+      -- width, so truncate to that; mirrors buffer/history.lua.
+      local width
+      if vim.api.nvim_get_option_value("laststatus", {}) >= 3 then
+        width = vim.api.nvim_get_option_value("columns", {})
+      else
+        width = vim.api.nvim_win_get_width(win)
+      end
       local text = M.build(path, comment, multi_select, width)
       if text == "" then
         pcall(vim.api.nvim_set_option_value, "statusline", "", { win = win })

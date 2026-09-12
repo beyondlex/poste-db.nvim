@@ -736,6 +736,34 @@ describe("db_browser yank register indicator", function()
     vim.api.nvim_buf_delete(buf, { force = true })
   end)
 
+  it("update_statusline truncates the comment to the editor width under globalstatus", function()
+    local comment = "a table comment that only fits the full editor width"
+    local buf = vim.api.nvim_create_buf(false, false)
+    local win = vim.api.nvim_open_win(buf, true, { split = "right", width = 20 })
+
+    local prev_ls = vim.api.nvim_get_option_value("laststatus", {})
+    local prev_cols = vim.api.nvim_get_option_value("columns", {})
+    vim.api.nvim_set_option_value("columns", 200, {})
+    vim.api.nvim_win_set_width(win, 20)
+
+    -- Per-window statusline: the budget is the narrow split, so the comment is cut.
+    vim.api.nvim_set_option_value("laststatus", 2, {})
+    statusline.update(buf, "pg-dev  blog", comment, { active = false, selected = {} })
+    local narrow = vim.api.nvim_get_option_value("statusline", { win = win })
+    assert.is_truthy(narrow:find("…") ~= nil, "comment truncated to the split width")
+
+    -- Global statusline spans the editor, so the same comment must stay whole.
+    vim.api.nvim_set_option_value("laststatus", 3, {})
+    statusline.update(buf, "pg-dev  blog", comment, { active = false, selected = {} })
+    local global = vim.api.nvim_get_option_value("statusline", { win = win })
+    assert.is_falsy(global:find("…", 1, true), "comment kept whole under globalstatus")
+
+    vim.api.nvim_set_option_value("laststatus", prev_ls, {})
+    vim.api.nvim_set_option_value("columns", prev_cols, {})
+    vim.api.nvim_win_close(win, true)
+    vim.api.nvim_buf_delete(buf, { force = true })
+  end)
+
   it("clear drops the register immediately", function()
     yank.set({ kind = "table", name = "posts", conn = "maria-dev", db = "blog", dialect = "mysql" })
     assert.is_truthy(yank.get(), "register holds the entry")
