@@ -62,7 +62,30 @@ local function fmt_ctx(ctx)
   return ctx
 end
 
-function M.setup()
+--- Context resolution for the shared `poste.statusline` layer. poste-db
+--- claims a window when its buffer carries a context (SQL source, dataset,
+--- db browser, introspection buffers). Buffer-scoped, so it always beats a
+--- sibling plugin's *global* fallback context.
+--- @param win number
+--- @return table|nil  { text, hl, scope }
+local function provider_resolve(win)
+  local ok_buf, buf = pcall(vim.api.nvim_win_get_buf, win)
+  if not ok_buf then return nil end
+  local ok_vars, vars = pcall(function() return vim.b[buf] end)
+  if not ok_vars then return nil end
+  local ctx = vars.poste_db_context
+  if not ctx or ctx == "" then return nil end
+  return {
+    text = ctx,
+    hl = get_ctx_color(ctx:match("^(.-)[/]") or ctx),
+    scope = "buffer",
+  }
+end
+
+--- Legacy inline mini.statusline wiring (pre-shared-layer poste.nvim).
+--- Kept byte-for-byte behaviour: content.active owns the layout and
+--- section_fileinfo bakes the per-connection `%#…#` markup into the string.
+local function legacy_mini_wiring()
   vim.schedule(function()
     local ok_mini, statusline = pcall(require, "mini.statusline")
     if ok_mini then
@@ -70,6 +93,15 @@ function M.setup()
       statusline.section_fileinfo = function(...)
         local ctx = vim.b.poste_db_context
         if ctx and ctx ~= "" then
+          -- Bake the per-connection highlight into the returned string itself:
+          -- other plugins (e.g. poste-redis.nvim) may own `content.active` and
+          -- drop poste-db's per-group highlight, but `%#…#` markup inside the
+          -- string survives any layout.
+          local conn_name = ctx:match("^(.-)[/]") or ctx
+          local hl_name = get_ctx_color(conn_name)
+          if hl_name then
+            return "%#" .. hl_name .. "# " .. ctx .. " "
+          end
           return ctx
         end
         return orig_fileinfo(...)
@@ -105,7 +137,22 @@ function M.setup()
         })
       end
     end
+  end)
+end
 
+--- Register with the shared `poste.statusline` compose layer (poste.nvim).
+--- Falls back to the inline mini.statusline wiring above when the shared
+--- module is missing (older poste.nvim checkout).
+function M.setup()
+  local ok_shared, shared = pcall(require, "poste.statusline")
+  if ok_shared then
+    shared.register_provider({ name = "poste-db", resolve = provider_resolve })
+    shared.setup()
+  else
+    legacy_mini_wiring()
+  end
+
+  vim.schedule(function()
     local ok_lualine = pcall(require, "lualine")
     if ok_lualine then
       M.setup_lualine()
