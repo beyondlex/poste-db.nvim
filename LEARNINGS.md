@@ -168,8 +168,48 @@ open)` 多含一个反引号又手拼一个，产出 `` ``proc_copy`` ``——My
 值——`matches("``proc_copy`\\(`")` 就放过过 ② 的双反引号。给"纯函数"补测试
 时优先全串 equals，子串 matches 只用于宽松冒烟。
 
+## 14. MySQL 种子乱码＝初始化连接 charset，不是插件读取 bug
+
+**发生了什么**：`playground/init/mysql/` 全库（cinema 尤甚）在 dataset 里
+中文/日文/西里尔全变乱码。`docker exec ... mysql` 读出来的字节是二次编码：
+`外`(`E5A496`) 存成了 `C3A5C2A4E28093`。根因：官方 mysql 镜像
+`/entrypoint.sh` 的 `docker_process_sql` 调 `mysql` 客户端**不带**
+`--default-character-set`，客户端默认会话 `character_set_client`＝`latin1`
+（MySQL 的 latin1＝cp1252，`0x96` 会被 `SET NAMES` 前的中文 UTF-8 字节映射成
+`–`），seed 的 UTF-8 字节被 latin1→utf8mb4「解释一次再转存」＝双重编码入库。
+文件与建库都是 utf8mb4 也无济于事。poste 的 sqlx 连接默认 utf8mb4，如实读出
+坏字节，所以「乱码」在库里不在读取链路。
+
+**约束**：往 `playground/init/mysql|mariadb/` 落任何含非 ASCII 的 seed 文件，
+文件首条语句必须是 `SET NAMES utf8mb4;`（纯 ASCII，先于任何多字节字节流）。
+新方言 seed 落盘后按第 12 条完整重跑，并抽验一条多字节行：
+`SELECT HEX(name_zh)>0 AND name_zh=CONVERT(name_zh USING utf8mb4) ...`。
+
 ---
 
-*Latest: 2026-09-06 db_browser 拆分 + copy_ddl 特征测试（gsub pesc/双反引号/
-双 schema 前缀三个潜伏 bug）会话。
+## 15. BINARY 列的乱码在 Rust 值转换里，不在 Lua 侧
+
+**发生了什么**：`game_achievements.hidden_hid`（`BINARY(16)`）在 dataset 里显示
+成 `�` 一串。数据本身没问题（`HEX(hidden_hid)` 在 mysql CLI 里是
+`8885031DAE8A11F19D8C669C27760320` 这样的 hex）。根因：Rust CLI 的
+`mysql_value_to_json`（`poste.nvim/crates/poste-cli/src/{exec_file,session}.rs`，
+以及 `poste-for-db` 的 `poste-exec/src/sql_executor/{mysql,value}.rs`）对
+`Vec<u8>` 走 `String::from_utf8_lossy`，BINARY 的非法 UTF-8 字节在 Rust 侧就被
+换成 U+FFFD——JSON 一发出，字节值已经丢失，Lua 拿到坏串无法还原。所以修 Rust，
+不修 Lua。修复：给 BINARY/VARBINARY/TINYBLOB/MEDIUMBLOB/BLOB/LONGBLOB 加
+`mysql_binary_to_hex` 分支，按 MySQL `HEX()` 习惯输出大写 hex。
+
+**约束**：poste 插件（poste-db.nvim）的查询默认走 `poste session`
+（`poste-db/executor.lua` 的 `prefer_session=true`），会话路径是 live 转换器，
+exec-file 是 fallback（visual selection 也走 exec-file）。改了其中一个必须同步
+另一个；`poste.nvim` 的 `poste-exec/src/sql_executor/mysql.rs`（方言引擎，目前
+MSSQL/ClickHouse 在用）还有一份同款转换器，也要一起改（现已经补齐）。
+`poste-for-db` 是遗留工作树（已并入 main），不要改。验证：直接给二进制喂
+`{"seq":1,"sql":"SELECT hidden_hid FROM cinema.game_achievements LIMIT 3;"}` 看
+返回 JSON，`hidden_hid` 应与 `HEX(hidden_hid)` 一致；改完记得 `cargo build`
+重建 `poste.nvim/target/debug/poste`（插件按 rtp 目录解析二进制，不用装）。
+
+---
+
+*Latest: 2026-09-12 MySQL 种子乱码（init 连接 latin1 双重编码）会话。
 新增条目时保持同一格式：发生了什么（带 file:line）→ 约束（可执行的检查动作）。*
