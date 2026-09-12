@@ -45,3 +45,28 @@ describe("statusline context text", function()
     assert.equals("PosteDbSqlCtxprod", hl)
   end)
 end)
+describe("statusline % escaping", function()
+  before_each(function()
+    vim.b.poste_db_context = nil
+    vim.b.poste_db_conn = nil
+  end)
+
+  it("escapes % in the colored context so statusline redraws never hit E539", function()
+    vim.b.poste_db_context = "prod/100%db"
+    vim.b.poste_db_conn = "prod"
+    local out = statusline.get_context()
+    assert.matches("prod/100%%db", out, 1, true)
+    assert.has_no.errors(function()
+      vim.api.nvim_eval_statusline(out, {})
+    end)
+  end)
+
+  it("escapes % in the plain (uncolored) context", function()
+    vim.b.poste_db_context = "anon/50%db"
+    local out = statusline.get_context()
+    assert.matches("anon/50%%db", out, 1, true)
+    assert.has_no.errors(function()
+      vim.api.nvim_eval_statusline(out, {})
+    end)
+  end)
+end)

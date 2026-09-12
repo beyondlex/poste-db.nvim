@@ -51,15 +51,21 @@ local function get_ctx_color(conn_name)
   return hl_name
 end
 
+-- `%` is the statusline escape character: a connection/context containing it
+-- (e.g. "100%/db") breaks every redraw with E539 unless doubled to `%%`.
+local function escape_statusline(s)
+  return (s:gsub("%%", "%%%%"))
+end
+
 local function fmt_ctx(ctx)
   local conn_name = vim.b.poste_db_conn
   if conn_name then
     local hl_name = get_ctx_color(conn_name)
     if hl_name then
-      return "%#" .. hl_name .. "# " .. ctx .. " "
+      return "%#" .. hl_name .. "# " .. escape_statusline(ctx) .. " "
     end
   end
-  return ctx
+  return escape_statusline(ctx)
 end
 
 --- Context resolution for the shared `poste.statusline` layer. poste-db
@@ -100,9 +106,9 @@ local function legacy_mini_wiring()
           local conn_name = ctx:match("^(.-)[/]") or ctx
           local hl_name = get_ctx_color(conn_name)
           if hl_name then
-            return "%#" .. hl_name .. "# " .. ctx .. " "
+            return "%#" .. hl_name .. "# " .. escape_statusline(ctx) .. " "
           end
-          return ctx
+          return escape_statusline(ctx)
         end
         return orig_fileinfo(...)
       end
