@@ -1,4 +1,4 @@
--- @connection my-blog
+-- @connection local
 -- @database blog
 
 -- ============================================================
@@ -139,7 +139,7 @@ FROM posts WHERE metadata IS NOT NULL LIMIT 10;
 -- Full-text search (requires FULLTEXT index)
 -- SELECT * FROM posts WHERE MATCH(title, body) AGAINST('Rust' IN BOOLEAN MODE) LIMIT 10;
 
--- @connection my-inventory
+-- @connection prod
 -- @database inventory
 
 -- ============================================================
@@ -216,7 +216,7 @@ INSERT INTO three_kingdoms_characters (name, courtesy_name, birth_year, death_ye
 
 SELECT * from three_kingdoms_characters;
 
--- @connection my-cinema
+-- @connection prod
 -- @database cinema
 
 -- ============================================================
@@ -274,9 +274,10 @@ FROM episodes e WHERE e.is_omake = b'1' LIMIT 5;
 
 SELECT t.id, t.title, t.duration FROM tracks t LIMIT 5;
 
--- @connection my-history
+-- @connection uat
 -- @database history
 
+SELECT * FROM civilizations;
 -- ============================================================
 -- History: POINT / ENUM / SET / JSON / BINARY / big timeline
 -- ============================================================
