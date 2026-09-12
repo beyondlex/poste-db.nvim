@@ -2,6 +2,7 @@
 --- Used by the Dataset buffer (bottom horizontal split).
 local util = require("poste-db.util")
 local C = require("poste-db.constants")
+local dataset = require("poste-db.dataset")
 local M = {}
 
 --- Normalized numeric ctypes (see normalize_type) eligible for right-alignment
@@ -491,7 +492,7 @@ function M.format_dataset(r)
     if not layout or #layout.columns == 0 then
       return { "", "  (no results)", "" }, { type = "empty" }, layout
     end
-    local lines, meta = M.render_page(layout, 1, 50)
+    local lines, meta = M.render_page(layout, 1, dataset.default_page_size)
     meta.total_rows = layout.total_rows
     meta.table_name = data.table_name
     if layout.translated_sql then

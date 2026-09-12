@@ -32,6 +32,9 @@ function M.setup(opts)
   if opts.history_max ~= nil then
     require("poste-db.dataset").set_max_history(opts.history_max)
   end
+  if opts.page_size ~= nil then
+    require("poste-db.dataset").set_page_size(opts.page_size)
+  end
 
   if not pcall(vim.treesitter.language.get_lang, "sql") then
     vim.notify("poste-db: Tree-sitter SQL parser not found. Run :TSInstall sql to enable. Falling back to Rust/Lua heuristics.", vim.log.levels.WARN, { title = "PosteDb" })

@@ -77,3 +77,27 @@ describe("dataset compute_view_indices", function()
     assert.same({ 2, 1, 3 }, tab.view_indices)
   end)
 end)
+
+describe("dataset default page size", function()
+  before_each(function()
+    D.tabs = {}
+    D.active_tab_idx = 0
+    D.set_page_size(50)
+  end)
+
+  it("defaults to 50 rows per page", function()
+    local tab = D.alloc_tab(1)
+    assert.equals(50, tab.page_size)
+  end)
+
+  it("honors set_page_size for newly allocated tabs", function()
+    D.set_page_size(25)
+    local tab = D.alloc_tab(1)
+    assert.equals(25, tab.page_size)
+  end)
+
+  it("clamps invalid values to a sane minimum", function()
+    D.set_page_size(-3)
+    assert.equals(1, D.default_page_size)
+  end)
+end)

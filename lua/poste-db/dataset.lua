@@ -20,6 +20,7 @@ M.active_tab_idx = 0
 M.history = {}           -- [n] = { label, elapsed_ms, src_buf, src_file, sql, stmt_line, error, tabs = {}, last_tab }
 M.active_history = 0
 M.max_history = 20
+M.default_page_size = 50
 M.buf_label_count = {}   -- [bufnr] = n, for fallback labels like test_1, test_2
 
 M.scroll_autocmd_id = nil
@@ -142,6 +143,11 @@ function M.set_max_history(n)
   M.max_history = math.max(1, math.floor(n or 20))
 end
 
+--- Configure the default row page size for new dataset tabs (setup opts).
+function M.set_page_size(n)
+  M.default_page_size = math.max(1, math.floor(n or 50))
+end
+
 --- Wall-clock timestamp of an event (libuv realtime clock: { sec, nsec }).
 --- Falls back to whole-second `os.time()` on older Neovim.
 --- @return { sec = number, nsec = number }
@@ -180,7 +186,7 @@ function M.alloc_tab(idx)
       data = nil,
       cursor = { row = 1, col = 1 },
       leftcol = 0,
-      page = 1, page_size = 50, num_pages = 1,
+      page = 1, page_size = M.default_page_size, num_pages = 1,
       pagination_enabled = true, visible_rows = nil,
       filter_col = nil, filter_val = nil, filter_col_name = nil,
       filter_active = false, filtered_indices = nil,

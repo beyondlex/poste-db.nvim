@@ -111,3 +111,38 @@ describe("format wrap_text (error box)", function()
     end
   end)
 end)
+
+describe("format dataset default page size", function()
+  local dataset = require("poste-db.dataset")
+
+  local function body(rows)
+    return vim.json.encode({
+      type = "resultset",
+      total_rows = rows,
+      results = { {
+        columns = { { name = "id", type = "INT" } },
+        rows = vim.tbl_map(function(i) return { i } end, vim.fn.range(rows)),
+        row_count = rows,
+      } },
+      connection = "",
+      database = "",
+      dialect = "postgres",
+    })
+  end
+
+  before_each(function()
+    dataset.set_page_size(50)
+  end)
+
+  it("renders the configured default page size for the first page", function()
+    dataset.set_page_size(4)
+    local _, meta = sql_format.format_dataset({ body = body(10) })
+    assert.equals("resultset", meta.type)
+    assert.equals(4, meta.row_count)
+  end)
+
+  it("falls back to 50 when unconfigured", function()
+    local _, meta = sql_format.format_dataset({ body = body(70) })
+    assert.equals(50, meta.row_count)
+  end)
+end)

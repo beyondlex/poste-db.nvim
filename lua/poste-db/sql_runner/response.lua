@@ -12,6 +12,7 @@ local config = require("poste-db.config")
 local indicators = require("poste.indicators")
 local statement = require("poste-db.statement")
 local sql_format = require("poste-db.format")
+local dataset = require("poste-db.dataset")
 local sql_buffer = require("poste-db.buffer")
 
 local M = {}
@@ -140,7 +141,7 @@ function M.handle(deps, parsed)
           local lines, meta
           if layout then
             tab_idx = tab_idx + 1
-            lines, meta = sql_format.render_page(layout, 1, 50)
+            lines, meta = sql_format.render_page(layout, 1, dataset.default_page_size)
             meta.table_name = table_name
           elseif hide_empty then
             -- Skip statements with no result set (SET, USE, etc.) — they

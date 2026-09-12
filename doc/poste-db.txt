@@ -355,7 +355,8 @@ All options go to `require("poste-db.init").setup(opts)`; defaults shown:
 <
 
 Extras: `icons` (dataset icons), `history_max` (session request history),
-`snippets` (see |poste-db-completion|), `statusline = false` to opt out.
+`page_size` (default dataset rows per page), `snippets`
+(see |poste-db-completion|), `statusline = false` to opt out.
 
 Legacy globals `g:poste_db_{config,debug,legacy_completion,dialect,autoformat}`
 are honored; old `g:poste_sql_*` spellings are deprecated aliases.
