@@ -1,9 +1,14 @@
 local ui = require("poste-db.buffer.nav_ui")
 local state = require("poste-db.state")
 
+local saved_connections = package.loaded["poste-db.connections"]
+
 describe("buffer_nav_ui", function()
   before_each(function()
     _G.__saved_conn_name = state and state.context and state.context.connection
+    -- default stub: name lookup never hits (tests pin the state-name and
+    -- host:port fallbacks); individual tests override name_for_url
+    package.loaded["poste-db.connections"] = { name_for_url = function() return nil end }
   end)
 
   after_each(function()
@@ -11,10 +16,55 @@ describe("buffer_nav_ui", function()
       state.context.connection = _G.__saved_conn_name
     end
     _G.__saved_conn_name = nil
+    package.loaded["poste-db.connections"] = saved_connections
   end)
   it("formats connection urls for the winbar", function()
     assert.equals("localhost:5432/blog", ui.format_conn_short("postgres://user:pass@localhost:5432/blog?sslmode=require"))
     assert.equals("blog.sqlite", ui.format_conn_short("/tmp/blog.sqlite"))
+  end)
+
+  it("shows the name reverse-looked-up from the connection url", function()
+    -- the binary echoes urls only (exec_file.rs); name_for_url maps the
+    -- dataset's own url back to its connections.toml entry
+    package.loaded["poste-db.connections"].name_for_url = function(url)
+      if url:match("db%.internal") then return "prod" end
+      return nil
+    end
+    local text = ui.build_status_winbar_text({
+      type = "resultset",
+      total_rows = 5,
+      total_execution_time_ms = 3,
+      table_name = "users",
+      connection = "postgres://user:pass@db.internal:5432/blog",
+    }, {}, 1, 1)
+    assert.truthy(text:find("prod", 1, true))
+    assert.is_falsy(text:find("db.internal:5432", 1, true))
+  end)
+
+  it("prefers the url's own name over a stale session connection name", function()
+    package.loaded["poste-db.connections"].name_for_url = function() return "prod" end
+    if state and state.context then
+      state.context.connection = "stale-dev"
+    end
+    local text = ui.build_status_winbar_text({
+      type = "resultset",
+      total_rows = 5,
+      total_execution_time_ms = 3,
+      table_name = "users",
+      connection = "postgres://user:pass@db.internal:5432/blog",
+    }, {}, 1, 1)
+    assert.truthy(text:find("prod", 1, true))
+    assert.is_falsy(text:find("stale%-dev", 1, true))
+  end)
+
+  it("shows a bare non-url connection value as-is", function()
+    -- error/affected metas carry context.connection (a name) verbatim
+    local ctx = ui.build_statusline_context({
+      type = "resultset",
+      connection = "prod",
+      database = "blog",
+    })
+    assert.truthy(ctx:find("prod", 1, true))
   end)
 
   it("includes the connection name in the winbar text", function()

@@ -59,13 +59,23 @@ function M.build_statusline_context(meta, opts)
 
   local conn = meta.connection
   if conn and conn ~= "" then
-    local conn_name = sql_state and sql_state.context and sql_state.context.connection
+    -- The binary echoes connection URLs, never names (exec_file.rs), so
+    -- resolve a display name for the dataset's OWN url first — authoritative
+    -- even when session state points elsewhere (browser-opened datasets).
+    -- Then the applied name (@connection / :PosteDbConnection), then host:port.
+    local connections = require("poste-db.connections")
+    local conn_name = connections.name_for_url(conn)
+      or (sql_state.context and sql_state.context.connection)
     if conn_name and conn_name ~= "" then
       parts[#parts + 1] = conn_name
     else
       local host, port = conn:match("^%w+://[^@]*@([^:]+):(%d+)")
       if host then
         parts[#parts + 1] = string.format("%s:%s", host, port)
+      elseif not conn:match("^%w+://") then
+        -- not URL-shaped: already a bare name (error/affected metas carry
+        -- context.connection verbatim) — show it as-is
+        parts[#parts + 1] = conn
       end
     end
   end

@@ -185,12 +185,10 @@ local function percent_encode(s)
   end))
 end
 
---- Get the config for a named connection by reading connections.toml directly.
---- Returns values with `{{var}}` references resolved from .env / env.json / OS env.
---- Caches parsed config to avoid file I/O on every cursor move.
---- @param name string Connection name
---- @return table|nil Connection config or nil
-function M.get_connection_config(name)
+--- Parsed connections.toml shared by get_connection_config and name_for_url.
+--- mtime-keyed cache; `false` means the file exists but is broken.
+--- @return table|nil
+local function cached_parsed_config()
   local search_dir = get_search_dir()
   local config_path = M.find_connections_toml(search_dir)
   if not config_path then
@@ -220,32 +218,34 @@ function M.get_connection_config(name)
     _config_cache_mtime = mtime
   end
   if _config_cache == false then return nil end
-  local conn = _config_cache[name]
+  return _config_cache
+end
+
+--- Get the config for a named connection by reading connections.toml directly.
+--- Returns values with `{{var}}` references resolved from .env / env.json / OS env.
+--- Caches parsed config to avoid file I/O on every cursor move.
+--- @param name string Connection name
+--- @return table|nil Connection config or nil
+function M.get_connection_config(name)
+  local parsed = cached_parsed_config()
+  if not parsed then return nil end
+  local conn = parsed[name]
   if not conn then return nil end
-  conn = apply_env(conn, M.get_env_vars(search_dir))
+  conn = apply_env(conn, M.get_env_vars(get_search_dir()))
   conn.dialect = const.normalize_dialect(conn.dialect)
   return conn
 end
 
---- Resolve a connection name to a URL by reading connections.toml from cwd.
---- Replicates Rust's ConnectionConfig::to_url() logic, resolving `{{var}}`
---- references first.
---- @param name string Connection name
+--- Assemble the dialect URL for an env-applied, dialect-normalized entry.
+--- Shared by resolve_connection_url (name → URL) and name_for_url (URL → name)
+--- so the two directions cannot drift. `ensure_tunnel` marks the execution
+--- path and may open the ssh tunnel; the display path (false) only reuses an
+--- already-active one — a name lookup for the winbar must never open one.
+--- @param name string
+--- @param conn table
+--- @param ensure_tunnel boolean
 --- @return string|nil, string|nil url, error_message
-function M.resolve_connection_url(name)
-  local search_dir = get_search_dir()
-  local config_path = M.find_connections_toml(search_dir)
-  if not config_path then
-    return nil, "connections.toml not found (searched from " .. search_dir .. ")"
-  end
-  local toml = require("poste-db.toml")
-  local parsed, err = toml.parse_file(config_path)
-  if not parsed then return nil, err end
-  local conn = parsed[name]
-  if not conn then return nil, "Connection '" .. name .. "' not found in " .. config_path end
-  conn = apply_env(conn, M.get_env_vars(search_dir))
-  conn.dialect = const.normalize_dialect(conn.dialect)
-
+local function build_conn_url(name, conn, ensure_tunnel)
   -- Fail loudly for dialects poste-db does not support (a shared
   -- connections.toml may carry redis/elasticsearch/... sections), instead of
   -- building a mysql/postgres URL from their fields.
@@ -281,10 +281,21 @@ function M.resolve_connection_url(name)
   -- A `tunnel` section forwards host:port through an ssh jump host; the URL
   -- (and thus the Rust binary) only ever sees the local end of the forward.
   if conn.tunnel then
-    local tunnel = require("poste-db.tunnel")
-    local local_port, terr = tunnel.ensure(name, conn.tunnel, host, port)
-    if not local_port then
-      return nil, ("Connection '%s': %s"):format(name, terr)
+    local local_port, terr
+    if ensure_tunnel then
+      local tunnel = require("poste-db.tunnel")
+      local_port, terr = tunnel.ensure(name, conn.tunnel, host, port)
+      if not local_port then
+        return nil, ("Connection '%s': %s"):format(name, terr)
+      end
+    else
+      -- Display path: reuse the running tunnel's local end, never open one.
+      for _, t in ipairs(require("poste-db.tunnel").status_list()) do
+        if t.name == name then local_port = t.port; break end
+      end
+      if not local_port then
+        return nil, ("Connection '%s': tunnel not active"):format(name)
+      end
     end
     host, port = "127.0.0.1", local_port
   end
@@ -296,6 +307,51 @@ function M.resolve_connection_url(name)
     auth = percent_encode(conn.user) .. "@"
   end
   return scheme .. "://" .. auth .. host .. ":" .. port .. "/" .. percent_encode(db), nil
+end
+
+--- Resolve a connection name to a URL by reading connections.toml from cwd.
+--- Replicates Rust's ConnectionConfig::to_url() logic, resolving `{{var}}`
+--- references first.
+--- @param name string Connection name
+--- @return string|nil, string|nil url, error_message
+function M.resolve_connection_url(name)
+  local search_dir = get_search_dir()
+  local config_path = M.find_connections_toml(search_dir)
+  if not config_path then
+    return nil, "connections.toml not found (searched from " .. search_dir .. ")"
+  end
+  local toml = require("poste-db.toml")
+  local parsed, err = toml.parse_file(config_path)
+  if not parsed then return nil, err end
+  local conn = parsed[name]
+  if not conn then return nil, "Connection '" .. name .. "' not found in " .. config_path end
+  conn = apply_env(conn, M.get_env_vars(search_dir))
+  conn.dialect = const.normalize_dialect(conn.dialect)
+  return build_conn_url(name, conn, true)
+end
+
+--- Reverse of resolve_connection_url: the connections.toml name whose resolved
+--- URL equals `url`. Display fallback for surfaces that only hold a URL — the
+--- Rust binary echoes connection URLs, never names (exec_file.rs), so the
+--- dataset winbar/statusline would otherwise degrade to host:port. Never
+--- opens a tunnel: tunneled entries only match while their tunnel is running.
+--- The parse is shared with get_connection_config's mtime-keyed cache; the
+--- per-entry env re-resolution is cheap (dotenv/env.json are mtime-cached too).
+--- @param url string
+--- @return string|nil name
+function M.name_for_url(url)
+  if not url or url == "" then return nil end
+  local parsed = cached_parsed_config()
+  if not parsed then return nil end
+  local vars = M.get_env_vars(get_search_dir())
+  for name, entry in pairs(parsed) do
+    if type(entry) == "table" then
+      local conn = apply_env(entry, vars)
+      conn.dialect = const.normalize_dialect(conn.dialect)
+      if build_conn_url(name, conn, false) == url then return name end
+    end
+  end
+  return nil
 end
 
 ---------------------------------------------------------------------------

@@ -570,3 +570,73 @@ describe("connections percent_encode", function()
     assert.equals("caf%C3%A9", enc("café"))
   end)
 end)
+
+describe("connections name_for_url", function()
+  local tmpdir
+  local saved_cwd
+  local saved_tunnel
+
+  before_each(function()
+    tmpdir = vim.fn.tempname()
+    vim.fn.mkdir(tmpdir, "p")
+    saved_cwd = vim.fn.getcwd()
+    vim.fn.chdir(tmpdir)
+    util_stub.find_file_upwards = function() return tmpdir .. "/connections.toml" end
+    package.loaded["poste-db.toml"].parse_file = function()
+      return {
+        primary = { dialect = "postgres", host = "db.internal", port = 5432, database = "blog", user = "alice", password = "s3cret" },
+        mem = { dialect = "sqlite" },
+        redis = { dialect = "redis", host = "cache.internal", port = 6379 },
+        tun = { dialect = "mysql", host = "db.internal", port = 3306, database = "ops", user = "bob", tunnel = { dest = "jump@bastion" } },
+      }
+    end
+    saved_tunnel = package.loaded["poste-db.tunnel"]
+    package.loaded["poste-db.tunnel"] = { status_list = function() return {} end }
+  end)
+
+  after_each(function()
+    vim.fn.chdir(saved_cwd)
+    pcall(vim.fn.delete, tmpdir, "rf")
+    package.loaded["poste-db.tunnel"] = saved_tunnel
+  end)
+
+  it("round-trips resolve_connection_url back to the name", function()
+    local url = connections.resolve_connection_url("primary")
+    assert.equals("postgres://alice:s3cret@db.internal:5432/blog", url)
+    assert.equals("primary", connections.name_for_url(url))
+  end)
+
+  it("matches sqlite entries", function()
+    assert.equals("mem", connections.name_for_url("sqlite::memory:"))
+  end)
+
+  it("never matches non-SQL dialect entries (shared connections.toml)", function()
+    assert.is_nil(connections.name_for_url("redis://cache.internal:6379"))
+  end)
+
+  it("returns nil for an unknown url", function()
+    assert.is_nil(connections.name_for_url("postgres://nobody@nowhere:5432/x"))
+  end)
+
+  it("matches a tunneled entry through its active local port", function()
+    package.loaded["poste-db.tunnel"] = {
+      status_list = function() return { { name = "tun", port = 15432 } } end,
+      ensure = function() return 15432 end,
+    }
+    -- forward resolution yields the same local-end URL the binary saw
+    local url = connections.resolve_connection_url("tun")
+    assert.equals("mysql://bob@127.0.0.1:15432/ops", url)
+    assert.equals("tun", connections.name_for_url(url))
+  end)
+
+  it("skips tunneled entries when the tunnel is not running", function()
+    assert.is_nil(connections.name_for_url("mysql://bob@127.0.0.1:15432/ops"))
+    -- the non-tunneled entries still resolve
+    assert.equals("primary", connections.name_for_url(connections.resolve_connection_url("primary")))
+  end)
+
+  it("returns nil without a connections.toml", function()
+    util_stub.find_file_upwards = function() return nil end
+    assert.is_nil(connections.name_for_url("postgres://x@y:1/z"))
+  end)
+end)
