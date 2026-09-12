@@ -153,7 +153,11 @@ function M.ask_resultset()
     for j = 1, #cols do
       local v = rows[i][j]
       local s = (v == nil and "NULL" or tostring(v)):gsub("[|\n]", " ")
-      if #s > 60 then s = s:sub(1, 57) .. "..." end
+      if #s > 60 then
+        -- char-safe cut at the byte budget: a plain sub split multibyte cell
+        -- values (CJK schemas are first-class) and sent invalid UTF-8
+        s = require("poste-db.util").utf8_safe_cut(s, 57) .. "..."
+      end
       cells[#cells + 1] = s
     end
     out[#out + 1] = row_line(cells)

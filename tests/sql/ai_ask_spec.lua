@@ -75,6 +75,38 @@ describe("poste-db.ai ask entry points", function()
     require("poste-ai.chat.window").close()
   end)
 
+  it("truncates long CJK cell values on a character boundary", function()
+    if not ai.available() then
+      pending("poste-ai.nvim not on rtp")
+      return
+    end
+    -- "x" + 40×蜀 = 121 bytes, so the 57-byte budget lands in the MIDDLE of
+    -- a character: the old byte-based sub(1, 57) emitted a half character
+    -- (invalid UTF-8) to the provider
+    local long = "x" .. string.rep("蜀", 40)
+    state_sql.last_dataset = {
+      type = "resultset",
+      results = { {
+        columns = { { name = "name" } },
+        rows = { { long } },
+        original_sql = "SELECT name FROM t",
+      } },
+    }
+    ai.ask_resultset()
+    local text = require("poste-ai.chat.window").input_text()
+    local cell
+    for l in text:gmatch("[^\n]+") do
+      if l:match("^%| x") then cell = l:match("^%| (.-) %|$") break end
+    end
+    assert.truthy(cell, "truncated CJK cell present")
+    local trimmed = cell:gsub("%.%.%.$", "")
+    assert.equals(cell .. "", trimmed .. "...", "cell ends with the ellipsis")
+    assert.is_true(#trimmed <= 57, "byte budget respected")
+    assert.equals(trimmed, vim.fn.iconv(trimmed, "utf-8", "utf-8"),
+      "cell must be valid UTF-8 — a byte-based cut emits a half character")
+    require("poste-ai.chat.window").close()
+  end)
+
   it("ask_view notifies when there is nothing to ask about", function()
     local window = require("poste-ai.chat.window")
     window.close()

@@ -90,14 +90,18 @@ local function build_menu_lines(node, context)
   local defs = MENU_DEFS[node.node_type]
   if not defs or #defs == 0 then return nil end
 
+  -- display widths throughout: CJK table names are wider than their #len,
+  -- and the pad below must cancel the title's DISPLAY width or the top
+  -- border draws shorter than the bottom one
+  local dw = vim.fn.strdisplaywidth
   local max_label = 0
   for _, item in ipairs(defs) do
     max_label = math.max(max_label, #item.label)
   end
-  local width = math.max(#("  [x] " .. node.name) + 8, #("  [x] " .. string.rep("X", max_label)) + 4)
+  local width = math.max(dw("  [x] " .. node.name) + 8, dw("  [x] " .. string.rep("X", max_label)) + 4)
   local title = node.node_type:sub(1, 1):upper() .. node.node_type:sub(2) .. ": " .. node.name
-  width = math.max(width, #title + 4)
-  local title_pad = width - #title - 2
+  width = math.max(width, dw(title) + 4)
+  local title_pad = width - dw(title) - 2
 
   local lines = {}
   local item_map = {}

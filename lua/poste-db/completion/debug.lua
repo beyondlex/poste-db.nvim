@@ -87,7 +87,11 @@ local function render()
         break
       end
       local doc = (item.documentation or "")
-      if doc:len() > 55 then doc = doc:sub(1, 55) .. "…" end
+      if #doc > 55 then
+        -- char-safe cut: column comments (the usual documentation source) are
+        -- often CJK and a byte-based sub rendered invalid UTF-8
+        doc = require("poste-db.util").utf8_safe_cut(doc, 55) .. "…"
+      end
       table.insert(lines, string.format("  %d. %s [%s]", i, item.label, doc))
     end
 
