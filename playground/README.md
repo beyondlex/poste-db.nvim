@@ -41,7 +41,14 @@ docker compose up -d
 | `blog`      | authors, categories, posts, tags, post_tags, comments          | 53 / 4 / 207 / 30 / 508 |
 | `blog`      | web_vitals (54-col wide table)                                 | 10k              |
 | `inventory` | warehouses, suppliers, items, stock, shipments, shipment_items | 24 / 34 / 110 / 523 / 105 |
+| `cinema`    | 36 tables (works, work_titles, people, characters, seasons, episodes, episode_lines, reviews, box_office, tracks, game_achievements, ...) | ~26k (works 300, titles 1.5k, people 501, characters 450, episodes 12.6k, episode_lines 1.5k, reviews 710, ...) |
+| `history`   | 34 tables (regions, civilizations, eras, historical_figures, dynasties, wars, battles, literary_works, relics, timelines, citations, ...) | ~7k (figures 504, events 640, timeline 2k, citations 918, ...) |
 
+- `cinema` (04/05) and `history` (06/07) demonstrate type coverage beyond the
+  basics: JSON, ENUM, SET, BIT, BINARY(16), POINT geometry, DECIMAL, DOUBLE,
+  FLOAT, SMALLINT, YEAR, TIME, BLOB — plus multilingual rows (en/zh/ja/la/ru)
+  and deep parent→child hierarchies (works→seasons→episodes→episode_lines)
+  sized for tree pagination demos.
 - User: `root` / Password: `poste_test`
 
 ### MariaDB (port 13307)
@@ -92,6 +99,8 @@ The `queries/` directory contains dialect-specific query files covering each dat
 |-------------------|-------------|-----------------|------------------|
 | `postgres.sql`    | PostgreSQL  | pg-ecommerce    | JSONB, DISTINCT ON, RETURNING, LATERAL, window functions, FILTER, ARRAY_AGG, generate_series, INET, full-text search, GROUPING SETS |
 | `mysql.sql`       | MySQL       | my-blog         | GROUP_CONCAT, ELT, JSON functions, window functions, WITH RECURSIVE, wide tables, date functions |
+| `mysql.sql`       | MySQL       | my-cinema       | multilingual titles, works→seasons→episodes→episode_lines tree, BIT/TIME/BINARY/YEAR, JSON metadata, ratings/reviews aggregation |
+| `mysql.sql`       | MySQL       | my-history      | POINT geometry (ST_AsText), SET membership (FIND_IN_SET), JSON honors, BINARY(16) hex, 2k-row timeline pagination, multilingual citations |
 | `mariadb.sql`     | MariaDB     | maria-dev       | Sequences, RETURNING, INVISIBLE columns, virtual columns, AES encryption, CTE |
 | `sqlite.sql`      | SQLite      | sqlite-dev      | PRAGMA, INSERT OR, GLOB, NATURAL JOIN, SAVEPOINT, JSON functions, WITHOUT ROWID |
 | `mssql.sql`       | SQL Server  | mssql           | TOP, OFFSET/FETCH, MERGE (UPSERT), IDENTITY, CAST/CONVERT, DATEDIFF/DATEADD, TRY_*, STRING_AGG, FORMAT, derived tables, temp tables, FOR JSON, GENERATE_SERIES, window functions, rowversion |
@@ -99,7 +108,11 @@ The `queries/` directory contains dialect-specific query files covering each dat
 
 ## Data Generation Strategy
 
-All SQL files stay under 8KB. Hand-crafted demo data (3-7 rows) is kept for realistic samples; the rest is generated via `generate_series()` / `WITH RECURSIVE` + `random()`. No external dependencies, no file bloat.
+Hand-crafted demo data (3-40 rows per table) is kept for realistic samples; the
+rest is generated via `generate_series()` / `WITH RECURSIVE` + `random()`. The
+large cinema/history MySQL seeds intentionally exceed ~8KB so tree pagination
+has real volume (episodes 12.6k, timeline 2k, citations 918). No external
+dependencies, no other file bloat.
 
 ## Cleanup
 

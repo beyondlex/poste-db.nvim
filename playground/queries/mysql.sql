@@ -216,3 +216,104 @@ INSERT INTO three_kingdoms_characters (name, courtesy_name, birth_year, death_ye
 
 SELECT * from three_kingdoms_characters;
 
+-- @connection my-cinema
+-- @database cinema
+
+-- ============================================================
+-- Cinema: multilingual works, deep tree pagination
+-- ============================================================
+SELECT w.id, w.title, w.title_zh, w.kind, w.release_year, w.maturity, w.score
+FROM works w
+WHERE w.kind = 'anime'
+ORDER BY w.score DESC LIMIT 10;
+
+-- titles in multiple languages (en/zh/ja/ru/la)
+SELECT w.title AS base, GROUP_CONCAT(CONCAT(t.lang, ':', t.title) SEPARATOR ' | ') AS titles
+FROM works w JOIN work_titles t ON t.work_id = w.id
+WHERE w.id IN (1, 2, 3, 10)
+GROUP BY w.id, w.title;
+
+-- deepest hierarchy: seasons -> episodes -> episode_lines (tree pagination demo)
+SELECT s.work_id, s.season_no, e.ep_no, COUNT(el.id) AS line_count
+FROM seasons s
+JOIN episodes e ON e.season_id = s.id
+LEFT JOIN episode_lines el ON el.episode_id = e.id
+GROUP BY s.work_id, s.season_no, e.ep_no
+ORDER BY s.work_id, s.season_no, e.ep_no
+LIMIT 10;
+
+-- voices across languages
+SELECT c.name, c.name_zh, cv.lang, p.name_en AS voice
+FROM characters c
+JOIN character_voices cv ON cv.character_id = c.id
+JOIN people p ON p.id = cv.people_id
+WHERE cv.lang != 'ja'
+ORDER BY c.id LIMIT 10;
+
+-- ratings/reviews aggregation
+SELECT w.title, wr.score, wr.votes, COUNT(r.id) AS review_count
+FROM works w
+JOIN work_ratings wr ON wr.work_id = w.id AND wr.source_id = 1
+LEFT JOIN reviews r ON r.work_id = w.id
+GROUP BY w.id, w.title, wr.score, wr.votes
+ORDER BY wr.score DESC LIMIT 10;
+
+-- multilingual reviews
+SELECT w.title, r.title, r.lang, LEFT(r.body, 40) AS body_prefix, r.likes
+FROM reviews r JOIN works w ON w.id = r.work_id
+WHERE r.lang IN ('en', 'ja', 'ru', 'la')
+ORDER BY r.likes DESC LIMIT 10;
+
+-- JSON metadata spot checks
+SELECT w.title, JSON_UNQUOTE(JSON_EXTRACT(w.metadata, '$.tags[0]')) AS first_tag
+FROM works w WHERE w.metadata IS NOT NULL LIMIT 10;
+
+-- type demo: BIT / TIME / BINARY / YEAR
+SELECT e.id, e.ep_no, e.air_time, BIN(e.is_omake) AS omake, e.viewership
+FROM episodes e WHERE e.is_omake = b'1' LIMIT 5;
+
+SELECT t.id, t.title, t.duration FROM tracks t LIMIT 5;
+
+-- @connection my-history
+-- @database history
+
+-- ============================================================
+-- History: POINT / ENUM / SET / JSON / BINARY / big timeline
+-- ============================================================
+-- capitals with POINT coordinates (via ST_AsText)
+SELECT c.name_en, c.name_zh, ST_AsText(c.coord) AS coord, c.first_year, c.last_year
+FROM capitals c ORDER BY c.first_year LIMIT 10;
+
+-- famous battles with geometry + double armies
+SELECT b.name_en, b.battle_date, ST_AsText(b.coord) AS coord,
+       b.troops_a, b.troops_b, b.outcome
+FROM battles b ORDER BY b.battle_date LIMIT 10;
+
+-- SET column membership (find wars Rome/Mongol fought in)
+SELECT w.name_en, w.started, w.ended, w.belligerents
+FROM wars w
+WHERE FIND_IN_SET('Rome', w.belligerents) OR FIND_IN_SET('Mongol', w.belligerents)
+ORDER BY w.started LIMIT 10;
+
+-- JSON honors on historical figures
+SELECT f.name_en, f.name_zh, JSON_UNQUOTE(JSON_EXTRACT(f.honors, '$.temple')) AS temple
+FROM historical_figures f WHERE f.honors IS NOT NULL LIMIT 10;
+
+-- BINARY(16) archive id (hex)
+SELECT l.title_en, HEX(l.source_hid) AS asset_hid FROM literary_works l LIMIT 5;
+
+-- timeline big table pagination demo (2000 rows)
+SELECT t.event_year, t.title_en, r.name_en AS region
+FROM timeline_events t JOIN regions r ON r.id = t.region_id
+ORDER BY t.event_year LIMIT 10;
+SELECT t.kind, COUNT(*) FROM timeline_events t GROUP BY t.kind ORDER BY 2 DESC;
+
+-- multilingual citations (918 rows, langs en/zh/ja/la/ru/fr/de)
+SELECT c.quote_zh, c.lang, c.page_no, l.title_en AS source
+FROM citations c LEFT JOIN literary_works l ON l.id = c.source_work_id
+WHERE c.lang IN ('la', 'ru') LIMIT 10;
+
+-- expedition POINT + SMALLINT scale demo
+SELECT e.name_en, ST_AsText(e.departure) AS departure, e.ships_count, e.crew_count
+FROM expeditions e ORDER BY e.start_year;
+

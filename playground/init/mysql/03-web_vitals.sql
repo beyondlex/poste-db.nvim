@@ -3,6 +3,7 @@
 -- Added to blog database for testing wide-table support
 -- ============================================================
 
+SET NAMES utf8mb4;
 CREATE DATABASE IF NOT EXISTS blog CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE blog;
 

@@ -43,6 +43,24 @@ database = ""
 user = "{{MYSQL_LOCAL_USER}}"
 password = "{{MYSQL_LOCAL_PASSWORD}}"
 
+[my-cinema]
+dialect = "mysql"
+host = "{{MYSQL_CINEMA_HOST}}"
+port = 13306
+database = "{{MYSQL_CINEMA_DB}}"
+user = "{{MYSQL_CINEMA_USER}}"
+password = "{{MYSQL_CINEMA_PASSWORD}}"
+color = "MiniStatuslineModeVisual"
+
+[my-history]
+dialect = "mysql"
+host = "{{MYSQL_HISTORY_HOST}}"
+port = 13306
+database = "{{MYSQL_HISTORY_DB}}"
+user = "{{MYSQL_HISTORY_USER}}"
+password = "{{MYSQL_HISTORY_PASSWORD}}"
+color = "MiniStatuslineModeInsert"
+
 [sqlite-dev]
 dialect = "sqlite"
 path = "./playground/init/sqlite/test.db"
