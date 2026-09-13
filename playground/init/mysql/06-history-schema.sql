@@ -42,7 +42,6 @@ CREATE TABLE civilizations (
     name_zh       VARCHAR(120) NOT NULL,
     start_year    INT,                        -- 负值 = 公元前
     end_year      INT,
-    writing_system ENUM('cuneiform','hieroglyphs','ideographic','syllabic','alphabet','other'),
     flourish      VARCHAR(200),
     FOREIGN KEY (region_id) REFERENCES regions(id)
 ) ENGINE=InnoDB COMMENT='文明';

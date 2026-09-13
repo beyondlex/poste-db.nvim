@@ -70,8 +70,16 @@ function M.setup()
   vim.api.nvim_set_hl(0, "PosteDbDatasetSearchActive", { fg = dark and 0xc084fc or 0x7e22ce, bold = true })
   -- the matched characters inside a searched cell (fg over the cell-wide
   -- Search tint); same purple family as the winbar's search label
+  vim.api.nvim_set_hl(0, "PosteDbDatasetSearchMatch",
+    { fg = dark and 0xffffff or 0x1e1e1e, bold = true, bg = dark and 0x073522 or 0x3cb4ea })
   vim.api.nvim_set_hl(0, "PosteDbDatasetSearchMatchText",
     { fg = dark and 0xc084fc or 0x7e22ce, bold = true })
+  -- matched characters inside the CURRENT cell. IncSearch is a flat
+  -- bg/reverse group, so the char layer needs its own fg to be visible;
+  -- resolve IncSearch's fg (theme-chosen for contrast on its bg) and add
+  -- bold/underline so the matched chars read as emphasized.
+  vim.api.nvim_set_hl(0, "PosteDbDatasetSearchCurrentText",
+    { fg = fg_of("IncSearch", dark and 0xc084fc or 0x7e22ce), bold = true, underline = true })
   vim.api.nvim_set_hl(0, "PosteDbMissingWhere",
     { fg = dark and 0xc084fc or 0x8250df, bold = true })
   vim.api.nvim_set_hl(0, "PosteDbDatasetInsertHint", { fg = dark and 0xe5c07b or 0x0550ae, bold = true, underline = true })
@@ -105,7 +113,7 @@ function M.setup()
     "PosteDbDatasetMeta", "PosteDbDatasetMetaDim", "PosteDbDatasetNull",
     "PosteDbDatasetNumber", "PosteDbDatasetBool", "PosteDbDatasetSortIndicator",
     "PosteDbDatasetRowNum", "PosteDbDatasetCellSelected", "PosteDbDatasetCursorLine",
-    "PosteDbDatasetSearchMatch", "PosteDbDatasetSearchCurrent", "PosteDbDatasetSearchMatchText",
+    "PosteDbDatasetSearchMatch", "PosteDbDatasetSearchCurrent", "PosteDbDatasetSearchMatchText", "PosteDbDatasetSearchCurrentText",
     "PosteDbDatasetInsertHint", "PosteDbDatasetError",
     "PosteDbDatasetWinbarAdded", "PosteDbDatasetWinbarModified", "PosteDbDatasetWinbarDeleted",
     "PosteDbMissingWhere",

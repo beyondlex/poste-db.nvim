@@ -42,20 +42,40 @@ SELECT
 FROM seq;
 
 -- ---------- 文明 / 分期 / 家族 / 官职 ----------
+INSERT INTO civilizations
+(region_id, name_en, name_native, name_zh, start_year, end_year, flourish)
+VALUES
+  -- 东亚
+  (1,  'Chinese civilization',      '中华文明',          '中华文明',        -3800, NULL,  '黄河/长江流域'),
+  (2,  'Yamato civilization',       '大和',              '大和文明',        250,   NULL,  '畿内'),
+  (3,  'Korean civilization',       '한국',              '朝鲜文明',        -1500, NULL,  '朝鲜半岛'),
 
-INSERT INTO civilizations (region_id, name_en, name_native, name_zh, start_year, end_year, writing_system, flourish) VALUES
-  (1,  'Chinese civilization', '中华文明', '中华文明', -2070, 1912, 'ideographic', '河洛/长江流域'),
-  (2,  'Yamato civilization', '邪馬台国', '大和文明', -300, 1868, 'ideographic', '畿内'),
-  (3,  'Korean civilization', '한국', '朝鲜文明', -2333, 1945, 'ideographic', '汉江'),
-  (4,  'Indus Valley civilization', 'सिंधु घाटी', '印度河谷文明', -2600, -1900, 'ideographic', '摩亨佐-达罗'),
-  (5,  'Persian civilization', 'تمدن ایران', '波斯文明', -550, 1979, 'alphabet', '波斯波利斯'),
-  (6,  'Egyptian civilization', 'حضارة مصر', '古埃及文明', -3100, -30, 'hieroglyphs', '尼罗河三角洲'),
-  (7,  'Mesopotamian civilization', 'بلاد الرافدين', '美索不达米亚文明', -3500, -539, 'cuneiform', '乌尔/巴比伦'),
-  (8,  'Greek civilization', 'Ελληνικός πολιτισμός', '希腊文明', -1600, -146, 'alphabet', '雅典城邦'),
-  (9,  'Roman civilization', 'Civitas Romana', '罗马文明', -753, 476, 'alphabet', '台伯河七丘'),
-  (10, 'European civilization', 'Europe', '欧洲文明', 476, NULL, 'alphabet', '西欧基督教世界');
+  -- 南亚
+  (4,  'Indus Valley civilization', 'सिंधु घाटी',             '印度河谷文明',    -2600, -1900, '摩亨佐-达罗/哈拉帕'),
+  (19, 'Indian civilization',       'भारतीय सभ्यता',     '印度文明',        -1500, NULL,    '恒河流域'),
 
-INSERT INTO civilizations (region_id, name_en, name_native, name_zh, start_year, end_year, writing_system, flourish)
+  -- 西亚/北非
+  (6,  'Egyptian civilization',     'حضارة مصر',         '古埃及文明',      -3100, -30,    '尼罗河'),
+  (7,  'Mesopotamian civilization', 'بلاد الرافدين',     '美索不达米亚文明', -3500, -539,   '乌尔/巴比伦'),
+  (11, 'Elamite civilization',      'هَتَمتی',           '埃兰文明',        -3200, -539,    '苏萨/安善'),
+  (12, 'Hittite civilization',      '𒌷𒄩𒀜𒋾',          '赫梯文明',        -1900, -1178,   '哈图沙'),
+  (13, 'Assyrian civilization',     '𒀸𒋩',             '亚述文明',        -2500, -609,   '尼尼微/亚述城'),
+  (14, 'Phoenician civilization',   '𐤊𐤍𐤏𐤍',           '腓尼基文明',      -1500, -539,       '推罗/西顿/迦太基'),
+  (5,  'Persian civilization',      'تمدن ایران',        '波斯文明',        -550,  NULL,    '波斯波利斯'),
+  (18, 'Islamic civilization',      'الحضارة الإسلامية', '伊斯兰文明',      622,   NULL,       '麦加/巴格达/开罗'),
+
+  -- 欧洲
+  (8,  'Greek civilization',        'Ελληνικός πολιτισμός', '希腊文明',     -1600, -146,    '雅典/爱琴海'),
+  (9,  'Roman civilization',        'Civitas Romana',    '罗马文明',        -753,  476,       '台伯河七丘'),
+  (17, 'Byzantine civilization',    'Βυζάντιον',         '拜占庭文明',      330,   1453,      '君士坦丁堡'),
+  (10, 'European civilization',     'Europa',            '欧洲文明',        476,   NULL,      '西欧基督教世界'),
+  (20, 'Celtic civilization',       'Celtic',            '凯尔特文明',      -1200, 500,       '中欧/不列颠/高卢'),
+
+  -- 美洲
+  (15, 'Maya civilization',         'Maya',              '玛雅文明',        -2000, 1697,   '尤卡坦/佩滕'),
+  (16, 'Inca civilization',         'Tawantinsuyu',      '印加文明',        -1438, 1533,         '库斯科');
+
+INSERT INTO civilizations (region_id, name_en, name_native, name_zh, start_year, end_year, flourish)
 WITH RECURSIVE seq (i) AS (
     SELECT 1 UNION ALL SELECT i + 1 FROM seq WHERE i < 30
 )
@@ -66,7 +86,6 @@ SELECT
   CONCAT('演示文明', i + 10),
   -2000 + i * 120,
   -2000 + i * 120 + 1600,
-  ELT(1 + (i % 6), 'cuneiform', 'hieroglyphs', 'ideographic', 'syllabic', 'alphabet', 'other'),
   CONCAT('Bloom of demo civilization #', i + 10)
 FROM seq;
 

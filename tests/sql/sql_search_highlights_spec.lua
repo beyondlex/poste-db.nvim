@@ -80,11 +80,11 @@ describe("apply_search_highlights extmark columns", function()
     assert.equals("b", line:sub(sub[4].end_col, sub[4].end_col))
   end)
 
-  it("the current match's substring uses IncSearch", function()
+  it("the current match's substring uses CurrentText", function()
     tab.search_idx = 1 -- == global_match_idx
     search.apply_search_highlights()
     local sub = marks()[2]
-    assert.equals("PosteDbDatasetSearchCurrent", sub[4].hl_group)
+    assert.equals("PosteDbDatasetSearchCurrentText", sub[4].hl_group)
     assert.equals(15, sub[3])
   end)
 end)

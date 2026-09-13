@@ -145,7 +145,7 @@ function M.apply_search_highlights()
           vim.api.nvim_buf_set_extmark(D.dataset_buffer, D.search_ns, buf_line - 1, range.ext_start + s - 2, {
             end_row = buf_line - 1,
             end_col = range.ext_start + e - 1,
-            hl_group = current and "PosteDbDatasetSearchCurrent" or "PosteDbDatasetSearchMatchText",
+            hl_group = current and "PosteDbDatasetSearchCurrentText" or "PosteDbDatasetSearchMatchText",
             priority = 151,
           })
         end
