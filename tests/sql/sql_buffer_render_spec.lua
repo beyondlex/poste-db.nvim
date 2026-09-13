@@ -48,7 +48,7 @@ describe("buffer_render", function()
 
   it("inserts the sort indicator without corrupting the header text", function()
     local tab = { sort = { col = 1, ascending = true } }
-    local _, meta = render.normalize_rendered_page(tab, {
+    local _ = render.normalize_rendered_page(tab, {
       "┌──────────────┐",
       "│ # │ id    │ name   │",
       "├──────────────┤",

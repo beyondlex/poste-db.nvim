@@ -37,9 +37,10 @@ local function make_buf(lines)
   return buf
 end
 
--- Seed state so conn_key() resolves
+-- Seed state so conn_key() resolves (mutate the module table — rebinding the
+-- local never reached it)
 local state = require("poste-db.state")
-state = { context = { connection = "test-conn", database = "blog" } }
+state.context = { connection = "test-conn", database = "blog" }
 
 sql_comp.cache_tables({ { name = "authors" }, { name = "posts" } })
 sql_comp.cache_columns("authors", {
@@ -87,7 +88,7 @@ end
 -- ── 2. Alias resolution ─────────────────────────────────────────────────────
 log("\n=== alias resolution (Rust path) ===")
 
-state = { context = { connection = "test-conn", database = "blog" } }
+state.context = { connection = "test-conn", database = "blog" }
 sql_comp.cache_tables({ { name = "authors" }, { name = "posts" } })
 sql_comp.cache_columns("posts", {
   { name = "id" }, { name = "title" }, { name = "author_id" },

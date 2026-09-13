@@ -11,7 +11,6 @@ local ICONS = icons.ICONS
 local MARKER_COLLAPSED = icons.MARKER_COLLAPSED
 local MARKER_EXPANDED = icons.MARKER_EXPANDED
 local MARKER_LOADING = icons.MARKER_LOADING
-local HEADER_LINES = icons.HEADER_LINES
 
 local flatten_tree = tree.flatten_tree
 local calc_icon_position = tree.calc_icon_position
@@ -374,7 +373,7 @@ describe("db_browser flatten_tree", function()
       meta = { dialect = "postgres", host = "localhost" },
     }
 
-    local lines, node_map, count_ranges = flatten_tree({ conn })
+    local lines, node_map = flatten_tree({ conn })
 
     -- 4 visible + 1 column = 5 lines
     assert.equals(5, #lines)

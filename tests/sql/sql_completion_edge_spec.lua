@@ -19,11 +19,6 @@ end
 -- resolve_current_context / conn_key edge cases
 ----------------------------------------------------------------------
 describe("resolve_current_context / conn_key", function()
-  before_each(function()
-    local state = require("poste-db.state")
-    state = state or {}
-  end)
-
   it("nil conn_key when no connection in buffer or state", function()
     local buf = make_buf({"###", "SELECT * FROM users"})
     vim.api.nvim_set_current_buf(buf)

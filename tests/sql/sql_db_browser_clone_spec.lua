@@ -40,8 +40,6 @@ describe("db_browser copy progress spinner", function()
   end
 
   it("renders an animated spinner frame while a job is copying", function()
-    local copy = require("poste-db.db_browser.copy")
-    local t = copy._test
     local source = { conn = "s", db = "blog", dialect = "postgres" }
     local target = { conn = "t", db = "other", dialect = "postgres" }
     local jobs = {
@@ -108,8 +106,6 @@ describe("db_browser copy progress cancel", function()
   end
 
   it("exposes a cancel handle and stops the queue without running later jobs", function()
-    local copy = require("poste-db.db_browser.copy")
-    local t = copy._test
     local source = { conn = "s", db = "blog", dialect = "postgres" }
     local target = { conn = "t", db = "other", dialect = "postgres" }
     local ran = {}
@@ -143,8 +139,6 @@ describe("db_browser copy progress cancel", function()
   end)
 
   it("renders the cancel hint while jobs are pending", function()
-    local copy = require("poste-db.db_browser.copy")
-    local t = copy._test
     local source = { conn = "s", db = "blog", dialect = "postgres" }
     local target = { conn = "t", db = "other", dialect = "postgres" }
     local release

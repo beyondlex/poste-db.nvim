@@ -26,11 +26,12 @@ jobs:
         run: luarocks install luacheck
 
       # Zero-warning baseline since the 2026-09-07 cleanup (review report
-      # docs/REVIEW-2026-09-07.md): any luacheck warning or error fails the
-      # build. W111 (write to an undefined global) was the bug class behind
+      # docs/REVIEW-2026-09-07.md; tests/ joined the baseline in the
+      # 2026-09-13 round): any luacheck warning or error fails the build.
+      # W111 (write to an undefined global) was the bug class behind
       # review-2026-09-06 findings 1/2/3/10.
       - name: Lint
-        run: luacheck --codes lua plugin ftplugin
+        run: luacheck --codes lua plugin ftplugin tests
 
   test:
     strategy:

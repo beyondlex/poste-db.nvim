@@ -214,7 +214,7 @@ describe("extract_stmt_at_cursor — edge cases", function()
       "SELECT * FROM users;",
       "SELECT * FROM orders;",
     }
-    local content, adjusted_line, stmt_start = t.extract_stmt_at_cursor(lines, 2)
+    local content, _, stmt_start = t.extract_stmt_at_cursor(lines, 2)
     assert.equals(2, stmt_start)
     assert.truthy(content:find("SELECT %* FROM users;", 1, false))
   end)
@@ -226,7 +226,7 @@ describe("extract_stmt_at_cursor — edge cases", function()
       "FROM users;",
       "SELECT * FROM orders;",
     }
-    local content, adjusted_line, stmt_start = t.extract_stmt_at_cursor(lines, 3)
+    local content, _, stmt_start = t.extract_stmt_at_cursor(lines, 3)
     -- stmt_start should be 2 (line with "SELECT *")
     assert.equals(2, stmt_start)
     assert.truthy(content:find("SELECT %*", 1, false))
@@ -240,7 +240,7 @@ describe("extract_stmt_at_cursor — edge cases", function()
       "",
       "SELECT * FROM orders;",
     }
-    local content, adjusted_line, stmt_start = t.extract_stmt_at_cursor(lines, 3)
+    local _, _, stmt_start = t.extract_stmt_at_cursor(lines, 3)
     -- Cursor on line 3 (blank), should skip to line 4
     assert.equals(4, stmt_start)
   end)
@@ -250,7 +250,7 @@ describe("extract_stmt_at_cursor — edge cases", function()
       "###",
       "SELECT * FROM users",
     }
-    local content, adjusted_line, stmt_start = t.extract_stmt_at_cursor(lines, 2)
+    local _, _, stmt_start = t.extract_stmt_at_cursor(lines, 2)
     assert.equals(2, stmt_start)
   end)
 
@@ -262,7 +262,7 @@ describe("extract_stmt_at_cursor — edge cases", function()
       "SELECT * FROM orders;",
     }
     local buf = make_buf(lines)
-    local content, adjusted_line, stmt_start = t.extract_stmt_at_cursor(lines, 3, buf)
+    local _, _, stmt_start = t.extract_stmt_at_cursor(lines, 3, buf)
     assert.equals(3, stmt_start)
   end)
 
@@ -291,7 +291,7 @@ describe("extract_stmt_at_cursor — edge cases", function()
       "###",
       "SELECT * FROM users WHERE id = 1;",
     }
-    local content, adjusted_line, stmt_start = t.extract_stmt_at_cursor(lines, 2)
+    local _, _, stmt_start = t.extract_stmt_at_cursor(lines, 2)
     -- stmt_start = 2 (SELECT line). indicators.set_indicator uses
     -- first_line - 1 = 2 - 1 = 1 → 0-indexed line 1 = SELECT line
     assert.equals(2, stmt_start)
@@ -305,7 +305,7 @@ describe("extract_stmt_at_cursor — SET user variables", function()
       "SET @a = 1;",
       "SELECT * FROM items WHERE id = @a;",
     }
-    local content, adjusted_line, stmt_start, stmt_end, set_lines = t.extract_stmt_at_cursor(lines, 3)
+    local content, _, stmt_start, _, set_lines = t.extract_stmt_at_cursor(lines, 3)
     assert.equals(3, stmt_start, "stmt_start stays on the SELECT line for indicators")
     assert.same({ "SET @a = 1;" }, set_lines)
     assert.truthy(content:find("SET @a = 1;", 1, true))
@@ -344,7 +344,7 @@ describe("extract_stmt_at_cursor — SET user variables", function()
       "###",
       "SELECT * FROM users;",
     }
-    local content, adjusted_line, stmt_start, stmt_end, set_lines = t.extract_stmt_at_cursor(lines, 2)
+    local _, _, _, _, set_lines = t.extract_stmt_at_cursor(lines, 2)
     assert.same({}, set_lines)
   end)
 
@@ -367,7 +367,7 @@ describe("extract_stmt_at_cursor — SET user variables", function()
       "SET @a = 1;",
       "SELECT * FROM items WHERE id = @a;",
     }
-    local content, adjusted_line = t.extract_stmt_at_cursor(lines, 3)
+    local _, adjusted_line = t.extract_stmt_at_cursor(lines, 3)
     -- content layout: ### (1) + SET @a (2) + SELECT (3) → SELECT is at line 3
     assert.equals(3, adjusted_line)
   end)

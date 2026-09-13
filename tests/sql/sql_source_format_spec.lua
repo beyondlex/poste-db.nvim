@@ -8,7 +8,6 @@ local config_mod = require("poste-db.config")
 local sf = require("poste-db.source_format")
 local t = sf._test
 
-local orig_executable = vim.fn.executable
 local function stub_executable(result)
   vim.fn.executable = function() return result or 0 end
 end
@@ -41,7 +40,6 @@ describe("source_format build_formatter_args", function()
 end)
 
 describe("source_format dialect maps", function()
-  local t = sf._test
 
   it("maps mssql to tsql in every formatter that knows mssql", function()
     local mapped = 0

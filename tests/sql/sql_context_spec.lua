@@ -4,7 +4,6 @@ local saved_const = package.loaded["poste-db.constants"]
 local saved_connections = package.loaded["poste-db.connections"]
 
 local state_stub = { context = { connection = nil, database = nil }, log = function() end }
-local const_stub = package.loaded["poste-db.constants"] or require("poste-db.constants")
 
 package.loaded["poste-db.connections"] = {
   get_connection_config = function(name)
