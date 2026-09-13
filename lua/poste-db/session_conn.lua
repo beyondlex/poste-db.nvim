@@ -46,7 +46,9 @@ end
 -- Extract database name from connection URL for display.
 local function database_from_url(url)
   if url:match("^sqlite:") then
-    local rest = url:gsub("^sqlite:", ""):gsub("^/+", "")
+    -- strip the query string first: `file.sqlite?mode=rwc` names the file,
+    -- not a database called "file.sqlite?mode=rwc" (09-08 carry)
+    local rest = url:gsub("^sqlite:", ""):gsub("%?.*$", ""):gsub("^/+", "")
     if rest == ":memory:" or rest == "" then return nil end
     local stem = rest:match("([^/]+)%.sqlite$") or rest:match("([^/]+)$")
     return stem
@@ -56,8 +58,11 @@ local function database_from_url(url)
     local after = url:sub(scheme_end + 3)
     local last_slash = after:match(".*()/")
     if last_slash then
-      local db = after:sub(last_slash + 1)
-      if db ~= "" then return db end
+      -- strip the query string; and a candidate that still carries `@` is
+      -- host info leaked from a `/` inside the password (db-less URL) —
+      -- no name is better than a wrong one
+      local db = after:sub(last_slash + 1):gsub("%?.*$", "")
+      if db ~= "" and not db:find("@", 1, true) then return db end
     end
   end
   return nil

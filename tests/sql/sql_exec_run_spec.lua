@@ -149,6 +149,16 @@ describe("exec_run", function()
       assert.equals("mydb", exec_run.detect_use("use mydb -- switch context"))
     end)
 
+    it("detects hyphenated db names (plain and quoted)", function()
+      -- `USE my-db;` used to miss the identifier class and reach the session
+      -- as real SQL — a syntax error — instead of switching the context.
+      assert.equals("my-db", exec_run.detect_use("USE my-db;"))
+      assert.equals("my-db", exec_run.detect_use("use my-db"))
+      assert.equals("my-db", exec_run.detect_use("USE `my-db`;"))
+      assert.equals("my-db", exec_run.detect_use('USE "my-db";'))
+      assert.equals("my-db", exec_run.detect_use("USE my-db; -- switch context"))
+    end)
+
     it("ignores non-USE SQL", function()
       assert.is_nil(exec_run.detect_use("SELECT * FROM t"))
       assert.is_nil(exec_run.detect_use("USE inventory\nSELECT 1"))

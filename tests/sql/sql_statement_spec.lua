@@ -66,6 +66,19 @@ describe("statement extract_table_name", function()
     assert.is_nil(statement.extract_table_name("select * from posts join authors on authors.id = posts.author_id join comments on comments.post_id = posts.id"))
   end)
 
+  it("a 'join' inside a string literal does not count as a JOIN", function()
+    -- two literals containing "join" used to trip join_count >= 2 and return
+    -- nil, degrading the label to "result n" (09-12 carry)
+    assert.equals("logs", statement.extract_table_name(
+      "select * from logs where msg = 'join' and other = 'join again'"))
+    -- one real JOIN plus a literal still extracts the FROM table
+    assert.equals("logs", statement.extract_table_name(
+      "select * from logs join t on t.id = logs.t_id where msg = 'join'"))
+    -- doubled-quote escapes stay inside the literal
+    assert.equals("logs", statement.extract_table_name(
+      "select * from logs where msg = 'it''s a join'"))
+  end)
+
   it("strips backtick quotes", function()
     assert.equals("users", statement.extract_table_name("select * from `users`"))
   end)

@@ -62,3 +62,22 @@ describe("poste-db.session_conn", function()
     assert.are.equal(2, vim.tbl_count(jobs))
   end)
 end)
+
+describe("session_conn database_from_url", function()
+  local session_conn = require("poste-db.session_conn")
+  local from_url = session_conn._test.database_from_url
+
+  it("strips the query string from the database name", function()
+    -- `db?schema=public` used to display (and pool-key) with the query riding
+    -- along; the sqlite variant named a database "file.sqlite?mode=rwc"
+    assert.equals("db", from_url("postgres://u:p@h:5432/db?schema=public"))
+    assert.equals("file", from_url("sqlite:/tmp/x/file.sqlite?mode=rwc"))
+  end)
+
+  it("returns nil rather than password fragments for a db-less url", function()
+    -- a `/` inside the password with no db path used to leak `p/ss@h:3306`
+    assert.is_nil(from_url("mysql://u:p/ss@h:3306"))
+    -- a real db path after a slash-y password still resolves
+    assert.equals("blog", from_url("mysql://u:p/ss@h:3306/blog"))
+  end)
+end)

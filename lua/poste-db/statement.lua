@@ -416,6 +416,11 @@ function M.extract_table_name(sql)
   if not sql or sql == "" then return nil end
   -- Strip -- line comments and /* */ block comments
   local clean = sql:gsub("%-%-[^\n]*", ""):gsub("/%*.-%*/", "")
+  -- Blank single-quoted literals (length-preserving) so a "join" inside a
+  -- string no longer inflates the JOIN count (09-12 carry). Double-quoted
+  -- regions stay intact: they can be identifiers feeding the captures below,
+  -- and `''` inside a literal is the SQL escape form.
+  clean = clean:gsub("'([^']|'')*'", function(lit) return string.rep(" ", #lit) end)
   local upper = clean:upper()
   local join_count = 0
   local idx = 1

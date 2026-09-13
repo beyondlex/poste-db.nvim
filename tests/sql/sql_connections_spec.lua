@@ -1,9 +1,3 @@
-local saved_cli = package.loaded["poste.cli"]
-local saved_state = package.loaded["poste-db.state"]
-local saved_util = package.loaded["poste.util"]
-local saved_select = package.loaded["poste.select"]
-local saved_const = package.loaded["poste-db.constants"]
-local saved_toml = package.loaded["poste-db.toml"]
 
 local cli_stub = {}
 local state_stub = { context = { connection = nil, database = nil } }
@@ -150,6 +144,19 @@ describe("connections resolve_connection_url", function()
     end
     local url = connections.resolve_connection_url("localdb")
     assert.equals("sqlite:/data/test.db?mode=rwc", url)
+  end)
+
+  it("sqlite paths with a query string gain mode=rwc via & (or keep an explicit mode)", function()
+    -- appending `?mode=rwc` to a path that already had a query produced an
+    -- invalid URL (09-11 carry)
+    package.loaded["poste-db.toml"].parse_file = function()
+      return {
+        q = { dialect = "sqlite", path = "data.db?cache=shared" },
+        m = { dialect = "sqlite", path = "data.db?mode=ro" },
+      }
+    end
+    assert.equals("sqlite:data.db?cache=shared&mode=rwc", connections.resolve_connection_url("q"))
+    assert.equals("sqlite:data.db?mode=ro", connections.resolve_connection_url("m"))
   end)
 
   it("builds sqlite :memory: URL", function()
@@ -586,6 +593,7 @@ describe("connections name_for_url", function()
       return {
         primary = { dialect = "postgres", host = "db.internal", port = 5432, database = "blog", user = "alice", password = "s3cret" },
         mem = { dialect = "sqlite" },
+        q = { dialect = "sqlite", path = "f.db?cache=shared" },
         redis = { dialect = "redis", host = "cache.internal", port = 6379 },
         tun = { dialect = "mysql", host = "db.internal", port = 3306, database = "ops", user = "bob", tunnel = { dest = "jump@bastion" } },
       }
@@ -608,6 +616,8 @@ describe("connections name_for_url", function()
 
   it("matches sqlite entries", function()
     assert.equals("mem", connections.name_for_url("sqlite::memory:"))
+    -- query-string paths round-trip through the same builder (&mode=rwc)
+    assert.equals("q", connections.name_for_url("sqlite:f.db?cache=shared&mode=rwc"))
   end)
 
   it("never matches non-SQL dialect entries (shared connections.toml)", function()

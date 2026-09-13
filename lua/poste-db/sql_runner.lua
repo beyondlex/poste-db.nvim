@@ -304,8 +304,10 @@ function M.run_sql_request()
     if not s then return false end
     local trimmed = s:match("^%s*(.*)%s*$") or ""
     -- case-insensitive: a lowercase `use db;` must route to exec-file (which
-    -- skips it), not into the session as real SQL — a syntax error on postgres
-    return trimmed:upper():match("^USE%s+([%w_]+)%s*;?%s*$") ~= nil
+    -- skips it), not into the session as real SQL — a syntax error on postgres.
+    -- `[%w_-]`: a hyphenated `USE my-db;` routes like a plain identifier —
+    -- the session would only see it as a syntax error (09-12 carry)
+    return trimmed:upper():match("^USE%s+([%w_-]+)%s*;?%s*$") ~= nil
   end
 
   -- Extract raw SQL text for a single statement (without directives/###)

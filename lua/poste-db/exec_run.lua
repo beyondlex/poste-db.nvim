@@ -60,15 +60,19 @@ end
 --- @return string|nil database_name
 local function detect_use(sql)
   local trimmed = sql:match("^%s*(.*)%s*$") or ""
-  local name = trimmed:match("^[Uu][Ss][Ee]%s+([%w_]+)%s*;?%s*$")
+  -- `[%w_-]`: hyphenated db names (`USE my-db;`, `` USE `my-db`; ``) switch
+  -- context like plain identifiers; the plain-identifier class used to miss
+  -- them and route the statement into the session as real SQL — a syntax
+  -- error on postgres/sqlite (09-12 carry).
+  local name = trimmed:match("^[Uu][Ss][Ee]%s+([%w_-]+)%s*;?%s*$")
   if not name then
-    name = trimmed:match("^[Uu][Ss][Ee]%s+[\"`]([%w_]+)[\"`]%s*;?%s*$")
+    name = trimmed:match("^[Uu][Ss][Ee]%s+[\"`]([%w_-]+)[\"`]%s*;?%s*$")
   end
   -- `USE db -- comment` / `USE db; -- comment`: the capture is required here
   -- — a groupless pattern makes match() return the whole statement, which
   -- then leaks into database_name / state.context.database.
   if not name then
-    name = trimmed:match("^[Uu][Ss][Ee]%s+([%w_]+)%s*;?%s*%-%-.*$")
+    name = trimmed:match("^[Uu][Ss][Ee]%s+([%w_-]+)%s*;?%s*%-%-.*$")
   end
   return name
 end

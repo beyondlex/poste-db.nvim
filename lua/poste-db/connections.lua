@@ -272,7 +272,17 @@ local function build_conn_url(name, conn, ensure_tunnel)
     if path == ":memory:" then
       return "sqlite::memory:", nil
     end
-    return "sqlite:" .. path .. "?mode=rwc", nil
+    -- Append the create-if-missing flag without corrupting a path that
+    -- already carries a query string (09-11 carry): `f.db?cache=shared`
+    -- gains `&mode=rwc`; a path that already pins `mode=` is left untouched.
+    if path:find("?", 1, true) then
+      if not path:find("mode=", 1, true) then
+        path = path .. "&mode=rwc"
+      end
+    else
+      path = path .. "?mode=rwc"
+    end
+    return "sqlite:" .. path, nil
   end
 
   local scheme = conn.dialect
