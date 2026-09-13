@@ -48,12 +48,6 @@ jobs:
         with:
           path: poste-db.nvim
 
-      - name: Checkout poste.nvim (sibling dependency)
-        uses: actions/checkout@v4
-        with:
-          repository: beyondlex/poste.nvim
-          path: poste.nvim
-
       - name: Checkout poste-ai.nvim (optional AI chat dependency)
         uses: actions/checkout@v4
         with:

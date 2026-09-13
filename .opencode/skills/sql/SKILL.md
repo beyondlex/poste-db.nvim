@@ -15,8 +15,8 @@ metadata:
 
 # SQL — Agent Skill
 
-Only load files listed below. Do NOT read `lua/poste/http/`, `crates/poste-exec/src/executor.rs`
-(curl), `crates/poste-core/src/parser.rs`, or any HTTP-specific files unless the task
+Only load files listed below. Do NOT read poste-http.nvim repo files, `../poste.nvim/crates/poste-exec/src/executor.rs`
+(curl), `../poste.nvim/crates/poste-core/src/parser.rs`, or any HTTP-specific files unless the task
 explicitly crosses protocols.
 
 For SQL completion specific work, also load `.opencode/skills/sql-completion/SKILL.md`.
@@ -28,13 +28,17 @@ For SQL completion specific work, also load `.opencode/skills/sql-completion/SKI
 | File | Why |
 |------|-----|
 | `AGENTS.md` | Architecture, conventions, build |
-| `lua/poste/state.lua` | Shared state object (`.sql` namespace for SQL-specific state) |
-| `lua/poste/init.lua` | Entry point: dispatches SQL filetypes to `sql.init.run_sql_request()` |
-| `lua/poste/buffer_setup.lua` | Shared keymap registration for source buffers |
-| `lua/poste/indicators.lua` | Spinner/✓/✘ indicators |
-| `lua/poste/select.lua` | Picker UI (telescope/fzf/mini.pick fallback) |
-| `lua/poste/util.lua` | `clean_nil`, `find_file_upwards`, `ensure_job_data` |
-| `lua/poste/help.lua` | Keymap help (SQL section) |
+
+The former poste.nvim shared layer is vendored under `lua/poste-db/` since
+the family dissolution — part of this repo now, load on demand like any
+module here: `state.lua` (SQL context + merged state-lite: config singleton,
+`find_poste_binary`, `apply_highlight_overrides`, `log`), `util.lua`
+(`clean_nil`/`find_file_upwards`/`ensure_job_data` + utf8 helpers),
+`select.lua` (snacks → float → `vim.ui.select` picker), `dialog.lua`,
+`layout.lua`, `indicators.lua` (spinner/✓/✘), `cli.lua` (poste binary
+wrapper), `install.lua` (binary installer), `buffer_setup.lua` (source
+keymaps), `help.lua` (keymap help). Full index:
+`docs/dev/sql/README.md`.
 
 ### SQL Lua (`lua/poste-db/`)
 
@@ -146,11 +150,10 @@ Credentials never enter prompts — schema summaries carry names/dialects/commen
 
 These files are HTTP-only. Skip them entirely:
 
-- `lua/poste/http/` (any file)
-- `crates/poste-exec/src/executor.rs` (curl executor — but executor.rs dispatch is OK)
-- `crates/poste-core/src/parser.rs`
-- `crates/poste-exec/src/cookie_jar.rs`
-- `syntax/poste_http.vim`
+- poste-http.nvim repo files (`lua/poste-http/`, `syntax/poste_http.vim`)
+- `../poste.nvim/crates/poste-exec/src/executor.rs` (curl executor — but executor.rs dispatch is OK)
+- `../poste.nvim/crates/poste-core/src/parser.rs`
+- `../poste.nvim/crates/poste-exec/src/cookie_jar.rs`
 
 ## SQL-Specific Conventions
 
