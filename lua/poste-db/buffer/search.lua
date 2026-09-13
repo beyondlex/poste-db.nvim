@@ -9,6 +9,35 @@ local sql_format = require("poste-db.format")
 local float_window = require("poste-db.float_window")
 local M = {}
 
+-- Search keyword history for the prompt box (<Up>/<Down>), most-recent
+-- first. In-memory only — deliberately NOT persisted across sessions.
+M.search_history = {}
+local MAX_SEARCH_HISTORY = 50
+
+--- Record a submitted query (dedup, most-recent-first, capped).
+local function record_search(text)
+  if text == nil or text == "" then return end
+  for i = #M.search_history, 1, -1 do
+    if M.search_history[i] == text then table.remove(M.search_history, i) end
+  end
+  table.insert(M.search_history, 1, text)
+  while #M.search_history > MAX_SEARCH_HISTORY do
+    table.remove(M.search_history) -- drop the oldest (tail)
+  end
+end
+
+--- Pure history step. hist is most-recent-first; idx is the 1-based position
+--- in hist, 0 = the box currently holds free text. dir = 1 (<Up>, older),
+--- dir = -1 (<Down>, newer). Returns new text + new idx; (nil, idx) means
+--- "no change", and (nil, 0) means "restore the box's original text".
+local function step_history(hist, idx, dir)
+  if #hist == 0 then return nil, idx end
+  local next_idx = idx + dir
+  if next_idx < 0 or next_idx > #hist then return nil, idx end
+  if next_idx == 0 then return nil, 0 end
+  return hist[next_idx], next_idx
+end
+
 -- Forward declarations
 local update_winbar
 local jump_to_search_match
@@ -160,10 +189,14 @@ function M.show_search()
 
   local buf, win = float_window.open_centered({}, {
     filetype = "poste_search",
-    title = " Search ",
+    title = " Search Dataset ",
     title_pos = "center",
+    -- The prompt box has no content lines, so open_centered's content-driven
+    -- width collapses to min_width (default 10). Pin it to the same
+    -- half-editor cap the width_ratio/max_width pair intended.
     width_ratio = 0.5,
     max_width = 50,
+    min_width = math.min(math.floor(vim.o.columns * 0.5), 50),
     width_padding = 0,
     height_ratio = 0.4,
     min_height = 1,
@@ -192,6 +225,7 @@ function M.show_search()
       M.apply_search_highlights(); update_winbar()
       return
     end
+    record_search(text)
     tab.rows_source = tab.rows_source or (tab.data.results and tab.data.results[1] and tab.data.results[1].rows)
     if not tab.rows_source then return end
     tab.search_text = text
@@ -208,6 +242,41 @@ function M.show_search()
   local km = { buffer = buf, noremap = true, silent = true }
   vim.keymap.set("i", "<Esc>", cleanup, km)
   vim.keymap.set("i", "<C-c>", cleanup, km)
+
+  -- <Up>/<Down> walk the search keyword history. idx 0 = box holds free text;
+  -- the box's text at the moment you first press <Up> is remembered so a
+  -- full walk back down restores it (shell-history semantics).
+  local hist_idx = 0
+  local hist_orig = nil
+  local prompt_prefix = vim.fn.prompt_getprompt(buf) or ""
+  -- Prompt-buffer line 1 is "<prefix><input>". Read/write ONLY the input
+  -- region: overwriting the whole line would clobber the prompt prefix and
+  -- desync nvim's internal prompt state (Enter then submits the wrong text).
+  local function box_text()
+    local line = vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1] or ""
+    return line:sub(#prompt_prefix + 1)
+  end
+  local function fill_box(text)
+    local line = vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1] or ""
+    vim.api.nvim_buf_set_text(buf, 0, #prompt_prefix, 0, #line, { text })
+    vim.api.nvim_win_set_cursor(0, { 1, #prompt_prefix + #text })
+  end
+  local function navigate(dir)
+    if #M.search_history == 0 then return end
+    if hist_idx == 0 and dir == 1 then hist_orig = box_text() end
+    local text, next_idx = step_history(M.search_history, hist_idx, dir)
+    if text == nil then
+      if next_idx == 0 and hist_idx > 0 then
+        hist_idx = 0
+        fill_box(hist_orig or "")
+      end
+      return
+    end
+    hist_idx = next_idx
+    fill_box(text)
+  end
+  vim.keymap.set("i", "<Up>", function() navigate(1) end, km)
+  vim.keymap.set("i", "<Down>", function() navigate(-1) end, km)
 
   vim.cmd("startinsert!")
 end
@@ -348,6 +417,10 @@ update_winbar = function()
 end
 M.update_winbar = update_winbar
 
-M._test = { match_span = match_span }
+M._test = {
+  match_span = match_span,
+  step_history = step_history,
+  record_search = record_search,
+}
 
 return M

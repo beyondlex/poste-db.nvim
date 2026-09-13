@@ -36,3 +36,69 @@ describe("buffer_search match_span", function()
     assert.is_nil(span("cell", nil))
   end)
 end)
+
+describe("buffer_search step_history", function()
+  local step = search._test.step_history
+  -- most-recent-first: index 1 is the newest entry
+  local hist = { "foo", "bar", "baz" }
+
+  it("moves from free text (idx 0) to the most recent entry on <Up>", function()
+    assert.same({ "foo", 1 }, { step(hist, 0, 1) })
+  end)
+
+  it("walks older on repeated <Up>", function()
+    local t, i = step(hist, 1, 1)
+    assert.same({ "bar", 2 }, { t, i })
+    t, i = step(hist, 2, 1)
+    assert.same({ "baz", 3 }, { t, i })
+  end)
+
+  it("clamps at the oldest entry", function()
+    assert.same({ nil, 3 }, { step(hist, 3, 1) })
+  end)
+
+  it("walks newer on <Down> and signals restore at idx 0", function()
+    local t, i = step(hist, 3, -1)
+    assert.same({ "bar", 2 }, { t, i })
+    t, i = step(hist, 2, -1)
+    assert.same({ "foo", 1 }, { t, i })
+    t, i = step(hist, 1, -1)
+    assert.same({ nil, 0 }, { t, i }) -- caller restores the original text
+  end)
+
+  it("does nothing on <Down> while already at free text", function()
+    assert.same({ nil, 0 }, { step(hist, 0, -1) })
+  end)
+
+  it("no-ops on empty history", function()
+    assert.same({ nil, 0 }, { step({}, 0, 1) })
+    assert.same({ nil, 0 }, { step({}, 0, -1) })
+  end)
+end)
+
+describe("buffer_search record_search", function()
+  local rec = search._test.record_search
+
+  before_each(function()
+    search.search_history = {}
+  end)
+
+  it("stores most-recent-first", function()
+    rec("alice")
+    rec("bob")
+    assert.same({ "bob", "alice" }, search.search_history)
+  end)
+
+  it("dedups by re-inserting at the front", function()
+    rec("alice")
+    rec("bob")
+    rec("alice")
+    assert.same({ "alice", "bob" }, search.search_history)
+  end)
+
+  it("ignores nil and empty", function()
+    rec(nil)
+    rec("")
+    assert.same({}, search.search_history)
+  end)
+end)
