@@ -1,7 +1,7 @@
 --- SQL completion — data + cache layer.
 --- Provides keyword tables, connection context resolution, lazy-fetch
 --- (tables/columns/databases via the Rust CLI), and binary helpers.
-local state = require("poste.state")
+local state = require("poste-db.state")
 local sql_state = require("poste-db.state")
 local const = require("poste-db.constants")
 
@@ -576,7 +576,7 @@ function M.ensure_conn_names(callback)
   if conn_names_cache then callback(conn_names_cache); return end
   vim.schedule(function()
     local search_dir = M.search_dir()
-    local util = require("poste.util")
+    local util = require("poste-db.util")
     local config_path = util.find_file_upwards("connections.toml", search_dir)
     local names = {}
     if config_path then

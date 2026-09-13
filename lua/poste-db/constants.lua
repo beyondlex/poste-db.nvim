@@ -37,6 +37,14 @@ M.LOG_TRIM_EVERY = 10
 M.HIGHLIGHTS_IMMEDIATE_ROW_LIMIT = 1000
 M.YANK_PREVIEW_CHARS = 50
 
+-- vendored from poste.nvim@5b3759e lua/poste/constants.lua — the entries
+-- consumed by this plugin's vendored indicators.lua and copy_progress.lua
+-- (family dissolution)
+M.SPINNER_FRAMES = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" }
+M.SPINNER_INTERVAL_MS = 100
+M.INDICATOR_NS_NAME = "poste_indicator"
+M.SIGN_GROUP_NAME = "poste_sg_4a7f"
+
 M.STATUSLINE_TRUNC_WIDTH = 120
 M.MAX_COL_WIDTH = 30
 M.IMPORT_PREVIEW_HEIGHT_RATIO = 0.6

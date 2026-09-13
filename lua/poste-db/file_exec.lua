@@ -1,6 +1,6 @@
-local state = require("poste.state")
-local dialog = require("poste.dialog")
-local layout = require("poste.layout")
+local state = require("poste-db.state")
+local dialog = require("poste-db.dialog")
+local layout = require("poste-db.layout")
 local connections = require("poste-db.connections")
 
 local M = {}

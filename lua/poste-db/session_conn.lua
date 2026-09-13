@@ -8,7 +8,7 @@
 --- Sessions are pooled keyed by `connection_url` + selected database and
 --- shared across buffers targeting the same pair.
 
-local state = require("poste.state")
+local state = require("poste-db.state")
 local const = require("poste-db.constants")
 
 local M = {}

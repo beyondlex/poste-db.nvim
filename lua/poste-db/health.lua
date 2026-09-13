@@ -17,16 +17,9 @@ function M.check()
     error("Neovim >= 0.10.0 required (uses vim.system, vim.treesitter.language)")
   end
 
-  -- Shared infra (poste.nvim)
-  local state_ok, state = pcall(require, "poste.state")
-  if state_ok then
-    ok("poste.nvim shared infra loaded")
-  else
-    error("poste.nvim not found on runtimepath — install beyondlex/poste.nvim")
-    return
-  end
-
-  -- Poste binary
+  -- Poste binary (vendored state, family dissolution: the binary is
+  -- REQUIRED here — exec-file/session are the SQL transport)
+  local state = require("poste-db.state")
   local binary = state.find_poste_binary()
   if binary then
     ok("poste binary: " .. binary)
@@ -105,7 +98,7 @@ function M.check()
   -- connections.toml discovery
   local buf_name = vim.api.nvim_buf_get_name(0)
   local search_dir = buf_name ~= "" and vim.fn.fnamemodify(buf_name, ":h") or vim.fn.getcwd()
-  local util = require("poste.util")
+  local util = require("poste-db.util")
   local config_path = util.find_file_upwards("connections.toml", search_dir)
   if config_path then
     ok("connections.toml: " .. config_path)

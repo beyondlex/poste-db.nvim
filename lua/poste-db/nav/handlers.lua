@@ -1,6 +1,6 @@
 --- Go-to-definition --- handlers for connection/database/table navigation.
 local detect = require("poste-db.nav.detect")
-local util = require("poste.util")
+local util = require("poste-db.util")
 
 local M = {}
 

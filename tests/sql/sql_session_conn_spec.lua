@@ -4,7 +4,7 @@
 --- session — the second silently executed against the wrong database.
 
 describe("poste-db.session_conn", function()
-  local state = require("poste.state")
+  local state = require("poste-db.state")
   local session_conn = require("poste-db.session_conn")
 
   local jobs

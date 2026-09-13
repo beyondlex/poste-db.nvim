@@ -11,7 +11,7 @@ describe("introspect job helpers", function()
     local logs = {}
     local notified = nil
 
-    local state_mod = package.loaded["poste.state"]
+    local state_mod = package.loaded["poste-db.state"]
     local saved_log = state_mod.log
     local saved_notify = vim.notify
 

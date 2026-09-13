@@ -3,8 +3,8 @@
 --- presentation over caller-injected jobs ({label, tag, work}).
 local uv = vim.uv or vim.loop
 local config = require("poste-db.config")
-local dialog = require("poste.dialog")
-local C = require("poste.constants")
+local dialog = require("poste-db.dialog")
+local C = require("poste-db.constants")
 local db_util = require("poste-db.db_browser.util")
 
 require("poste-db.db_browser.theme").register({

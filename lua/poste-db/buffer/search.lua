@@ -387,7 +387,7 @@ function M.find_column()
     return
   end
 
-  local picker = require("poste.select")
+  local picker = require("poste-db.select")
   local items = {}
   for i, col in ipairs(tab.meta.columns) do
     items[i] = { key = tostring(i), name = col.name or "", description = col.type or "?" }

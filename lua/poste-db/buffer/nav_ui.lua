@@ -263,7 +263,7 @@ function M.show_dataset_sql()
   local lines = vim.split(sql, "\n")
   local width = math.min(120, vim.o.columns - 4)
   local height = math.min(#lines + 2, vim.o.lines - 6)
-  local dialog = require("poste.dialog")
+  local dialog = require("poste-db.dialog")
   local d = dialog.open({
     title = " Dataset SQL ",
     width = width,

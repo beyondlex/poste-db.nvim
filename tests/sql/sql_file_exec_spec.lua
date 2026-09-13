@@ -29,20 +29,20 @@ describe("file_exec", function()
 
     before_each(function()
       saved = {}
-      saved.state = package.loaded["poste.state"]
-      saved.dialog = package.loaded["poste.dialog"]
-      saved.layout = package.loaded["poste.layout"]
+      saved.state = package.loaded["poste-db.state"]
+      saved.dialog = package.loaded["poste-db.dialog"]
+      saved.layout = package.loaded["poste-db.layout"]
       saved.connections = package.loaded["poste-db.connections"]
       saved.log = package.loaded["poste-db.log"]
       saved.jobstart = vim.fn.jobstart
       saved.readfile = vim.fn.readfile
 
-      package.loaded["poste.state"] = {
+      package.loaded["poste-db.state"] = {
         current_env = "dev",
         find_poste_binary = function() return "/tmp/bin dir/poste" end,
         log = function() end,
       }
-      package.loaded["poste.dialog"] = {
+      package.loaded["poste-db.dialog"] = {
         open = function()
           return {
             content_width = 68,
@@ -53,7 +53,7 @@ describe("file_exec", function()
         end,
       }
       local identity = function(x) return x end
-      package.loaded["poste.layout"] = {
+      package.loaded["poste-db.layout"] = {
         cell = identity,
         columns = function() return { lines = {}, highlights = {} } end,
         progress = function() return { "" } end,
@@ -84,9 +84,9 @@ describe("file_exec", function()
     end)
 
     after_each(function()
-      package.loaded["poste.state"] = saved.state
-      package.loaded["poste.dialog"] = saved.dialog
-      package.loaded["poste.layout"] = saved.layout
+      package.loaded["poste-db.state"] = saved.state
+      package.loaded["poste-db.dialog"] = saved.dialog
+      package.loaded["poste-db.layout"] = saved.layout
       package.loaded["poste-db.connections"] = saved.connections
       package.loaded["poste-db.log"] = saved.log
       package.loaded["poste-db.file_exec"] = nil

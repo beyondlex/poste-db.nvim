@@ -1,9 +1,9 @@
-local state = require("poste.state")
+local state = require("poste-db.state")
 local config = require("poste-db.config")
 local dml = require("poste-db.dml")
 local edit_commit = require("poste-db.edit_commit")
 local mapping = require("poste-db.import.mapping")
-local dialog = require("poste.dialog")
+local dialog = require("poste-db.dialog")
 
 local M = {}
 

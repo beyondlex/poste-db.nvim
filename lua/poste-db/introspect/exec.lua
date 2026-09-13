@@ -1,6 +1,6 @@
 --- Introspection --- shell command execution and job management.
-local cli = require("poste.cli")
-local util = require("poste.util")
+local cli = require("poste-db.cli")
+local util = require("poste-db.util")
 local job = require("poste-db.introspect.job")
 local const = require("poste-db.constants")
 

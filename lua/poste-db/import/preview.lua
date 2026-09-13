@@ -1,4 +1,4 @@
-local dialog = require("poste.dialog")
+local dialog = require("poste-db.dialog")
 local const = require("poste-db.constants")
 
 local M = {}

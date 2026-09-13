@@ -30,7 +30,6 @@ nvim --headless \
   -u tests/minimal_init.lua \
   -c "set rtp+=$PLENARY_PATH" \
   -c "set rtp+=." \
-  -c "set rtp+=../poste.nvim" \
   -c "runtime plugin/plenary.vim" \
   -c "lua require('poste-db.init').setup()" \
   -c "PlenaryBustedDirectory tests/sql/ {minimal_init = 'tests/minimal_init.lua'}" \

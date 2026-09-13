@@ -6,10 +6,10 @@
 ---   entry, current_seq, get_exec_seq, src_buf, src_file, buf_lines,
 ---   buf_content, stmt_sql_raw, stmt_lines, first_line, is_visual,
 ---   visual_sel_end, vis_start, vis_end, set_lines, block_result_line
-local state = require("poste.state")
+local state = require("poste-db.state")
 local sql_state = require("poste-db.state")
 local config = require("poste-db.config")
-local indicators = require("poste.indicators")
+local indicators = require("poste-db.indicators")
 local statement = require("poste-db.statement")
 local sql_format = require("poste-db.format")
 local dataset = require("poste-db.dataset")

@@ -1,8 +1,5 @@
--- poste-db.nvim — SQL execution plugin for Poste
--- Requires poste-core.nvim for shared infrastructure.
-local ok, _ = pcall(require, "poste.core")
-if not ok then
-  vim.notify("poste-db.nvim requires poste-core.nvim. Install it first.", vim.log.levels.WARN)
-  return
-end
+-- poste-db.nvim — SQL execution plugin for Poste.
+-- Self-contained since the poste.nvim family dissolution: shared infra is
+-- vendored under lua/poste-db/. The family poste binary (built/released by
+-- poste.nvim) is ensured by setup().
 require("poste-db.init").setup(require("poste-db.compat").opt("config") or {})

@@ -25,8 +25,8 @@ local execute_drop  -- forward declaration
 
 --- Show a confirmation dialog for dropping a table (red warning text).
 local function show_drop_confirm(table_node, qualified, conn, schema_prefix, context)
-  local dialog = require("poste.dialog")
-  local layout = require("poste.layout")
+  local dialog = require("poste-db.dialog")
+  local layout = require("poste-db.layout")
 
   local width = 56
   local sql = "DROP TABLE " .. qualified .. ";"
@@ -255,7 +255,7 @@ local function start_batch_drop(items, conn_label, search_dir, context)
     end
   end
 
-  local dialog = require("poste.dialog")
+  local dialog = require("poste-db.dialog")
   progress_dlg = dialog.open({
     title = "Dropping",
     width = 60,
@@ -437,7 +437,7 @@ function M.batch_drop_tables(selected_nodes, context)
   table.insert(lines, string.format("  %d table(s) at %s", #items, conn_label))
   table.insert(lines, "")
 
-  local layout = require("poste.layout")
+  local layout = require("poste-db.layout")
   local km = layout.keymaps({
     mapping = { { key = "y", label = "Drop" }, { key = "n", label = "Cancel" } },
     indent = 4,
@@ -446,7 +446,7 @@ function M.batch_drop_tables(selected_nodes, context)
   local height = #lines + 2
   height = math.min(height, 26)
 
-  local dialog = require("poste.dialog")
+  local dialog = require("poste-db.dialog")
   local dlg = dialog.open({
     title = " Drop Tables ",
     width = 60,

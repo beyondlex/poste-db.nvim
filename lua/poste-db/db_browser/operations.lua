@@ -1,6 +1,6 @@
 --- Operations dispatched from the DB Browser context menu.
 --- Each function: op(node, context) → performs the action.
-local cli = require("poste.cli")
+local cli = require("poste-db.cli")
 local icons = require("poste-db.db_browser.icons")
 local forms = require("poste-db.db_browser.forms")
 local ident = require("poste-db.ident")

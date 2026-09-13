@@ -1,7 +1,7 @@
 --- SQL Dataset buffer — core: state, keymaps, tab switching, render, close.
 local D = require("poste-db.dataset")
 local C = require("poste-db.constants")
-local state = require("poste.state")
+local state = require("poste-db.state")
 local sql_state = require("poste-db.state")
 
 local config = require("poste-db.config")

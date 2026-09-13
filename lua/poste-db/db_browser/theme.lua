@@ -10,7 +10,7 @@
 --- A spec is a table passed straight to nvim_set_hl, or a function
 --- returning one (return nil to skip the group, e.g. "first definition
 --- wins" semantics).
-local state = require("poste.state")
+local state = require("poste-db.state")
 
 local M = {}
 

@@ -1,4 +1,4 @@
-local state = require("poste.state")
+local state = require("poste-db.state")
 local sql_state = require("poste-db.state")
 
 local tree = require("poste-db.db_browser.tree")
@@ -420,7 +420,7 @@ end
 function M.load_connections(callback, search_dir)
   state.log("INFO", "DB Browser load_connections: search_dir=" .. search_dir)
 
-  local util = require("poste.util")
+  local util = require("poste-db.util")
   local config_path = util.find_file_upwards("connections.toml", search_dir)
 
   vim.schedule(function()

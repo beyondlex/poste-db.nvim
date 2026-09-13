@@ -1,10 +1,10 @@
 --- SQL execution entry point — supports single-statement (normal mode)
 --- and multi-statement (visual selection) execution.
 --- Each statement result goes into its own dataset tab.
-local state = require("poste.state")
+local state = require("poste-db.state")
 local sql_state = require("poste-db.state")
 local config = require("poste-db.config")
-local indicators = require("poste.indicators")
+local indicators = require("poste-db.indicators")
 local statement = require("poste-db.statement")
 local stmt_indicator = require("poste-db.statement_indicator")
 local sql_introspect = require("poste-db.introspect")

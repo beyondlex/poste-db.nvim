@@ -4,7 +4,7 @@
 --- 1. Calling the Rust CLI for context detection (full ### block)
 --- 2. Falling back to Lua heuristic when Rust returns empty/incomplete
 --- 3. Dispatching to the correct completion source (columns/tables/keywords)
-local state = require("poste.state")
+local state = require("poste-db.state")
 local data = require("poste-db.completion.data")
 local ctx = require("poste-db.completion.ctx")
 local debug = require("poste-db.completion.debug")

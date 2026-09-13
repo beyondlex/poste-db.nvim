@@ -1,5 +1,5 @@
 --- Highlight theme --- load and register highlight groups for dataset UI.
-local state = require("poste.state")
+local state = require("poste-db.state")
 local util = require("poste-db.util")
 
 local M = {}

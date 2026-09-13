@@ -21,6 +21,16 @@ M._test = statement._test
 function M.setup(opts)
   opts = opts or {}
   config.merge(opts)
+
+  -- Shared poste binary (vendored installer, family dissolution): make sure
+  -- it is available once per session. vim.g.poste_binary keeps its
+  -- first-class override role (a dev/worktree build never triggers a
+  -- release download).
+  if not vim.g.poste_db_setup_done then
+    vim.g.poste_db_setup_done = true
+    require("poste-db.install").ensure()
+  end
+
   require("poste-db.snippets").setup(opts)
   require("poste-db.insert_hint").setup()
 

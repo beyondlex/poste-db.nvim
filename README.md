@@ -2,7 +2,9 @@
 
 **SQL execution, dataset browser, and schema introspection for Neovim.** Part of the [Poste](https://github.com/beyondlex/poste.nvim) family.
 
-**Requires**: [poste.nvim](https://github.com/beyondlex/poste.nvim) (shared infra + Rust binary)
+**Requires**: the family `poste` binary (installed automatically on first
+setup from [poste.nvim](https://github.com/beyondlex/poste.nvim) releases, or
+point `vim.g.poste_binary` at a build)
 
 Full documentation is in `doc/poste-db.txt` (`:h poste-db` after installing helptags).
 
@@ -28,7 +30,6 @@ Full documentation is in `doc/poste-db.txt` (`:h poste-db` after installing help
 {
   "beyondlex/poste-db.nvim",
   dependencies = {
-    "beyondlex/poste.nvim",
     "saghen/blink.cmp",
   },
   config = function()
@@ -270,8 +271,7 @@ require("poste-db").setup({
 ## Requirements
 
 - Neovim >= 0.10.0
-- [poste.nvim](https://github.com/beyondlex/poste.nvim) (sibling directory or on rtp)
-- `poste` binary (from poste.nvim)
+- `poste` binary (auto-installed from poste.nvim releases on first setup; `vim.g.poste_binary` overrides)
 - blink.cmp (recommended) or nvim-cmp for completion
 - `ssh` on PATH for `tunnel` connections
 

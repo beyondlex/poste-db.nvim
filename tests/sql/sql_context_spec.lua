@@ -1,5 +1,5 @@
 local saved_state = package.loaded["poste-db.state"]
-local saved_select = package.loaded["poste.select"]
+local saved_select = package.loaded["poste-db.select"]
 local saved_const = package.loaded["poste-db.constants"]
 local saved_connections = package.loaded["poste-db.connections"]
 
@@ -11,7 +11,7 @@ package.loaded["poste-db.connections"] = {
   end,
 }
 package.loaded["poste-db.state"] = state_stub
-package.loaded["poste.select"] = { select = function() end }
+package.loaded["poste-db.select"] = { select = function() end }
 
 local context = require("poste-db.context")
 
@@ -168,7 +168,7 @@ describe("context handle_use_statement", function()
 
   after_each(function()
     package.loaded["poste-db.state"] = saved_state
-    package.loaded["poste.select"] = saved_select
+    package.loaded["poste-db.select"] = saved_select
     package.loaded["poste-db.constants"] = saved_const
     package.loaded["poste-db.connections"] = saved_connections
   end)

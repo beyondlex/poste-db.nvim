@@ -23,7 +23,7 @@ package.loaded["poste-db.dml_guard"] = {
   update = function() end,
   clear = function() end,
 }
-package.loaded["poste.state"] = { sql = { context = { connection = nil } } }
+package.loaded["poste-db.state"] = { sql = { context = { connection = nil } } }
 
 local diag = require("poste-db.diagnostics")
 local t = diag._test

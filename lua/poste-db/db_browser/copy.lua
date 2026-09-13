@@ -1,5 +1,5 @@
-local cli = require("poste.cli")
-local util = require("poste.util")
+local cli = require("poste-db.cli")
+local util = require("poste-db.util")
 local sql_conn = require("poste-db.db_browser.sql_conn")
 local catalog = require("poste-db.db_browser.catalog")
 local notify = require("poste-db.db_browser.notify")

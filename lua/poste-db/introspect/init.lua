@@ -4,8 +4,8 @@
 --- Provides show_table_ddl() and supporting functions.
 -- luacheck: ignore 411
 
-local state = require("poste.state")
-local util = require("poste.util")
+local state = require("poste-db.state")
+local util = require("poste-db.util")
 local config = require("poste-db.config")
 local route = require("poste-db.introspect.route")
 local detect = require("poste-db.introspect.detect")

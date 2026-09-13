@@ -1,6 +1,6 @@
 --- SQL execution context management.
 --- Handles connection → database context resolution and status display.
-local state = require("poste.state")
+local state = require("poste-db.state")
 local sql_state = require("poste-db.state")
 
 local const = require("poste-db.constants")

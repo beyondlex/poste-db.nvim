@@ -110,7 +110,7 @@ end
 --- EXPLAIN the statement under the cursor and show the plan in a float.
 function M.explain()
   local src_buf = vim.api.nvim_get_current_buf()
-  local state = require("poste.state")
+  local state = require("poste-db.state")
   if not state.find_poste_binary() then
     vim.notify("Poste binary not found.", vim.log.levels.ERROR, { title = "PosteDb" })
     return

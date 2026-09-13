@@ -1,11 +1,11 @@
 --- SQL connection management UI.
 --- Provides :PosteDbConnection command to list, select, and test connections.
-local cli = require("poste.cli")
-local state = require("poste.state")
+local cli = require("poste-db.cli")
+local state = require("poste-db.state")
 local sql_state = require("poste-db.state")
 
-local util = require("poste.util")
-local select_mod = require("poste.select")
+local util = require("poste-db.util")
+local select_mod = require("poste-db.select")
 local const = require("poste-db.constants")
 
 local M = {}

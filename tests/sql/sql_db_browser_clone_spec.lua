@@ -50,7 +50,7 @@ describe("db_browser copy progress spinner", function()
     local start_fn = t.show_paste_progress(source, target, jobs, function() end)
     start_fn()
 
-    local frames = require("poste.constants").SPINNER_FRAMES
+    local frames = require("poste-db.constants").SPINNER_FRAMES
     local observed = nil
     vim.wait(200, function()
       for _, l in ipairs(collect_dialog_lines()) do

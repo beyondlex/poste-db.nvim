@@ -15,9 +15,16 @@ see `.opencode/skills/sql-architecture-harness/SKILL.md` for the house rules
 | `init.lua` | `setup()` entry: config merge, highlights, commands, autocmds, AI registration |
 | `config.lua` | User config (`M.config`), defaults, keymap lookup |
 | `compat.lua` | Legacy `poste_sql_*` globals + `poste_db_*`/`poste_sql_` variable-name fallbacks; deprecation warnings |
-| `constants.lua` | **Single source**: supported dialects, `DIALECT_ALIASES`, `URL_SCHEMES`/`dialect_from_url`, `DIALECT_DEFAULT_PORTS`, `SYSTEM_SCHEMAS`, directive parsing helpers |
-| `state.lua` | SQL context (current connection/database binding) + dataset/cell state |
-| `health.lua` | `:checkhealth` — nvim version, poste.nvim presence, binary discovery |
+| `constants.lua` | **Single source**: supported dialects, `DIALECT_ALIASES`, `URL_SCHEMES`/`dialect_from_url`, `DIALECT_DEFAULT_PORTS`, `SYSTEM_SCHEMAS`, directive parsing helpers; spinner/indicator constants merged from poste.nvim@5b3759e |
+| `state.lua` | SQL context (current connection/database binding) + dataset/cell state; + state-lite merged from poste.nvim@5b3759e (`config` singleton, `find_poste_binary`, `apply_highlight_overrides`, `log`) |
+| `cli.lua` | VENDORED from poste.nvim@5b3759e `lua/poste/cli.lua` — poste binary wrapper (`run`/`run_json`/`run_async`) |
+| `select.lua` | VENDORED from poste.nvim@5b3759e `lua/poste/select.lua` — snacks → float → `vim.ui.select` picker |
+| `dialog.lua` | VENDORED from poste.nvim@5b3759e `lua/poste/dialog.lua` — float dialog with backdrop refcount |
+| `layout.lua` | VENDORED from poste.nvim@5b3759e `lua/poste/layout.lua` — wrapping/padding/progress/keymap-hint layout |
+| `indicators.lua` | VENDORED from poste.nvim@5b3759e `lua/poste/indicators.lua` — sign-column spinner / ✓ / ✘ + eol latency virt-text |
+| `install.lua` | VENDORED from poste.nvim@5b3759e `lua/poste/install.lua`, trimmed (no git-tag version sync) — ensures the family poste binary |
+| `util.lua` | utf8/color helpers, `width.truncate` bridge; + `clean_nil`/`find_file_upwards`/`ensure_job_data` merged from poste.nvim@5b3759e |
+| `health.lua` | `:checkhealth` — nvim version, binary probe + version, connections, parser |
 | `autocmds.lua` | Filetype detection, directive highlighting, buffer cleanup wiring |
 | `commands.lua` | `:PosteDb*` command definitions |
 | `buffer_setup.lua` | Buffer-local setup for poste_sql buffers |
@@ -60,7 +67,7 @@ see `.opencode/skills/sql-architecture-harness/SKILL.md` for the house rules
 | `nav/` | Cross-dataset navigation routing (`detect`/`handlers`/`route`) |
 | `float_window.lua` | House floating-window primitive — all popups go through `open()`/`open_centered()` |
 | `insert_hint.lua` | Debounced INSERT template hint |
-| `statusline.lua` | Dataset statusline |
+| `statusline.lua` | Dataset statusline — since the family dissolution the mini.statusline wiring is scope-guarded (renders only on `poste_db_context` buffers, falls through otherwise; `vim.g.poste_db_statusline_wired` idempotency) |
 | `log_viewer.lua` | SQL log browsing/filtering/re-run |
 | `help.lua` | Floating keymap help |
 
@@ -124,9 +131,8 @@ There are exactly THREE spellings to know, and they mean different things:
 - **`sql` → the filetype only.** `poste_sql` / `poste_sqlite` are reserved for
   the buffer filetype value and the `ftdetect/`/`syntax/`/`ftplugin/`/`after/queries/`
   files named after it. The filetype handling itself lives in this repo
-  (`buffer_setup.lua`, `autocmds.lua`, `ftdetect/`) — poste.nvim's shared Lua
-  is protocol-agnostic and knows nothing about these filetypes, so the value
-  must NOT change casually (config surface, ftdetect, queries all key on it).
+  (`buffer_setup.lua`, `autocmds.lua`, `ftdetect/`) — the value must NOT
+  change casually (config surface, ftdetect, queries all key on it).
 - Never introduce a new `poste_sql_*`-prefixed global, buffer var, namespace, or
   provider name. The `poste_sql_*` globals that still exist are **deprecated
   aliases** read only by `lua/poste-db/compat.lua` (they log a deprecation
@@ -150,25 +156,26 @@ conform.formatters_by_ft["poste_sql"] = ...
 vim.g.poste_db_legacy_completion = "rust"
 ```
 
-## Shared infra (poste.nvim) contracts
+## Self-containment + family contracts
 
-Siblings (poste-redis, poste-es, ...) co-load in one Neovim session, so every
-`lua/poste/` module is a single-instance global surface. Two rules this repo
-must respect; full text in `../poste.nvim/AGENTS.md` ("Shared-Surface
-Contracts"):
+This repo is self-contained since the poste.nvim family dissolution: the
+former shared Lua (`poste.state/cli/util/select/layout/dialog/indicators` +
+installer) is vendored under `lua/poste-db/` (vendor source
+poste.nvim@5b3759e `lua/poste/`, copied verbatim apart from require renames
+and source annotations). There is no shared Lua layer any more — the only
+cross-repo contracts are:
 
-- **statusline** — `poste.statusline` is the ONE owner of the mini.statusline
-  context hooks; this repo only registers a provider
-  (`lua/poste-db/statusline.lua`, hl namespace `PosteDb*Ctx*`). Never wire
-  mini.statusline directly. The provider contract (scope semantics, re-register
-  and error-isolation guarantees, resolve-cheap rule) lives in the
-  `../poste.nvim/lua/poste/statusline.lua` header and is pinned by its
-  `tests/poste/statusline_spec.lua` with two coexisting providers.
-- **poste.state** — read-only sharing only: config, binary resolution,
-  keymap helpers. Never attach mutable fields to the shared singleton
-  (per-plugin state lives in `lua/poste-db/state.lua`) — a field two siblings
-  write becomes last-writer-wins and silently changes the other's behaviour
-  (the redis/es `poste_state.connection` lesson).
+- **The `poste` binary NDJSON schema** (exec-file, session, introspect, ...)
+  — documented in `../poste.nvim/docs/schema.md`. `resolve_connection_url`
+  and the Rust `ConnectionConfig::to_url()` are mirror implementations:
+  neither may drift alone.
+- **Statusline scope discipline** (no shared coordinator any more): the
+  mini.statusline wiring in `lua/poste-db/statusline.lua` is scope-guarded —
+  it renders only on buffers carrying `poste_db_context` and falls through
+  to the captured original everywhere else, so a sibling's wrapper (redis,
+  ...) chains with ours instead of fighting over the global hooks. Any new
+  wiring MUST keep that guard and the `vim.g.poste_db_statusline_wired`
+  idempotency flag; pinned by `tests/sql/sql_statusline_spec.lua`.
 
 ## Design Docs
 
@@ -190,4 +197,4 @@ Contracts"):
 
 ---
 
-*SQL developer documentation — Last updated: 2026-09-13 (added Shared infra contracts section; module index unchanged)*
+*SQL developer documentation — Last updated: 2026-09-13 (poste.nvim family dissolution: shared-infra contracts section replaced by self-containment + scope discipline; module index unchanged)*

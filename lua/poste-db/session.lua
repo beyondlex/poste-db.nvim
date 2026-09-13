@@ -22,7 +22,7 @@ end
 --- @param meta? table
 --- @return table
 function M.begin(meta)
-  local state = require("poste.state")
+  local state = require("poste-db.state")
   local sql_state = require("poste-db.state")
   local session = M.new(meta)
 

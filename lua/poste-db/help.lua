@@ -1,6 +1,6 @@
 --- SQL keymap help — displays SQL-specific keymaps in a floating window.
 local config = require("poste-db.config")
-local dialog = require("poste.dialog")
+local dialog = require("poste-db.dialog")
 
 local M = {}
 

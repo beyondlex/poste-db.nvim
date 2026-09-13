@@ -20,13 +20,15 @@ local FRESH_BODY = {
 }
 
 local state_stub = {
-  sql = { context = { connection = nil, database = nil } },
+  -- one module since the poste.nvim family dissolution: the old
+  -- poste.state `sql` shim nesting is gone, context lives at the top level
+  context = { connection = nil, database = nil },
   find_poste_binary = function() return "/tmp/poste" end,
   log = function() end,
 }
 
 local function install_stubs()
-  package.loaded["poste.state"] = state_stub
+  package.loaded["poste-db.state"] = state_stub
   package.loaded["poste-db.editor"] = { clear_pk_cache = function() end }
   -- commit_edits calls ensure_primary_key before generating DML; the real one
   -- introspects via the poste binary.

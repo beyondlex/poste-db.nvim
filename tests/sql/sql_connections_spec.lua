@@ -1,13 +1,16 @@
 
 local cli_stub = {}
-local state_stub = { context = { connection = nil, database = nil } }
+local state_stub = {
+  context = { connection = nil, database = nil },
+  log = function() end,  -- merged poste.state surface (state.log caller)
+}
 local util_stub = { find_file_upwards = function() return nil end }
 local select_stub = { select = function() end }
 
-package.loaded["poste.cli"] = cli_stub
+package.loaded["poste-db.cli"] = cli_stub
 package.loaded["poste-db.state"] = state_stub
-package.loaded["poste.util"] = util_stub
-package.loaded["poste.select"] = select_stub
+package.loaded["poste-db.util"] = util_stub
+package.loaded["poste-db.select"] = select_stub
 package.loaded["poste-db.constants"] = require("poste-db.constants")
 
 local toml_parse_calls = {}

@@ -1,4 +1,4 @@
-local cli = require("poste.cli")
+local cli = require("poste-db.cli")
 
 local M = {}
 

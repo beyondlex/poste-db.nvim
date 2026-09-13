@@ -5,7 +5,7 @@
 --- of the editor, keeps a visible floor, and never shrinks an
 --- intentionally enlarged dataset.
 
-package.loaded["poste.state"] = { sql = {}, config = {} }
+package.loaded["poste-db.state"] = { sql = {}, config = {} }
 package.loaded["poste-db.dataset"] = {}
 package.loaded["poste-db.highlights"] = {}
 package.loaded["poste-db.buffer.render"] = {}

@@ -68,95 +68,77 @@ local function fmt_ctx(ctx)
   return escape_statusline(ctx)
 end
 
---- Context resolution for the shared `poste.statusline` layer. poste-db
---- claims a window when its buffer carries a context (SQL source, dataset,
---- db browser, introspection buffers). Buffer-scoped, so it always beats a
---- sibling plugin's *global* fallback context.
---- @param win number
---- @return table|nil  { text, hl, scope }
-local function provider_resolve(win)
-  local ok_buf, buf = pcall(vim.api.nvim_win_get_buf, win)
-  if not ok_buf then return nil end
-  local ok_vars, vars = pcall(function() return vim.b[buf] end)
-  if not ok_vars then return nil end
-  local ctx = vars.poste_db_context
-  if not ctx or ctx == "" then return nil end
-  return {
-    text = ctx,
-    hl = get_ctx_color(ctx:match("^(.-)[/]") or ctx),
-    scope = "buffer",
-  }
-end
-
---- Legacy inline mini.statusline wiring (pre-shared-layer poste.nvim).
---- Kept byte-for-byte behaviour: content.active owns the layout and
---- section_fileinfo bakes the per-connection `%#…#` markup into the string.
-local function legacy_mini_wiring()
+--- mini.statusline wiring (the only path since the poste.nvim family
+--- dissolution). Scope-guarded: db renders only on buffers carrying
+--- `poste_db_context` (SQL source, dataset, db browser, introspection
+--- buffers); on every other buffer both wrappers fall through to the
+--- captured original, so sibling plugins wrapping the same hooks chain
+--- instead of fighting over the global slots. The
+--- `vim.g.poste_db_statusline_wired` flag keeps a module reload from
+--- re-capturing the already-wrapped hooks (wrapper stacking).
+local function wire_mini_statusline()
   vim.schedule(function()
     local ok_mini, statusline = pcall(require, "mini.statusline")
-    if ok_mini then
-      local orig_fileinfo = statusline.section_fileinfo
-      statusline.section_fileinfo = function(...)
-        local ctx = vim.b.poste_db_context
-        if ctx and ctx ~= "" then
-          -- Bake the per-connection highlight into the returned string itself:
-          -- other plugins (e.g. poste-redis.nvim) may own `content.active` and
-          -- drop poste-db's per-group highlight, but `%#…#` markup inside the
-          -- string survives any layout.
-          local conn_name = ctx:match("^(.-)[/]") or ctx
-          local hl_name = get_ctx_color(conn_name)
-          if hl_name then
-            return "%#" .. hl_name .. "# " .. escape_statusline(ctx) .. " "
-          end
-          return escape_statusline(ctx)
+    if not ok_mini then return end
+    if vim.g.poste_db_statusline_wired then return end
+    vim.g.poste_db_statusline_wired = true
+
+    local orig_fileinfo = statusline.section_fileinfo
+    statusline.section_fileinfo = function(...)
+      local ctx = vim.b.poste_db_context
+      if ctx and ctx ~= "" then
+        -- Bake the per-connection highlight into the returned string itself:
+        -- other plugins (e.g. poste-redis.nvim) may own `content.active` and
+        -- drop poste-db's per-group highlight, but `%#…#` markup inside the
+        -- string survives any layout.
+        local conn_name = ctx:match("^(.-)[/]") or ctx
+        local hl_name = get_ctx_color(conn_name)
+        if hl_name then
+          return "%#" .. hl_name .. "# " .. escape_statusline(ctx) .. " "
         end
-        return orig_fileinfo(...)
+        return escape_statusline(ctx)
       end
+      return orig_fileinfo(...)
+    end
 
-      statusline.config.content.active = function()
-        local ctx = vim.b.poste_db_context
-        local ctx_hl = nil
-        if ctx and ctx ~= "" then
-          local conn_name = ctx:match("^(.-)[/]") or ctx
-          ctx_hl = get_ctx_color(conn_name)
-        end
-
-        local mode, mode_hl = statusline.section_mode({ trunc_width = const.STATUSLINE_TRUNC_WIDTH })
-        local git = statusline.section_git({ trunc_width = 40 })
-        local diff = statusline.section_diff({ trunc_width = 75 })
-        local diagnostics = statusline.section_diagnostics({ trunc_width = 75 })
-        local lsp = statusline.section_lsp({ trunc_width = 75 })
-        local filename = statusline.section_filename({ trunc_width = 140 })
-        local fileinfo = statusline.section_fileinfo({ trunc_width = const.STATUSLINE_TRUNC_WIDTH })
-        local location = statusline.section_location({ trunc_width = 75 })
-        local search = statusline.section_searchcount({ trunc_width = 75 })
-
-        return statusline.combine_groups({
-          { hl = mode_hl,                  strings = { mode } },
-          { hl = 'MiniStatuslineDevinfo',  strings = { git, diff, diagnostics, lsp } },
-          '%<',
-          { hl = 'MiniStatuslineFilename', strings = { filename } },
-          '%=',
-          { hl = ctx_hl or 'MiniStatuslineFileinfo', strings = { fileinfo } },
-          { hl = mode_hl,                  strings = { location } },
-          { hl = 'MiniStatuslineFileinfo', strings = { search } },
-        })
+    local orig_active = statusline.config.content.active
+    statusline.config.content.active = function()
+      local ctx = vim.b.poste_db_context
+      if not ctx or ctx == "" then
+        -- Not a db buffer: fall through so an earlier sibling wrapper
+        -- still renders its context (chain discipline).
+        if orig_active then return orig_active() end
+        return ""
       end
+      local conn_name = ctx:match("^(.-)[/]") or ctx
+      local ctx_hl = get_ctx_color(conn_name)
+
+      local mode, mode_hl = statusline.section_mode({ trunc_width = const.STATUSLINE_TRUNC_WIDTH })
+      local git = statusline.section_git({ trunc_width = 40 })
+      local diff = statusline.section_diff({ trunc_width = 75 })
+      local diagnostics = statusline.section_diagnostics({ trunc_width = 75 })
+      local lsp = statusline.section_lsp({ trunc_width = 75 })
+      local filename = statusline.section_filename({ trunc_width = 140 })
+      local fileinfo = statusline.section_fileinfo({ trunc_width = const.STATUSLINE_TRUNC_WIDTH })
+      local location = statusline.section_location({ trunc_width = 75 })
+      local search = statusline.section_searchcount({ trunc_width = 75 })
+
+      return statusline.combine_groups({
+        { hl = mode_hl,                  strings = { mode } },
+        { hl = "MiniStatuslineDevinfo",  strings = { git, diff, diagnostics, lsp } },
+        "%<",
+        { hl = "MiniStatuslineFilename", strings = { filename } },
+        "%=",
+        { hl = ctx_hl or "MiniStatuslineFileinfo", strings = { fileinfo } },
+        { hl = mode_hl,                  strings = { location } },
+        { hl = "MiniStatuslineFileinfo", strings = { search } },
+      })
     end
   end)
 end
 
---- Register with the shared `poste.statusline` compose layer (poste.nvim).
---- Falls back to the inline mini.statusline wiring above when the shared
---- module is missing (older poste.nvim checkout).
 function M.setup()
-  local ok_shared, shared = pcall(require, "poste.statusline")
-  if ok_shared then
-    shared.register_provider({ name = "poste-db", resolve = provider_resolve })
-    shared.setup()
-  else
-    legacy_mini_wiring()
-  end
+  wire_mini_statusline()
 
   vim.schedule(function()
     local ok_lualine = pcall(require, "lualine")

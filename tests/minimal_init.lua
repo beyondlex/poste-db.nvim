@@ -1,8 +1,26 @@
 -- Minimal Neovim configuration for running SQL tests.
 -- Used as -u script (actual vimrc replacement).
+-- Self-contained since the poste.nvim family dissolution (no poste.nvim on
+-- rtp). The poste BINARY is still the family one built in ../poste.nvim —
+-- a locally built binary is preferred when present (debug first, matching
+-- find_poste_binary's order), else a dummy keeps the vendored installer's
+-- ensure() hermetic (no download attempt in headless runs).
 
 vim.opt.runtimepath:append(".")
-vim.opt.runtimepath:append("../poste.nvim")
+
+if vim.g.poste_binary == nil then
+  local debug_build = "../poste.nvim/target/debug/poste"
+  local release_build = "../poste.nvim/target/release/poste"
+  local chosen = (vim.fn.filereadable(debug_build) == 1) and debug_build or release_build
+  if vim.fn.filereadable(chosen) == 1 then
+    vim.g.poste_binary = vim.fn.fnamemodify(chosen, ":p")
+  else
+    local dummy = vim.fn.tempname()
+    vim.fn.writefile({ "# dummy poste binary for tests" }, dummy)
+    vim.g.poste_binary = dummy
+  end
+end
+
 -- Optional: poste-ai.nvim (AI chat integration tests are skipped when absent)
 if vim.fn.isdirectory("../poste-ai.nvim") == 1 then
   vim.opt.runtimepath:append("../poste-ai.nvim")

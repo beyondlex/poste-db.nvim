@@ -1,4 +1,4 @@
-local state = require("poste.state")
+local state = require("poste-db.state")
 local connections = require("poste-db.connections")
 local log = require("poste-db.log")
 local compat = require("poste-db.compat")

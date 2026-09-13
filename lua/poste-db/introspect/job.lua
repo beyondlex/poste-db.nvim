@@ -14,7 +14,7 @@ end
 
 function M.append_stderr(stderr_lines, data, log_prefix)
   if not data then return end
-  local state = log_prefix and require("poste.state") or nil
+  local state = log_prefix and require("poste-db.state") or nil
   for _, l in ipairs(data) do
     if l ~= "" then
       stderr_lines[#stderr_lines + 1] = l

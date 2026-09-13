@@ -8,7 +8,7 @@ package.loaded["poste-db.connections"] = {
   resolve_connection_url = function() return nil end,
   get_connection_config = function() return nil end,
 }
-package.loaded["poste.state"] = { find_poste_binary = function() return nil end }
+package.loaded["poste-db.state"] = { find_poste_binary = function() return nil end }
 package.loaded["poste-db.constants"] = {
   SYSTEM_SCHEMAS = {},
   is_pg_catalog_name = function() return false end,

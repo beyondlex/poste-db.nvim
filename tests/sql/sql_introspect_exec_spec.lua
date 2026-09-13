@@ -1,6 +1,6 @@
-local saved_cli = package.loaded["poste.cli"]
+local saved_cli = package.loaded["poste-db.cli"]
 local cli_stub = {}
-package.loaded["poste.cli"] = cli_stub
+package.loaded["poste-db.cli"] = cli_stub
 
 local exec = require("poste-db.introspect.exec")
 
@@ -9,7 +9,7 @@ describe("introspect exec helpers", function()
   local saved_notify = vim.notify
 
   before_each(function()
-    package.loaded["poste.cli"] = cli_stub
+    package.loaded["poste-db.cli"] = cli_stub
     vim.schedule = function(fn)
       fn()
     end
@@ -18,7 +18,7 @@ describe("introspect exec helpers", function()
   after_each(function()
     vim.schedule = saved_schedule
     vim.notify = saved_notify
-    package.loaded["poste.cli"] = saved_cli
+    package.loaded["poste-db.cli"] = saved_cli
   end)
 
   it("runs json item jobs and forwards parsed items", function()

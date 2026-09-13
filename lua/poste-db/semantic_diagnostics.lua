@@ -9,7 +9,7 @@
 
 local context = require("poste-db.context")
 local connections = require("poste-db.connections")
-local state = require("poste.state")
+local state = require("poste-db.state")
 local const = require("poste-db.constants")
 
 local M = {}

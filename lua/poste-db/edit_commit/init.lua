@@ -55,7 +55,7 @@ end
 --- Bypasses run_sql_request() to avoid cursor-position-dependent buffer parsing.
 --- @param tab table Tab state with original_sql, src_file, src_buf
 function M.refresh_dataset(tab)
-  local state = require("poste.state")
+  local state = require("poste-db.state")
   local sql_state = require("poste-db.state")
   local statement = require("poste-db.statement")
 
@@ -156,7 +156,7 @@ end
 --- Commit all pending edits by generating and executing DML.
 function M.commit_edits()
   local D = require("poste-db.dataset")
-  local state = require("poste.state")
+  local state = require("poste-db.state")
   -- Same request context readers as refresh_dataset: connection/database fall
   -- back to the plugin's SQL context when the tab layout carries neither.
   local sql_state = require("poste-db.state")

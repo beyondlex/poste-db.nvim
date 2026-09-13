@@ -1,33 +1,34 @@
-local saved_state = package.loaded["poste.state"]
-local saved_sql_state = package.loaded["poste-db.state"]
+local saved_state = package.loaded["poste-db.state"]
 local saved_config = package.loaded["poste-db.config"]
-local saved_util = package.loaded["poste.util"]
-local saved_indicators = package.loaded["poste.indicators"]
+local saved_util = package.loaded["poste-db.util"]
+local saved_indicators = package.loaded["poste-db.indicators"]
 local saved_statement = package.loaded["poste-db.statement"]
 local saved_introspect = package.loaded["poste-db.introspect"]
 local saved_format = package.loaded["poste-db.format"]
 local saved_buffer = package.loaded["poste-db.buffer"]
 
+-- One module since the poste.nvim family dissolution: the old poste.state
+-- and poste-db.state stubs collapse into a single table. Both local names
+-- are kept as aliases so the per-test mutations/assertions below stay
+-- meaningful.
 local poste_state_stub = {
   current_env = "dev",
   find_poste_binary = function() return nil end,
   log = function() end,
   last_response = nil,
-}
-local sql_state_stub = {
   context = { connection = nil, database = nil },
   _sql_session = nil,
 }
+local sql_state_stub = poste_state_stub
 local config_stub = {
   get_keymap = function() return nil end,
   config = {},
 }
 
-package.loaded["poste.state"] = poste_state_stub
-package.loaded["poste-db.state"] = sql_state_stub
+package.loaded["poste-db.state"] = poste_state_stub
 package.loaded["poste-db.config"] = config_stub
-package.loaded["poste.util"] = {}
-package.loaded["poste.indicators"] = { clear_all = function() end, set_indicator = function() end }
+package.loaded["poste-db.util"] = {}
+package.loaded["poste-db.indicators"] = { clear_all = function() end, set_indicator = function() end }
 package.loaded["poste-db.statement"] = {
   extract_stmt_at_cursor = function() end,
   extract_visual_block = function() end,
@@ -149,7 +150,7 @@ describe("sql_runner run_sql_request", function()
     local indicator_calls = {}
     -- The runner captured `poste.indicators` at require time (the stub set up
     -- at the top of this spec), so mutate that same object to spy on calls.
-    local ind_stub = package.loaded["poste.indicators"]
+    local ind_stub = package.loaded["poste-db.indicators"]
     ind_stub.clear_all = function() end
     ind_stub.set_indicator = function(...)
       indicator_calls[#indicator_calls + 1] = { ... }
@@ -270,11 +271,10 @@ describe("sql_runner run_sql_request", function()
   end)
 
   after_each(function()
-    package.loaded["poste.state"] = saved_state
-    package.loaded["poste-db.state"] = saved_sql_state
+    package.loaded["poste-db.state"] = saved_state
     package.loaded["poste-db.config"] = saved_config
-    package.loaded["poste.util"] = saved_util
-    package.loaded["poste.indicators"] = saved_indicators
+    package.loaded["poste-db.util"] = saved_util
+    package.loaded["poste-db.indicators"] = saved_indicators
     package.loaded["poste-db.statement"] = saved_statement
     package.loaded["poste-db.introspect"] = saved_introspect
     package.loaded["poste-db.format"] = saved_format

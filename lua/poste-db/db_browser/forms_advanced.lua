@@ -1,5 +1,5 @@
-local dialog = require("poste.dialog")
-local layout = require("poste.layout")
+local dialog = require("poste-db.dialog")
+local layout = require("poste-db.layout")
 local notify = require("poste-db.db_browser.notify")
 
 local M = {}

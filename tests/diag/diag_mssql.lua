@@ -16,7 +16,7 @@ end
 
 local binary = vim.fn.getenv("POSTE_BINARY")
 if binary == vim.NIL or binary == "" then
-  local ok_state, state = pcall(require, "poste.state")
+  local ok_state, state = pcall(require, "poste-db.state")
   binary = ok_state and state.find_poste_binary() or nil
 end
 if not binary then

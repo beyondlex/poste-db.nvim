@@ -4,7 +4,7 @@
 
 local saved_session_conn = package.loaded["poste-db.session_conn"]
 local saved_exec_run = package.loaded["poste-db.exec_run"]
-local saved_state = package.loaded["poste.state"]
+local saved_state = package.loaded["poste-db.state"]
 local saved_log = package.loaded["poste-db.log"]
 
 local session_sql = nil
@@ -19,7 +19,7 @@ local state_stub = {
   log = function() end,
 }
 
-package.loaded["poste.state"] = state_stub
+package.loaded["poste-db.state"] = state_stub
 package.loaded["poste-db.log"] = {
   info = function() end,
   warn = function() end,
@@ -177,7 +177,7 @@ describe("executor session routing", function()
   after_each(function()
     package.loaded["poste-db.session_conn"] = saved_session_conn
     package.loaded["poste-db.exec_run"] = saved_exec_run
-    package.loaded["poste.state"] = saved_state
+    package.loaded["poste-db.state"] = saved_state
     package.loaded["poste-db.log"] = saved_log
   end)
 end)

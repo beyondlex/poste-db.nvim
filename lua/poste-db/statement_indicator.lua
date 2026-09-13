@@ -1,5 +1,5 @@
 local ts_stmt = require("poste-db.ts_stmt")
-local state = require("poste.state")
+local state = require("poste-db.state")
 
 local M = {}
 local _setup_done = false

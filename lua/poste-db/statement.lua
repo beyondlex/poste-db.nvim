@@ -3,7 +3,7 @@
 --- Pure functions for finding and extracting SQL statements from a buffer.
 --- Extracted from sql/init.lua to reduce module size and improve testability.
 
-local cli = require("poste.cli")
+local cli = require("poste-db.cli")
 local log = require("poste-db.log")
 local ts_stmt = require("poste-db.ts_stmt")
 local const = require("poste-db.constants")

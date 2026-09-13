@@ -1,5 +1,5 @@
-local saved_poste_util = package.loaded["poste.util"]
-package.loaded["poste.util"] = saved_poste_util or {
+local saved_poste_util = package.loaded["poste-db.util"]
+package.loaded["poste-db.util"] = saved_poste_util or {
   clean_nil = function()
     return nil
   end,
@@ -32,7 +32,7 @@ describe("nav.goto_definition", function()
       package.loaded[name] = mod
     end
     saved_modules = {}
-    package.loaded["poste.util"] = saved_poste_util
+    package.loaded["poste-db.util"] = saved_poste_util
   end)
 
   it("jumps to the matching connection entry in connections.toml", function()

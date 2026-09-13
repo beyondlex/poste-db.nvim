@@ -1,4 +1,4 @@
-local state = require("poste.state")
+local state = require("poste-db.state")
 
 local M = {}
 

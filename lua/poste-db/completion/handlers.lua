@@ -5,7 +5,7 @@
 local data = require("poste-db.completion.data")
 local ctx = require("poste-db.completion.ctx")
 local const = require("poste-db.constants")
-local state = require("poste.state")
+local state = require("poste-db.state")
 local compat = require("poste-db.compat")
 
 local M = {}
