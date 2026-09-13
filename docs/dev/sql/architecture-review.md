@@ -1,6 +1,6 @@
 # poste-db.nvim 架构审查报告 — 坏味道与 UI 渲染选型
 
-> 审查方式：以「高级架构师」视角对全仓 39,493 行 Lua 做三路并行深审（db_browser 子系统、dataset buffer/UI 子系统、核心执行链路）+ 对每个关键结论的独立 grep/读码复核。本报告聚焦**架构坏味道**，与 [review-report.md](./review-report.md)（P0-P3 功能缺陷/安全/测试）互补，不重复其内容。
+> 审查方式：以「高级架构师」视角对全仓 39,493 行 Lua 做三路并行深审（db_browser 子系统、dataset buffer/UI 子系统、核心执行链路）+ 对每个关键结论的独立 grep/读码复核。本报告聚焦**架构坏味道**，与 [review-report.md](./archived/review-report.md)（P0-P3 功能缺陷/安全/测试）互补，不重复其内容。
 >
 > 所有问题均标注 `file:line`；引用行号基于 2026-08-30 的 `ai` 分支工作区。
 >

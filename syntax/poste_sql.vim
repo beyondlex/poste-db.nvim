@@ -40,7 +40,7 @@ syn match PosteDbSqlComment '--.*$'
 
 " ─── SQL Keywords, Functions, Types ─────────────────
 " NOTE: SQL keyword/function/type highlighting is handled by
-" lua/poste/sql/syntax.lua (extmark-based). This ensures a single
+" lua/poste-db/syntax.lua (extmark-based). This ensures a single
 " source of truth shared with the log viewer.
 " Keep syn keyword lines here for Vim's synID-based motion/iskeyword,
 " but they no longer define highlight groups.

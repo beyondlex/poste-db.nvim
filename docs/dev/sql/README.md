@@ -182,18 +182,16 @@ cross-repo contracts are:
 | Document | Description |
 |----------|-------------|
 | [Dialect Support](./dialect-support.md) | 新增 SQL 方言：优先级、别名机制、三层测试、容器方案、**Lua/Rust 触点清单**（动手前照单全查） |
-| [Code Review Report](./review-report.md) | 全量代码审查报告（P0-P3 分级缺陷，全部带 file:line 证据） |
 | [Architecture Review](./architecture-review.md) | 架构坏味道审查 + UI 渲染选型（nui-components 评估）+ 重构路线图 |
-| [Fix Plan & Architecture Design](./fix-plan.md) | 修复计划与架构设计（AI agent 执行依据，含异步模型/缓存/上下文/执行器设计） |
-| [Completion System](./completion/INDEX.md) | P0-P4 implementation guide (✅ complete) |
 | [Context Architecture](./context-architecture.md) | SQL completion context detection architecture |
-| [DB Browser Context Menu](./db-browser-context-menu.md) | Database browser context menu design |
-| [Schema Create](./schema-create-design.md) | Schema creation dialog, advanced form component, SQL execution from DB browser |
 | [Refactor Agent Guide](./refactor-agent-guide.zh.md) | AI agent execution guide for the refactor branch |
 | [AI Chat Integration](./ai-chat.md) | poste-ai.nvim "db" context: @connection mentions, schema injection, SQL code-block execution into the dataset |
 
 > **Archived design docs** (features implemented, kept for reference):  
-> SQL Feature Design, Dataset UI Design, Dataset Editing, Data Import — these are in [archived docs](../archived/README.md) as their features are now implemented.
+> SQL Feature Design, Dataset UI Design, Dataset Editing, Data Import,
+> Code Review Report, Fix Plan, DB Browser Context Menu, Schema Create,
+> and the completed SQL Completion P0–P4 guides — these are in
+> [archived docs](../archived/) as their features are now implemented.
 
 ---
 
