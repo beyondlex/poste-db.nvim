@@ -66,6 +66,17 @@ function M.recompute_after_view_change()
   end
 end
 
+--- Byte span (1-based, inclusive) of `query` inside `cell_text`, case-insensitive
+--- plain find; nil when it doesn't appear. The rendered text can drift from the
+--- raw value a match was computed on (truncation, NULL formatting) — the caller
+--- falls back to the whole-cell highlight then.
+local function match_span(cell_text, query)
+  if not cell_text or cell_text == "" or not query or query == "" then return nil end
+  local pos = cell_text:lower():find(query:lower(), 1, true)
+  if not pos then return nil end
+  return pos, pos + #query - 1
+end
+
 function M.apply_search_highlights()
   if not D.dataset_buffer or not vim.api.nvim_buf_is_valid(D.dataset_buffer) then return end
   vim.api.nvim_buf_clear_namespace(D.dataset_buffer, D.search_ns, 0, -1)
@@ -86,13 +97,25 @@ function M.apply_search_highlights()
     if line then
       local range = sql_highlights.find_cell_range(line, match.col + 1)
       if range then
-        local hl = (match.global_match_idx == tab.search_idx) and "PosteDbDatasetSearchCurrent" or "PosteDbDatasetSearchMatch"
+        local current = match.global_match_idx == tab.search_idx
+        local hl = current and "PosteDbDatasetSearchCurrent" or "PosteDbDatasetSearchMatch"
         vim.api.nvim_buf_set_extmark(D.dataset_buffer, D.search_ns, buf_line - 1, range.ext_start, {
           end_row = buf_line - 1,
           end_col = range.ext_end,
           hl_group = hl,
           priority = 150,
         })
+        -- fg-emphasize just the matched characters, layered over the
+        -- whole-cell tint above
+        local s, e = match_span(line:sub(range.ext_start, range.ext_end), tab.search_text)
+        if s then
+          vim.api.nvim_buf_set_extmark(D.dataset_buffer, D.search_ns, buf_line - 1, range.ext_start + s - 1, {
+            end_row = buf_line - 1,
+            end_col = range.ext_start + e - 1,
+            hl_group = current and "PosteDbDatasetSearchCurrent" or "PosteDbDatasetSearchMatchText",
+            priority = 151,
+          })
+        end
       end
     end
   end
@@ -320,5 +343,7 @@ update_winbar = function()
   end
 end
 M.update_winbar = update_winbar
+
+M._test = { match_span = match_span }
 
 return M

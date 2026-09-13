@@ -68,6 +68,10 @@ function M.setup()
   vim.api.nvim_set_hl(0, "PosteDbDatasetSortIndicator", { fg = dark and 0x56b6c2 or 0xcf222e, bold = true })
   vim.api.nvim_set_hl(0, "PosteDbDatasetFilterActive", { fg = fg_of("DiagnosticOk", dark and 0x4ade80 or 0x16a34a), bold = true })
   vim.api.nvim_set_hl(0, "PosteDbDatasetSearchActive", { fg = dark and 0xc084fc or 0x7e22ce, bold = true })
+  -- the matched characters inside a searched cell (fg over the cell-wide
+  -- Search tint); same purple family as the winbar's search label
+  vim.api.nvim_set_hl(0, "PosteDbDatasetSearchMatchText",
+    { fg = dark and 0xc084fc or 0x7e22ce, bold = true })
   vim.api.nvim_set_hl(0, "PosteDbMissingWhere",
     { fg = dark and 0xc084fc or 0x8250df, bold = true })
   vim.api.nvim_set_hl(0, "PosteDbDatasetInsertHint", { fg = dark and 0xe5c07b or 0x0550ae, bold = true, underline = true })
@@ -101,7 +105,7 @@ function M.setup()
     "PosteDbDatasetMeta", "PosteDbDatasetMetaDim", "PosteDbDatasetNull",
     "PosteDbDatasetNumber", "PosteDbDatasetBool", "PosteDbDatasetSortIndicator",
     "PosteDbDatasetRowNum", "PosteDbDatasetCellSelected", "PosteDbDatasetCursorLine",
-    "PosteDbDatasetSearchMatch", "PosteDbDatasetSearchCurrent",
+    "PosteDbDatasetSearchMatch", "PosteDbDatasetSearchCurrent", "PosteDbDatasetSearchMatchText",
     "PosteDbDatasetInsertHint", "PosteDbDatasetError",
     "PosteDbDatasetWinbarAdded", "PosteDbDatasetWinbarModified", "PosteDbDatasetWinbarDeleted",
     "PosteDbMissingWhere",
