@@ -106,10 +106,14 @@ function M.apply_search_highlights()
           priority = 150,
         })
         -- fg-emphasize just the matched characters, layered over the
-        -- whole-cell tint above
+        -- whole-cell tint above. extmark cols are 0-based: s/e are 1-based
+        -- byte spans within cell_text (which starts at ext_start), so the
+        -- start col is ext_start + s - 2. end_col is EXCLUSIVE, which
+        -- numerically equals the 1-based inclusive end — the same convention
+        -- the whole-cell mark above uses.
         local s, e = match_span(line:sub(range.ext_start, range.ext_end), tab.search_text)
         if s then
-          vim.api.nvim_buf_set_extmark(D.dataset_buffer, D.search_ns, buf_line - 1, range.ext_start + s - 1, {
+          vim.api.nvim_buf_set_extmark(D.dataset_buffer, D.search_ns, buf_line - 1, range.ext_start + s - 2, {
             end_row = buf_line - 1,
             end_col = range.ext_start + e - 1,
             hl_group = current and "PosteDbDatasetSearchCurrent" or "PosteDbDatasetSearchMatchText",
