@@ -1,4 +1,4 @@
--- Tests for lua/poste/sql/import.lua
+-- Tests for lua/poste-db/import.lua
 -- Pure function tests (parsing, mapping, coercion, detection).
 
 -- Enable test-only exports in import.lua
