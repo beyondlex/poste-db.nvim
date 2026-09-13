@@ -1,17 +1,42 @@
 # poste-db.nvim
 
-**SQL execution, dataset browser, and schema introspection for Neovim.** Part of the [Poste](https://github.com/beyondlex/poste.nvim) family.
+[![CI](https://github.com/beyondlex/poste-db.nvim/actions/workflows/ci.yml/badge.svg)](https://github.com/beyondlex/poste-db.nvim/actions/workflows/ci.yml)
 
-**Requires**: the family `poste` binary (installed automatically on first
-setup from [poste.nvim](https://github.com/beyondlex/poste.nvim) releases, or
-point `vim.g.poste_binary` at a build)
+**Execute SQL from plain-text files. A spreadsheet for your results.**
 
-Full documentation is in `doc/poste-db.txt` (`:h poste-db` after installing helptags).
+A self-contained SQL plugin for Neovim: run statements from `.sql` files
+against PostgreSQL, MySQL/MariaDB, SQLite, SQL Server or ClickHouse, and get
+a keyboard-driven dataset panel — pagination, cell navigation, search, sort,
+inline transactional editing — instead of a wall of text.
+
+<!--
+Hero screenshot: a .sql buffer with the cursor on a statement, the dataset
+panel below showing a result grid, and the statusline context
+[connection/database] highlighted per-connection color.
+Drop the image at .github/assets/dataset.png and uncomment.
+![poste-db.nvim — SQL buffer + dataset panel](.github/assets/dataset.png)
+-->
+
+Part of the [Poste](https://github.com/beyondlex/poste.nvim) family. The
+plugin is fully self-contained (shared infra is vendored); the one shared
+piece is the `poste` binary, installed automatically on first setup from
+[poste.nvim](https://github.com/beyondlex/poste.nvim) releases — or point
+`vim.g.poste_binary` at your own build.
+
+Full documentation lives in `doc/poste-db.txt` (`:h poste-db`), with a
+[quick reference](docs/user/sql/quick-reference.md) for the everyday keys.
 
 ## Features
 
 - **Execute SQL statements** from `.sql` files — PostgreSQL, MySQL/MariaDB, SQLite, SQL Server, ClickHouse, and PG/MySQL-compatible aliases
 - **Dataset panel** — Paginated results, cell navigation (hjkl), vim-style search/filter, sorting
+
+<!--
+Screenshot: a dataset panel mid-navigation — cell cursor on a row, the
+search/filter prompt active, multiple result tabs along the top.
+Suggested path: .github/assets/dataset-panel.png
+-->
+
 - **Inline editing** — Edit cells, insert/delete rows, commit as one **transaction** (BEGIN/COMMIT/ROLLBACK) with affected-row verification
 - **DB Browser** — Tree view of schemas, tables, columns; context menu with create/import/drop/clone actions and DDL generators
 - **SSH tunnels** — Declare a jump host per connection; everything works through `127.0.0.1:<local port>`
@@ -38,9 +63,30 @@ Full documentation is in `doc/poste-db.txt` (`:h poste-db` after installing help
 }
 ```
 
+On first setup the `poste` binary is downloaded from poste.nvim releases
+(SHA256-verified) into `stdpath("data")/poste/bin/poste`. To use your own
+build — e.g. a worktree with unreleased dialect work — set
+`vim.g.poste_binary = "/path/to/poste"` before setup.
+
+Run `:checkhealth poste-db` to verify the installation.
+
 ## Usage
 
-Open a `.sql` file and press `<CR>` on a statement to execute.
+Open a `.sql` file, position the cursor on a statement, press `<CR>`.
+
+```sql
+-- @connection pg-dev
+
+SELECT u.name, count(o.id) AS orders
+FROM users u JOIN orders o ON o.user_id = u.id
+GROUP BY u.name
+ORDER BY orders DESC;
+```
+
+The result opens in the dataset panel: `h/j/k/l` move the cell cursor,
+`H/L` page, `s` sorts, `<leader>/` searches, `K` previews a cell, `yy` yanks
+it, `E` exports the whole result set. Every statement gets its own tab
+(`<Tab>`/`<S-Tab>` to cycle).
 
 ### Connection management
 
@@ -157,6 +203,12 @@ file or clipboard.
 
 Press `<leader>db` in a SQL file to open the database tree browser.
 
+<!--
+Screenshot: the browser tree open on a schema — a table node expanded to
+columns, one node highlighted, the context menu (x) floating beside it.
+Suggested path: .github/assets/db-browser.png
+-->
+
 | Key | Action |
 |-----|--------|
 | `<CR>` | Toggle node expand/collapse |
@@ -189,10 +241,22 @@ your SQL buffer: `ma` add column, `mr` rename column, `md` drop column,
 under the cursor in a float — `EXPLAIN` on postgres/mysql/clickhouse,
 `EXPLAIN QUERY PLAN` on sqlite. Plan-only forms never execute the statement.
 
+<!--
+Screenshot: the EXPLAIN float over a .sql buffer, showing a posted plan
+(ANALYZE rows on top of the raw plan if the dialect supports it).
+Suggested path: .github/assets/explain.png
+-->
+
 ### AI chat
 
 With [poste-ai.nvim](https://github.com/beyondlex/poste-ai.nvim) installed,
 `:PosteDbChat` opens a schema-aware chat:
+
+<!--
+Screenshot: the chat sidebar beside a dataset tab — a question about the
+result set, with a ```sql block from the answer about to be executed.
+Suggested path: .github/assets/ai-chat.png
+-->
 
 - `/connections` / `/databases` scope the conversation
 - `@connection/database[/table]` mentions inject schema summaries; tables
@@ -275,9 +339,7 @@ require("poste-db").setup({
 - blink.cmp (recommended) or nvim-cmp for completion
 - `ssh` on PATH for `tunnel` connections
 
-Run `:checkhealth poste-db` to verify your installation.
-
-## Integration Tests
+## Testing
 
 ```bash
 # Start test databases (PG 16 on 15432, MySQL 8.0 on 13306)
