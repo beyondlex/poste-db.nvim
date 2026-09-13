@@ -47,10 +47,32 @@ local function filter_matches(entry)
   if (entry.connection or ""):lower():find(lower, 1, true) then return true end
   if (entry.status or ""):lower():find(lower, 1, true) then return true end
   if (entry.database or ""):lower():find(lower, 1, true) then return true end
+  if (entry.source or ""):lower():find(lower, 1, true) then return true end
   if (entry.sql or ""):lower():find(lower, 1, true) then return true end
   return false
 end
 M._filter_matches = filter_matches
+
+--- source field → summary-column tag. The log is the journal of every SQL
+--- request (manual runs, run-file, AI, EXPLAIN, commits, imports, browser
+--- queries, schema introspection, connection probes), so each surface gets a
+--- short tag for the summary row.
+local SOURCE_TAGS = {
+  manual_exec = "exec",
+  run_file = "file",
+  ai_chat = "ai",
+  dataset_commit = "commit",
+  import = "import",
+  explain = "explain",
+  browser = "browser",
+  introspect = "schema",
+  connection = "conn",
+}
+
+local function source_tag(entry)
+  return SOURCE_TAGS[entry.source or ""] or tostring(entry.source or "exec")
+end
+M._source_tag = source_tag
 
 local function format_time(ts)
   if not ts then return "??-?? ??:??:??" end
@@ -221,7 +243,7 @@ local function summary_parts(entry)
   local time = format_time(entry.ts)
   local db = pad_table(entry_database(entry) or entry_table(entry) or "?")
   local ms = string.format("%5s", tostring(entry.elapsed_ms or 0) .. "ms")
-  local src_tag = string.format("%-6s", entry.source == "dataset_commit" and "commit" or entry.source == "import" and "import" or "exec")
+  local src_tag = string.format("%-7s", source_tag(entry))
   local display_sql = clean_sql(entry.sql)
   local sql = preview_sql(display_sql, 70)
   return { "  ", time, "  ", db, "  ", ms, "  ", src_tag, " ", sql }

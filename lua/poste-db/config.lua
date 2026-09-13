@@ -38,6 +38,7 @@ M.defaults = {
       toggle_db_browser = "<leader>db",
       trigger_completion = "<C-Space>",
       ask_ai = "<leader>aa",
+      toggle_log = "<leader>l",
       help = "g?",
     },
     sql_dataset = {

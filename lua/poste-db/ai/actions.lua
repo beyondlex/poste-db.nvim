@@ -145,6 +145,8 @@ function M.execute_sql(sql, refs, cb)
     database = database,
     mode = "greedy",
     src_file = "poste://ai_chat",
+    log_source = "ai_chat",
+    log_extra = { connection = conn },
     on_response = function(parsed)
       -- in-band database errors arrive as a normal response: surface them as
       -- a chat error (not a fake success) and retain them for the dataset

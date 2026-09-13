@@ -246,3 +246,29 @@ Mc 记 1 格）；光标/高亮触发的**局部重绘**按 nvim 自己的网格
 
 *Latest: 2026-09-13 Devanagari Mc 标记宽度（dataset 右边框被盖）会话。
 新增条目时保持同一格式：发生了什么（带 file:line）→ 约束（可执行的检查动作）。*
+
+---
+
+## Plenary harness：`after_each` 注册在 describe 外 → 目录模式静默丢文件（2026-09-14）
+
+**发生了什么**：`sql_exec_run_log_spec.lua` 等三个新 spec 把 `after_each(...)`
+写在文件顶层（describe 外）。`PlenaryBustedFile` 单跑时测试全绿、仅末尾
+打印一条 `Error in command line: busted.lua:147: bad argument #1 to 'insert'`
+（`table.insert(current_after_each[#current_description], fn)` 在无 describe
+上下文时 `#current_description` 为 nil）；但 `tests/run.sh` 的
+`PlenaryBustedDirectory` 下，子进程在汇报前就被这个错误带崩——"Scheduling:"
+了却永远不出 "Testing:" 行，84 个文件只剩 81 个跑，且 `run.sh` 只以退出码 1
+报错、正文零失败统计，极易误判为"全绿"。
+
+**约束**：`before_each`/`after_each` 必须写在 `describe` 块内（仓库现有 spec
+均如此，见 `tests/sql/sql_executor_spec.lua`）。验收目录跑法的结果时要三对：
+`grep -c '^Testing:'` == spec 文件数、逐文件 `Failed :` 全 0、`run.sh` 退出码
+为 0——只看退出码或只看个别文件的绿字都不够。另外 plenary 在测试生命周期外
+触发的 ERROR 级 `vim.notify` 会走错误通道砸中 harness：spec 里驱动异步回调时
+（如 `sql_db_browser_introspect_log_spec.lua`）要 stub `vim.notify` 并在测试
+存活期内 `vim.wait` 排空 `vim.schedule`，防止跨测试泄漏与 late-callback 崩溃。
+
+---
+
+*Latest: 2026-09-14 Plenary harness after_each 作用域 + 目录模式静默丢 spec。
+新增条目时保持同一格式：发生了什么（带 file:line）→ 约束（可执行的检查动作）。*

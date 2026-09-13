@@ -238,6 +238,31 @@ function M.cancel()
   render_progress()
 end
 
+--- One journal entry per file run: outcome plus the first statement failure
+--- (full per-statement detail stays in the progress dialog). Defined BEFORE
+--- handle_line, which calls it — a local defined after its caller resolves
+--- to a nil global there (AGENTS.md forward-declaration pitfall).
+local function journal_file_summary()
+  local first_error
+  for _, r in ipairs(S.results) do
+    if r.status == "error" then
+      first_error = (r.seq and ("[" .. r.seq .. "] ") or "") .. tostring(r.error or "statement failed")
+      break
+    end
+  end
+  require("poste-db.sql_log").record({
+    source = "run_file",
+    sql = "[file] " .. (S.filepath or "?"),
+    connection = S.conn or nil,
+    database = S.db or nil,
+    status = S.n_failed > 0 and "error" or "success",
+    elapsed_ms = S.start_time and ((vim.uv or vim.loop).now() - S.start_time) or nil,
+    affected_rows = S.total_affected,
+    rolled_back = S.rolled_back or nil,
+    error_msg = first_error,
+  })
+end
+
 local function handle_line(line)
   local ok, event = pcall(vim.json.decode, line)
   if not ok or type(event) ~= "table" then return end
@@ -291,6 +316,8 @@ local function handle_line(line)
     S.rolled_back = event.rolled_back or false
     S.is_running = false
     S.current_sql = nil
+    S.summary_seen = true
+    journal_file_summary()
     render_progress()
   end
 end
@@ -316,6 +343,7 @@ function M.run(opts)
   S.job_id = nil
   S.is_running = true
   S.cancelled = false
+  S.summary_seen = false
   S.n_succeeded = 0
   S.n_failed = 0
   S.total_rows = 0
@@ -339,6 +367,14 @@ function M.run(opts)
     vim.notify("Poste binary not found", vim.log.levels.ERROR)
     S.is_running = false
     render_progress()
+    require("poste-db.sql_log").record({
+      source = "run_file",
+      sql = "[file] " .. filepath,
+      connection = conn or nil,
+      database = db or nil,
+      status = "error",
+      error_msg = "Poste binary not found",
+    })
     return
   end
 
@@ -354,6 +390,14 @@ function M.run(opts)
       if S.dialog then S.dialog:close(); S.dialog = nil end
       S.is_running = false
       vim.notify("Connection '" .. resolved_conn .. "' not found: " .. (err or "create a connections.toml in your project root"), vim.log.levels.ERROR, { title = "PosteDb" })
+      require("poste-db.sql_log").record({
+        source = "run_file",
+        sql = "[file] " .. filepath,
+        connection = resolved_conn,
+        database = db or nil,
+        status = "error",
+        error_msg = err or "connection not found",
+      })
       return
     end
     S.conn = resolved_conn
@@ -408,6 +452,20 @@ function M.run(opts)
         if code ~= 0 and not S.cancelled then
           state.log("ERROR", "ExecFile exit code " .. code)
         end
+        -- A dead binary/connection never delivers a summary — journal the
+        -- run so `<leader>l` shows why nothing happened.
+        if not S.summary_seen and not S.cancelled then
+          S.n_failed = math.max(S.n_failed, 1)
+          require("poste-db.sql_log").record({
+            source = "run_file",
+            sql = "[file] " .. (S.filepath or "?"),
+            connection = S.conn or nil,
+            database = S.db or nil,
+            status = "error",
+            elapsed_ms = S.start_time and ((vim.uv or vim.loop).now() - S.start_time) or nil,
+            error_msg = "exit code " .. tostring(code) .. " (no summary event)",
+          })
+        end
         S.is_running = false
         render_progress()
       end)
@@ -418,6 +476,14 @@ function M.run(opts)
     vim.notify("Failed to start poste exec-file job", vim.log.levels.ERROR)
     S.is_running = false
     render_progress()
+    require("poste-db.sql_log").record({
+      source = "run_file",
+      sql = "[file] " .. (S.filepath or "?"),
+      connection = S.conn or nil,
+      database = S.db or nil,
+      status = "error",
+      error_msg = "failed to start exec-file job",
+    })
   end
 end
 

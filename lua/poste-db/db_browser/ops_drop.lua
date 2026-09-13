@@ -107,6 +107,8 @@ execute_drop = function(table_node, qualified, conn, schema_prefix, context)
     conn_url = url,
     database = database,
     mode = "greedy",
+    log_source = "browser",
+    log_extra = { connection = conn },
   }, {
     on_response = function(resp)
       vim.schedule(function()
@@ -361,6 +363,8 @@ local function start_batch_drop(items, conn_label, search_dir, context)
       conn_url = url,
       database = it.database,
       mode = "greedy",
+      log_source = "browser",
+      log_extra = { connection = it.conn },
     }, {
       on_response = function(resp)
         vim.schedule(function()

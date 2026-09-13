@@ -11,6 +11,26 @@
 
 local cli = require("poste-db.cli")
 local state = require("poste-db.state")
+local log = require("poste-db.log")
+local sql_log = require("poste-db.sql_log")
+
+----------------------------------------------------------------------------
+-- Request journaling
+--
+-- Every exec-file invocation lands in sql_log.jsonl exactly once, success or
+-- failure, unless the caller opts out (`opts.log == false` — used by callers
+-- that journal richer entries themselves, e.g. edit commits and imports).
+-- `opts.log_source` tags the surface; `opts.log_extra` overrides fields the
+-- seam can't know (e.g. the connection *name* instead of its URL).
+----------------------------------------------------------------------------
+
+--- Entry fields known at dispatch time, or nil when logging is opted out.
+local function journal_base(sql, opts)
+  local base = sql_log.seam_base(opts)
+  if not base then return nil end
+  base.sql = sql
+  return base
+end
 
 ----------------------------------------------------------------------------
 -- Temp file
@@ -292,22 +312,43 @@ end
 --- @param opts table  same as run_async (src_file, conn_url, database, mode, timeout, max_rows)
 local function run_sql(sql, opts)
   opts = opts or {}
+  local t0 = vim.uv.now()
+  local base = journal_base(sql, opts)
   local use_db = detect_use(sql)
   if use_db and not opts.conn_url and not opts.database then
-    return make_use_response(use_db)
+    local resp = make_use_response(use_db)
+    sql_log.result(base, resp, vim.uv.now() - t0)
+    return resp
   end
   local binary = state.find_poste_binary()
-  if not binary then return nil end
+  if not binary then
+    sql_log.fail(base, "Poste binary not found", vim.uv.now() - t0)
+    return nil
+  end
   local tmpfile = write_temp_file(sql)
   local cmd = vim.list_extend({ binary }, build_cmd(tmpfile, opts))
   local ok_sys, result_obj = pcall(vim.system, cmd, { timeout = 30000 })
-  if not ok_sys then pcall(vim.fn.delete, tmpfile); return nil end
+  pcall(vim.fn.delete, tmpfile)
+  if not ok_sys then
+    sql_log.fail(base, "failed to start exec-file", vim.uv.now() - t0)
+    return nil
+  end
   local result = result_obj:wait()
   pcall(vim.fn.delete, tmpfile)
-  if result.code ~= 0 then return nil end
+  if result.code ~= 0 then
+    local err = (result.stderr and result.stderr ~= "") and result.stderr
+      or ("exec-file exit code " .. tostring(result.code))
+    sql_log.fail(base, err, vim.uv.now() - t0)
+    return nil
+  end
   local events = parse_lines(result.stdout)
-  if #events == 0 then return nil end
-  return build_response(events, opts.conn_url, opts.database)
+  if #events == 0 then
+    sql_log.fail(base, "exec-file produced no events", vim.uv.now() - t0)
+    return nil
+  end
+  local resp = build_response(events, opts.conn_url, opts.database)
+  sql_log.result(base, resp, vim.uv.now() - t0)
+  return resp
 end
 
 --- Run SQL asynchronously via `exec-file`.
@@ -321,11 +362,31 @@ end
 ---   - on_response: function(resp)
 ---   - on_progress: function(seq, total)|nil
 ---   - on_error: function(message, stderr)|nil   called when the process itself fails
+--- Logging opts (see journal_base): log=false opts out; log_source/log_extra tag.
 local function run_async(sql, opts, callbacks)
   opts = opts or {}
   callbacks = callbacks or {}
   local on_response = callbacks.on_response
   local on_error = callbacks.on_error
+
+  local t0 = vim.uv.now()
+  local base = journal_base(sql, opts)
+  if base then
+    --- Journal, then deliver. Transport failures (binary missing, job start
+    --- failure, non-zero exit without a summary) arrive via on_error; SQL
+    --- failures arrive as a normal response with has_error.
+    local user_on_response, user_on_error = on_response, on_error
+    on_response = function(resp)
+      -- Binary-reported execution time when available, wall clock otherwise.
+      local elapsed = tonumber(resp and resp.latency_ms) or (vim.uv.now() - t0)
+      sql_log.result(base, resp, elapsed)
+      if user_on_response then user_on_response(resp) end
+    end
+    on_error = function(message, stderr)
+      sql_log.fail(base, message, vim.uv.now() - t0)
+      if user_on_error then user_on_error(message, stderr) end
+    end
+  end
 
   -- Lone USE statement: handled locally (exec-file skips USE).
   local use_db = detect_use(sql)
@@ -357,7 +418,6 @@ local function run_async(sql, opts, callbacks)
   local tmpfile = write_temp_file(sql)
 
   local cmd = build_cmd(tmpfile, opts)
-  local log = require("poste-db.log")
   log.info("exec-run cmd: " .. log.redact_cmd(cmd))
 
   local events = {}

@@ -94,6 +94,21 @@ function M.show_ddl(node, context)
   local log = require("poste-db.log")
   log.info("DB Browser DDL: " .. log.redact_cmd(cmd))
 
+  local sql_log = require("poste-db.sql_log")
+  local journal = sql_log.cli_fields(cmd, "browser")
+  journal.connection = conn -- friendly name beats the redacted URL here
+  local t0 = vim.uv.now()
+  local journaled = false
+  local function journal_once(status, error_msg)
+    if journaled then return end
+    journaled = true
+    sql_log.record(vim.tbl_extend("force", journal, {
+      status = status,
+      elapsed_ms = vim.uv.now() - t0,
+      error_msg = error_msg,
+    }))
+  end
+
   cli.run_async(cmd, {
     on_stdout = function(data)
       if not data then return end
@@ -105,6 +120,7 @@ function M.show_ddl(node, context)
         vim.schedule(function()
           notify.warn("DDL: failed to parse output")
         end)
+        journal_once("error", "failed to parse output")
         return
       end
 
@@ -113,8 +129,11 @@ function M.show_ddl(node, context)
         vim.schedule(function()
           notify.warn("DDL: no items in response")
         end)
+        journal_once("error", "no items in response")
         return
       end
+
+      journal_once("success", nil)
 
       vim.schedule(function()
         local ddl = items[1].ddl or ""
@@ -135,6 +154,7 @@ function M.show_ddl(node, context)
         vim.schedule(function()
           vim.notify("DDL fetch failed (exit " .. tostring(code) .. ")", vim.log.levels.ERROR)
         end)
+        journal_once("error", "exit code " .. tostring(code))
       end
     end,
   })

@@ -150,6 +150,8 @@ function M.explain()
     src_file = vim.api.nvim_buf_get_name(src_buf),
     conn_url = conn_url,
     database = database,
+    log_source = "explain",
+    log_extra = { connection = conn ~= "" and conn or nil },
   })
 
   local lines, plan_err = M.plan_lines(resp)

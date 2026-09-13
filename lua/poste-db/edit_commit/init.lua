@@ -107,6 +107,7 @@ function M.refresh_dataset(tab)
     conn_url = conn_url,
     database = db,
     mode = "greedy",
+    log = false, -- journaling happens in execute_commit with edit_summary
   }, {
     on_response = function(parsed)
       vim.schedule(function()
@@ -256,6 +257,7 @@ function M.commit_edits()
     conn_url = conn_url,
     database = database,
     mode = exec_mode,
+    log = false, -- this function journals the commit with edit_summary itself
   }, {
     on_response = function(resp)
       local elapsed = vim.uv.now() - start_time

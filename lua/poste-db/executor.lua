@@ -2,6 +2,7 @@ local config = require("poste-db.config")
 local session_conn = require("poste-db.session_conn")
 local exec_run = require("poste-db.exec_run")
 local log = require("poste-db.log")
+local sql_log = require("poste-db.sql_log")
 
 local M = {}
 
@@ -24,6 +25,33 @@ function M.execute(opts)
   local src_buf = opts.src_buf
   local src_file = opts.src_file
 
+  -- Request journaling: one entry per executor request, success or failure,
+  -- covering both the session and exec-file transports (and the internal
+  -- session→exec-file fallback, which must not log twice). The exec_run
+  -- calls below pass log=false — the wrapping here owns the entry.
+  local t0 = vim.uv.now()
+  local base = sql_log.seam_base({
+    log = opts.log,
+    log_source = opts.log_source,
+    log_extra = opts.log_extra,
+    conn_url = conn_url,
+    database = database,
+  })
+  if base then
+    base.sql = sql
+    local user_on_response, user_on_error = on_response, on_error
+    on_response = function(parsed)
+      -- Binary-reported execution time when available, wall clock otherwise.
+      local elapsed = tonumber(parsed and parsed.latency_ms) or (vim.uv.now() - t0)
+      sql_log.result(base, parsed, elapsed)
+      if user_on_response then user_on_response(parsed) end
+    end
+    on_error = function(message, parsed)
+      sql_log.fail(base, message, vim.uv.now() - t0)
+      if user_on_error then user_on_error(message, parsed) end
+    end
+  end
+
   local fallback_used = false
   local function exec_file_fallback(msg)
     if fallback_used then return end
@@ -36,6 +64,7 @@ function M.execute(opts)
       database = database,
       mode = mode,
       max_rows = max_rows,
+      log = false,
     }, {
       on_response = on_response,
       on_error = on_error,
@@ -50,6 +79,8 @@ function M.execute(opts)
     log.debug("SQL via session: " .. (sql and sql:sub(1, 200):gsub("\n", "\\n") or "nil"))
     local ok = session_conn.execute(conn_url, sql, {
       on_response = on_response,
+      -- A dead session falls back internally; only the fallback's own
+      -- outcome is journaled, not this transport hiccup.
       on_error = exec_file_fallback,
       on_sql_error = function(message, parsed)
         if on_error then on_error(message, parsed) end
@@ -67,6 +98,7 @@ function M.execute(opts)
       database = database,
       mode = mode,
       max_rows = max_rows,
+      log = false,
     }, {
       on_response = on_response,
       on_error = on_error,

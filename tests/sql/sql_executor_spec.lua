@@ -6,6 +6,7 @@ local saved_session_conn = package.loaded["poste-db.session_conn"]
 local saved_exec_run = package.loaded["poste-db.exec_run"]
 local saved_state = package.loaded["poste-db.state"]
 local saved_log = package.loaded["poste-db.log"]
+local saved_sql_log = package.loaded["poste-db.sql_log"]
 
 local session_sql = nil
 local session_callbacks = nil
@@ -40,6 +41,11 @@ package.loaded["poste-db.session_conn"] = {
 }
 package.loaded["poste-db.exec_run"] = {
   run_async = function() return 1 end,
+}
+-- Journaling disabled: seam_base(nil) keeps the executor from writing to the
+-- real sql_log.jsonl while these routing tests fire its callbacks.
+package.loaded["poste-db.sql_log"] = {
+  seam_base = function() return nil end,
 }
 
 local function fresh_executor()
@@ -179,5 +185,6 @@ describe("executor session routing", function()
     package.loaded["poste-db.exec_run"] = saved_exec_run
     package.loaded["poste-db.state"] = saved_state
     package.loaded["poste-db.log"] = saved_log
+    package.loaded["poste-db.sql_log"] = saved_sql_log
   end)
 end)

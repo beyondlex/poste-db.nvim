@@ -121,10 +121,12 @@ local function run_introspection_query(query, connection, database, src_file)
     src_file = src_file,
     database = database,
     mode = "greedy",
+    log_source = "introspect",
   }
   if connection:match("^%w+://") then
     opts.conn_url = connection
   else
+    opts.log_extra = { connection = connection }
     local connections = require("poste-db.connections")
     local resolved, _ = connections.resolve_connection_url(connection)
     if resolved and resolved ~= "" then

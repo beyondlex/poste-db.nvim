@@ -385,6 +385,8 @@ function M.run_sql_request()
   end
 
   local executor = require("poste-db.executor")
+  local conn_name = ctx.connection
+  if conn_name == vim.NIL then conn_name = nil end
   executor.execute({
     sql = stmt_sql_raw or buf_content,
     conn_url = conn_url,
@@ -393,6 +395,8 @@ function M.run_sql_request()
     prefer_session = use_session,
     src_buf = src_buf,
     src_file = file,
+    log_source = "manual_exec",
+    log_extra = { connection = conn_name },
     on_response = on_response,
     on_error = function(message, parsed)
       indicators.set_indicator(src_buf, block_result_line, "error")

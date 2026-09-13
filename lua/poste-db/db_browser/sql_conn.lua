@@ -26,6 +26,8 @@ function M.run(conn_name, database, sql, on_result, on_error)
     conn_url = url,
     database = database,
     mode = "greedy",
+    log_source = "browser",
+    log_extra = { connection = conn_name },
   }, {
     on_response = function(resp)
       if on_result then on_result(vim.json.encode(resp)) end

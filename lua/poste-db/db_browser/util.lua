@@ -105,6 +105,8 @@ function M.run_ddl_and_refresh(sql, conn_name, context, opts)
     conn_url = url,
     database = opts.database or nil,
     mode = "greedy",
+    log_source = "browser",
+    log_extra = { connection = conn_name },
   }, {
     on_response = function(resp)
       local ok_body, body = pcall(vim.json.decode, resp.body or "{}")

@@ -212,18 +212,6 @@ function M.handle(deps, parsed)
         indicators.set_indicator(deps.src_buf, result_line - 1, "error")
       else
         indicators.set_indicator(deps.src_buf, result_line - 1, "success", parsed.latency_ms)
-        -- Log successful manual execution
-        local edit_commit = require("poste-db.edit_commit")
-        local context = require("poste-db.context").resolve_full_context(deps.src_buf, deps.first_line)
-        edit_commit.write_log({
-          source = "manual_exec",
-          connection = context.connection or "",
-          dialect = parsed.dialect or "",
-          database = context.database or "",
-          sql = deps.buf_content or "",
-          status = "success",
-          elapsed_ms = tonumber(parsed.latency_ms) or 0,
-        })
       end
     end
 
@@ -262,19 +250,6 @@ function M.handle_error(deps, message, parsed)
     vim.notify(message, vim.log.levels.ERROR, { title = "PosteDb" })
     local lines = sql_format.format_error(message, sql_state.context.connection or "")
     sql_buffer.render_dataset(lines, { type = "error" })
-    -- Log failed execution
-    local edit_commit = require("poste-db.edit_commit")
-    local context = require("poste-db.context").resolve_full_context(deps.src_buf, #deps.buf_lines)
-    edit_commit.write_log({
-      source = "manual_exec",
-      connection = context.connection or "",
-      dialect = (parsed and parsed.dialect) or "",
-      database = context.database or "",
-      sql = deps.buf_content or "",
-      status = "error",
-      elapsed_ms = 0,
-      error_msg = message:sub(1, 500),
-    })
   end)
 end
 

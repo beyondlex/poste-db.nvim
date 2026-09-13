@@ -38,6 +38,7 @@ local function fetch_roles(url)
   local resp = exec_run.run_sql("SELECT rolname FROM pg_roles ORDER BY rolname", {
     conn_url = url,
     mode = "greedy",
+    log_source = "browser",
   })
   if not resp then return nil end
   local ok, data = pcall(vim.json.decode, resp.body or "{}")

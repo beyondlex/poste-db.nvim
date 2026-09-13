@@ -210,6 +210,8 @@ execute_table_select = function(node, context)
     conn_url = url,
     database = node.meta and node.meta.database or nil,
     mode = "greedy",
+    log_source = "browser",
+    log_extra = { connection = conn },
   }, {
     on_response = function(parsed)
       local sql_format = require("poste-db.format")
@@ -468,6 +470,21 @@ function M.show_table_info(buf_line, context)
     table.insert(cmd, "--database"); table.insert(cmd, database)
   end
 
+  local sql_log = require("poste-db.sql_log")
+  local journal = sql_log.cli_fields(cmd, "browser")
+  journal.connection = conn -- friendly name beats the redacted URL here
+  local t0 = vim.uv.now()
+  local journaled = false
+  local function journal_once(status, error_msg)
+    if journaled then return end
+    journaled = true
+    sql_log.record(vim.tbl_extend("force", journal, {
+      status = status,
+      elapsed_ms = vim.uv.now() - t0,
+      error_msg = error_msg,
+    }))
+  end
+
   cli.run_async(cmd, {
     on_stdout = function(data)
       if not data then return end
@@ -479,6 +496,7 @@ function M.show_table_info(buf_line, context)
         vim.schedule(function()
           notify.warn("Table info: failed to parse response")
         end)
+        journal_once("error", "failed to parse response")
         return
       end
       deep_clean(parsed)
@@ -487,8 +505,10 @@ function M.show_table_info(buf_line, context)
         vim.schedule(function()
           notify.warn("Table info: no data returned")
         end)
+        journal_once("error", "no data returned")
         return
       end
+      journal_once("success", nil)
       local info = items[1]
       local lines = {}
       table.insert(lines, "Table:  " .. (info.table_name or "?"))
@@ -542,6 +562,14 @@ function M.show_table_info(buf_line, context)
       vim.schedule(function()
         notify.warn("Table info: " .. table.concat(data, "\n"))
       end)
+    end,
+    on_exit = function(code)
+      if code ~= 0 then
+        vim.schedule(function()
+          notify.warn("Table info fetch failed (exit " .. tostring(code) .. ")")
+        end)
+        journal_once("error", "exit code " .. tostring(code))
+      end
     end,
   })
 end

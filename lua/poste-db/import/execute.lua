@@ -131,6 +131,7 @@ function M.execute_import(table_info, valid_rows, col_map, table_cols, callback)
       conn_url = conn_url,
       database = table_info.database,
       mode = "greedy",
+      log = false, -- chunk outcomes are journaled per chunk with source=import
     }, {
       on_response = function(resp)
         local ok_body, body = pcall(vim.json.decode, resp.body or "{}")

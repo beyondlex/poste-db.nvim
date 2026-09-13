@@ -280,8 +280,14 @@ introspected schema cache, with known system schemas ignored.
 `:PosteDbSessionList`     Show pooled sessions (per connection+database)
 `:PosteDbSessionStop`     Stop sessions: `--all`, a connection URL, or an
                           exact key
-`:PosteDbLog`             Execution log viewer (sql_log.jsonl) with timing,
-                          filtering, and re-run
+`:PosteDbLog`             Execution log viewer (sql_log.jsonl) — the journal
+                          of every SQL request, success or failure: manual
+                          runs, run-file, AI-executed SQL, EXPLAIN, dataset
+                          edit commits, imports, browser queries, schema
+                          introspection and connection probes. Transport
+                          failures (connection timeout, missing binary) are
+                          journaled too. Filter (f), expand (<CR>), yank SQL
+                          (y), clear all (C)
 `:PosteDbShowSql`         The SQL behind the active dataset tab
 `:PosteDbInfo`            Environment summary (binary, parsers, completion)
 

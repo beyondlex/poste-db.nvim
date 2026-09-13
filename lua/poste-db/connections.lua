@@ -554,6 +554,8 @@ function M.run_test_via_tunnel(conn)
   local resp = require("poste-db.exec_run").run_sql("SELECT 1", {
     conn_url = url,
     database = conn.database or "",
+    log_source = "connection",
+    log_extra = { connection = conn.name },
   })
   local ok = resp ~= nil and not resp.has_error
   vim.notify(
@@ -574,8 +576,17 @@ function M.run_test(conn)
 
   vim.notify(string.format("Testing '%s'...", conn.name), vim.log.levels.INFO)
 
+  local t0 = vim.uv.now()
   cli.run_async(cmd, {
     on_exit = function(code)
+      require("poste-db.sql_log").record({
+        source = "connection",
+        sql = "connection test " .. conn.name,
+        connection = conn.name,
+        status = code == 0 and "success" or "error",
+        elapsed_ms = vim.uv.now() - t0,
+        error_msg = code ~= 0 and ("probe exit code " .. tostring(code)) or nil,
+      })
       vim.schedule(function()
         if code == 0 then
           vim.notify(string.format("✓ Connection '%s' OK", conn.name), vim.log.levels.INFO)
