@@ -182,17 +182,10 @@ cross-repo contracts are:
 | Document | Description |
 |----------|-------------|
 | [Dialect Support](./dialect-support.md) | 新增 SQL 方言：优先级、别名机制、三层测试、容器方案、**Lua/Rust 触点清单**（动手前照单全查） |
-| [Architecture Review](./architecture-review.md) | 架构坏味道审查 + UI 渲染选型（nui-components 评估）+ 重构路线图 |
 | [Context Architecture](./context-architecture.md) | SQL completion context detection architecture |
-| [Refactor Agent Guide](./refactor-agent-guide.zh.md) | AI agent execution guide for the refactor branch |
+| [Session Design](./session-design.md) | 持久 SQL session 池：问题、路由、生命周期 |
 | [AI Chat Integration](./ai-chat.md) | poste-ai.nvim "db" context: @connection mentions, schema injection, SQL code-block execution into the dataset |
-
-> **Archived design docs** (features implemented, kept for reference):  
-> SQL Feature Design, Dataset UI Design, Dataset Editing, Data Import,
-> Code Review Report, Fix Plan, DB Browser Context Menu, Schema Create,
-> and the completed SQL Completion P0–P4 guides — these are in
-> [archived docs](../archived/) as their features are now implemented.
 
 ---
 
-*SQL developer documentation — Last updated: 2026-09-13 (poste.nvim family dissolution: shared-infra contracts section replaced by self-containment + scope discipline; module index unchanged)*
+*SQL developer documentation — Last updated: 2026-09-14 (community-readiness sweep: process archives removed, design-doc table reduced to living references; module index unchanged)*

@@ -34,9 +34,9 @@ poste-db.nvim turns Neovim into a SQL workstation: execute statements from
 schemas in a tree browser, and ask an AI about your database — without
 leaving the editor.
 
-It is part of the Poste family and shares infrastructure (state, binary
-resolution, pickers, indicators) with |poste.nvim|, which drives the `poste`
-Rust binary that actually talks to the databases.
+The `poste` Rust binary talks to the databases; it is downloaded from the
+poste.nvim releases on first setup (see |poste-db-requirements|). All Lua
+lives in this repo — there is no runtime dependency on poste.nvim itself.
 
 Supported dialects: PostgreSQL, MySQL/MariaDB, SQLite, SQL Server,
 ClickHouse, plus PostgreSQL/MySQL-compatible aliases (cockroachdb, tidb,
@@ -47,7 +47,8 @@ and PG-family to `postgres`.
 2. REQUIREMENTS                                            *poste-db-requirements*
 
 - Neovim >= 0.10
-- poste.nvim (shared infra + the `poste` Rust binary)
+- The `poste` Rust binary (auto-installed from poste.nvim releases on first
+  setup; no poste.nvim installation required)
 - blink.cmp (recommended) or nvim-cmp for completion
 - Optional: poste-ai.nvim for the AI chat, sqlfluff/sqlfmt/sql-formatter or
   pg_format for `:PosteDbFormat`
@@ -61,7 +62,7 @@ Run `:checkhealth poste-db` to verify your installation.
     -- lazy.nvim
     {
       "beyondlex/poste-db.nvim",
-      dependencies = { "beyondlex/poste.nvim", "saghen/blink.cmp" },
+      dependencies = { "saghen/blink.cmp" },
       config = function()
         require("poste-db.init").setup()
       end,

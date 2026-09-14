@@ -11,3 +11,6 @@
 nvim.log
 
 ignore/
+
+# Local AI-session artifacts
+.zcode/

@@ -5,7 +5,7 @@ Docker Compose environment for testing SQL queries across PostgreSQL, MySQL, Mar
 ## Quick Start
 
 ```bash
-cd playground/sql
+cd playground
 docker compose up -d
 ```
 

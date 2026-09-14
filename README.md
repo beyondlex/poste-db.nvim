@@ -142,27 +142,7 @@ tunnel = "jump@bastion.corp"
 
 The current connection and database are shown in the statusline as `[connection/database]` when `mini.statusline` is installed. The context updates as you move the cursor (respects `@connection`, `@database`, and `USE` statements).
 
-**Per-connection colors** — add a `color` or `link` field in `connections.toml`:
-
-```toml
-[production]
-color = "#ff0000"
-
-[staging]
-link = "WarningMsg"
-
-[development]
-color = "SkyBlue"
-```
-
-| Field | Type | Example |
-|-------|------|---------|
-| `color = "#rrggbb"` | Hex color | `color = "#ff0000"` |
-| `color = "CSS"` | CSS named color | `color = "Red"`, `color = "SkyBlue"` |
-| `color = "HL"` | Highlight group (auto-detected) | `color = "Function"` |
-| `link = "HL"` | Explicit highlight group link | `link = "ErrorMsg"` |
-
-Auto-detection: `color` values that are valid Neovim highlight groups are linked (`:link`), others are treated as CSS color names.
+**Per-connection colors** — add a `color = "#ff0000"` / `color = "SkyBlue"` / `link = "WarningMsg"` field to a connection section (hex, CSS named color, or highlight group — auto-detected). Full details: `:h poste-db-statusline`.
 
 ### Dataset buffer
 
@@ -348,6 +328,8 @@ cd playground && docker compose up -d
 # Run Lua tests
 tests/run.sh
 ```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full contribution guide.
 
 ## License
 
