@@ -655,7 +655,10 @@ function M.update(buf)
 
   if not ok then
     _updating = false
-    state.log("ERROR", "semantic_diagnostics: " .. tostring(err))
+    -- The handler must never throw: in a session that cached pre-dissolution
+    -- modules, `state.log` itself can be nil, and letting it error here would
+    -- crash the FileType autocmd and mask the original `err`.
+    pcall(state.log, "ERROR", "semantic_diagnostics: " .. tostring(err))
   end
 end
 
