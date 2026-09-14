@@ -1,5 +1,4 @@
 local M = {}
-local const = require("poste-db.constants")
 
 local function get_ctx_color(conn_name)
   local ok, connections = pcall(require, "poste-db.connections")
@@ -67,15 +66,16 @@ local function fmt_ctx(ctx)
   end
   return escape_statusline(ctx)
 end
-
 --- mini.statusline wiring (the only path since the poste.nvim family
---- dissolution). Scope-guarded: db renders only on buffers carrying
---- `poste_db_context` (SQL source, dataset, db browser, introspection
---- buffers); on every other buffer both wrappers fall through to the
---- captured original, so sibling plugins wrapping the same hooks chain
---- instead of fighting over the global slots. The
+--- dissolution). The context is rendered by wrapping `section_fileinfo`
+--- only: db claims a buffer when it carries `poste_db_context` (SQL source,
+--- dataset, db browser, introspection buffers) and otherwise falls through
+--- to the captured original, so sibling plugins wrapping the same hook chain
+--- instead of fighting over a global slot. `section_fileinfo` is a safe
+--- anchor — mini.statusline's own default `content.active` renders through
+--- it, so the context survives whoever owns the layout. The
 --- `vim.g.poste_db_statusline_wired` flag keeps a module reload from
---- re-capturing the already-wrapped hooks (wrapper stacking).
+--- re-capturing the already-wrapped hook (wrapper stacking).
 local function wire_mini_statusline()
   vim.schedule(function()
     local ok_mini, statusline = pcall(require, "mini.statusline")
@@ -100,40 +100,16 @@ local function wire_mini_statusline()
       end
       return orig_fileinfo(...)
     end
-
-    local orig_active = statusline.config.content.active
-    statusline.config.content.active = function()
-      local ctx = vim.b.poste_db_context
-      if not ctx or ctx == "" then
-        -- Not a db buffer: fall through so an earlier sibling wrapper
-        -- still renders its context (chain discipline).
-        if orig_active then return orig_active() end
-        return ""
-      end
-      local conn_name = ctx:match("^(.-)[/]") or ctx
-      local ctx_hl = get_ctx_color(conn_name)
-
-      local mode, mode_hl = statusline.section_mode({ trunc_width = const.STATUSLINE_TRUNC_WIDTH })
-      local git = statusline.section_git({ trunc_width = 40 })
-      local diff = statusline.section_diff({ trunc_width = 75 })
-      local diagnostics = statusline.section_diagnostics({ trunc_width = 75 })
-      local lsp = statusline.section_lsp({ trunc_width = 75 })
-      local filename = statusline.section_filename({ trunc_width = 140 })
-      local fileinfo = statusline.section_fileinfo({ trunc_width = const.STATUSLINE_TRUNC_WIDTH })
-      local location = statusline.section_location({ trunc_width = 75 })
-      local search = statusline.section_searchcount({ trunc_width = 75 })
-
-      return statusline.combine_groups({
-        { hl = mode_hl,                  strings = { mode } },
-        { hl = "MiniStatuslineDevinfo",  strings = { git, diff, diagnostics, lsp } },
-        "%<",
-        { hl = "MiniStatuslineFilename", strings = { filename } },
-        "%=",
-        { hl = ctx_hl or "MiniStatuslineFileinfo", strings = { fileinfo } },
-        { hl = mode_hl,                  strings = { location } },
-        { hl = "MiniStatuslineFileinfo", strings = { search } },
-      })
-    end
+    -- NOTE: we deliberately do NOT override `config.content.active`.
+    -- The context is rendered through the `section_fileinfo` wrapper
+    -- above, which survives any layout: mini.statusline's default
+    -- `content.active` calls `section_fileinfo`, and every sibling
+    -- postgres-family layout does too. Owning `content.active` here
+    -- duplicated mini's default layout and, when the user did not
+    -- configure their own `content.active` (the default case), the
+    -- non-db fall-through returned "" and blanked the statusline on
+    -- every non-SQL buffer. See the `section_fileinfo` wrapper for
+    -- the per-connection highlight.
   end)
 end
 
