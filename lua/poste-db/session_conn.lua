@@ -325,8 +325,13 @@ end
 
 --- Close all sessions.
 function M.stop_all()
-  for conn_url in pairs(pool) do
-    M.stop(conn_url)
+  -- M.stop() removes possibly several pool keys (one URL, many databases);
+  -- deleting keys other than the current one during a pairs() walk is
+  -- undefined in Lua, so snapshot the keys first.
+  local keys = {}
+  for key in pairs(pool) do keys[#keys + 1] = key end
+  for _, key in ipairs(keys) do
+    M.stop(key)
   end
 end
 
