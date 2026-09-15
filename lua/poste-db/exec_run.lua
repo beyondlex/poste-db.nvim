@@ -215,12 +215,13 @@ local function build_response(events, conn, shown_db)
   -- response. Keying off column presence (not just affected_rows == nil)
   -- guards against a driver/binary reporting affected_rows as 0 for a SELECT,
   -- which would otherwise be misclassified as an affected/Query OK response.
+  -- NB: errors were already counted when their event arrived above; this pass
+  -- only decides resultset-vs-affected, it must not re-increment `failed`.
   local is_query = false
   for _, r in ipairs(results) do
-    if r.error then
-      failed = failed + 1
-    elseif r.affected_rows == nil or (r.row_count or 0) > 0 or #(r.columns or {}) > 0
-      or is_query_sql(r.sql or "") then
+    if not r.error
+      and (r.affected_rows == nil or (r.row_count or 0) > 0 or #(r.columns or {}) > 0
+        or is_query_sql(r.sql or "")) then
       is_query = true
     end
     total_rows = total_rows + (r.row_count or 0)
