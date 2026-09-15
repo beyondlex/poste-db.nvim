@@ -93,6 +93,17 @@ describe("poste-db.ai.actions", function()
       assert.is_true(actions._test.is_readonly(
         "WITH t AS (SELECT last_update FROM u) SELECT * FROM t"))
     end)
+
+    it("skips leading comment/directive lines before the keyword", function()
+      -- the append_header directives and copied-back blocks must not force a
+      -- confirm on every read-only block
+      assert.is_true(actions._test.is_readonly("-- @connection my-blog\nSELECT 1"))
+      assert.is_true(actions._test.is_readonly(
+        "-- @connection my-blog\n-- @database blog\nselect * from t"))
+      assert.is_true(actions._test.is_readonly("-- why: check rows\nSHOW TABLES"))
+      -- a write hidden behind a leading comment still flags
+      assert.is_false(actions._test.is_readonly("-- cleanup\nDELETE FROM users"))
+    end)
   end)
 
   describe("strip_directives", function()

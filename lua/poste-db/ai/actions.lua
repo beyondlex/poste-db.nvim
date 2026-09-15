@@ -20,10 +20,19 @@ local READONLY_KINDS = {
 local WRITE_WORDS = { "insert", "update", "delete", "merge", "replace" }
 
 --- Heuristic read-only check for the confirm gate.
+--- Leading comment lines are skipped first so `-- @connection x\nSELECT 1`
+--- (the exact header append_header writes, and which models copy) reads as a
+--- SELECT instead of forcing a pointless confirm on every read-only block.
 --- @param sql string
 --- @return boolean
 function M.is_readonly(sql)
-  local lowered = sql:lower()
+  local body = sql
+  while true do
+    local stripped = body:gsub("^%s*%-%-[^\n]*\n?", "")
+    if stripped == body then break end
+    body = stripped
+  end
+  local lowered = body:lower()
   local kind = lowered:match("^%s*(%a+)")
   if not kind then return false end
   if kind == "with" then
