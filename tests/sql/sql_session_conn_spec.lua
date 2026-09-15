@@ -61,6 +61,35 @@ describe("poste-db.session_conn", function()
     assert.are.equal("dispatched", status)
     assert.are.equal(2, vim.tbl_count(jobs))
   end)
+
+  local function arg_value(cmd, flag)
+    for i, v in ipairs(cmd) do
+      if v == flag then return cmd[i + 1] end
+    end
+    return nil
+  end
+
+  it("passes opts.session_max_rows to the session command", function()
+    local config = require("poste-db.config")
+    local saved = config.config.session_max_rows
+    config.config.session_max_rows = 500
+    local ok, session = pcall(session_conn.get, "postgres://h/capped", nil, "db1")
+    config.config.session_max_rows = saved
+    assert.is_true(ok)
+    assert.equals("500", arg_value(jobs[session.job_id].cmd, "--max-rows"))
+  end)
+
+  it("keeps --max-rows unlimited (0) by default and guards bad values", function()
+    local config = require("poste-db.config")
+    local saved = config.config.session_max_rows
+    config.config.session_max_rows = -3
+    local a = session_conn.get("postgres://h/guarded", nil, "db1")
+    assert.equals("0", arg_value(jobs[a.job_id].cmd, "--max-rows"), "negative caps back to unlimited")
+    config.config.session_max_rows = "lots"
+    local b = session_conn.get("postgres://h/guarded", nil, "db2")
+    assert.equals("0", arg_value(jobs[b.job_id].cmd, "--max-rows"), "non-number falls back to unlimited")
+    config.config.session_max_rows = saved
+  end)
 end)
 
 describe("session_conn database_from_url", function()

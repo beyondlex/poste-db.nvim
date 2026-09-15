@@ -9,6 +9,13 @@ M.defaults = {
   sql_formatters = { "sqlfluff", "sqlfmt", "sql-formatter", "pg_format" },
   hide_empty_result_tabs = true,
   default_max_rows = 0,
+  -- Server-side row cap for the persistent `poste session` transport.
+  -- 0 (default) = unlimited, so `SET @a` / temp-table flows and client-side
+  -- paging behave exactly like exec-file; raise it when a stray
+  -- `SELECT *` on a huge table should be cut off at the server instead of
+  -- streamed into Neovim. Applies when a session starts (see
+  -- :PosteDbSessionStop to recycle running sessions).
+  session_max_rows = 0,
   export_path = nil,
   import_chunk_size = 100,
   -- Enable debug commands (:PosteDbCmpDebug, :PosteDbDiag, ...). Off by

@@ -350,6 +350,7 @@ All options go to `require("poste-db.init").setup(opts)`; defaults shown:
       sql_formatters = { "sqlfluff", "sqlfmt", "sql-formatter", "pg_format" },
       hide_empty_result_tabs = true,
       default_max_rows = 0,          -- 0 = unlimited (client-side paging)
+      session_max_rows = 0,          -- server-side cap for poste session runs
       export_path = nil,             -- default export directory
       import_chunk_size = 100,
       debug = false,
@@ -361,6 +362,15 @@ All options go to `require("poste-db.init").setup(opts)`; defaults shown:
                   sql_introspect = {...} },  -- see :h poste-db keymaps per buffer
     }
 <
+
+                                                    *poste-db-session-max-rows*
+`session_max_rows` caps the rows the persistent `poste session` transport
+returns per statement, server-side. `0` (default) is unlimited, matching
+exec-file, so the dataset panel keeps paging client-side over full result
+sets. Set it to a positive number (e.g. `5000`) when a stray `SELECT *` on a
+huge table should be cut off at the server instead of streamed into Neovim
+(`rows_truncated` marks the cut). The value is read when a session starts —
+run `:PosteDbSessionStop` on a running session to pick up a changed setting.
 
                                                               *poste-db-width-mode*
 `width_mode` picks the width oracle for dataset/table cell padding. Neovim

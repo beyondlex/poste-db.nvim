@@ -209,7 +209,17 @@ local function start(conn_url, database)
     last_active = now,
   }
 
-  local cmd = { binary, "session", "--connection", conn_url, "--max-rows", "0", "--timeout", "0" }
+  -- Server-side row cap: 0 keeps parity with exec-file (unlimited, the
+  -- dataset paginates client-side); opts.session_max_rows cuts a stray
+  -- huge SELECT off at the server. Read at session start — recycle a
+  -- running session (:PosteDbSessionStop) to pick up a changed value.
+  local session_max_rows = require("poste-db.config").config.session_max_rows
+  if type(session_max_rows) ~= "number" or session_max_rows < 0 then
+    session_max_rows = 0
+  end
+
+  local cmd = { binary, "session", "--connection", conn_url,
+    "--max-rows", tostring(math.floor(session_max_rows)), "--timeout", "0" }
   if db then
     table.insert(cmd, "--database"); table.insert(cmd, db)
   end
