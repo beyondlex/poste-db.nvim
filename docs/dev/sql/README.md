@@ -36,21 +36,27 @@ see `.opencode/skills/sql-architecture-harness/SKILL.md` for the house rules
 | `statement.lua` | Statement boundary detection (Rust binary → tree-sitter → fallback) |
 | `ts_stmt.lua` | Tree-sitter statement/query extraction |
 | `context.lua` / `lex.lua` | Cursor context resolution; comment/string lexing |
+| `explain.lua` | `EXPLAIN` the statement under the cursor (dialect plan form → introspection float) |
+| `source_format.lua` | SQL source formatter for poste_sql buffers (multi-backend: external formatters or built-in) |
 | `semantic_diagnostics.lua` | Tree-sitter reference extraction + unknown-object validation (fetches schema via introspect jobs) |
 | `syntax.lua` | Treesitter-based highlight queries / digit-prefix fragments / known error constructs |
 | `ident.lua` | Identifier quoting (`quote`/`quote_qualified`) + value literals per dialect |
+| `width.lua` | Terminal-consistent display width (Indic combining marks that `strdisplaywidth` folds to 0) |
 
 ### Execution
 
 | Module | Role |
 |--------|------|
 | `connections.lua` | connections.toml discovery/parse/cache, env `{{vars}}`, URL building (`resolve_connection_url` — mirror of Rust `to_url()`), picker |
+| `toml.lua` | Minimal pure-Lua TOML parser behind `connections.toml` (documented subset: sections, scalars, strings, comments) |
+| `tunnel.lua` | SSH tunnel for connections.toml `tunnel` sections (URL only ever sees the local forward end) |
 | `executor.lua` | Chooses session vs exec path per connection/operation |
 | `session_conn.lua` | Long-lived `poste session` pool (temp tables, `USE`, session vars persist across `<CR>`); keyed by conn_url, shared across buffers |
 | `exec_run.lua` / `file_exec.lua` | One-shot `poste exec-file` runs (editor/file entry) with NDJSON event parsing |
 | `sql_runner.lua` | Resultset request path used by the dataset R-refresh flows |
 | `sql_runner/response.lua` | Response → statement results mapping, DDL classification |
 | `session.lua` | Request-scoped session lifecycle (fresh Session per run, persistent context) |
+| `sql_log.lua` | Persistent SQL activity journal (`sql_log.jsonl`) — the single writer behind the `<leader>l` viewer |
 | `async.lua` | jobstart/timeout scaffolding |
 | `edit_commit/` | Dataset edit commit: DML generation (`dml.lua`, `dml_guard.lua`), commit/rollback exec, SQL log |
 | `table_ops.lua` | Table-level DDL operations from the browser |
@@ -80,6 +86,7 @@ see `.opencode/skills/sql-architecture-harness/SKILL.md` for the house rules
 | `completion/ctx.lua` / `handlers.lua` | Context detection dispatch and per-context item building |
 | `completion/adapter.lua` / `register.lua` | blink.cmp integration + provider registration |
 | `completion/debug.lua` | On-demand completion debug window |
+| `snippets.lua` | SQL snippet definitions for blink.cmp, organized as categories with per-dialect template variants |
 
 ### DB browser / import / export / introspect
 
@@ -188,4 +195,4 @@ cross-repo contracts are:
 
 ---
 
-*SQL developer documentation — Last updated: 2026-09-14 (community-readiness sweep: process archives removed, design-doc table reduced to living references; module index unchanged)*
+*SQL developer documentation — Last updated: 2026-09-15 (module index: added the seven unlisted modules — explain, source_format, width, toml, tunnel, sql_log, snippets)*
