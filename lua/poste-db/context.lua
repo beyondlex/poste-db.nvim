@@ -1,7 +1,6 @@
 --- SQL execution context management.
 --- Handles connection → database context resolution and status display.
 local state = require("poste-db.state")
-local sql_state = require("poste-db.state")
 
 local const = require("poste-db.constants")
 local lex = require("poste-db.lex")
@@ -53,7 +52,7 @@ end
 
 --- Resolve the full context chain: buffer scan → connections.json default.
 --- Priority: block-level > USE > file-level > runtime connection > connections.json default
---- Does NOT fall back to sql_state.context.database — context is position-determined.
+--- Does NOT fall back to state.context.database — context is position-determined.
 --- @param buf number Buffer handle (default: current buffer)
 --- @return table context { connection = string|nil, database = string|nil }
 function M.resolve_full_context(buf, limit_line)
@@ -62,7 +61,7 @@ function M.resolve_full_context(buf, limit_line)
   local ctx = M.resolve_context(buf, limit_line)
 
   -- Fallback to runtime state for connection (set by :PosteDbConnection or execution)
-  local state_sql = sql_state
+  local state_sql = state
   local conn = ctx.connection or (state_sql and state_sql.context and state_sql.context.connection)
 
   -- Database: buffer scan → connections.json default
@@ -87,7 +86,7 @@ function M.handle_use_statement(response)
   if not ok or type(body) ~= "table" then return end
 
   if body.type == "use" and body.database_name then
-    sql_state.context.database = body.database_name
+    state.context.database = body.database_name
     state.log("INFO", "SQL context database updated: " .. body.database_name)
   end
 end
@@ -95,7 +94,7 @@ end
 --- Get status text for the statusline.
 --- @return string Status text like "[db: conn/database]"
 function M.get_status_text()
-  local ctx = sql_state.context
+  local ctx = state.context
   local conn = ctx.connection
   local db = ctx.database
 
