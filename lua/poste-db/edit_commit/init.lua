@@ -56,7 +56,6 @@ end
 --- @param tab table Tab state with original_sql, src_file, src_buf
 function M.refresh_dataset(tab)
   local state = require("poste-db.state")
-  local sql_state = require("poste-db.state")
   local statement = require("poste-db.statement")
 
   local sql = tab.original_sql
@@ -71,13 +70,13 @@ function M.refresh_dataset(tab)
     return
   end
 
-  local conn = (tab.layout and tab.layout._conn_name) or sql_state.context.connection or ""
+  local conn = (tab.layout and tab.layout._conn_name) or state.context.connection or ""
   local db = ""
   if tab.layout then
     local layout_db = tab.layout._database or tab.layout.database
     if layout_db and layout_db ~= "" then db = layout_db end
   end
-  if db == "" then db = sql_state.context.database or "" end
+  if db == "" then db = state.context.database or "" end
 
   local conn_url = nil
   if conn and conn ~= "" then
@@ -158,9 +157,6 @@ end
 function M.commit_edits()
   local D = require("poste-db.dataset")
   local state = require("poste-db.state")
-  -- Same request context readers as refresh_dataset: connection/database fall
-  -- back to the plugin's SQL context when the tab layout carries neither.
-  local sql_state = require("poste-db.state")
   local tab = D.T()
   if not tab or not tab.edit_state or not tab.edit_state.dirty then
     vim.notify("No changes to commit", vim.log.levels.INFO)
@@ -210,7 +206,7 @@ function M.commit_edits()
     return
   end
 
-  local connection = tab.layout and tab.layout._conn_name or sql_state.context.connection or ""
+  local connection = tab.layout and tab.layout._conn_name or state.context.connection or ""
   local table_name = tab.layout and tab.layout.table_name or ""
 
   -- Resolve database: layout._database → layout.database → context → connections.json default
@@ -220,7 +216,7 @@ function M.commit_edits()
     if layout_db and layout_db ~= "" then database = layout_db end
   end
   if database == "" then
-    database = sql_state.context.database or ""
+    database = state.context.database or ""
   end
   if database == "" and connection ~= "" then
     local config = require("poste-db.connections").get_connection_config(connection)
