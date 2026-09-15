@@ -56,6 +56,20 @@ describe("toml.parse", function()
     assert.equals("a\\qb", res.v)
   end)
 
+  it("treats a backslash in a literal string as a plain character", function()
+    -- literal strings ('…') have no escapes: 'a\' ends at that quote, so a
+    -- trailing comment after it must still be stripped (the escape-skip used
+    -- to swallow the closing quote and fail the parse)
+    local res, err = toml.parse("password = 'a\\' # comment")
+    assert.is_nil(err)
+    assert.equals("a\\", res.password)
+  end)
+
+  it("parses content saved with a UTF-8 BOM", function()
+    local res = toml.parse("\xEF\xBB\xBF[section]\nkey = \"value\"")
+    assert.equals("value", res.section.key)
+  end)
+
   it("skips comment lines", function()
     local res = toml.parse('# this is a comment\nkey = "value"')
     assert.equals("value", res.key)

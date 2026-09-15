@@ -13,11 +13,20 @@ local function strip_inline_comment(s)
   local i = 1
   local in_string = false
   local string_char = nil
+  -- TOML basic strings ("…") process backslash escapes; literal strings
+  -- ('…') process NONE — skipping 2 chars after a `\` in a literal string
+  -- ate the closing quote of values like 'a\' and turned a trailing
+  -- comment into a spurious "Unclosed single-quoted string" error.
+  local escaped = false
   while i <= #s do
     local ch = s:sub(i, i)
     if in_string then
-      if ch == "\\" then
-        i = i + 2
+      if escaped then
+        escaped = false
+        i = i + 1
+      elseif string_char == '"' and ch == "\\" then
+        escaped = true
+        i = i + 1
       elseif ch == string_char then
         in_string = false
         i = i + 1
@@ -73,6 +82,9 @@ end
 --- @param content string Raw TOML text
 --- @return table|nil, string|nil parsed table, error_message
 function M.parse(content)
+  -- editors and Windows tools routinely save with a UTF-8 BOM; without
+  -- stripping it the first line fails as "Invalid key=value line"
+  content = content:gsub("^\xEF\xBB\xBF", "")
   local result = {}
   local section = result
 
