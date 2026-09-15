@@ -253,7 +253,8 @@ Suggested path: .github/assets/ai-chat.png
 - **Functions** — Aggregate and scalar functions per dialect
 - **Connection-aware** — Completions reflect the actual schema
 
-Requires **blink.cmp**. Auto-registers as `poste_db` source.
+Works with **blink.cmp** (auto-registers as the `poste_db` source) or
+**nvim-cmp**.
 
 ### SQL Snippets
 
