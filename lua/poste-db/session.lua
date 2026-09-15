@@ -23,16 +23,15 @@ end
 --- @return table
 function M.begin(meta)
   local state = require("poste-db.state")
-  local sql_state = require("poste-db.state")
   local session = M.new(meta)
 
   -- Request-scoped clear (connection/database context intentionally kept)
   state.last_response = nil
-  sql_state.last_dataset = nil
-  sql_state.cell = { row = 1, col = 1 }
+  state.last_dataset = nil
+  state.cell = { row = 1, col = 1 }
 
   active = session
-  sql_state._sql_session = session
+  state._sql_session = session
   return session
 end
 
