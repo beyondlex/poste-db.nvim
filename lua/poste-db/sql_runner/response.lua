@@ -7,7 +7,6 @@
 ---   buf_content, stmt_sql_raw, stmt_lines, first_line, is_visual,
 ---   visual_sel_end, vis_start, vis_end, set_lines, block_result_line
 local state = require("poste-db.state")
-local sql_state = require("poste-db.state")
 local config = require("poste-db.config")
 local indicators = require("poste-db.indicators")
 local statement = require("poste-db.statement")
@@ -72,7 +71,7 @@ function M.handle(deps, parsed)
       -- new tables are no longer reported as "not found".
       local ok_sem, sem = pcall(require, "poste-db.semantic_diagnostics")
       if ok_sem then
-        sem.invalidate(sql_state.context.connection, sql_state.context.database)
+        sem.invalidate(state.context.connection, state.context.database)
         vim.schedule(function()
           if vim.api.nvim_buf_is_valid(deps.src_buf) then
             sem.update(deps.src_buf)
@@ -111,7 +110,7 @@ function M.handle(deps, parsed)
         if result.error then
           deps.entry.error = true
           local err_text = type(result.error) == "string" and result.error or vim.inspect(result.error)
-          sql_state.last_error = {
+          state.last_error = {
             message = err_text,
             sql = statement.get_stmt_sql(deps.buf_lines, deps.stmt_lines, i, deps.visual_sel_end or #deps.buf_lines) or deps.buf_content,
             connection = parsed.connection,
@@ -151,18 +150,19 @@ function M.handle(deps, parsed)
               "success", result.execution_time_ms)
             goto continue
           else
-          tab_idx = tab_idx + 1
-          lines, meta, layout = sql_format.format_resultset(single_data)
-        end
-        sql_buffer.render_dataset(lines, meta, {
-          tab_index = tab_idx,
-          exec_seq = deps.current_seq,
-          data = single_data,
-          layout = layout,
-          original_sql = deps.buf_content,
-          src_file = deps.src_file,
-          src_buf = deps.src_buf,
-        })
+            tab_idx = tab_idx + 1
+            lines, meta, layout = sql_format.format_resultset(single_data)
+            meta.table_name = table_name
+          end
+          sql_buffer.render_dataset(lines, meta, {
+            tab_index = tab_idx,
+            exec_seq = deps.current_seq,
+            data = single_data,
+            layout = layout,
+            original_sql = deps.buf_content,
+            src_file = deps.src_file,
+            src_buf = deps.src_buf,
+          })
 
           local line_nr = deps.stmt_lines[i] or deps.first_line
           indicators.set_indicator(deps.src_buf, M.stmt_indicator_line(line_nr),
@@ -199,7 +199,7 @@ function M.handle(deps, parsed)
       if has_err then
         deps.entry.error = true
         local err_text = type(results[1].error) == "string" and results[1].error or vim.inspect(results[1].error)
-        sql_state.last_error = {
+        state.last_error = {
           message = err_text,
           sql = deps.buf_content or "",
           connection = parsed.connection,
@@ -239,7 +239,7 @@ function M.handle_error(deps, message, parsed)
     deps.entry.error = true
     -- retained for the AI chat's "ask about this error" action
     local err_ctx = require("poste-db.context").resolve_full_context(deps.src_buf, #deps.buf_lines)
-    sql_state.last_error = {
+    state.last_error = {
       message = tostring(message),
       sql = deps.stmt_sql_raw or deps.buf_content,
       connection = err_ctx.connection,
@@ -248,7 +248,7 @@ function M.handle_error(deps, message, parsed)
     }
     indicators.set_indicator(deps.src_buf, deps.block_result_line, "error")
     vim.notify(message, vim.log.levels.ERROR, { title = "PosteDb" })
-    local lines = sql_format.format_error(message, sql_state.context.connection or "")
+    local lines = sql_format.format_error(message, state.context.connection or "")
     sql_buffer.render_dataset(lines, { type = "error" })
   end)
 end
