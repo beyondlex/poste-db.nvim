@@ -2,7 +2,6 @@
 --- and multi-statement (visual selection) execution.
 --- Each statement result goes into its own dataset tab.
 local state = require("poste-db.state")
-local sql_state = require("poste-db.state")
 local config = require("poste-db.config")
 local indicators = require("poste-db.indicators")
 local statement = require("poste-db.statement")
@@ -23,7 +22,6 @@ local _vis_active = false
 local _vis_start = 0
 local _vis_end = 0
 
--- CursorMoved debounce to avoid jitter from repeated context resolution
 -- Pending statusline/indicator debounce, keyed per SQL buffer. A single
 -- shared timer would let one buffer's cursor move cancel another buffer's
 -- scheduled update.
@@ -275,8 +273,8 @@ function M.run_sql_request()
     ctx = sql_context.resolve_full_context(src_buf)
   end
   -- Persist resolved context so it's available for dataset editing (PK introspection etc.)
-  if ctx.connection then sql_state.context.connection = ctx.connection end
-  if ctx.database then sql_state.context.database = ctx.database end
+  if ctx.connection then state.context.connection = ctx.connection end
+  if ctx.database then state.context.database = ctx.database end
 
   -- Resolve connection name to URL and pass directly (bypasses Rust connections.json lookup)
   local conn_url = nil
