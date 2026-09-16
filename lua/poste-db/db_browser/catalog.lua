@@ -192,14 +192,20 @@ end
 
 --- Strip a "CREATE ... VIEW <ident> AS" header, leaving the SELECT body.
 --- Handles MySQL (backticks + ALGORITHM/DEFINER clauses) and SQLite; PG's
---- already-bare body passes through unchanged.
+--- already-bare body passes through unchanged. Matching is case-insensitive
+--- AND gated on a leading CREATE: sqlite_master stores the statement exactly
+--- as written (`create view …` is common), while pg_get_viewdef returns a
+--- bare SELECT — a body that merely CONTAINS " view … as " (a comment, a
+--- string literal) must never be stripped.
 ---@param text string
 ---@return string body
 function M.view_body_from_ddl(text)
   text = tostring(text)
-  local vi = text:find("%sVIEW%s")
+  local low = text:lower()
+  if not low:match("^%s*create%s") then return text end
+  local vi = low:find("%sview%s")
   if vi then
-    local split_at = text:find("%sAS%s", vi + 5)
+    local split_at = low:find("%sas%s", vi + 5)
     if split_at then return text:sub(split_at + 4) end
   end
   return text

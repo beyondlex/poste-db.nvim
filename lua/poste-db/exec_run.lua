@@ -136,6 +136,13 @@ end
 -- The `exec-file` result event carries the SQL text; use its leading keyword to
 -- tell a query apart from a DML even when the binary/driver reports
 -- `affected_rows` as a number (not null) and omits columns/rows for a SELECT.
+-- NB — intentional mirror drift vs the Rust `QueryKinds`
+-- (poste-exec/src/sql_exec_common.rs): that list is per-dialect and has no
+-- CALL/EXEC entries; this flat fallback list is a superset used ONLY to break
+-- ties when reconstructing a legacy response (the Rust event's `affected_rows`
+-- null-ness and column/row presence decide first). Never promote this list to
+-- an authority; reconcile with QueryKinds only if it ever stops being a
+-- last-resort tie-breaker.
 local QUERY_PREFIXES = {
   "SELECT", "WITH", "EXPLAIN", "SHOW", "VALUES", "PRAGMA", "DESCRIBE",
   "TABLE", "DESC", "RETURNING", "CALL", "EXEC",
