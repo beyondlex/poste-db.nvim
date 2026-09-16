@@ -154,7 +154,6 @@ describe("generate_insert __expr gating", function()
   end)
 
   it("generate_update honors the same gate on both SET and WHERE values", function()
-    local dml = require("poste-db.dml")
     local columns = {
       { name = "id", ctype = "integer", primary_key = true },
       { name = "note", ctype = "text" },
