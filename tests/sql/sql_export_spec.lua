@@ -126,10 +126,19 @@ describe("export sql_escape_val", function()
     assert.equals("FALSE", export._test.sql_escape_val(false))
   end)
 
-  it("escapes quotes and control bytes", function()
+  it("escapes quotes; control bytes stay raw outside postgres", function()
     assert.equals("'a''b'", export._test.sql_escape_val("a'b"))
-    assert.equals("'\\x00'", export._test.sql_escape_val(string.char(0)))
-    assert.equals("'\\x1B'", export._test.sql_escape_val(string.char(27)))
+    -- mysql/sqlite: no dialect interprets \xHH in a regular literal, so the
+    -- raw byte is the only round-tripping form
+    assert.equals("'a\1b'", export._test.sql_escape_val("a\1b", "mysql"))
+    assert.equals("'a\27b'", export._test.sql_escape_val("a\27b", "sqlite"))
+  end)
+
+  it("postgres control bytes use the E'' prefix with \\xHH escapes", function()
+    assert.equals("E'a\\x1Bb'", export._test.sql_escape_val("a\27b", "postgres"))
+    assert.equals("E'\\x00'", export._test.sql_escape_val(string.char(0), "postgres"))
+    -- a plain value keeps the plain literal (no E'' unless needed)
+    assert.equals("'a''b'", export._test.sql_escape_val("a'b", "postgres"))
   end)
 end)
 

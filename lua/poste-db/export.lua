@@ -196,14 +196,28 @@ end
 
 local ident = require("poste-db.ident")
 
-local function sql_escape_val(v)
+--- Single-quoted SQL literal. Control bytes need dialect-aware handling:
+--- NO dialect interprets a `\xHH` escape inside a regular string literal —
+--- PostgreSQL keeps the four characters verbatim (standard_conforming_strings
+--- is on by default), MySQL drops the backslash (`\x` → `x`), SQLite keeps
+--- the literal text — so the old dialect-blind `\xNN` form silently
+--- corrupted every exported value that carried a control byte.
+---   postgres: E'' literal with \xHH escapes (printable AND round-trips)
+---   mysql/sqlite: the raw byte inside the quotes (valid on both; SQLite
+---   string constants may hold any byte, MySQL's too). NUL can never come
+---   back from a PG/MySQL TEXT column, so the raw form stays unreachable
+---   there in practice.
+local function sql_escape_val(v, dialect)
   if v == nil or v == vim.NIL then return "NULL" end
   if type(v) == "number" then return tostring(v) end
   if type(v) == "boolean" then return v and "TRUE" or "FALSE" end
   local s = tostring(v):gsub("'", "''")
-  s = s:gsub("[%z\1-\8\11-\12\14-\31]", function(c)
-    return string.format("\\x%02X", c:byte())
-  end)
+  if dialect == "postgres" and s:find("[%z\1-\8\11-\12\14-\31]") then
+    s = s:gsub("[%z\1-\8\11-\12\14-\31]", function(c)
+      return string.format("\\x%02X", c:byte())
+    end)
+    return "E'" .. s .. "'"
+  end
   return "'" .. s .. "'"
 end
 
@@ -223,7 +237,7 @@ local function format_sql_insert(data_result)
   for _, row in ipairs(rows) do
     local vals = {}
     for i = 1, #cols do
-      table.insert(vals, sql_escape_val(row[i]))
+      table.insert(vals, sql_escape_val(row[i], dialect))
     end
     table.insert(lines, string.format("INSERT INTO %s (%s) VALUES (%s);",
       qualified, col_names_str, table.concat(vals, ", ")))
