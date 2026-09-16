@@ -135,3 +135,42 @@ describe("dml generation", function()
     assert.truthy(skipped[1]:find("update row 1"))
   end)
 end)
+
+describe("generate_insert __expr gating", function()
+  local cols = { { name = "note", ctype = "text" } }
+
+  it("import path (no allow_expr): a crafted __expr: cell stays a string literal", function()
+    -- a CSV cell is untrusted input: `__expr:` is the EDITOR's escape hatch
+    -- and must never fire on imported data
+    local sql = require("poste-db.dml").generate_insert(
+      nil, "t", cols, { "__expr:(SELECT 1)" }, "postgres")
+    assert.equals('INSERT INTO "t" ("note") VALUES (\'__expr:(SELECT 1)\');', sql)
+  end)
+
+  it("editor path (allow_expr): __expr: still emits raw SQL", function()
+    local sql = require("poste-db.dml").generate_insert(
+      nil, "t", cols, { "__expr:CURRENT_TIMESTAMP" }, "postgres", true)
+    assert.equals('INSERT INTO "t" ("note") VALUES (CURRENT_TIMESTAMP);', sql)
+  end)
+
+  it("generate_update honors the same gate on both SET and WHERE values", function()
+    local dml = require("poste-db.dml")
+    local columns = {
+      { name = "id", ctype = "integer", primary_key = true },
+      { name = "note", ctype = "text" },
+    }
+    local sql = dml.generate_update(
+      nil, "t", columns,
+      { { col = 2, new_val = "__expr:now()" } },
+      { 1, "keep" }, "postgres")
+    assert.equals('UPDATE "t" SET "note" = \'__expr:now()\' WHERE "id" = 1;', sql)
+
+    -- no-PK table: the WHERE falls back to every non-NULL column value, so
+    -- the hatch-closed literal lands in the WHERE clause too
+    local sql3 = dml.generate_update(
+      nil, "t", { { name = "note", ctype = "text" } },
+      { { col = 1, new_val = "y" } },
+      { "__expr:1=1" }, "postgres")
+    assert.equals('UPDATE "t" SET "note" = \'y\' WHERE "note" = \'__expr:1=1\';', sql3)
+  end)
+end)

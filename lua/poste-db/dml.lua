@@ -6,11 +6,16 @@ local function quote_schema(schema, dialect)
   return ident.quote(schema, dialect) .. "."
 end
 
-local function quote_val(val, dialect)
+--- quote a value as a SQL literal. `allow_expr` opens the `__expr:` escape
+--- hatch (the value is emitted as RAW SQL). That hatch is an EDITOR feature
+--- — the user typed it deliberately into the cell editor — so it defaults to
+--- FALSE: imported CSV/JSON cells starting with `__expr:` must become plain
+--- string literals, never executed SQL (a CSV cell is untrusted input).
+local function quote_val(val, dialect, allow_expr)
   if val == nil or val == vim.NIL then
     return "NULL"
   end
-  if type(val) == "string" then
+  if type(val) == "string" and allow_expr then
     local expr = val:match("^__expr:(.*)$")
     if expr then return expr end
   end
@@ -63,14 +68,14 @@ local function find_pk_columns(columns)
   return pks
 end
 
-local function where_eq(col_name, val, dialect)
+local function where_eq(col_name, val, dialect, allow_expr)
   if val == nil or val == vim.NIL then
     return ident.quote(col_name, dialect) .. " IS NULL"
   end
-  return ident.quote(col_name, dialect) .. " = " .. quote_val(val, dialect)
+  return ident.quote(col_name, dialect) .. " = " .. quote_val(val, dialect, allow_expr)
 end
 
-local function build_where(columns, pk_cols, row_values, dialect)
+local function build_where(columns, pk_cols, row_values, dialect, allow_expr)
   if #pk_cols > 0 then
     local parts = {}
     for _, ci in ipairs(pk_cols) do
@@ -84,21 +89,23 @@ local function build_where(columns, pk_cols, row_values, dialect)
   for i, col in ipairs(columns or {}) do
     local val = row_values[i]
     if val ~= nil and val ~= vim.NIL then
-      parts[#parts + 1] = where_eq(col.name, val, dialect)
+      parts[#parts + 1] = where_eq(col.name, val, dialect, allow_expr)
     end
   end
   return table.concat(parts, " AND ")
 end
 
 --- Generate one UPDATE statement.
+--- @param allow_expr boolean|nil honor `__expr:` values as raw SQL (editor
+---   edits only; imports pass nil so a crafted cell cannot inject SQL)
 --- @return string|nil sql nil when no safe statement can be generated
 --- @return string|nil err why generation was refused
-function M.generate_update(schema, table_name, columns, modifications, row_values, dialect)
+function M.generate_update(schema, table_name, columns, modifications, row_values, dialect, allow_expr)
   local set_parts = {}
   for _, mod in ipairs(modifications or {}) do
     local col = columns and columns[mod.col]
     if col then
-      set_parts[#set_parts + 1] = ident.quote(col.name, dialect) .. " = " .. quote_val(mod.new_val, dialect)
+      set_parts[#set_parts + 1] = ident.quote(col.name, dialect) .. " = " .. quote_val(mod.new_val, dialect, allow_expr)
     end
   end
   if #set_parts == 0 then
@@ -108,7 +115,7 @@ function M.generate_update(schema, table_name, columns, modifications, row_value
   local where = ""
   if row_values then
     local pk_cols = find_pk_columns(columns)
-    where = build_where(columns, pk_cols, row_values, dialect)
+    where = build_where(columns, pk_cols, row_values, dialect, allow_expr)
   end
   -- A missing WHERE target means a WHERE-less UPDATE — a full-table rewrite.
   -- Refuse instead: an all-NULL row (no PK, nothing to match on) cannot be
@@ -123,7 +130,9 @@ function M.generate_update(schema, table_name, columns, modifications, row_value
   return sql .. ";"
 end
 
-function M.generate_insert(schema, table_name, columns, row_values, dialect)
+--- @param allow_expr boolean|nil honor `__expr:` values as raw SQL (editor
+---   edits only; imports pass nil so a crafted cell cannot inject SQL)
+function M.generate_insert(schema, table_name, columns, row_values, dialect, allow_expr)
   local col_parts = {}
   local val_parts = {}
 
@@ -131,7 +140,7 @@ function M.generate_insert(schema, table_name, columns, row_values, dialect)
     local val = row_values and row_values[i]
     if val ~= "[Auto]" and val ~= nil then
       col_parts[#col_parts + 1] = ident.quote(col.name, dialect)
-      val_parts[#val_parts + 1] = quote_val(val, dialect)
+      val_parts[#val_parts + 1] = quote_val(val, dialect, allow_expr)
     end
   end
 
@@ -191,7 +200,7 @@ function M.generate_dml(es, tab, dialect)
       for _, mod in ipairs(mods) do
         original_row[mod.col] = mod.old_val
       end
-      local sql, err = M.generate_update(schema, table_name, columns, mods, original_row, dialect)
+      local sql, err = M.generate_update(schema, table_name, columns, mods, original_row, dialect, true)
       if sql then
         stmts[#stmts + 1] = { sql = sql, type = "update" }
       else
@@ -219,7 +228,7 @@ function M.generate_dml(es, tab, dialect)
       row_values = added.data
     end
     stmts[#stmts + 1] = {
-      sql = M.generate_insert(schema, table_name, columns, row_values, dialect),
+      sql = M.generate_insert(schema, table_name, columns, row_values, dialect, true),
       type = "insert",
     }
   end
