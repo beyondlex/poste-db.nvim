@@ -63,7 +63,12 @@ local function gen_add_column(table_name, col_name, col_type, nullable, default_
 end
 
 --- Generate RENAME COLUMN DDL.
+--- MSSQL has no RENAME COLUMN — sp_rename is the only form.
 local function gen_rename_column(table_name, old_name, new_name, dialect)
+  if dialect == "mssql" then
+    return string.format("EXEC sp_rename '%s.%s', '%s', 'COLUMN';",
+      table_name, old_name, new_name)
+  end
   local q = function(n) return quote(n, dialect) end
   return string.format(
     "ALTER TABLE %s RENAME COLUMN %s TO %s;",
@@ -78,10 +83,17 @@ local function gen_drop_column(table_name, col_name, dialect)
 end
 
 --- Generate ALTER COLUMN TYPE DDL.
+--- The type-keyword spelling is per dialect: Postgres `... ALTER COLUMN c
+--- TYPE t`, MySQL/MariaDB and ClickHouse `MODIFY COLUMN`, MSSQL bare
+--- `ALTER COLUMN c t` (no TYPE). SQLite cannot alter types in place.
 local function gen_alter_type(table_name, col_name, new_type, dialect)
   local q = function(n) return quote(n, dialect) end
   if dialect == "mysql" then
     return string.format("ALTER TABLE %s MODIFY COLUMN %s %s;", q(table_name), q(col_name), new_type)
+  elseif dialect == "clickhouse" then
+    return string.format("ALTER TABLE %s MODIFY COLUMN %s %s;", q(table_name), q(col_name), new_type)
+  elseif dialect == "mssql" then
+    return string.format("ALTER TABLE %s ALTER COLUMN %s %s;", q(table_name), q(col_name), new_type)
   elseif dialect == "sqlite" then
     return string.format(
       "-- SQLite does not support ALTER COLUMN TYPE directly.\n"
@@ -225,5 +237,13 @@ function M.register_keymaps(browser_buf, get_table_context)
     end, vim.tbl_extend("force", opts, { desc = "Alter column type" }))
   end
 end
+
+M._test = {
+  quote = quote,
+  gen_add_column = gen_add_column,
+  gen_rename_column = gen_rename_column,
+  gen_drop_column = gen_drop_column,
+  gen_alter_type = gen_alter_type,
+}
 
 return M
