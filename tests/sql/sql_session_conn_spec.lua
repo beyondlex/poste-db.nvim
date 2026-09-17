@@ -90,6 +90,20 @@ describe("poste-db.session_conn", function()
     assert.equals("0", arg_value(jobs[b.job_id].cmd, "--max-rows"), "non-number falls back to unlimited")
     config.config.session_max_rows = saved
   end)
+
+  it("never passes the URL-inferred database as --database (sqlite file corrupt)", function()
+    -- regression: the sqlite stem inferred from the URL was passed as
+    -- --database, and the binary's replace_database_in_url swapped it for
+    -- the URL's last path segment — `sqlite:///d/test.sqlite` re-opened as
+    -- `sqlite:///d/test`, a fresh EMPTY database, silently.
+    local a = session_conn.get("sqlite:///d/test.sqlite", nil, nil)
+    assert.is_nil(arg_value(jobs[a.job_id].cmd, "--database"))
+    -- an EXPLICIT database (an @database directive) still overrides
+    local b = session_conn.get("postgres://h/app", nil, "override_db")
+    assert.equals("override_db", arg_value(jobs[b.job_id].cmd, "--database"))
+    -- pool keying keeps the inferred name for display purposes
+    assert.equals("test", a.database)
+  end)
 end)
 
 describe("session_conn database_from_url", function()

@@ -220,8 +220,14 @@ local function start(conn_url, database)
 
   local cmd = { binary, "session", "--connection", conn_url,
     "--max-rows", tostring(math.floor(session_max_rows)), "--timeout", "0" }
-  if db then
-    table.insert(cmd, "--database"); table.insert(cmd, db)
+  -- Only an EXPLICIT database (an @database directive) becomes --database.
+  -- The URL-inferred `db` is display/pool-key info: passing it to the binary
+  -- rewrites the URL's last path segment via replace_database_in_url, and
+  -- for a sqlite file that swap is lossy — `sqlite:///d/test.sqlite`
+  -- inferred "test" and re-opened as `sqlite:///d/test`, a fresh EMPTY
+  -- database, silently (the same file name is already in the URL anyway).
+  if database then
+    table.insert(cmd, "--database"); table.insert(cmd, database)
   end
   local job_id = vim.fn.jobstart(cmd, {
     stdin = "pipe",
