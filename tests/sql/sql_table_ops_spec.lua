@@ -26,6 +26,14 @@ describe("poste-db table_ops DDL generation", function()
       assert.equals('ALTER TABLE "t" ADD COLUMN "c" TEXT;',
         t.gen_add_column("t", "c", "TEXT", true, nil, "postgres"))
     end)
+    it("annotates sqlite NOT NULL without a DEFAULT (server rejects it)", function()
+      local ddl = t.gen_add_column("t", "c", "TEXT", false, "", "sqlite")
+      assert.match("^ALTER TABLE", ddl)
+      assert.match("requires a DEFAULT", ddl)
+      -- a DEFAULT makes it legal: no note
+      assert.equals('ALTER TABLE "t" ADD COLUMN "c" TEXT NOT NULL DEFAULT 0;',
+        t.gen_add_column("t", "c", "TEXT", false, "0", "sqlite"))
+    end)
   end)
 
   describe("rename column", function()

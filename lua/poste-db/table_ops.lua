@@ -50,6 +50,9 @@ end
 ---------------------------------------------------------------------------
 
 --- Generate ADD COLUMN DDL.
+--- SQLite rejects `ADD COLUMN c T NOT NULL` without a DEFAULT (the added
+--- column must materialize a value for existing rows) — annotate the DDL so
+--- the review step catches it before the server does.
 local function gen_add_column(table_name, col_name, col_type, nullable, default_val, dialect)
   local q = function(n) return quote(n, dialect) end
   local sql = string.format("ALTER TABLE %s ADD COLUMN %s %s", q(table_name), q(col_name), col_type)
@@ -59,7 +62,11 @@ local function gen_add_column(table_name, col_name, col_type, nullable, default_
   if default_val and default_val ~= "" then
     sql = sql .. " DEFAULT " .. default_val
   end
-  return sql .. ";"
+  sql = sql .. ";"
+  if not nullable and not (default_val and default_val ~= "") and dialect == "sqlite" then
+    sql = sql .. "\n-- SQLite: a NOT NULL added column requires a DEFAULT; add one above."
+  end
+  return sql
 end
 
 --- Generate RENAME COLUMN DDL.
