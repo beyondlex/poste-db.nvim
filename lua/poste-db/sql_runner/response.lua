@@ -123,7 +123,12 @@ function M.handle(deps, parsed)
           local lines = sql_format.format_error(err_text, parsed.connection or "")
           sql_buffer.render_dataset(lines, { type = "error" }, { tab_index = tab_idx, exec_seq = deps.current_seq })
         else
-          local sql_text = statement.get_stmt_sql(deps.buf_lines, deps.stmt_lines, i, deps.visual_sel_end)
+          -- `or deps.stmt_end or #deps.buf_lines`: without a visual selection
+          -- visual_sel_end is nil, and get_stmt_sql's no-max_end default
+          -- (`stop = start`) truncates a multi-line statement to its first
+          -- line, losing e.g. the FROM clause for table-name extraction.
+          local sql_text = statement.get_stmt_sql(deps.buf_lines, deps.stmt_lines, i,
+            deps.visual_sel_end or deps.stmt_end or #deps.buf_lines)
           local table_name = statement.extract_table_name(sql_text)
           local single_data = {
             type = "resultset",

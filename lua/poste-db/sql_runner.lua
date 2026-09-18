@@ -365,6 +365,7 @@ function M.run_sql_request()
     buf_content = buf_content,
     stmt_sql_raw = stmt_sql_raw,
     stmt_lines = stmt_lines,
+    stmt_end = stmt_end,
     first_line = first_line,
     is_visual = is_visual,
     visual_sel_end = visual_sel_end,

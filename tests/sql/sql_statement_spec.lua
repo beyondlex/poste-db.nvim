@@ -91,6 +91,15 @@ describe("statement extract_table_name", function()
     assert.equals("users", statement.extract_table_name("select * from public.users"))
   end)
 
+  it("strips mssql bracket quotes", function()
+    assert.equals("users", statement.extract_table_name("select * from [users]"))
+  end)
+
+  it("strips mssql bracket-qualified names ([db].[table] forms)", function()
+    assert.equals("users", statement.extract_table_name("select * from [dbo].[users]"))
+    assert.equals("orders", statement.extract_table_name("update [sales].[orders] set x = 1"))
+  end)
+
   it("lowercases the result", function()
     assert.equals("users", statement.extract_table_name("select * from USERS"))
   end)
@@ -123,6 +132,13 @@ describe("statement get_stmt_sql", function()
 
   it("respects max_end parameter", function()
     assert.equals("select 1 select 2", statement.get_stmt_sql({ "select 1", "select 2", "select 3" }, { 1 }, 1, 2))
+  end)
+
+  it("without max_end, the last statement truncates to its first line", function()
+    -- Pinned semantics: callers that need the full text must pass max_end
+    -- (response.lua passes `visual_sel_end or stmt_end or #buf_lines`).
+    assert.equals("select *",
+      statement.get_stmt_sql({ "select 1;", "select *", "from users;" }, { 1, 2 }, 2))
   end)
 end)
 describe("statement extract_stmt_at_cursor (Lua ;-heuristic fallback)", function()

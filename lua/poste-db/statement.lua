@@ -444,7 +444,14 @@ function M.extract_table_name(sql)
       tname = tname:gsub("^[`\"'\\[]+", ""):gsub("[`\"'\\]]+$", "")
       tname = tname:gsub("[%p%s]+$", "")
       local dot = tname:find("%.")
-      if dot then tname = tname:sub(dot + 1) end
+      if dot then
+        tname = tname:sub(dot + 1)
+        -- mssql bracketed qualified name: the first strip removed only the
+        -- leading `[`, so the second part still opens with `].[` (the first
+        -- part's closing `]` has no dot before it) — `[DBO].[USERS]` read
+        -- `[USERS` here. Strip quote chars again after the split.
+        tname = tname:gsub("^[`\"'\\[]+", ""):gsub("[`\"'\\]]+$", "")
+      end
       if tname ~= "" then return tname:lower() end
     end
   end
