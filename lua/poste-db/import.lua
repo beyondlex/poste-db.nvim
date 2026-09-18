@@ -201,15 +201,14 @@ local function process_import(content, filepath, table_info, table_cols)
 
     local rows_to_import = valid_rows
     if action == "skip" and #bad_rows > 0 then
-      rows_to_import = valid_rows
+      -- 'skip' and 'proceed' import the same rows (valid_rows never
+      -- contained the rejected ones); 'skip' just confirms it out loud.
       vim.notify(string.format("Skipping %d row(s) with validation errors", #bad_rows),
         vim.log.levels.WARN)
     end
 
-    execute.execute_import(table_info, rows_to_import, col_map, table_cols, function(result)
-      if result and result.imported > 0 then  -- luacheck: ignore 542
-      end
-    end)
+    -- no callback: execute_import reports success/errors itself
+    execute.execute_import(table_info, rows_to_import, col_map, table_cols)
   end)
 end
 
