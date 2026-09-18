@@ -213,7 +213,9 @@ function M.get_completion_items(prefix, dialect)
   local items = {}
   local seen = {}
   for trigger, route in pairs(M.snippets) do
-    if not seen[trigger] and trigger:find("^" .. prefix) then
+    -- plain=true: the prefix is the user's typed text — treating it as a
+    -- pattern would error on magic chars (`sel(`) and mis-filter on others.
+    if not seen[trigger] and trigger:find(prefix, 1, true) == 1 then
       seen[trigger] = true
       local resolved = M.resolve(trigger, dialect)
       if resolved then

@@ -96,6 +96,13 @@ describe("snippets", function()
       assert.same({ "ct", "cte" }, triggers)
     end)
 
+    it("treats pattern-magic chars in the prefix literally", function()
+      -- Regression: the prefix was interpolated into a find pattern, so a
+      -- typed `sf(` raised "malformed pattern" instead of matching nothing.
+      assert.same({}, snippets.get_completion_items("sf("))
+      assert.same({}, snippets.get_completion_items("%f"))
+    end)
+
     it("builds blink-compatible items with snippet data", function()
       local items = snippets.get_completion_items("sf")
       local item = items[1]
