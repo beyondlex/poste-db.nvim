@@ -98,10 +98,10 @@ describe("db_browser operations build_alter_column_sql (postgres)", function()
       col_type = "TEXT", nullable = false, default_val = "''", comment_val = "note",
     }, "postgres")
     assert.same({
-      'ALTER TABLE "users" ALTER COLUMN "email" TYPE TEXT;',
-      'ALTER TABLE "users" ALTER COLUMN "email" SET NOT NULL;',
-      "ALTER TABLE \"users\" ALTER COLUMN \"email\" SET DEFAULT '';",
-      "COMMENT ON COLUMN \"users\".\"email\" IS 'note';",
+      'ALTER TABLE "public"."users" ALTER COLUMN "email" TYPE TEXT;',
+      'ALTER TABLE "public"."users" ALTER COLUMN "email" SET NOT NULL;',
+      [[ALTER TABLE "public"."users" ALTER COLUMN "email" SET DEFAULT '';]],
+      [[COMMENT ON COLUMN "public"."users"."email" IS 'note';]],
     }, sql)
   end)
 
@@ -109,21 +109,28 @@ describe("db_browser operations build_alter_column_sql (postgres)", function()
     local sql = t.build_alter_column_sql(table_node(), column_node(), {
       col_type = "VARCHAR(255)", nullable = true, default_val = nil, comment_val = nil,
     }, "postgres")
-    assert.same({ 'ALTER TABLE "users" ALTER COLUMN "email" TYPE VARCHAR(255);' }, sql)
+    assert.same({ 'ALTER TABLE "public"."users" ALTER COLUMN "email" TYPE VARCHAR(255);' }, sql)
   end)
 
   it("emits SET DEFAULT '' for an explicit empty-string default", function()
     local sql = t.build_alter_column_sql(table_node(), column_node(), {
       col_type = "TEXT", nullable = true, default_val = "", comment_val = nil,
     }, "postgres")
-    assert.equals("ALTER TABLE \"users\" ALTER COLUMN \"email\" SET DEFAULT '';", sql[2])
+    assert.equals([[ALTER TABLE "public"."users" ALTER COLUMN "email" SET DEFAULT '';]], sql[2])
   end)
 
   it("escapes single quotes inside comments", function()
     local sql = t.build_alter_column_sql(table_node(), column_node(), {
       col_type = "TEXT", nullable = true, default_val = nil, comment_val = "it's",
     }, "postgres")
-    assert.equals("COMMENT ON COLUMN \"users\".\"email\" IS 'it''s';", sql[2])
+    assert.equals([[COMMENT ON COLUMN "public"."users"."email" IS 'it''s';]], sql[2])
+  end)
+
+  it("quotes the bare table when no schema is known", function()
+    local sql = t.build_alter_column_sql(table_node({ meta = {} }), column_node(), {
+      col_type = "TEXT", nullable = true, default_val = nil, comment_val = nil,
+    }, "postgres")
+    assert.equals('ALTER TABLE "users" ALTER COLUMN "email" TYPE TEXT;', sql[1])
   end)
 end)
 
@@ -136,12 +143,36 @@ describe("db_browser operations build_alter_column_sql (mysql)", function()
   end)
 end)
 
-describe("db_browser operations build_alter_column_sql (generic)", function()
-  it("emits a single ALTER COLUMN statement", function()
+describe("db_browser operations build_alter_column_sql (dialect spellings)", function()
+  it("clickhouse uses MODIFY COLUMN plus COMMENT COLUMN", function()
+    local sql = t.build_alter_column_sql(table_node(), column_node(), {
+      col_type = "String", nullable = true, default_val = nil, comment_val = "note",
+    }, "clickhouse")
+    assert.same({
+      'ALTER TABLE `users` MODIFY COLUMN `email` String;',
+      [[ALTER TABLE `users` COMMENT COLUMN `email` 'note';]],
+    }, sql)
+  end)
+
+  it("mssql drops the TYPE keyword and comments the DEFAULT constraint", function()
+    local sql = t.build_alter_column_sql(table_node(), column_node(), {
+      col_type = "NVARCHAR(100)", nullable = false, default_val = "0", comment_val = nil,
+    }, "mssql")
+    assert.same({
+      "ALTER TABLE [users] ALTER COLUMN [email] NVARCHAR(100) NOT NULL;",
+      "-- DEFAULT needs a separate named constraint:",
+      "-- ALTER TABLE [users] ADD CONSTRAINT DF_email DEFAULT 0 FOR [email];",
+    }, sql)
+  end)
+
+  it("sqlite cannot alter types in place — guidance comments only", function()
     local sql = t.build_alter_column_sql(table_node(), column_node(), {
       col_type = "TEXT", nullable = true, default_val = nil, comment_val = nil,
     }, "sqlite")
-    assert.same({ "ALTER TABLE \"users\" ALTER COLUMN \"email\" TYPE TEXT;" }, sql)
+    assert.same({
+      "-- SQLite does not support ALTER COLUMN TYPE directly.",
+      "-- Recreate users to change email to TEXT.",
+    }, sql)
   end)
 end)
 describe("db_browser operations new_query", function()

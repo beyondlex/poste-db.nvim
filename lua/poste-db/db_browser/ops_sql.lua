@@ -72,6 +72,12 @@ function M.build_directive_lines(table_node, conn)
 end
 
 --- Build ALTER COLUMN migration statements for a modified column.
+--- Spellings are per dialect (mirrors table_ops.gen_alter_type): postgres
+--- `ALTER COLUMN c TYPE t`, mysql/clickhouse `MODIFY COLUMN`, mssql bare
+--- `ALTER COLUMN c t` (no TYPE keyword, no inline DEFAULT), sqlite cannot
+--- alter types in place at all. The table reference is schema-qualified
+--- where the dialect resolves it (postgres) so the generated SQL does not
+--- depend on the session search_path.
 --- @param table_node table  the parent table node
 --- @param node table  the column node being modified
 --- @param values { col_type: string, nullable: boolean, default_val: string|nil, comment_val: string|nil }
@@ -83,23 +89,24 @@ function M.build_alter_column_sql(table_node, node, values, dialect)
   local default_val = values.default_val
   local comment_val = values.comment_val
   local col_ref = ident.quote(node.name, dialect)
+  local table_ref = M.qualified_table_ref(table_node, dialect)
 
   if dialect == "postgres" then
-    local lines = { "ALTER TABLE " .. ident.quote(table_node.name, dialect) .. " ALTER COLUMN " .. col_ref .. " TYPE " .. col_type .. ";" }
+    local lines = { "ALTER TABLE " .. table_ref .. " ALTER COLUMN " .. col_ref .. " TYPE " .. col_type .. ";" }
     if not nullable then
-      table.insert(lines, "ALTER TABLE " .. ident.quote(table_node.name, dialect) .. " ALTER COLUMN " .. col_ref .. " SET NOT NULL;")
+      table.insert(lines, "ALTER TABLE " .. table_ref .. " ALTER COLUMN " .. col_ref .. " SET NOT NULL;")
     end
     if default_val ~= nil and default_val ~= "" then
-      table.insert(lines, "ALTER TABLE " .. ident.quote(table_node.name, dialect) .. " ALTER COLUMN " .. col_ref .. " SET DEFAULT " .. default_val .. ";")
+      table.insert(lines, "ALTER TABLE " .. table_ref .. " ALTER COLUMN " .. col_ref .. " SET DEFAULT " .. default_val .. ";")
     elseif default_val == "" then
-      table.insert(lines, "ALTER TABLE " .. ident.quote(table_node.name, dialect) .. " ALTER COLUMN " .. col_ref .. " SET DEFAULT '';")
+      table.insert(lines, "ALTER TABLE " .. table_ref .. " ALTER COLUMN " .. col_ref .. " SET DEFAULT '';")
     end
     if comment_val ~= nil and comment_val ~= "" then
-      table.insert(lines, "COMMENT ON COLUMN " .. ident.quote(table_node.name, dialect) .. "." .. col_ref .. " IS '" .. tostring(comment_val):gsub("'", "''") .. "';")
+      table.insert(lines, "COMMENT ON COLUMN " .. table_ref .. "." .. col_ref .. " IS '" .. tostring(comment_val):gsub("'", "''") .. "';")
     end
     return lines
   elseif dialect == "mysql" or dialect == "mariadb" then
-    local parts = { "ALTER TABLE " .. ident.quote(table_node.name, dialect) .. " MODIFY COLUMN " .. col_ref .. " " .. col_type }
+    local parts = { "ALTER TABLE " .. table_ref .. " MODIFY COLUMN " .. col_ref .. " " .. col_type }
     if not nullable then table.insert(parts, " NOT NULL") end
     if default_val ~= nil and default_val ~= "" then table.insert(parts, " DEFAULT " .. default_val)
     elseif default_val == "" then table.insert(parts, " DEFAULT ''") end
@@ -108,8 +115,33 @@ function M.build_alter_column_sql(table_node, node, values, dialect)
     end
     table.insert(parts, ";")
     return { table.concat(parts, "") }
+  elseif dialect == "clickhouse" then
+    local lines = { "ALTER TABLE " .. table_ref .. " MODIFY COLUMN " .. col_ref .. " " .. col_type .. ";" }
+    if comment_val ~= nil and comment_val ~= "" then
+      table.insert(lines, "ALTER TABLE " .. table_ref .. " COMMENT COLUMN " .. col_ref .. " '" .. tostring(comment_val):gsub("'", "''") .. "';")
+    end
+    return lines
+  elseif dialect == "mssql" then
+    local stmt = "ALTER TABLE " .. table_ref .. " ALTER COLUMN " .. col_ref .. " " .. col_type
+    if not nullable then stmt = stmt .. " NOT NULL" end
+    local lines = { stmt .. ";" }
+    if default_val ~= nil and default_val ~= "" then
+      -- MSSQL cannot add a DEFAULT inline in ALTER COLUMN (that spelling
+      -- binds only to new columns); it needs a named constraint.
+      table.insert(lines, "-- DEFAULT needs a separate named constraint:")
+      table.insert(lines, "-- ALTER TABLE " .. table_ref .. " ADD CONSTRAINT DF_" .. node.name
+        .. " DEFAULT " .. default_val .. " FOR " .. col_ref .. ";")
+    end
+    return lines
+  elseif dialect == "sqlite" then
+    return {
+      "-- SQLite does not support ALTER COLUMN TYPE directly.",
+      "-- Recreate " .. table_node.name .. " to change " .. node.name .. " to " .. col_type .. ".",
+    }
   else
-    local parts = { "ALTER TABLE " .. ident.quote(table_node.name, dialect) .. " ALTER COLUMN " .. col_ref .. " TYPE " .. col_type }
+    -- Unknown dialect: keep the postgres-like spelling (same default as
+    -- table_ops.gen_alter_type).
+    local parts = { "ALTER TABLE " .. table_ref .. " ALTER COLUMN " .. col_ref .. " TYPE " .. col_type }
     if not nullable then table.insert(parts, " NOT NULL") end
     if default_val ~= nil and default_val ~= "" then table.insert(parts, " DEFAULT " .. default_val)
     elseif default_val == "" then table.insert(parts, " DEFAULT ''") end
