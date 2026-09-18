@@ -99,8 +99,13 @@ function M.rename_seq_reference(ddl, seq_name, new_seq_name)
 end
 
 function M.prepare_table_ddl(ddl, target_table_name, table_name, schema, dialect)
-  local modified = ddl:gsub("`" .. table_name .. "`", "`" .. target_table_name .. "`")
-  modified = modified:gsub('"' .. table_name .. '"', '"' .. target_table_name .. '"')
+  -- pesc: table_name is data, not a pattern — backtick-quoted MySQL names may
+  -- contain gsub-magic chars (`order-2024(`), which would error or mis-match.
+  -- The replacement side escapes % (the only replacement magic).
+  local pat = vim.pesc(table_name)
+  local rep = target_table_name:gsub("%%", "%%%%")
+  local modified = ddl:gsub("`" .. pat .. "`", "`" .. rep .. "`")
+  modified = modified:gsub('"' .. pat .. '"', '"' .. rep .. '"')
 
   if dialect ~= "postgres" then
     return modified
