@@ -43,7 +43,10 @@ function M.quote_literal(val, dialect)
   if type(val) == "boolean" then return val and "TRUE" or "FALSE" end
   if type(val) == "number" then return tostring(val) end
   local s = tostring(val):gsub("'", "''")
-  if dialect == "mysql" or dialect == "mariadb" then
+  -- Backslash dialects: MySQL/MariaDB and ClickHouse both treat `\` as an
+  -- escape character inside single-quoted literals — a raw `\` in the value
+  -- would swallow the next char (e.g. `a\b` reads as `a` + backspace).
+  if dialect == "mysql" or dialect == "mariadb" or dialect == "clickhouse" then
     s = s:gsub("\\", "\\\\")
   end
   return "'" .. s .. "'"
