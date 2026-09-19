@@ -166,6 +166,9 @@ end
 --- @param vars table<string,string>
 --- @return table Resolved connection config
 local function apply_env(conn, vars)
+  -- A shared connections.toml can carry top-level scalars (`description = "…"`
+  -- above the first section); pairs() over one used to crash every listing.
+  if type(conn) ~= "table" then return conn end
   local resolved = {}
   for k, v in pairs(conn) do
     resolved[k] = M.substitute_vars(v, vars)
@@ -229,7 +232,7 @@ function M.get_connection_config(name)
   local parsed = cached_parsed_config()
   if not parsed then return nil end
   local conn = parsed[name]
-  if not conn then return nil end
+  if type(conn) ~= "table" then return nil end
   conn = apply_env(conn, M.get_env_vars(get_search_dir()))
   conn.dialect = const.normalize_dialect(conn.dialect)
   return conn
@@ -389,6 +392,8 @@ function M.list_connections(callback)
     local list = {}
     local vars = M.get_env_vars(search_dir)
     for name, conn in pairs(parsed) do
+      -- Same convention as name_for_url: only [section] tables are connections.
+      if type(conn) ~= "table" then goto continue end
       conn = apply_env(conn, vars)
       conn.dialect = const.normalize_dialect(conn.dialect)
       -- Skip dialects poste-db does not support (satellite sections from a

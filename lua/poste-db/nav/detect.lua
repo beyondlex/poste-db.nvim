@@ -49,6 +49,14 @@ local function resolve_alias(parsed, prefix)
   return resolved
 end
 
+--- 0-based index of the character before the word that ends at `from`
+--- (inclusive); -1 when the word reaches the start of the line.
+local function back_over_word(line_text, from)
+  local p = from
+  while p >= 0 and line_text:sub(p + 1, p + 1):match("[%w_]") do p = p - 1 end
+  return p
+end
+
 function M.build_context_detect_command(bin, offset, dialect)
   local dialect_flag = ""
   if dialect and dialect ~= "" then
@@ -211,20 +219,20 @@ function M.resolve_detected_table_target(parsed, line_text, end_col, cword, full
         }
       end
 
+      -- `alias.column`. end_col is the 0-based index just past the word under
+      -- the cursor (nav/handlers.lua extends it forward), so the walk over the
+      -- word itself has to start at end_col - 1; starting at end_col tested the
+      -- delimiter after the word and stopped before consuming it, which left
+      -- every column cursor falling through to tables[1].
       local alias = nil
-      local ws = end_col
-      while ws > 0 do
-        if not line_text:sub(ws + 1, ws + 1):match("[%w_]") then break end
-        ws = ws - 1
+      local dot = back_over_word(line_text, end_col)
+      if line_text:sub(dot + 1, dot + 1) ~= "." then
+        dot = back_over_word(line_text, end_col - 1)
+        if line_text:sub(dot + 1, dot + 1) ~= "." then dot = nil end
       end
-      if ws >= 0 and line_text:sub(ws + 1, ws + 1) == "." then
-        local ae = ws - 1
-        local ap = ae
-        while ap >= 0 do
-          if not line_text:sub(ap + 1, ap + 1):match("[%w_]") then break end
-          ap = ap - 1
-        end
-        if ap + 1 <= ae then alias = line_text:sub(ap + 2, ae + 1) end
+      if dot then
+        local pre = back_over_word(line_text, dot - 1)
+        if pre + 1 <= dot - 1 then alias = line_text:sub(pre + 2, dot) end
       end
       local resolved = nil
       if alias then

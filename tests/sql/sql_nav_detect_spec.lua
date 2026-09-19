@@ -42,3 +42,39 @@ describe("nav_detect", function()
     }, target)
   end)
 end)
+
+-- nav/handlers.lua extends the cursor column forward to the first non-word
+-- character, so `end_col` is the 0-based index just past the word under the
+-- cursor ("select u.name" with the cursor on name → end_col = 13).
+describe("nav_detect alias prefix", function()
+  local parsed = {
+    ctx_type = "column",
+    tables = {
+      { name = "comments", alias = "c" },
+      { name = "posts", alias = "u" },
+    },
+  }
+  local ctx = { connection = "conn", database = "blog" }
+
+  it("resolves the prefix alias when the cursor sits on the column", function()
+    local target = detect.resolve_detected_table_target(parsed, "select u.name from x", 13, "name", ctx)
+
+    assert.same({
+      action = "navigate_to_table",
+      database = "blog",
+      table_name = "posts",
+      column_name = "name",
+    }, target)
+  end)
+
+  it("falls back to the first table for an unknown prefix instead of guessing", function()
+    local target = detect.resolve_detected_table_target(parsed, "select z.name from x", 13, "name", ctx)
+
+    assert.same({
+      action = "navigate_to_table",
+      database = "blog",
+      table_name = "comments",
+      column_name = "name",
+    }, target)
+  end)
+end)

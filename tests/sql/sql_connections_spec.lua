@@ -362,6 +362,15 @@ describe("connections get_connection_config", function()
     local config = connections.get_connection_config("primary")
     assert.equals("mysql", config.dialect)
   end)
+
+  it("returns nil for a top-level scalar, not a string it cannot index", function()
+    -- A stale `-- @connection description` directive used to reach
+    -- `conn.dialect = …` on a string and throw.
+    package.loaded["poste-db.toml"].parse_file = function()
+      return { description = "shared file", primary = { dialect = "postgres" } }
+    end
+    assert.is_nil(connections.get_connection_config("description"))
+  end)
 end)
 
 describe("connections list_connections", function()
@@ -402,6 +411,21 @@ describe("connections list_connections", function()
     assert.equals(1, #captured)
     assert.equals("primary", captured[1].name)
     assert.equals("postgres", captured[1].dialect)
+  end)
+
+  it("skips a top-level scalar above the first section", function()
+    local config_path = tmpdir .. "/connections.toml"
+    vim.fn.writefile({ "[primary]", "dialect = \"postgres\"" }, config_path)
+    util_stub.find_file_upwards = function() return config_path end
+    -- toml.parse puts `key = value` lines before any [section] at the root
+    package.loaded["poste-db.toml"].parse_file = function()
+      return { description = "shared file", primary = { dialect = "postgres" } }
+    end
+    local captured
+    connections.list_connections(function(list) captured = list end)
+    vim.wait(100, function() return captured ~= nil end)
+    assert.equals(1, #captured)
+    assert.equals("primary", captured[1].name)
   end)
 
   it("skips unsupported dialects from a shared connections.toml", function()
