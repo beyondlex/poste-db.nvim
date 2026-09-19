@@ -104,6 +104,40 @@ describe("poste-db.ai.actions", function()
       -- a write hidden behind a leading comment still flags
       assert.is_false(actions._test.is_readonly("-- cleanup\nDELETE FROM users"))
     end)
+
+    it("gates a multi-statement block on its most dangerous statement", function()
+      -- the block runs as one greedy request, so a leading SELECT cannot
+      -- vouch for what follows it
+      assert.is_false(actions._test.is_readonly("SELECT 1; DROP TABLE users;"))
+      assert.is_false(actions._test.is_readonly("SELECT id FROM t; DELETE FROM t;"))
+      assert.is_false(actions._test.is_readonly(
+        "-- @connection my-blog\nSELECT 1;\nINSERT INTO t VALUES (1)"))
+      assert.is_true(actions._test.is_readonly("SELECT 1; SELECT 2;"))
+      assert.is_true(actions._test.is_readonly("WITH a AS (SELECT 1) SELECT * FROM a;"))
+    end)
+
+    it("judges statements by SQL structure, not by comment shape", function()
+      -- a `--` inside a literal used to comment out the rest of the batch,
+      -- hiding the statement after it
+      assert.is_false(actions._test.is_readonly("SELECT '--'; DROP TABLE t"))
+      -- a semicolon inside a literal does not split the statement
+      assert.is_true(actions._test.is_readonly("SELECT 'a;b' FROM t"))
+      assert.is_true(actions._test.is_readonly("SELECT \"x;\" FROM t"))
+      -- ...and the reverse: two apostrophes in *comments* used to pair up and
+      -- blank the real code between them
+      assert.is_false(actions._test.is_readonly(
+        "-- can't believe\nDROP TABLE t\n-- won't last"))
+    end)
+
+    it("flags EXPLAIN ANALYZE, which runs the statement it explains", function()
+      assert.is_true(actions._test.is_readonly("EXPLAIN SELECT * FROM t"))
+      assert.is_false(actions._test.is_readonly("EXPLAIN ANALYZE DELETE FROM t"))
+    end)
+
+    it("rejects an empty block rather than waving it through", function()
+      assert.is_false(actions._test.is_readonly(""))
+      assert.is_false(actions._test.is_readonly("   \n-- nothing but a comment\n"))
+    end)
   end)
 
   describe("strip_directives", function()

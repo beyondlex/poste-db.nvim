@@ -39,11 +39,17 @@ M.config = {
 M.current_env = "dev"
 
 function M.find_poste_binary()
+  -- Readable is not enough: a downloaded/copied file without the exec bit (or
+  -- a test dummy) would be picked over a working PATH entry and then fail at
+  -- spawn with an opaque error.
+  local function usable(p)
+    return p ~= nil and p ~= "" and vim.fn.filereadable(p) == 1 and vim.fn.executable(p) == 1
+  end
   local g_val = vim.g.poste_binary
-  if g_val and g_val ~= "" and vim.fn.filereadable(g_val) == 1 then
+  if usable(g_val) then
     return vim.fn.fnamemodify(g_val, ":p")
   end
-  if M.config.poste_binary ~= "" and vim.fn.filereadable(M.config.poste_binary) == 1 then
+  if M.config.poste_binary ~= "" and usable(M.config.poste_binary) then
     return vim.fn.fnamemodify(M.config.poste_binary, ":p")
   end
   local paths = {}
@@ -62,10 +68,26 @@ function M.find_poste_binary()
     end
   end
   for _, p in ipairs(paths) do
-    if vim.fn.filereadable(p) == 1 then return vim.fn.fnamemodify(p, ":p") end
+    if usable(p) then return vim.fn.fnamemodify(p, ":p") end
   end
   local path = vim.fn.exepath("poste")
   return path ~= "" and path or nil
+end
+
+--- `poste --version`, spawned without a shell: the binary path is user config
+--- (`vim.g.poste_binary`), and interpolating it into io.popen would let a path
+--- with shell metacharacters run arbitrary commands.
+--- @param binary string|nil defaults to find_poste_binary()
+--- @return string|nil trimmed version text, nil when it cannot be read
+function M.poste_version(binary)
+  binary = binary or M.find_poste_binary()
+  if not binary then return nil end
+  local ok, obj = pcall(vim.system, { binary, "--version" }, { text = true, timeout = 5000 })
+  if not ok or not obj then return nil end
+  local result = obj:wait(5000)
+  if not result or result.code ~= 0 or type(result.stdout) ~= "string" then return nil end
+  local version = (result.stdout:gsub("%s+$", ""))
+  return version ~= "" and version or nil
 end
 
 function M.apply_highlight_overrides(group_names)

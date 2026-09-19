@@ -61,6 +61,22 @@ describe("poste-db.ai.system_prompt", function()
     local prompt = system_prompt._test.build()
     assert.falsy(prompt:find("Current SQL context"))
   end)
+
+  it("keeps credentials out of the prompt for both context paths", function()
+    -- A chat scope / buffer context can hold the resolved DSN, and the prompt
+    -- goes to a remote model.
+    local scoped = system_prompt._test.build({
+      connection = "postgres://u:pa/ss@h:5432/db?password=hunter2", database = "blog",
+    })
+    assert.falsy(scoped:find("hunter2", 1, true))
+    assert.falsy(scoped:find("pa/ss", 1, true))
+    assert.truthy(scoped:find("postgres://u:***@h:5432/db", 1, true))
+
+    state.context.connection = "mysql://root:s3cret@h:3306/app"
+    local ctx = system_prompt._test.build()
+    assert.falsy(ctx:find("s3cret", 1, true))
+    assert.truthy(ctx:find("mysql://root:***@h:3306/app", 1, true))
+  end)
 end)
 
 describe("poste-db.ai integration", function()

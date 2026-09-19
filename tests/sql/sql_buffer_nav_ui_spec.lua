@@ -288,4 +288,37 @@ describe("buffer_nav_ui", function()
     assert.truthy(right:find("[2/3: posts]", 1, true))
     assert.is_falsy(right:find("localhost:5432/blog", 1, true))
   end)
+
+  it("doubles data-borne percent signs so they stay literal in the winbar", function()
+    local left = ui.build_status_left({
+      type = "resultset",
+      total_rows = 2,
+      total_execution_time_ms = 1,
+      columns = { { name = "pct%" } },
+    }, {
+      sort = { col = 1, ascending = true },
+      layout = true,
+      pagination_enabled = false,
+      num_pages = 2,
+      filter_active = true,
+      filter_col_name = "rate",
+      filter_val = "100%",
+      search_text = "50%",
+      search_matches = { 1 },
+    })
+    local right = ui.build_status_right({
+      type = "resultset",
+      table_name = "a%b",
+    }, 2, 1, nil)
+
+    assert.truthy(left:find("pct%%", 1, true))
+    assert.truthy(left:find("rate=100%%", 1, true))
+    assert.truthy(left:find("search: 50%% ", 1, true))
+    assert.truthy(right:find("[1/2: a%%b]", 1, true))
+
+    -- After the highlight groups are removed, nothing may still look like a
+    -- statusline item: every data `%` has to arrive doubled.
+    local rest = (left .. right):gsub("%%#[%w%.]+#", ""):gsub("%%%%", "")
+    assert.is_falsy(rest:find("%", 1, true))
+  end)
 end)

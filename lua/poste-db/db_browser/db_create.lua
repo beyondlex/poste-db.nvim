@@ -1,21 +1,25 @@
 local forms_advanced = require("poste-db.db_browser.forms_advanced")
+local ident = require("poste-db.ident")
 local util = require("poste-db.db_browser.util")
 local notify = require("poste-db.db_browser.notify")
 
 local M = {}
 
-local function postgres_create_database(fields)
+-- Identifier quoting goes through ident.quote: hand-built `"`/`` ` `` wrappers
+-- never escape a quote inside the name, so a database called `a"b` produced
+-- broken (and injectable) DDL.
+local function postgres_create_database(fields, dialect)
   local parts = { "CREATE DATABASE" }
-  table.insert(parts, '"' .. fields.name .. '"')
+  table.insert(parts, ident.quote(fields.name, dialect))
   if fields.owner and fields.owner ~= "" then
-    table.insert(parts, 'OWNER "' .. fields.owner .. '"')
+    table.insert(parts, 'OWNER ' .. ident.quote(fields.owner, dialect))
   end
   return table.concat(parts, " ") .. ";"
 end
 
-local function mysql_create_database(fields)
+local function mysql_create_database(fields, dialect)
   local parts = { "CREATE DATABASE", "IF NOT EXISTS" }
-  table.insert(parts, "`" .. fields.name .. "`")
+  table.insert(parts, ident.quote(fields.name, dialect))
   if fields.charset and fields.charset ~= "" then
     table.insert(parts, "CHARACTER SET " .. fields.charset)
   end
@@ -97,9 +101,9 @@ local function generate_sql(fields, dialect)
     return { "--- Enter a database name ---" }
   end
   if dialect == "mysql" or dialect == "mariadb" then
-    return { mysql_create_database(fields) }
+    return { mysql_create_database(fields, dialect) }
   end
-  return { postgres_create_database(fields) }
+  return { postgres_create_database(fields, dialect) }
 end
 
 local function execute_sql(sql, conn_name, context, opts)
@@ -147,5 +151,8 @@ function M.open(node, context)
     window_management = "single",
   })
 end
+
+--- Exposed for tests.
+M._test = { generate_sql = generate_sql }
 
 return M

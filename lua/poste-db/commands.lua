@@ -55,18 +55,14 @@ function M.setup()
       if mtime then
         parts[#parts + 1] = "built:       " .. os.date("%Y-%m-%d %H:%M:%S", mtime.mtime.sec)
       end
-      local handle = io.popen('"' .. binary .. '" --version 2>/dev/null')
-      if handle then
-        local version = handle:read("*a"):gsub("%s+$", "")
-        handle:close()
-        if version ~= "" then
-          local tag, date = version:match("poste ([^%(]+)%(([^%)]+)%)")
-          if tag and date then
-            parts[#parts + 1] = "version:     " .. tag
-            parts[#parts + 1] = "released:    " .. date
-          else
-            parts[#parts + 1] = "version:     " .. version
-          end
+      local version = state.poste_version(binary)
+      if version then
+        local tag, date = version:match("poste ([^%(]+)%(([^%)]+)%)")
+        if tag and date then
+          parts[#parts + 1] = "version:     " .. tag
+          parts[#parts + 1] = "released:    " .. date
+        else
+          parts[#parts + 1] = "version:     " .. version
         end
       end
     else

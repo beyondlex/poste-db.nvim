@@ -173,3 +173,43 @@ describe("generate_insert __expr gating", function()
     assert.equals('UPDATE "t" SET "note" = \'y\' WHERE "note" = \'__expr:1=1\';', sql3)
   end)
 end)
+
+describe("literal quoting", function()
+  local cols = { { name = "zip" } }
+  local function insert(val, dialect)
+    return dml.generate_insert(nil, "t", cols, { val }, dialect)
+  end
+
+  it("escapes backslashes where the dialect honors them", function()
+    -- MySQL/MariaDB/ClickHouse read `\` as an escape inside '…' too: doubling
+    -- only the quote let `\'` eat the closing quote, and everything after it
+    -- became a second statement (DROP TABLE users) inside one INSERT
+    assert.equals([[INSERT INTO `t` (`zip`) VALUES ('\\''; DROP TABLE users; --');]],
+      insert([[\'; DROP TABLE users; --]], "mysql"))
+    assert.equals([[INSERT INTO `t` (`zip`) VALUES ('\\''; DROP TABLE users; --');]],
+      insert([[\'; DROP TABLE users; --]], "clickhouse"))
+    -- standard-conforming dialects: the backslash is plain text, so it must
+    -- NOT be doubled (that would corrupt the stored value)
+    assert.equals([[INSERT INTO "t" ("zip") VALUES ('\''; DROP TABLE users; --');]],
+      insert([[\'; DROP TABLE users; --]], "postgres"))
+    assert.equals([[INSERT INTO "t" ("zip") VALUES ('\''; DROP TABLE users; --');]],
+      insert([[\'; DROP TABLE users; --]], "sqlite"))
+  end)
+
+  it("quotes a string that only looks numeric", function()
+    -- bare `007` is the number 7 to the server, and `1.50` the number 1.5:
+    -- the cell's own text has to survive the round trip
+    assert.equals([[INSERT INTO `t` (`zip`) VALUES ('007');]], insert("007", "mysql"))
+    assert.equals([[INSERT INTO "t" ("zip") VALUES ('1.50');]], insert("1.50", "postgres"))
+    assert.equals([[INSERT INTO "t" ("zip") VALUES ('3.0');]], insert("3.0", "postgres"))
+  end)
+
+  it("still emits digits a double cannot hold as an exact literal", function()
+    -- the value is a bigint preserved as text: quoting it would make it a
+    -- string, emitting it as a number would move its digits
+    assert.equals([[INSERT INTO "t" ("zip") VALUES (2084515900853196878);]],
+      insert("2084515900853196878", "postgres"))
+    assert.equals([[INSERT INTO "t" ("zip") VALUES (42);]], insert("42", "postgres"),
+      "a plain integer that round-trips stays a bare literal")
+  end)
+end)

@@ -195,3 +195,57 @@ describe("db_browser operations new_query", function()
     vim.api.nvim_buf_delete(src, { force = true })
   end)
 end)
+
+describe("db_browser operations update_template", function()
+  --- Insert the template into a scratch buffer and return its SQL body (the
+  --- `-- @…` directive header is not part of what is being asserted).
+  local function render(node)
+    local src = vim.api.nvim_create_buf(false, true)
+    local ok, err = pcall(operations.update_template, node, { source_buf = src })
+    local lines = vim.api.nvim_buf_get_lines(src, 0, -1, false)
+    vim.api.nvim_buf_delete(src, { force = true })
+    assert.is_true(ok, tostring(err))
+    for i, l in ipairs(lines) do
+      if l:match("^UPDATE ") then return table.concat(lines, "\n", i) end
+    end
+    return "<no UPDATE line in:\n" .. table.concat(lines, "\n") .. ")"
+  end
+
+  local function table_with(columns)
+    local children = {}
+    for _, c in ipairs(columns) do
+      table.insert(children, { node_type = "column", name = c[1], meta = { is_pk = c[2] } })
+    end
+    return table_node({ meta = { dialect = "postgres" }, children = children })
+  end
+
+  it("separates SET assignments with commas and drops the last one", function()
+    assert.equals([[UPDATE "users"
+SET
+  "name" = 'val',
+  "bio" = 'val'
+WHERE "id" = ?;
+]], render(table_with({ { "id", true }, { "name", false }, { "bio", false } })))
+  end)
+
+  it("keeps the SET keyword when the key is the only column", function()
+    -- Regression: the trailing comma was stripped from whichever line came
+    -- last, so with no non-PK columns that line was the bare `SET` — and the
+    -- template started with `SE`.
+    local sql = render(table_with({ { "id", true } }))
+    assert.is_nil((sql .. "\n"):match("\nSE\n"))
+    assert.equals([[UPDATE "users"
+SET
+  "id" = ?
+WHERE "id" = ?;
+]], sql)
+  end)
+
+  it("emits every key column in the WHERE clause", function()
+    assert.equals([[UPDATE "users"
+SET
+  "name" = 'val'
+WHERE "a" = ? AND "b" = ?;
+]], render(table_with({ { "a", true }, { "b", true }, { "name", false } })))
+  end)
+end)

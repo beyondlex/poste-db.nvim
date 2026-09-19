@@ -140,6 +140,15 @@ describe("exec_run", function()
       assert.equals("mydb", exec_run.detect_use("USE mydb; -- switch context"))
     end)
 
+    it("does not let a comment tail reach past its own line", function()
+      -- Regression: the tail was `%-%-.*$`, and Lua's `.` crosses newlines, so
+      -- a whole batch after `USE db` looked like one comment. The batch was
+      -- then dropped on the floor while the context switched to `db`.
+      assert.is_nil(exec_run.detect_use("USE mydb\n-- note\nSELECT 1"))
+      assert.is_nil(exec_run.detect_use("USE mydb -- note\nDELETE FROM t"))
+      assert.is_nil(exec_run.detect_use("USE mydb\n\nSELECT 1"))
+    end)
+
     it("detects lowercase use statements (case-insensitive SQL keywords)", function()
       -- A lowercase `use db;` used to fall through: detect_use missed it, the
       -- statement reached the database as real SQL (syntax error on postgres)
@@ -235,6 +244,34 @@ describe("exec_run", function()
     it("keeps non-marker lines (including # in strings) intact", function()
       local out = exec_run.strip_section_markers("select * from t where note = 'a#b';\n")
       assert.equals("select * from t where note = 'a#b';\n", out)
+    end)
+  end)
+
+  describe("write_temp_file", function()
+    local made = {}
+    after_each(function()
+      for _, p in ipairs(made) do vim.fn.delete(p) end
+      made = {}
+    end)
+
+    it("creates the statement file 0600, not world-readable", function()
+      -- Statement text can carry row data; writefile()'s umask default is 0644.
+      local tmp = exec_run.write_temp_file("INSERT INTO t VALUES ('row data');\n")
+      made[#made + 1] = tmp
+      local uv = vim.uv or vim.loop
+      local stat = uv.fs_stat(tmp)
+      assert.truthy(stat)
+      assert.equals(tonumber("600", 8), stat.mode % 512)
+    end)
+
+    it("writes the SQL with the section markers stripped", function()
+      local tmp = exec_run.write_temp_file("###\nselect 1;\n")
+      made[#made + 1] = tmp
+      local lines = vim.fn.readfile(tmp)
+      assert.equals("select 1;", lines[1])
+      for _, l in ipairs(lines) do
+        assert.is_nil(l:match("^%s*###%s*$"))
+      end
     end)
   end)
 end)

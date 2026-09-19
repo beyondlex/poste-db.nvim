@@ -60,6 +60,12 @@ end
 local function write_temp_file(sql)
   local lines = vim.split(strip_section_markers(sql), "\n", { plain = true })
   local tmp = vim.fn.tempname() .. ".sql"
+  -- Pre-create the file 0600: writefile() would create it with the umask
+  -- default (0644 on a typical box), leaving statement text world-readable on
+  -- shared hosts. writefile truncates an existing file and keeps its mode.
+  local uv = vim.uv or vim.loop
+  local ok_open, fd = pcall(uv.fs_open, tmp, "w", tonumber("600", 8))
+  if ok_open and fd then uv.fs_close(fd) end
   vim.fn.writefile(lines, tmp)
   return tmp
 end
@@ -91,8 +97,12 @@ local function detect_use(sql)
   -- `USE db -- comment` / `USE db; -- comment`: the capture is required here
   -- — a groupless pattern makes match() return the whole statement, which
   -- then leaks into database_name / state.context.database.
+  -- `[^\n]` rather than `.`: Lua's `.` crosses newlines, so `USE db\n-- note\n
+  -- SELECT 1` matched too and the whole batch was swallowed as a lone USE
+  -- (nothing ran, and the context switched on a statement the user never
+  -- meant to execute alone).
   if not name then
-    name = trimmed:match("^[Uu][Ss][Ee]%s+([%w_-]+)%s*;?%s*%-%-.*$")
+    name = trimmed:match("^[Uu][Ss][Ee]%s+([%w_-]+)%s*;?%s*%-%-[^\n]*$")
   end
   return name
 end
@@ -490,4 +500,5 @@ return {
   for_each_event = for_each_event,
   is_query_sql = is_query_sql,
   strip_section_markers = strip_section_markers,
+  write_temp_file = write_temp_file,
 }

@@ -6,6 +6,25 @@ local INTEGER_TYPES = {
   tinyint = true, mediumint = true,
 }
 
+--- Root type names that hold numbers. Introspection reports `numeric(10,2)` or
+--- `double precision`, so only the leading word is looked up.
+local NUMERIC_TYPES = vim.tbl_extend("force", INTEGER_TYPES, {
+  numeric = true, decimal = true, dec = true, fixed = true,
+  float = true, float4 = true, float8 = true, double = true, real = true,
+  money = true, smallmoney = true, oid = true,
+})
+
+local function is_numeric_col(ctype)
+  if ctype == "" then return true end
+  local root = ctype:match("^%a[%a_]*")
+  return root == nil or NUMERIC_TYPES[root] == true
+end
+
+--- A double carries 53 bits of mantissa, so `9050341234567890123` arrives back as
+--- `…889920` — the digits themselves move. Past that range the text must stay text;
+--- dml then emits its exact digits rather than the corrupted number.
+local MAX_EXACT_DOUBLE = 2 ^ 53
+
 function M.coerce_value(str, col_type)
   if str == nil or str == vim.NIL then return vim.NIL end
   local s = tostring(str):gsub("^%s+", ""):gsub("%s+$", "")
@@ -26,12 +45,15 @@ function M.coerce_value(str, col_type)
     if s == "0" then return false end
   end
 
+  -- A digit-string becomes a number only when the column holds numbers (`007`
+  -- in a varchar column is the text `007`), the value fits a double, and an
+  -- integer column is not being handed a fraction.
   local num = tonumber(s)
-  if num and s:match("^%-?%d+%.?%d*$") then
-    if INTEGER_TYPES[ctype] and num ~= math.floor(num) then  -- luacheck: ignore 542
-    else
-      return num
-    end
+  if num and s:match("^%-?%d+%.?%d*$")
+    and is_numeric_col(ctype)
+    and math.abs(num) < MAX_EXACT_DOUBLE
+    and not (INTEGER_TYPES[ctype] and num ~= math.floor(num)) then
+    return num
   end
 
   return s

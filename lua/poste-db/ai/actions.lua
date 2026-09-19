@@ -5,6 +5,8 @@
 
 local M = {}
 
+local dml_guard = require("poste-db.dml_guard")
+
 --- Read-only statement keywords (Lua patterns have no alternation, hence the
 --- lookup table).
 local READONLY_KINDS = {
@@ -19,20 +21,10 @@ local READONLY_KINDS = {
 --- confirmation — the safe direction.
 local WRITE_WORDS = { "insert", "update", "delete", "merge", "replace" }
 
---- Heuristic read-only check for the confirm gate.
---- Leading comment lines are skipped first so `-- @connection x\nSELECT 1`
---- (the exact header append_header writes, and which models copy) reads as a
---- SELECT instead of forcing a pointless confirm on every read-only block.
---- @param sql string
+--- @param stmt string one statement, with literals/comments already blanked
 --- @return boolean
-function M.is_readonly(sql)
-  local body = sql
-  while true do
-    local stripped = body:gsub("^%s*%-%-[^\n]*\n?", "")
-    if stripped == body then break end
-    body = stripped
-  end
-  local lowered = body:lower()
+local function statement_is_readonly(stmt)
+  local lowered = stmt:lower()
   local kind = lowered:match("^%s*(%a+)")
   if not kind then return false end
   if kind == "with" then
@@ -44,7 +36,30 @@ function M.is_readonly(sql)
     end
     return true
   end
+  if kind == "explain" then
+    -- EXPLAIN ANALYZE runs the statement it explains
+    return not lowered:find("%f[%w_]analyze%f[^%w_]")
+  end
   return READONLY_KINDS[kind] == true
+end
+
+--- Read-only check for the confirm gate. A block is read-only only when
+--- EVERY statement in it is: the executor runs a block greedily, so
+--- `SELECT 1; DROP TABLE users` must confirm on the strength of the second
+--- statement, not pass on the first. Leading comment lines are blanked, so
+--- `-- @connection x\nSELECT 1` (the header append_header writes, and which
+--- models copy) still reads as a SELECT.
+--- @param sql string
+--- @return boolean
+function M.is_readonly(sql)
+  local count = 0
+  for stmt in (dml_guard.strip_non_code(sql) .. ";"):gmatch("([^;]*)") do
+    if stmt:match("%S") then
+      count = count + 1
+      if not statement_is_readonly(stmt) then return false end
+    end
+  end
+  return count > 0
 end
 
 --- Confirm gate used by poste-ai's codeblock action. Read-only statements

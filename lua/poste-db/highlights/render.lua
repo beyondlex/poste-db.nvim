@@ -256,10 +256,18 @@ function M.apply_edit_highlights(buf, tab)
 
   local es = tab.edit_state
   local meta = tab.meta
+  -- edit_state rows are SOURCE rows (see editor/nav.to_source_row); a row the
+  -- current page does not render has no line to mark
+  local sql_format = require("poste-db.format")
+  local function line_of(source_row)
+    local visible = sql_format.visible_row_of(meta, source_row)
+    if not visible then return nil end
+    return meta.data_start_line + visible - 1
+  end
 
   for row_idx, _ in pairs(es.deleted_rows) do
-    local line_idx = meta.data_start_line + row_idx - 1
-    if line_idx <= meta.data_end_line then
+    local line_idx = line_of(row_idx)
+    if line_idx and line_idx <= meta.data_end_line then
       local line = vim.api.nvim_buf_get_lines(buf, line_idx - 1, line_idx, false)[1] or ""
       vim.api.nvim_buf_set_extmark(buf, ns_edit, line_idx - 1, 0, {
         end_row = line_idx - 1,
@@ -274,8 +282,8 @@ function M.apply_edit_highlights(buf, tab)
   for _, added in ipairs(es.added_rows) do
     local row_idx = added.row_idx
     if row_idx then
-      local line_idx = meta.data_start_line + row_idx - 1
-      if line_idx <= meta.data_end_line then
+      local line_idx = line_of(row_idx)
+      if line_idx and line_idx <= meta.data_end_line then
         local line = vim.api.nvim_buf_get_lines(buf, line_idx - 1, line_idx, false)[1] or ""
         vim.api.nvim_buf_set_extmark(buf, ns_edit, line_idx - 1, 0, {
           end_row = line_idx - 1,
@@ -291,8 +299,8 @@ function M.apply_edit_highlights(buf, tab)
   for row_key, mod in pairs(es.modified_cells) do
     local row_idx = tonumber(row_key:match("^(%d+):"))
     if row_idx then
-      local line_idx = meta.data_start_line + row_idx - 1
-      if line_idx <= meta.data_end_line then
+      local line_idx = line_of(row_idx)
+      if line_idx and line_idx <= meta.data_end_line then
         local line = vim.api.nvim_buf_get_lines(buf, line_idx - 1, line_idx, false)[1] or ""
         local range = M.find_cell_range(line, mod.col + 1)
         if range then
@@ -316,8 +324,8 @@ function M.apply_edit_highlights(buf, tab)
     local row_idx = tonumber(row_key:match("^(%d+):"))
     local col_idx = tonumber(row_key:match(":(%d+)$"))
     if row_idx and col_idx then
-      local line_idx = meta.data_start_line + row_idx - 1
-      if line_idx <= meta.data_end_line then
+      local line_idx = line_of(row_idx)
+      if line_idx and line_idx <= meta.data_end_line then
         local line = vim.api.nvim_buf_get_lines(buf, line_idx - 1, line_idx, false)[1] or ""
         local range = M.find_cell_range(line, col_idx + 1)
         if range then

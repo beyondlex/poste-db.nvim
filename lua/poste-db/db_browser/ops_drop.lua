@@ -117,6 +117,7 @@ execute_drop = function(table_node, qualified, conn, schema_prefix, context)
           return
         end
         notify.info("Dropped table: " .. qualified)
+        util.invalidate_completion_cache()
         if parent then
           util.refresh_subtree(parent, context, parent.node_type, search_dir)
         end
@@ -342,6 +343,7 @@ local function start_batch_drop(items, conn_label, search_dir, context)
       end
       show_summary()
       refresh_all_parents()
+      if completed > 0 then util.invalidate_completion_cache() end
       return
     end
     local it = items[idx]
@@ -402,12 +404,14 @@ local function start_batch_drop(items, conn_label, search_dir, context)
     end
   end
 
+  -- Buffer-local like the summary dialog's binding: a global `q` here survived
+  -- the drop and hijacked every later window (and macro recording).
   vim.keymap.set("n", "q", function()
     cancelled = true
     if progress_dlg and progress_dlg.win and vim.api.nvim_win_is_valid(progress_dlg.win) then
       progress_dlg:close()
     end
-  end, { noremap = true, silent = true, nowait = true })
+  end, { buffer = progress_dlg.buf, noremap = true, silent = true, nowait = true })
 
   process_next(1)
 end

@@ -3,8 +3,14 @@
 --- read at prompt-build time.
 
 local state = require("poste-db.state")
+local log = require("poste-db.log")
 
 local M = {}
+
+--- A scope entry can hold a full DSN; never ship credentials to the model.
+local function redact(s)
+  return log.redact_url(s)
+end
 
 local KNOWLEDGE = [[You are running inside poste-db.nvim, a SQL execution plugin for Neovim in the Poste family.
 
@@ -55,9 +61,9 @@ function M.build(chat_scope)
   local db = chat_scope and chat_scope.database
   if conn then
     parts[#parts + 1] = "## Current chat scope\n"
-      .. "The chat is scoped to connection " .. conn
+      .. "The chat is scoped to connection " .. redact(conn)
       .. (dialect_of(conn) and (" (" .. dialect_of(conn) .. " dialect)") or "")
-      .. (db and (", database " .. db) or "")
+      .. (db and (", database " .. redact(db)) or "")
       .. ". SQL blocks run against this target by default — no @connection directive needed; "
       .. "write " .. (dialect_of(conn) or "SQL") .. "-compatible statements; "
       .. "qualify objects only when the query crosses databases."
@@ -66,7 +72,7 @@ function M.build(chat_scope)
     db = state.context and state.context.database
     if conn or db then
       local cur = "## Current SQL context\nThe buffer the user is working in is currently bound to: "
-        .. "connection " .. tostring(conn or "(none)") .. ", database " .. tostring(db or "(none)") .. "."
+        .. "connection " .. (redact(conn) or "(none)") .. ", database " .. (redact(db) or "(none)") .. "."
       parts[#parts + 1] = cur
     end
   end

@@ -86,6 +86,76 @@ describe("dml_guard regex_scan", function()
     assert.same({}, guard.regex_scan(""))
     assert.same({}, guard.regex_scan(nil))
   end)
+
+  -- regex_scan is the only engine that runs when tree-sitter is unavailable,
+  -- so every case below is a statement the confirm gate would silently skip.
+
+  it("flags a CTE delete, not just one that opens with the verb", function()
+    local hits = guard.regex_scan("WITH x AS (SELECT id FROM old) DELETE FROM users")
+    assert.equals(1, #hits)
+    assert.equals("delete", hits[1].kind)
+    hits = guard.regex_scan("WITH x AS (SELECT 1) UPDATE users SET a = 1")
+    assert.equals(1, #hits)
+    assert.equals("update", hits[1].kind)
+  end)
+
+  it("does not read a `--` inside a literal as a comment", function()
+    -- comment-first stripping let the in-string `--` erase the rest of the
+    -- batch, hiding the destructive statement behind it
+    local hits = guard.regex_scan("SELECT * FROM t WHERE a='-- x'; DELETE FROM secrets")
+    assert.equals(1, #hits)
+    assert.equals("delete", hits[1].kind)
+  end)
+
+  it("does not let a lone apostrophe in a comment swallow real code", function()
+    -- literal-first stripping paired `can't` with `won't` across three lines,
+    -- blanking the DELETE between them
+    local sql = "-- can't believe this\nDELETE FROM users\n-- won't last"
+    local hits = guard.regex_scan(sql)
+    assert.equals(1, #hits)
+    assert.equals("delete", hits[1].kind)
+  end)
+
+  it("honours backslash escapes inside literals", function()
+    -- `'it\'s WHERE b=1'` is one value, not a WHERE clause
+    local hits = guard.regex_scan([[UPDATE t SET a='it\'s WHERE b=1']])
+    assert.equals(1, #hits)
+    assert.equals("update", hits[1].kind)
+    assert.equals(0, #guard.regex_scan([[UPDATE t SET a='it\'s WHERE b=1' WHERE id = 2]]))
+  end)
+
+  it("keeps semicolons inside literals out of the statement split", function()
+    assert.equals(0, #guard.regex_scan("DELETE FROM t WHERE name = 'a;b'"))
+  end)
+
+  it("does not mistake a clause keyword for the statement verb", function()
+    assert.equals(0, #guard.regex_scan(
+      "ALTER TABLE t ADD COLUMN ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CASCADE"))
+    assert.equals(0, #guard.regex_scan("CREATE TRIGGER tr AFTER DELETE ON t FOR EACH ROW BEGIN END"))
+    assert.equals(0, #guard.regex_scan("SELECT * FROM updates"))
+  end)
+end)
+
+describe("dml_guard strip_non_code", function()
+  local strip = guard._test.strip_non_code
+
+  it("blanks a quoted literal and keeps line structure", function()
+    assert.equals("SELECT   \nFROM t\n", strip("SELECT 'x'\nFROM t\n"))
+  end)
+
+  it("erases comment text but never a newline", function()
+    local out = strip("SELECT 1\n-- go\n/* two\nlines */\nSELECT 2\n")
+    assert.is_nil(out:find("go", 1, true))
+    assert.is_nil(out:find("two", 1, true))
+    assert.is_nil(out:find("lines", 1, true))
+    assert.truthy(out:find("SELECT 1", 1, true))
+    assert.truthy(out:find("SELECT 2", 1, true))
+    assert.equals(5, select(2, out:gsub("\n", "")))
+  end)
+
+  it("leaves code untouched when there is nothing to strip", function()
+    assert.equals("DELETE FROM t WHERE id = 1", strip("DELETE FROM t WHERE id = 1"))
+  end)
 end)
 
 describe("dml_guard scan_text", function()

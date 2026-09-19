@@ -18,7 +18,19 @@ local preview = require("poste-db.buffer.nav_preview")
 local const = require("poste-db.constants")
 
 local M = {}
-local show_float_win = nil
+local show_float_win, show_float_buf = nil, nil
+
+--- Wipe the tracked DDL/info float (and its buffer) so repeated look-ups neither
+--- stack windows nor leak one preview buffer per call.
+local function close_show_float()
+  if show_float_win and vim.api.nvim_win_is_valid(show_float_win) then
+    pcall(vim.api.nvim_win_close, show_float_win, true)
+  end
+  if show_float_buf and vim.api.nvim_buf_is_valid(show_float_buf) then
+    pcall(vim.api.nvim_buf_delete, show_float_buf, { force = true })
+  end
+  show_float_win, show_float_buf = nil, nil
+end
 
 ---------------------------------------------------------------------------
 -- Float window
@@ -34,18 +46,21 @@ function M.show_float(lines, title, ft)
     return
   end
 
+  -- The previous float is replaced, not re-focused: looking up a second table
+  -- has to render the new DDL, not re-display the stale one.
+  close_show_float()
+
   -- Use the shared cell-preview float: native buffer navigation for scrolling
   -- and editor-anchored sizing, so a small source/dataset window can't squash
   -- the DDL/info popup (same treatment as the dataset K preview).
   local float_buf, win = preview.open_preview_float(title, table.concat(lines, "\n"), ft or "sql")
   if not float_buf or not win then return end
 
-  show_float_win = win
+  show_float_win, show_float_buf = win, float_buf
   vim.api.nvim_set_current_win(win)
 
   local close_fn = function()
-    if vim.api.nvim_win_is_valid(win) then vim.api.nvim_win_close(win, true) end
-    show_float_win = nil
+    close_show_float()
   end
   local sopts = { buffer = float_buf, noremap = true, silent = true }
   local ck = config.get_keymap("sql_introspect", "close", "q")
@@ -59,11 +74,6 @@ end
 
 --- Show DDL for the table under the cursor in a floating window.
 function M.show_table_ddl()
-  if show_float_win and vim.api.nvim_win_is_valid(show_float_win) then
-    vim.api.nvim_set_current_win(show_float_win)
-    return
-  end
-
   local binary = state.find_poste_binary()
   if not binary then
     vim.notify("Poste binary not found.", vim.log.levels.ERROR, { title = const.PLUGIN_TITLE })

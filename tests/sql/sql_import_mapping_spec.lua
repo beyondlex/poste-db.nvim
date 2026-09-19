@@ -55,6 +55,29 @@ describe("import mapping coerce_value", function()
     assert.equals("abc", mapping.coerce_value("abc", "int"))
     assert.equals("2026-01-02", mapping.coerce_value("2026-01-02", "date"))
   end)
+
+  it("keeps digits a double cannot hold", function()
+    -- a double has 53 bits of mantissa: parsing these moves their own digits,
+    -- so the cell stays text and dml emits the exact digits it was given
+    assert.equals("9050341234567890123",
+      mapping.coerce_value("9050341234567890123", "bigint"))
+    assert.equals("2084515900853196878",
+      mapping.coerce_value("2084515900853196878", "int8"))
+    assert.equals(4503599627370496, mapping.coerce_value("4503599627370496", "bigint"),
+      "within 2^52 the number survives and still coerces")
+  end)
+
+  it("lets the column type decide what a digit-string means", function()
+    -- `007` is the text 007 in a varchar column and the number 7 in an int
+    -- column; coercing unconditionally rewrote the former (and emitted it bare)
+    assert.equals("007", mapping.coerce_value("007", "varchar"))
+    assert.equals("1.50", mapping.coerce_value("1.50", "text"))
+    assert.equals("42", mapping.coerce_value("42", "character varying"))
+    assert.equals(7, mapping.coerce_value("007", "int"))
+    assert.equals(1.5, mapping.coerce_value("1.50", "numeric(10,2)"),
+      "suffixed type names are matched on their root word")
+    assert.equals(42, mapping.coerce_value("42", "INT4"), "dialect spellings normalize too")
+  end)
 end)
 
 describe("import mapping build_column_map", function()

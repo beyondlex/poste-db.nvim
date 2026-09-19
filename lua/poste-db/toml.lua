@@ -58,7 +58,88 @@ local function unescape_basic(s)
   end))
 end
 
-local function parse_value(v)
+local parse_value  -- forward: inline containers recurse into it
+
+--- Split a value body on a top-level delimiter, keeping quoted strings and
+--- nested `[...]`/`{...}` intact (so `["a,b", "c"]` splits into two items).
+local function split_top(s, sep)
+  local parts, buf = {}, {}
+  local depth, i, quote = 0, 1, nil
+  while i <= #s do
+    local ch = s:sub(i, i)
+    if quote then
+      table.insert(buf, ch)
+      if ch == "\\" and quote == '"' then
+        table.insert(buf, s:sub(i + 1, i + 1))
+        i = i + 2
+      elseif ch == quote then
+        quote = nil
+        i = i + 1
+      else
+        i = i + 1
+      end
+    elseif ch == '"' or ch == "'" then
+      quote = ch
+      table.insert(buf, ch)
+      i = i + 1
+    elseif ch == "{" or ch == "[" then
+      depth = depth + 1
+      table.insert(buf, ch)
+      i = i + 1
+    elseif ch == "}" or ch == "]" then
+      depth = depth - 1
+      table.insert(buf, ch)
+      i = i + 1
+    elseif ch == sep and depth == 0 then
+      table.insert(parts, table.concat(buf))
+      buf = {}
+      i = i + 1
+    else
+      table.insert(buf, ch)
+      i = i + 1
+    end
+  end
+  table.insert(parts, table.concat(buf))
+  return parts
+end
+
+--- Inline array (`[1, 2]`) / inline table (`{ to = "h", port = 2222 }`).
+--- Without these, `tunnel = { … }` — a shape tunnel.normalize_cfg documents —
+--- came back as the raw string and every tunneled connection failed to match.
+local function parse_container(v)
+  local is_array = v:sub(1, 1) == "["
+  local closer = is_array and "]" or "}"
+  if v:sub(-1, -1) ~= closer then
+    return nil, is_array and "Unclosed inline array" or "Unclosed inline table"
+  end
+  local body = v:sub(2, -2)
+  if is_array then
+    local out = {}
+    if trim(body) == "" then return out end
+    for _, part in ipairs(split_top(body, ",")) do
+      local item, err = parse_value(part)
+      if err then return nil, err end
+      if item ~= nil then table.insert(out, item) end
+    end
+    return out
+  end
+  local out = {}
+  if trim(body) == "" then return out end
+  for _, part in ipairs(split_top(body, ",")) do
+    local pair = trim(part)
+    if pair ~= "" then
+      local eq = pair:find("=", 1, true)
+      if not eq then return nil, "Invalid inline table entry" end
+      local key = parse_value(pair:sub(1, eq - 1))
+      local val, err = parse_value(pair:sub(eq + 1))
+      if err then return nil, err end
+      out[tostring(key)] = val
+    end
+  end
+  return out
+end
+
+parse_value = function(v)
   v = trim(strip_inline_comment(v))
   if v == "" then return nil end
   if v == "true" then return true end
@@ -74,6 +155,9 @@ local function parse_value(v)
   if v:sub(1, 1) == "'" then
     if v:sub(-1, -1) ~= "'" then return nil, "Unclosed single-quoted string" end
     return v:sub(2, -2)
+  end
+  if v:sub(1, 1) == "[" or v:sub(1, 1) == "{" then
+    return parse_container(v)
   end
   return v
 end

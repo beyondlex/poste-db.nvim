@@ -189,14 +189,15 @@ function M.get_cache() return cache end
 --- to force re-fetching on next completion.
 function M.clear_cache()
   cache_epoch = cache_epoch + 1
-  local key = M.conn_key()
-  if key then
-    cache[key] = nil
-    cache[key .. "/__databases__"] = nil
-    for k in pairs(cache) do
-      if k:find("^db:") then
-        cache[k] = nil
-      end
+  local ctx = M.resolve_current_context()
+  local conn = ctx and ctx.connection
+  if not conn then return end
+  -- Cache keys are `<conn>/<db>`, `<conn>/<db>/db:<name>` and
+  -- `<conn>/__databases__`. The old anchored `^db:` prefix matched none of
+  -- them, so every per-database table list survived a CREATE/DROP.
+  for k in pairs(cache) do
+    if k == conn or k:sub(1, #conn + 1) == conn .. "/" then
+      cache[k] = nil
     end
   end
 end
@@ -560,7 +561,12 @@ function M.ensure_columns(tbl, schema, callback)
       for _, item in ipairs(items) do
         table.insert(cols, item.name)
       end
-      cache[key].columns[cache_tbl_key] = cols
+      -- An empty list is not authoritative (same rule ensure_tables applies to
+      -- `#tables > 0`): caching one would blacklist the table from column
+      -- completion for the rest of the session.
+      if #cols > 0 then
+        cache[key].columns[cache_tbl_key] = cols
+      end
     end
     flush()
   end, nil)

@@ -22,6 +22,58 @@ end
 
 local word_wrap = layout.word_wrap
 
+--- Apply a `multi_select` pick to the current set, returning the new value as a
+--- list in `choices` order (so generated SQL is deterministic).
+local function apply_toggle(choices, current, picked)
+  local selected = {}
+  for _, c in ipairs(choices) do
+    if c == picked then
+      if not current[c] then table.insert(selected, c) end
+    elseif current[c] then
+      table.insert(selected, c)
+    end
+  end
+  return selected
+end
+
+--- A fresh row for a `list` field: each sub-field starts from ITS declared
+--- default (an empty-table default would otherwise throw away e.g.
+--- `value = "grant"`), deep-copied so entries never share a table.
+local function new_list_entry(sub_fields)
+  local entry = {}
+  for _, sf in ipairs(sub_fields or {}) do
+    local v = sf.value
+    if v == nil then
+      if sf.kind == "bool" then
+        v = false
+      elseif sf.kind == "multi_select" then
+        v = {}
+      else
+        v = ""
+      end
+    elseif type(v) == "table" then
+      v = vim.deepcopy(v)
+    end
+    entry[sf.key] = v
+  end
+  entry._collapsed = true
+  entry._summary = "new entry"
+  return entry
+end
+
+--- Values for one `list` entry, read from the entry itself. Falling back to the
+--- shared sub-field template only covers entries that predate a key — reading
+--- the template first would make every entry report identical values.
+local function entry_values(entry, sub_fields)
+  local e = {}
+  for _, sf in ipairs(sub_fields or {}) do
+    local v = entry[sf.key]
+    if v == nil then v = sf.value end
+    e[sf.key] = v
+  end
+  return e
+end
+
 local function to_display(field)
   if field.kind == "bool" then
     return field.value and "✓" or "✗"
@@ -270,11 +322,7 @@ function M.open(opts)
         if field.kind == "list" then
           local entries = {}
           for _, entry in ipairs(field.value or {}) do
-            local e = {}
-            for _, sf in ipairs(field.sub_fields or {}) do
-              e[sf.key] = sf.value
-            end
-            table.insert(entries, e)
+            table.insert(entries, entry_values(entry, field.sub_fields))
           end
           vals[field.key] = entries
         else
@@ -328,18 +376,15 @@ function M.open(opts)
       end
       editing = true
       vim.ui.select(items, {
-        prompt = f.label .. " (Space to toggle, Enter to confirm):",
+        prompt = f.label .. " (pick an item to toggle it, repeat for more):",
         format_item = function(item) return item.label end,
       }, function(choice)
         editing = false
         if closed or not choice then return end
-        local selected = {}
-        for _, c in ipairs(choices) do
-          if current[c] then
-            table.insert(selected, c)
-          end
-        end
-        f.value = selected
+        -- `choice` is the picked item; some vim.ui.select backends hand back the
+        -- formatted string instead of the table we built.
+        local picked = type(choice) == "table" and choice.value or choice
+        f.value = apply_toggle(choices, current, picked)
         if dlg.win and vim.api.nvim_win_is_valid(dlg.win) then
           vim.api.nvim_set_current_win(dlg.win)
           refresh()
@@ -350,12 +395,7 @@ function M.open(opts)
 
     if f.kind == "list" then
       if not f.sub_fields then return end
-      local entry = {}
-      for _, sf in ipairs(f.sub_fields) do
-        entry[sf.key] = (sf.kind == "bool" and false) or (sf.kind == "multi_select" and {}) or ""
-      end
-      entry._collapsed = true
-      entry._summary = "new entry"
+      local entry = new_list_entry(f.sub_fields)
       if not f.value then f.value = {} end
       table.insert(f.value, entry)
       rows, focusable = build_rows(sections, dialect)
@@ -499,5 +539,12 @@ function M.open(opts)
     end,
   })
 end
+
+--- Exposed for tests.
+M._test = {
+  apply_toggle = apply_toggle,
+  new_list_entry = new_list_entry,
+  entry_values = entry_values,
+}
 
 return M

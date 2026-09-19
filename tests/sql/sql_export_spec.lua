@@ -3,6 +3,8 @@
 
 local export = require("poste-db.export")
 
+--- results[1] of a response body: the bare column/row payload. The table name
+--- and dialect are NOT here — see the get_current_data block below.
 local function data_result(overrides)
   local base = {
     columns = { { name = "id" }, { name = "name" }, { name = "bio" } },
@@ -10,12 +12,15 @@ local function data_result(overrides)
       { 1, "Alice", "hello, world" },
       { 2, 'Bob "the" builder', nil },
     },
-    table_name = "users",
-    schema = "public",
-    dialect = "postgres",
     row_count = 2,
   }
   return vim.tbl_extend("force", base, overrides or {})
+end
+
+--- What the exporter derives from the body / tab, not from the result.
+local function info(overrides)
+  return vim.tbl_extend("force", { table_name = "users", schema = "public", dialect = "postgres" },
+    overrides or {})
 end
 
 describe("export format_csv", function()
@@ -87,30 +92,39 @@ end)
 
 describe("export format_sql_insert", function()
   it("emits INSERT with qualified quoted table and columns", function()
-    local out = export._test.format_sql_insert(data_result())
+    local out = export._test.format_sql_insert(data_result(), info())
     local lines = vim.split(out, "\n")
     assert.equals('INSERT INTO "public"."users" ("id", "name", "bio") VALUES (1, \'Alice\', \'hello, world\');', lines[1])
     assert.equals('INSERT INTO "public"."users" ("id", "name", "bio") VALUES (2, \'Bob "the" builder\', NULL);', lines[2])
   end)
 
   it("uses the quoted table name without schema when schema is empty", function()
-    local out = export._test.format_sql_insert(data_result({ schema = "" }))
+    local out = export._test.format_sql_insert(data_result(), info({ schema = "" }))
     assert.matches('^INSERT INTO "users" ', out)
   end)
 
   it("escapes single quotes in string values", function()
-    local out = export._test.format_sql_insert(data_result({ columns = { { name = "a" } }, rows = { { "it's" } } }))
+    local out = export._test.format_sql_insert(
+      data_result({ columns = { { name = "a" } }, rows = { { "it's" } } }), info())
     assert.equals("INSERT INTO \"public\".\"users\" (\"a\") VALUES ('it''s');", out)
   end)
 
   it("renders booleans as TRUE/FALSE", function()
-    local out = export._test.format_sql_insert(data_result({ columns = { { name = "a" } }, rows = { { true }, { false } } }))
+    local out = export._test.format_sql_insert(
+      data_result({ columns = { { name = "a" } }, rows = { { true }, { false } } }), info())
     assert.equals("INSERT INTO \"public\".\"users\" (\"a\") VALUES (TRUE);\nINSERT INTO \"public\".\"users\" (\"a\") VALUES (FALSE);", out)
   end)
 
   it("quotes identifiers with mysql backticks", function()
-    local out = export._test.format_sql_insert(data_result({ columns = { { name = "a" } }, rows = { { 1 } }, dialect = "mysql" }))
+    local out = export._test.format_sql_insert(
+      data_result({ columns = { { name = "a" } }, rows = { { 1 } } }), info({ dialect = "mysql" }))
     assert.equals("INSERT INTO `public`.`users` (`a`) VALUES (1);", out)
+  end)
+
+  it("falls back to a plain export table when the dataset names none", function()
+    local out = export._test.format_sql_insert(
+      data_result({ columns = { { name = "a" } }, rows = { { 1 } } }), {})
+    assert.equals('INSERT INTO "export" ("a") VALUES (1);', out)
   end)
 end)
 
@@ -143,14 +157,73 @@ describe("export sql_escape_val", function()
 end)
 
 describe("export generate_filename", function()
-  it("prefixes with the result table name and appends extension", function()
-    local name = export._test.generate_filename({ results = { { table_name = "users" } } }, ".csv")
+  it("prefixes with the dataset table name and appends extension", function()
+    local name = export._test.generate_filename({ table_name = "users" }, ".csv")
     assert.matches("^users_%d%d%d%d%d%d%d%d_%d%d%d%d%d%d%.csv$", name)
   end)
 
   it("falls back to export prefix when no table name", function()
-    local name = export._test.generate_filename({ results = {} }, ".json")
+    local name = export._test.generate_filename({}, ".json")
     assert.matches("^export_%d%d%d%d%d%d%d%d_%d%d%d%d%d%d%.json$", name)
+  end)
+
+  it("tolerates a missing info table", function()
+    local name = export._test.generate_filename(nil, ".md")
+    assert.matches("^export_", name)
+  end)
+end)
+
+describe("export get_current_data (response shape wiring)", function()
+  local dataset = require("poste-db.dataset")
+  local saved_tabs, saved_idx
+
+  before_each(function()
+    saved_tabs, saved_idx = dataset.tabs, dataset.active_tab_idx
+  end)
+  after_each(function()
+    dataset.tabs, dataset.active_tab_idx = saved_tabs, saved_idx
+  end)
+
+  -- The shape sql_runner/response.lua actually builds: identity fields on the
+  -- body, results[1] carrying nothing but columns/rows.
+  local function tab_from(body, layout, meta)
+    dataset.active_tab_idx = 1
+    dataset.tabs = { [1] = { data = body, layout = layout, meta = meta } }
+  end
+
+  it("reads table name and dialect off the response body", function()
+    tab_from({
+      type = "resultset",
+      results = { { columns = { { name = "id" } }, rows = { { 1 } } } },
+      table_name = "authors",
+      dialect = "mysql",
+    }, {}, {})
+    local result, got = export._test.get_current_data()
+    assert.equals(1, result.rows[1][1])
+    assert.same({ table_name = "authors", schema = nil, dialect = "mysql" }, got)
+  end)
+
+  it("falls back to the tab meta and layout, and JSON null away", function()
+    tab_from({
+      type = "resultset",
+      results = { { columns = {}, rows = {} } },
+      table_name = vim.NIL,
+      dialect = vim.NIL,
+    }, { table_name = "layout_tbl", dialect = "sqlite", schema = "main" }, { table_name = "meta_tbl" })
+    local _, got = export._test.get_current_data()
+    assert.same({ table_name = "meta_tbl", schema = "main", dialect = "sqlite" }, got)
+  end)
+
+  it("names the source table in the generated INSERT, not `export`", function()
+    tab_from({
+      type = "resultset",
+      results = { { columns = { { name = "id" } }, rows = { { 7 } } } },
+      table_name = "authors",
+      dialect = "mysql",
+    }, {}, {})
+    local result, current = export._test.get_current_data()
+    assert.equals("INSERT INTO `authors` (`id`) VALUES (7);",
+      export._test.format_sql_insert(result, current))
   end)
 end)
 

@@ -27,6 +27,25 @@ describe("db_browser copy_ddl quote_value", function()
   it("falls back to NULL when a table cannot be encoded", function()
     assert.equals("NULL", ddl_mod.quote_value({ fn = function() end }))
   end)
+
+  it("doubles backslashes only for the dialects that read them as escapes", function()
+    -- Regression: quote_value had no dialect, so a `a\b` value was sent raw —
+    -- MySQL/MariaDB/ClickHouse swallowed the next character and stored `ab`.
+    assert.equals([['a\\b']], ddl_mod.quote_value("a\\b", "mysql"))
+    assert.equals([['a\\b']], ddl_mod.quote_value("a\\b", "mariadb"))
+    assert.equals([['a\\b']], ddl_mod.quote_value("a\\b", "clickhouse"))
+    assert.equals([['a\b']], ddl_mod.quote_value("a\\b", "postgres"))
+    assert.equals([['a\b']], ddl_mod.quote_value("a\\b", "sqlite"))
+    assert.equals([['a\b']], ddl_mod.quote_value("a\\b"))
+  end)
+
+  it("escapes the JSON encoding of a nested value the same way", function()
+    -- json.encode already escapes the backslash; the dialect layer doubles
+    -- that pair again, which is what a MySQL literal needs
+    assert.equals([['{"s":"a\\\\b"}']], ddl_mod.quote_value({ s = "a\\b" }, "mysql"))
+    assert.equals([['{"s":"a\\b"}']], ddl_mod.quote_value({ s = "a\\b" }, "postgres"))
+    assert.equals([['{"s":"it''s"}']], ddl_mod.quote_value({ s = "it's" }, "postgres"))
+  end)
 end)
 
 describe("db_browser copy_ddl result field extraction", function()
@@ -66,6 +85,15 @@ describe("db_browser copy_ddl extract_schema_from_ddl", function()
 
   it("returns nil for mysql regardless of the header", function()
     assert.is_nil(ddl_mod.extract_schema_from_ddl(qualified, "posts", "mysql"))
+  end)
+
+  it("treats the table name as text, not as a match pattern", function()
+    -- Regression: the name was concatenated into the pattern, so `%a` (any
+    -- letter) and `.` (any char) matched a *different* table's header — and
+    -- the schema came back for a table the copy is not about.
+    assert.is_nil(ddl_mod.extract_schema_from_ddl('CREATE TABLE "public"."posts_x" (', "posts%a", "postgres"))
+    assert.is_nil(ddl_mod.extract_schema_from_ddl('CREATE TABLE "public"."axb" (', "a.b", "postgres"))
+    assert.equals("public", ddl_mod.extract_schema_from_ddl('CREATE TABLE "public"."a.b" (', "a.b", "postgres"))
   end)
 end)
 
@@ -125,6 +153,20 @@ describe("db_browser copy_ddl prepare_table_ddl", function()
       'CREATE SEQUENCE IF NOT EXISTS "public"."posts_copy_id_seq" AS bigint;\n'
         .. 'CREATE TABLE "public"."posts_copy" (\n  "id" bigint DEFAULT nextval(\'public.posts_copy_id_seq\'::regclass)\n);',
       out)
+  end)
+
+  it("renames a sequence whose table name holds pattern magic", function()
+    -- Regression: the seq rename used the raw table name as a pattern, so
+    -- `pct%tbl` matched nothing: the copy got its own CREATE SEQUENCE while
+    -- its DEFAULT still pointed at the source sequence, and the two tables
+    -- handed out the same ids.
+    local ddl = 'CREATE TABLE "pct%tbl" (\n  "id" bigint DEFAULT nextval(\'pct%tbl_id_seq\'::regclass)\n);'
+    local out = ddl_mod.prepare_table_ddl(ddl, "pct%tbl_copy", "pct%tbl", nil, "postgres")
+    assert.equals(
+      'CREATE SEQUENCE IF NOT EXISTS "pct%tbl_copy_id_seq" AS bigint;\n'
+        .. 'CREATE TABLE "pct%tbl_copy" (\n  "id" bigint DEFAULT nextval(\'pct%tbl_copy_id_seq\'::regclass)\n);',
+      out)
+    assert.is_nil(out:find("'pct%tbl_id_seq'", 1, true))
   end)
 end)
 

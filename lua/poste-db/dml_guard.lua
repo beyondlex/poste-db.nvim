@@ -169,16 +169,93 @@ function M.snippet(text, max)
   return s
 end
 
---- Strip comments and quoted literals so keyword scanning is not fooled by
---- `-- where` comments or a WHERE token inside a string value.
+--- Blank out quoted literals and comments so keyword scanning sees code only:
+--- a `where` inside a string is not a WHERE clause, and a `--` inside a string
+--- is not a comment. One pass with a small state machine — a gsub chain
+--- cannot get both directions right: stripping comments first lets a `--` in a
+--- literal swallow the rest of the batch (hiding a DELETE behind it), stripping
+--- literals first lets an apostrophe in a comment (`-- don't`) open a literal
+--- that erases real code. An unterminated literal or block comment runs to end
+--- of input, which is what the server does with it too. Newlines are kept so
+--- line structure survives for the callers that map back to the buffer.
 --- @param sql string
 --- @return string
-local function sanitize(sql)
-  return (sql:gsub("%-%-[^\n]*", " ")
-    :gsub("/%*.-%*/", " ")
-    :gsub("'[^']*'", " ")
-    :gsub('"[^"]*"', " ")
-    :gsub("`[^`]*`", " "))
+local QUOTE_STATE = { ["'"] = "squote", ['"'] = "dquote", ["`"] = "bquote" }
+local CLOSING_QUOTE = { squote = "'", dquote = '"', bquote = "`" }
+
+function M.strip_non_code(sql)
+  local out = {}
+  local i, n = 1, #sql
+  local state = "code"
+  while i <= n do
+    local c = sql:sub(i, i)
+    if state == "code" then
+      local nx = sql:sub(i + 1, i + 1)
+      if c == "-" and nx == "-" then
+        state, i = "line", i + 2
+      elseif c == "/" and nx == "*" then
+        state, i = "block", i + 2
+      elseif QUOTE_STATE[c] then
+        state, i = QUOTE_STATE[c], i + 1
+      else
+        i = i + 1
+      end
+      out[#out + 1] = (state == "code") and c or " "
+    elseif state == "line" then
+      out[#out + 1] = (c == "\n") and "\n" or " "
+      if c == "\n" then state = "code" end
+      i = i + 1
+    elseif state == "block" then
+      if c == "*" and sql:sub(i + 1, i + 1) == "/" then
+        state, i = "code", i + 2
+      else
+        out[#out + 1] = (c == "\n") and "\n" or " "
+        i = i + 1
+      end
+    else
+      local closing = CLOSING_QUOTE[state]
+      if c == "\\" and state ~= "bquote" then
+        i = i + 2 -- an escape consumes its next byte in every quoting style that honors it
+      elseif c == closing then
+        if sql:sub(i + 1, i + 1) == closing then
+          i = i + 2 -- doubled quote: still inside the literal
+        else
+          state, i = "code", i + 1
+        end
+      else
+        out[#out + 1] = (c == "\n") and "\n" or " "
+        i = i + 1
+      end
+    end
+  end
+  return table.concat(out)
+end
+
+--- The driving DML verb of a statement shell: the verb either opens the
+--- statement or follows a `WITH x AS, y AS` CTE naming chain (whose bodies are
+--- already gone with their parentheses). Anything before it must be naming, so
+--- an `ON UPDATE CASCADE` clause does not read as an UPDATE statement.
+---
+--- The verbs are scanned one at a time rather than with `%f[%w_](DELETE|UPDATE)`:
+--- LuaJIT's pattern matcher cannot combine a frontier pattern with a capture
+--- alternation (the match always fails), and Neovim ships Lua 5.1.
+--- @param shell string whitespace-collapsed, parenthesis-free statement text
+--- @return string|nil "delete"|"update"
+local DML_KEYWORDS = { "DELETE", "UPDATE" }
+
+local function dml_verb(shell)
+  local upper = shell:upper()
+  local pos, verb
+  for _, kw in ipairs(DML_KEYWORDS) do
+    local at = (upper:find("%f[%w_]" .. kw .. "%f[^%w_]"))
+    if at and (not pos or at < pos) then pos, verb = at, kw end
+  end
+  if not pos then return nil end
+  local prefix = upper:sub(1, pos - 1)
+  if prefix:match("^%s*$") or prefix:match("^%s*WITH[%w_%s,]*$") then
+    return verb:lower()
+  end
+  return nil
 end
 
 --- Regex fallback for `scan_text`: split on `;`, flag DELETE/UPDATE chunks
@@ -189,21 +266,13 @@ end
 function M.regex_scan(sql)
   local hits = {}
   if not sql or #sql == 0 then return hits end
-  for chunk in (sanitize(sql) .. ";"):gmatch("[^;]*") do
-    local stmt = chunk:gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+  for chunk in (M.strip_non_code(sql) .. ";"):gmatch("[^;]*") do
+    local stmt = (chunk:gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", ""))
     if stmt ~= "" then
-      local upper = stmt:upper()
-      local kw
-      if upper:match("^DELETE%s") then
-        kw = "delete"
-      elseif upper:match("^UPDATE%s") then
-        kw = "update"
-      end
-      if kw then
-        local body = stmt:gsub("%b()", " ")
-        if body:upper():find("%sWHERE%s") == nil then
-          hits[#hits + 1] = { kind = kw, snippet = stmt }
-        end
+      local shell = (stmt:gsub("%b()", " "):gsub("%s+", " "))
+      local kind = dml_verb(shell)
+      if kind and not shell:upper():find("%sWHERE%s") then
+        hits[#hits + 1] = { kind = kind, snippet = stmt }
       end
     end
   end
@@ -270,7 +339,8 @@ M._test = {
   regex_scan = M.regex_scan,
   confirm_message = M.confirm_message,
   snippet = M.snippet,
-  sanitize = sanitize,
+  strip_non_code = M.strip_non_code,
+  dml_verb = dml_verb,
 }
 
 return M

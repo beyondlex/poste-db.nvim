@@ -110,3 +110,57 @@ describe("sql_log", function()
     end)
   end)
 end)
+
+describe("log.redact_url", function()
+  local log = require("poste-db.log")
+
+  it("covers a password that contains a slash", function()
+    -- The old `[^@/]+` class stopped at the '/' and left the whole DSN in the
+    -- journal verbatim.
+    assert.equals("postgres://u:***@h:5432/db", log.redact_url("postgres://u:pa/ss@h:5432/db"))
+    assert.equals("mysql://u:***@h/db", log.redact_url("mysql://u:p@ss@w@h/db"))
+  end)
+
+  it("redacts credentials carried in the query string", function()
+    assert.equals("postgres://h:5432/db?password=***&sslmode=disable",
+      log.redact_url("postgres://h:5432/db?password=hunter2&sslmode=disable"))
+    assert.equals("https://api.h/reset?token=***", log.redact_url("https://api.h/reset?token=abc123"))
+  end)
+
+  it("redacts key=value DSNs (libpq and ODBC spellings)", function()
+    assert.equals("connection failed for host=h user=root password=***",
+      log.redact_url("connection failed for host=h user=root password=hunter2"))
+    assert.equals("Driver={x};server=h;pwd=***",
+      log.redact_url("Driver={x};server=h;Pwd=hunter2"))
+    assert.equals("password=***", log.redact_url("password=hunter2"))
+  end)
+
+  it("leaves SQL and non-credential URLs intact", function()
+    assert.equals([[UPDATE t SET password='hunter2' WHERE id=1]],
+      log.redact_url([[UPDATE t SET password='hunter2' WHERE id=1]]))
+    assert.equals("SET token = 1", log.redact_url("SET token = 1"))
+    assert.equals("SELECT 1;token=2", log.redact_url("SELECT 1;token=2"))
+    assert.equals("postgres://localhost:5432/db?user=a@b",
+      log.redact_url("postgres://localhost:5432/db?user=a@b"))
+    assert.equals("pg://u@h/db", log.redact_url("pg://u@h/db"))
+  end)
+
+  it("redacts a DSN that appears anywhere in a longer message", function()
+    assert.equals("exec-file /tmp/x.sql --connection postgres://u:***@h/db --mode greedy",
+      log.redact_url("exec-file /tmp/x.sql --connection postgres://u:pw@h/db --mode greedy"))
+  end)
+
+  it("passes non-strings through", function()
+    assert.same(7, log.redact_url(7))
+    assert.same(vim.NIL, log.redact_url(vim.NIL))
+  end)
+
+  it("keeps a query-string DSN out of the journal file", function()
+    local path = vim.fn.tempname() .. ".jsonl"
+    sql_log.set_log_path(path)
+    sql_log.record({ source = "exec", connection = "postgres://h:5432/db?password=hunter2" })
+    local line = vim.fn.readfile(path)[1]
+    assert.is_nil(line:find("hunter2", 1, true))
+    assert.matches("password=%*%*%*", line)
+  end)
+end)

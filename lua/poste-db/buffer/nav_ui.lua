@@ -125,7 +125,7 @@ function M.build_status_left(meta, tab)
     local col_name = meta.columns and meta.columns[tab.sort.col] and meta.columns[tab.sort.col].name
     if col_name then
       local arrow = tab.sort.ascending and " ↑" or " ↓"
-      left = left .. "   " .. col_name .. arrow
+      left = left .. "   " .. statusline_escape(col_name) .. arrow
     end
   end
 
@@ -141,18 +141,21 @@ function M.build_status_left(meta, tab)
   if tab and tab.filter_active and tab.filter_col_name then
     local fv = tab.filter_val
     local fvs = (fv == nil or fv == vim.NIL) and "NULL" or tostring(fv)
+    -- Column names and filter values come from the data, so a `%` in them must
+    -- not reach the statusline as a format item.
     left = left .. string.format("  %sfilter: %s=%s%s",
-      "%#PosteDbDatasetFilterActive#", tab.filter_col_name, fvs, "%#PosteDbDatasetMeta#")
+      "%#PosteDbDatasetFilterActive#", statusline_escape(tab.filter_col_name),
+      statusline_escape(fvs), "%#PosteDbDatasetMeta#")
   end
 
   if tab and tab.search_text and tab.search_matches and #tab.search_matches > 0 then
     local cnt = string.format("%d/%d", tab.search_idx or 0, #tab.search_matches)
-    local info = tab.search_text .. " (" .. cnt .. ")"
+    local info = statusline_escape(tab.search_text) .. " (" .. cnt .. ")"
     left = left .. string.format("  %ssearch: %s%s",
       "%#PosteDbDatasetSearchActive#", info, "%#PosteDbDatasetMeta#")
   elseif tab and tab.search_text then
     left = left .. string.format("  %ssearch: %s (0)%s",
-      "%#PosteDbDatasetSearchActive#", tab.search_text, "%#PosteDbDatasetMeta#")
+      "%#PosteDbDatasetSearchActive#", statusline_escape(tab.search_text), "%#PosteDbDatasetMeta#")
   end
 
   return left
@@ -174,7 +177,8 @@ function M.build_status_right(meta, total_tabs, active_idx, pending)
     local label = meta.table_name or ("result " .. active_idx)
     local next_k = config.get_keymap("sql_dataset", "next_tab", "<Tab>")
     local prev_k = config.get_keymap("sql_dataset", "prev_tab", "<S-Tab>")
-    right = right .. string.format("[%d/%d: %s] (%s/%s) ", active_idx, total_tabs, label, prev_k, next_k)
+    right = right .. string.format("[%d/%d: %s] (%s/%s) ", active_idx, total_tabs,
+      statusline_escape(tostring(label)), statusline_escape(prev_k), statusline_escape(next_k))
   end
 
   return right

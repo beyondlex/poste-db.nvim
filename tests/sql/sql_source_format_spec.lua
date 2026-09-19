@@ -155,3 +155,28 @@ describe("source_format format_text", function()
     assert.matches("No SQL formatter found", err or "")
   end)
 end)
+
+describe("source_format conform registration", function()
+  local saved_conform = package.loaded["conform"]
+
+  after_each(function() package.loaded["conform"] = saved_conform end)
+
+  it("publishes the per-filetype mapping conform actually reads", function()
+    local conform = { formatters = {}, formatters_by_ft = {} }
+    package.loaded["conform"] = conform
+    sf.setup_conform()
+    -- conform reads formatters_by_ft; the old writer put the functions in
+    -- formatters.by_ft, a slot nothing ever looked at
+    assert.is_function(conform.formatters_by_ft.poste_sql)
+    assert.is_function(conform.formatters_by_ft.poste_sqlite)
+    assert.is_nil(conform.formatters.by_ft)
+  end)
+
+  it("leaves a user-provided mapping alone", function()
+    local mine = function() return { "sqlfluff" } end
+    local conform = { formatters = {}, formatters_by_ft = { poste_sql = mine } }
+    package.loaded["conform"] = conform
+    sf.setup_conform()
+    assert.equals(mine, conform.formatters_by_ft.poste_sql)
+  end)
+end)

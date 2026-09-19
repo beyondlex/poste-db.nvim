@@ -45,8 +45,10 @@ end
 --- Re-render the browser tree from `context` and sync the line map.
 function M.render_tree(context)
   local tree = require("poste-db.db_browser.tree")
+  -- multi_select must ride along: without it the ▣ markers vanish while the
+  -- selection itself stays active, so the view lies about what `p` will paste.
   local new_map = tree.render_tree(context.browser_buf, context.line_to_node,
-    context.root_nodes, context.conn_label)
+    context.root_nodes, context.conn_label, context.multi_select)
   M.set_line_map(context.line_to_node, new_map)
 end
 
@@ -82,6 +84,13 @@ function M.refresh_subtree(target_node, context, node_type, search_dir)
       M.render_tree(context)
     end)
   end, search_dir or vim.fn.getcwd())
+end
+
+--- Drop the completion schema cache after browser-side DDL. The browser
+--- executes outside the SQL runner's response hook, so without this completion
+--- keeps offering dropped tables (and misses created ones).
+function M.invalidate_completion_cache()
+  pcall(function() require("poste-db.completion.data").clear_cache() end)
 end
 
 --- Execute a DDL statement through exec_run, report the outcome, and refresh
@@ -127,6 +136,7 @@ function M.run_ddl_and_refresh(sql, conn_name, context, opts)
         vim.notify(opts.fail_prefix .. " failed:\n" .. msg, vim.log.levels.ERROR)
       else
         notify.info(opts.success_msg)
+        M.invalidate_completion_cache()
       end
       M.refresh_subtree(opts.target_node, context, opts.node_type)
     end,

@@ -23,14 +23,8 @@ function M.check()
   local binary = state.find_poste_binary()
   if binary then
     ok("poste binary: " .. binary)
-    local handle = io.popen('"' .. binary .. '" --version 2>/dev/null')
-    if handle then
-      local version = handle:read("*a"):gsub("%s+$", "")
-      handle:close()
-      if version ~= "" then
-        ok("poste version: " .. version)
-      end
-    end
+    local version = state.poste_version(binary)
+    if version then ok("poste version: " .. version) end
   else
     error("poste binary not found — run :PosteInstall or set vim.g.poste_binary")
   end

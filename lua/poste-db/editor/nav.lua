@@ -39,7 +39,8 @@ end
 
 --- Check if a row index is a data row (not header/border).
 --- @param tab table Tab state
---- @param row_idx number 1-based buffer line index
+--- @param row_idx number 1-based row WITHIN THE RENDERED PAGE (what
+---   `state.cell.row` holds — clamped to `meta.row_count`)
 --- @return boolean
 function M.is_data_row(tab, row_idx)
   if not tab or not tab.meta then return false end
@@ -47,6 +48,16 @@ function M.is_data_row(tab, row_idx)
   if meta.type ~= "resultset" then return false end
   if not meta.row_count then return false end
   return row_idx >= 1 and row_idx <= meta.row_count
+end
+
+--- Page-visible row → index into `layout.rows` / `rows_source`.
+--- The two spaces only coincide on page 1 of an unfiltered, unsorted view;
+--- editing a filtered or paged result set used to write the visible index
+--- into the source arrays, so the commit targeted a different row than the
+--- one on screen.
+local function to_source_row(tab, visible_row)
+  local fmt = require("poste-db.format")
+  return fmt.source_row_of(tab.meta, visible_row) or visible_row
 end
 
 ---------------------------------------------------------------------------
@@ -63,6 +74,8 @@ end
 local function apply_cell_edit(row_idx, col_idx, new_val)
   local tab = get_dataset().T()
   if not tab or not tab.layout then return end
+  -- `row_idx` is a SOURCE row (see to_source_row): edit_state keys, layout.rows
+  -- and rows_source all live in that space, which dml.generate_dml reads.
 
   local es = ensure_edit_state(tab)
   local row_key = tostring(row_idx) .. ":" .. tostring(col_idx)
@@ -94,16 +107,18 @@ local function apply_cell_edit(row_idx, col_idx, new_val)
   -- Clear any previous error for this cell
   cell.clear_cell_error(es, row_key)
 
-  -- Re-render the buffer line
+  -- Re-render the buffer line (a source row off this page has no line to fix)
   local buf = get_dataset().dataset_buffer
   if buf and vim.api.nvim_buf_is_valid(buf) and tab.padded and tab.meta then
     local meta = tab.meta
-    if meta.data_start_line then
-      local line_idx = meta.data_start_line + row_idx - 1
-      local fmt = require("poste-db.format")
+    local fmt = require("poste-db.format")
+    local visible = fmt.visible_row_of(meta, row_idx)
+    if meta.data_start_line and visible then
+      local line_idx = meta.data_start_line + visible - 1
       local row = tab.rows_source and tab.rows_source[row_idx] or tab.layout.rows[row_idx]
       if row then
-        local new_line = fmt.render_row(row, tab.layout, #tostring(row_idx))
+        local new_line = fmt.render_row(row, tab.layout,
+          fmt.row_number_of(meta, visible) or row_idx)
         if new_line then
           -- Update padded table
           if tab.padded[line_idx] then
@@ -277,9 +292,12 @@ function M.edit_cell()
     return
   end
 
-  local old_val = tab.layout.rows[row_idx][col_idx]
+  -- handlers work in source-row space: that is what edit_state keys and
+  -- apply_cell_edit record
+  local src_row = to_source_row(tab, row_idx)
+  local old_val = tab.layout.rows[src_row][col_idx]
   local handler = cell_editors[M.detect_cell_type(col_meta)]
-  handler(row_idx, col_idx, col_meta, old_val)
+  handler(src_row, col_idx, col_meta, old_val)
 end
 
 --- Delete the current row.
@@ -293,7 +311,7 @@ function M.delete_row()
   if not M.is_data_row(tab, row_idx) then return end
 
   local es = ensure_edit_state(tab)
-  cell.track_row_delete(es, row_idx)
+  cell.track_row_delete(es, to_source_row(tab, row_idx))
 
   -- Visual feedback: strikethrough the line
   local buf = get_dataset().dataset_buffer
@@ -342,12 +360,13 @@ function M.insert_row()
     -- Re-apply edit highlights (green for added row)
     local sql_highlights = require("poste-db.highlights")
     sql_highlights.apply_edit_highlights(buf, tab)
-    -- Move cursor to new row if visible
-    if new_row_idx <= meta.row_count then
-      get_state().sql.cell.row = new_row_idx
-      local line_idx = meta.data_start_line + new_row_idx - 1
+    -- Move cursor to the new row when this page renders it
+    local visible = sql_format.visible_row_of(meta, new_row_idx)
+    if visible then
+      get_state().cell.row = visible
+      local line_idx = meta.data_start_line + visible - 1
       pcall(vim.api.nvim_win_set_cursor, get_dataset().dataset_window, { line_idx, 0 })
-      sql_highlights.highlight_cell(buf, new_row_idx, get_state().sql.cell.col or 1, meta)
+      sql_highlights.highlight_cell(buf, visible, get_state().cell.col or 1, meta)
     end
   end
 

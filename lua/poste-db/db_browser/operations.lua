@@ -51,7 +51,8 @@ function M.select_star(node, context)
   local conn = get_connection_name(table_node, context)
 
   local query_lines, cursor_offset = build_directive_lines(table_node, conn)
-  table.insert(query_lines, "SELECT * FROM " .. qualified_table_ref(table_node, dialect) .. " LIMIT 100;")
+  table.insert(query_lines,
+    ops_sql.select_star_sql(qualified_table_ref(table_node, dialect), dialect))
   table.insert(query_lines, "")
 
   if insert_into_source(context, query_lines, cursor_offset) then
@@ -203,13 +204,7 @@ function M.rename(node, context)
         cursor_offset = cursor_offset + 1
       end
 
-      if dialect == "mysql" then
-        table.insert(lines, "RENAME TABLE " .. ident.quote(node.name, dialect) .. " TO " .. ident.quote(input, dialect) .. ";")
-      elseif dialect == "sqlite" then
-        table.insert(lines, "ALTER TABLE " .. ident.quote(node.name, dialect) .. " RENAME TO " .. ident.quote(input, dialect) .. ";")
-      else
-        table.insert(lines, "ALTER TABLE " .. ident.quote(node.name, dialect) .. " RENAME TO " .. ident.quote(input, dialect) .. ";")
-      end
+      table.insert(lines, ops_sql.rename_table_sql(node, input, dialect))
     elseif node.node_type == "column" then
       local table_node = find_table_node(context, vim.fn.line(".") - HEADER_LINES)
       if not table_node then
@@ -224,14 +219,7 @@ function M.rename(node, context)
         table.insert(lines, "-- @database " .. table_node.meta.database)
         cursor_offset = cursor_offset + 1
       end
-      if dialect == "mysql" then
-        local col_type = node.meta and node.meta.col_type or "TEXT"
-        table.insert(lines, "ALTER TABLE " .. ident.quote(table_node.name, dialect)
-          .. " CHANGE COLUMN " .. ident.quote(node.name, dialect) .. " " .. ident.quote(input, dialect) .. " " .. col_type .. ";")
-      else
-        table.insert(lines, "ALTER TABLE " .. ident.quote(table_node.name, dialect)
-          .. " RENAME COLUMN " .. ident.quote(node.name, dialect) .. " TO " .. ident.quote(input, dialect) .. ";")
-      end
+      table.insert(lines, ops_sql.rename_column_sql(table_node, node, input, dialect))
     end
 
     table.insert(lines, "")
@@ -653,22 +641,30 @@ function M.update_template(node, context)
   local conn = get_connection_name(table_node, context)
 
   local pk_cols = {}
-  local set_cols = {}
+  local set_lines = {}
   for _, c in ipairs(cols) do
     if c.is_pk then
       table.insert(pk_cols, ident.quote(c.name, dialect))
     else
-      table.insert(set_cols, "  " .. ident.quote(c.name, dialect) .. " = 'val'")
+      table.insert(set_lines, "  " .. ident.quote(c.name, dialect) .. " = 'val'")
+    end
+  end
+  -- A table whose every column is part of the key has nothing to SET but the
+  -- key itself. Emit that rather than a `SET` line with no assignments: the
+  -- comma was stripped from whatever the last line happened to be, which
+  -- truncated the bare `SET` keyword to `SE`.
+  if #set_lines == 0 then
+    for _, pk in ipairs(pk_cols) do
+      table.insert(set_lines, "  " .. pk .. " = ?")
     end
   end
 
   local lines, cursor_offset = build_directive_lines(table_node, conn)
   table.insert(lines, "UPDATE " .. qualified_table_ref(table_node, dialect))
   table.insert(lines, "SET")
-  for _, sc in ipairs(set_cols) do table.insert(lines, sc .. ",") end
-  -- Remove trailing comma from last SET column
-  local last = lines[#lines]
-  lines[#lines] = last:sub(1, -2)
+  for i, sc in ipairs(set_lines) do
+    table.insert(lines, i < #set_lines and (sc .. ",") or sc)
+  end
   if #pk_cols > 0 then
     table.insert(lines, "WHERE " .. table.concat(pk_cols, " = ? AND ") .. " = ?;")
   else

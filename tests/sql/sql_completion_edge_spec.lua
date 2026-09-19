@@ -65,3 +65,53 @@ describe("resolve_current_context / conn_key", function()
     assert.equals("analytics", ctx.database)
   end)
 end)
+
+----------------------------------------------------------------------
+-- Directive completion (`-- @connection` / `-- @database`)
+----------------------------------------------------------------------
+describe("directive completion", function()
+  local handlers = require("poste-db.completion.handlers")
+  local data = require("poste-db.completion.data")
+  local orig_conn, orig_db
+
+  local function directives(line)
+    local out
+    handlers.handle_directives(line, function(items) out = items end)
+    return out or {}
+  end
+
+  local function labels(items)
+    local out = {}
+    for _, i in ipairs(items) do out[#out + 1] = i.label end
+    table.sort(out)
+    return out
+  end
+
+  before_each(function()
+    orig_conn, orig_db = data.ensure_conn_names, data.ensure_databases
+    data.ensure_conn_names = function(cb) cb({ "pg-dev", "pg-blog" }) end
+    data.ensure_databases = function(cb) cb({ "blog", "shop" }) end
+  end)
+  after_each(function()
+    data.ensure_conn_names, data.ensure_databases = orig_conn, orig_db
+  end)
+
+  it("lists every connection for a bare `-- @connection`", function()
+    -- Regression: the bare form matched `@connection$`, which has no capture,
+    -- so match() handed the directive word itself back as the filter and no
+    -- connection name starts with `@` — the empty list arrived exactly when
+    -- the user still had to type the name.
+    assert.same({ "pg-blog", "pg-dev" }, labels(directives("-- @connection")))
+    assert.same({ "pg-blog", "pg-dev" }, labels(directives("-- @connection ")))
+  end)
+
+  it("keeps filtering a typed connection prefix", function()
+    assert.same({ "pg-blog" }, labels(directives("-- @connection pg-bl")))
+    assert.same({}, labels(directives("-- @connection zz")))
+  end)
+
+  it("lists databases for a bare `-- @database`", function()
+    assert.same({ "blog", "shop" }, labels(directives("-- @database")))
+    assert.same({ "blog" }, labels(directives("-- @database b")))
+  end)
+end)

@@ -353,7 +353,7 @@ local function copy_data_cross_server(source, target, schema, table_name, target
         local row = rows[i]
         local vals = {}
         for j = 1, #row do
-          table.insert(vals, quote_value(row[j]))
+          table.insert(vals, quote_value(row[j], source.dialect))
         end
         table.insert(value_groups, "(" .. table.concat(vals, ", ") .. ")")
       end

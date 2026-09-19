@@ -5,6 +5,7 @@ local dataset = require("poste-db.dataset")
 -- `wutil`, not `width`: pad/wrap helpers below take a `width` parameter and
 -- would shadow the module binding (luacheck W431).
 local wutil = require("poste-db.width")
+local log = require("poste-db.log")
 local M = {}
 
 --- Normalized numeric ctypes (see normalize_type) eligible for right-alignment
@@ -467,7 +468,7 @@ function M.format_dataset(r)
       "",
       "  Context switched to: " .. (data.database_name or "???"),
       "",
-      string.format("  Connection: %s", data.connection or ""),
+      string.format("  Connection: %s", log.redact_url(data.connection or "")),
       string.format("  Dialect:    %s", data.dialect or ""),
       "",
     }
@@ -640,9 +641,11 @@ function M.render_page(layout, page, page_size)
   lines[line_num] = border_line(col_widths, "├", "┼", "┤", "─")
 
   local row_col_starts = {}
+  local row_sources = {}
   local data_start = line_num + 1
   for row_idx = start_idx, end_idx do
     line_num = line_num + 1
+    row_sources[#row_sources + 1] = row_idx
     local cells = { tostring(row_idx) }
     for i = 1, #columns do
       cells[i + 1] = cell_to_string(rows[row_idx][i], columns[i])
@@ -684,6 +687,7 @@ function M.render_page(layout, page, page_size)
     dialect = layout.dialect,
     table_name = layout.table_name,
     col_starts = row_col_starts,
+    row_sources = row_sources,
     header_col_starts = header_col_starts,
   }
 
@@ -733,11 +737,15 @@ function M.render_view(layout, view_indices, page, page_size, opts)
   lines[line_num] = border_line(col_widths, "├", "┼", "┤", "─")
 
   local row_col_starts = {}
+  local row_sources = {}
+  local row_numbers = {}
   local data_start = line_num + 1
   for view_pos = start_pos, end_pos do
     line_num = line_num + 1
     local src_idx = view_indices[view_pos]
     local row_num = (row_number_mode == "view") and view_pos or src_idx
+    row_sources[#row_sources + 1] = src_idx
+    row_numbers[#row_numbers + 1] = row_num
     local cells = { tostring(row_num) }
     for i = 1, #columns do
       cells[i + 1] = cell_to_string(rows[src_idx][i], columns[i])
@@ -768,6 +776,8 @@ function M.render_view(layout, view_indices, page, page_size, opts)
     dialect = layout.dialect,
     table_name = layout.table_name,
     col_starts = row_col_starts,
+    row_sources = row_sources,
+    row_numbers = row_numbers,
     header_col_starts = header_col_starts,
   }
 
@@ -802,10 +812,41 @@ function M.format_resultset(data)
   return lines, meta, layout
 end
 
---- Format a SQL error response.
---- @param err string Error message
---- @param connection string Connection info
---- @return string[] lines
+--- A rendered page numbers its rows by their position on screen, while the
+--- row DATA lives in `layout.rows` / `rows_source` at source indices, and the
+--- `#` column may show either (row_number_mode). `meta.row_sources` /
+--- `meta.row_numbers` record what each rendered line holds; a meta without
+--- them (rendered elsewhere, or before this bookkeeping) maps identity.
+--- @param meta DatasetMeta from render_page/render_view
+--- @param visible_row number 1-based row within the rendered page
+--- @return number|nil index into layout.rows, nil when off this page
+function M.source_row_of(meta, visible_row)
+  if not meta then return nil end
+  if not meta.row_sources then return visible_row end
+  return meta.row_sources[visible_row]
+end
+
+--- @param meta DatasetMeta
+--- @param source_row number index into layout.rows
+--- @return number|nil 1-based row within the rendered page, nil when off it
+function M.visible_row_of(meta, source_row)
+  if not meta then return nil end
+  if not meta.row_sources then return source_row end
+  for i, s in ipairs(meta.row_sources) do
+    if s == source_row then return i end
+  end
+  return nil
+end
+
+--- @param meta DatasetMeta
+--- @param visible_row number
+--- @return number|nil the number shown in the `#` column for that line
+function M.row_number_of(meta, visible_row)
+  if not meta then return nil end
+  if meta.row_numbers then return meta.row_numbers[visible_row] end
+  return M.source_row_of(meta, visible_row)
+end
+
 --- Render a single data row as a formatted line.
 --- @param row table Row data array
 --- @param layout table Layout with columns, col_widths, numeric_cols
@@ -845,14 +886,20 @@ local function wrap_text(text, width)
   return lines
 end
 
+--- Format a SQL error response.
+--- @param err string Error message
+--- @param connection string Connection info
+--- @return string[] lines
 function M.format_error(err, connection)
-  local wrapped = wrap_text(err, 78)
+  -- A driver error can echo the DSN it failed on, so the message is redacted
+  -- too — the panel is user-visible and the journal already is.
+  local wrapped = wrap_text(log.redact_url(err), 78)
   local lines = { "", "  ✗ SQL Error", "" }
   for _, l in ipairs(wrapped) do
     table.insert(lines, "  " .. l)
   end
   table.insert(lines, "")
-  table.insert(lines, "  Connection: " .. (connection or "unknown"))
+  table.insert(lines, "  Connection: " .. log.redact_url(connection or "unknown"))
   table.insert(lines, "")
   return lines
 end

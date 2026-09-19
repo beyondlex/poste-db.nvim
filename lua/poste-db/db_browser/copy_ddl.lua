@@ -12,25 +12,17 @@ function M.has_value(v)
   return v ~= nil and v ~= vim.NIL
 end
 
-function M.quote_value(val)
-  if not M.has_value(val) then
-    return "NULL"
-  end
-  local t = type(val)
-  if t == "number" then
-    return tostring(val)
-  elseif t == "boolean" then
-    return val and "TRUE" or "FALSE"
-  elseif t == "string" then
-    return "'" .. val:gsub("'", "''") .. "'"
-  elseif t == "table" then
+--- SQL literal for one copied value. `dialect` selects the escaping rules, so
+--- it has to reach ident.quote_literal: MySQL/MariaDB/ClickHouse read `\`
+--- inside '…' as an escape, and a value containing a backslash (a JSON column
+--- encodes nested quotes as `\"`) arrived mangled without it.
+function M.quote_value(val, dialect)
+  if type(val) == "table" then
     local ok, json_str = pcall(vim.json.encode, val)
-    if ok then
-      return "'" .. json_str:gsub("'", "''") .. "'"
-    end
-    return "NULL"
+    if not ok then return "NULL" end
+    return ident.quote_literal(json_str, dialect)
   end
-  return "'" .. tostring(val):gsub("'", "''") .. "'"
+  return ident.quote_literal(val, dialect)
 end
 
 function M.extract_row_count(r)
@@ -57,11 +49,15 @@ function M.extract_schema_from_ddl(ddl, table_name, dialect)
   if dialect == "mysql" or dialect == "mariadb" then
     return nil
   end
+  -- The table name is data, not a pattern. Splicing it into the match let a
+  -- name with magic characters (`t%x`) or a dot (`a.b`) accept a DDL header
+  -- for a different table — and the schema it reported was then applied to
+  -- the wrong one.
+  local schema, rest = ddl:match('^CREATE TABLE "([^"]+)"%.(.*)')
+  if not schema then return nil end
   local quoted = '"' .. table_name .. '"'
-  local pattern = '^CREATE TABLE "([^"]+)"%.' .. quoted
-  local schema = ddl:match(pattern)
-  if schema then return schema end
-  return nil
+  if rest:sub(1, #quoted) ~= quoted then return nil end
+  return schema
 end
 
 function M.extract_sequences_from_ddl(ddl, schema)
@@ -119,7 +115,15 @@ function M.prepare_table_ddl(ddl, target_table_name, table_name, schema, dialect
   local q = function(n) return quote(n, dialect) end
   local seq_stmts = {}
   for _, seq_name in ipairs(sequences) do
-    local new_seq_name = seq_name:gsub(table_name, target_table_name)
+    -- pesc for the same reason as above: a sequence is named after its table,
+    -- so a table name that happens to hold pattern magic (`pct%tbl`) matched
+    -- nothing and the CREATE SEQUENCE was renamed while the DEFAULT still
+    -- pointed at the source sequence.
+    -- The inner gsub is parenthesised so its second return (the replacement
+    -- count) cannot leak in as the outer gsub's `n` limit — with a `%`-free
+    -- target name that count is 0, which silently meant "replace nothing".
+    local new_seq_name = seq_name:gsub(vim.pesc(table_name),
+      (target_table_name:gsub("%%", "%%%%")))
     local seq_type = M.column_type_for_seq(ddl, seq_name)
     -- Qualified nextval refs leave new_seq_name carrying the schema already
     -- (quote() splits on the dot); prepending schema again would emit

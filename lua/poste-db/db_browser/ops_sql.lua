@@ -55,6 +55,62 @@ function M.qualified_table_ref(table_node, dialect)
   return schema_prefix .. ident.quote(table_node.name, dialect)
 end
 
+--- `SELECT *` with a row cap, spelled for the dialect. T-SQL has no LIMIT
+--- clause — the count goes in front as TOP.
+function M.select_star_sql(table_ref, dialect, count)
+  count = count or 100
+  if dialect == "mssql" then
+    return string.format("SELECT TOP %d * FROM %s;", count, table_ref)
+  end
+  return string.format("SELECT * FROM %s LIMIT %d;", table_ref, count)
+end
+
+--- T-SQL has no RENAME TO / RENAME COLUMN. `sp_rename` takes its arguments as
+--- string literals, so names are unquoted there (apostrophes doubled) rather
+--- than bracket-quoted identifiers.
+local function sp_rename(old_ref, new_name, object_kind)
+  local lit = function(s) return "'" .. tostring(s):gsub("'", "''") .. "'" end
+  local stmt = "EXEC sp_rename " .. lit(old_ref) .. ", " .. lit(new_name)
+  if object_kind then stmt = stmt .. ", " .. lit(object_kind) end
+  return stmt .. ";"
+end
+
+--- `schema.table` (or a bare table) as sp_rename wants it: plain names.
+local function mssql_object_ref(node)
+  local schema = node.meta and node.meta.schema
+  if schema and schema ~= "" then return schema .. "." .. node.name end
+  return node.name
+end
+
+--- Rename DDL for a table node, spelled for the dialect.
+function M.rename_table_sql(node, new_name, dialect)
+  if dialect == "mssql" then
+    return sp_rename(mssql_object_ref(node), new_name, nil)
+  end
+  if dialect == "mysql" then
+    return "RENAME TABLE " .. ident.quote(node.name, dialect)
+      .. " TO " .. ident.quote(new_name, dialect) .. ";"
+  end
+  return "ALTER TABLE " .. ident.quote(node.name, dialect)
+    .. " RENAME TO " .. ident.quote(new_name, dialect) .. ";"
+end
+
+--- Rename DDL for a column node, spelled for the dialect.
+function M.rename_column_sql(table_node, col_node, new_name, dialect)
+  if dialect == "mssql" then
+    return sp_rename(mssql_object_ref(table_node) .. "." .. col_node.name, new_name, "COLUMN")
+  end
+  if dialect == "mysql" then
+    local col_type = col_node.meta and col_node.meta.col_type or "TEXT"
+    return "ALTER TABLE " .. ident.quote(table_node.name, dialect)
+      .. " CHANGE COLUMN " .. ident.quote(col_node.name, dialect)
+      .. " " .. ident.quote(new_name, dialect) .. " " .. col_type .. ";"
+  end
+  return "ALTER TABLE " .. ident.quote(table_node.name, dialect)
+    .. " RENAME COLUMN " .. ident.quote(col_node.name, dialect)
+    .. " TO " .. ident.quote(new_name, dialect) .. ";"
+end
+
 --- Directive header (`-- @connection` / `-- @database`) for generated SQL.
 --- Returns the lines and the cursor offset relative to the first inserted line.
 function M.build_directive_lines(table_node, conn)

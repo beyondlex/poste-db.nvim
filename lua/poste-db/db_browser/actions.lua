@@ -2,9 +2,9 @@ local icons = require("poste-db.db_browser.icons")
 local tree = require("poste-db.db_browser.tree")
 local async = require("poste-db.db_browser.async")
 local cli = require("poste-db.cli")
-local ident = require("poste-db.ident")
 local util = require("poste-db.db_browser.util")
 local notify = require("poste-db.db_browser.notify")
+local ops_sql = require("poste-db.db_browser.ops_sql")
 
 local HEADER_LINES = icons.HEADER_LINES
 
@@ -189,12 +189,8 @@ end
 execute_table_select = function(node, context)
   local dialect = get_dialect(node, context.root_nodes)
   local conn = get_connection(node, context.root_nodes)
-  local schema_prefix = ""
-  if node.meta and node.meta.schema and dialect == "postgres" then
-    schema_prefix = ident.quote(node.meta.schema, dialect) .. "."
-  end
-
-  local sql = "-- @connection " .. conn .. "\nSELECT * FROM " .. schema_prefix .. ident.quote(node.name, dialect) .. " LIMIT 100;"
+  local sql = "-- @connection " .. conn .. "\n"
+    .. ops_sql.select_star_sql(ops_sql.qualified_table_ref(node, dialect), dialect)
   local search_dir = vim.fn.getcwd()
 
   local connections = require("poste-db.connections")

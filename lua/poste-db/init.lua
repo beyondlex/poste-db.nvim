@@ -6,14 +6,6 @@ local sql_runner = require("poste-db.sql_runner")
 local M = {}
 M.ensure_sql_keymaps = sql_runner.ensure_sql_keymaps
 
-local ck = config.get_keymap("sql_source", "clear_filter", "<leader>cr")
-if ck then
-  vim.keymap.set("n", ck, function()
-    local sql_buf = require("poste-db.buffer")
-    if sql_buf.is_open() then sql_buf.clear_filter_search() end
-  end, { noremap = true, silent = true, desc = "Poste: clear filter/search" })
-end
-
 M.run_sql_request = sql_runner.run_sql_request
 M.show_table_ddl = sql_introspect.show_table_ddl
 M._test = statement._test
@@ -21,6 +13,16 @@ M._test = statement._test
 function M.setup(opts)
   opts = opts or {}
   config.merge(opts)
+
+  -- Registered here, not at load: the keymap has to read the *merged* config,
+  -- so `keymaps.sql_source.clear_filter = false` is honoured.
+  local ck = config.get_keymap("sql_source", "clear_filter", "<leader>cr")
+  if ck then
+    vim.keymap.set("n", ck, function()
+      local sql_buf = require("poste-db.buffer")
+      if sql_buf.is_open() then sql_buf.clear_filter_search() end
+    end, { noremap = true, silent = true, desc = "Poste: clear filter/search" })
+  end
 
   -- Shared poste binary (vendored installer, family dissolution): make sure
   -- it is available once per session. vim.g.poste_binary keeps its
@@ -61,7 +63,10 @@ function M.setup(opts)
 
   require("poste-db.highlights").setup()
   require("poste-db.statement_indicator").setup()
-  vim.api.nvim_create_autocmd("ColorScheme", { callback = function()
+  -- Grouped (clear = true) so a second setup() replaces rather than stacks:
+  -- ungrouped, every re-setup added another ColorScheme handler.
+  local hl_group = vim.api.nvim_create_augroup("PosteDbHighlight", { clear = true })
+  vim.api.nvim_create_autocmd("ColorScheme", { group = hl_group, callback = function()
     require("poste-db.highlights").setup()
     require("poste-db.statement_indicator").setup()
   end })

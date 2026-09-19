@@ -16,9 +16,11 @@ end
 
 function M.handle_directives(line_before, callback)
   if line_before:match(const.DIRECTIVE_PREFIX_PATTERN .. const.DIRECTIVE_CONNECTION) then
-    local cp = line_before:match("@" .. const.DIRECTIVE_CONNECTION .. "$")
-      or line_before:match("@" .. const.DIRECTIVE_CONNECTION .. "%s+(%S*)$")
-      or ""
+    -- The `%s+(%S*)$` form is the only one that can yield a prefix: matching
+    -- the bare `@connection$` has no capture, so match() returns the whole
+    -- match — the directive word itself became the filter and no connection
+    -- name starts with `@`, which emptied the list on `-- @connection`.
+    local cp = line_before:match("@" .. const.DIRECTIVE_CONNECTION .. "%s+(%S*)$") or ""
     data.ensure_conn_names(function(names)
       flush_items(callback, ctx.filter(ctx.make_items(names, 6, "connection: "), cp))
     end)
@@ -26,9 +28,7 @@ function M.handle_directives(line_before, callback)
   end
 
   if line_before:match(const.DIRECTIVE_PREFIX_PATTERN .. const.DIRECTIVE_DATABASE) then
-    local db_prefix = line_before:match("@" .. const.DIRECTIVE_DATABASE .. "$")
-      or line_before:match("@" .. const.DIRECTIVE_DATABASE .. "%s+(%S*)$")
-      or ""
+    local db_prefix = line_before:match("@" .. const.DIRECTIVE_DATABASE .. "%s+(%S*)$") or ""
     data.ensure_databases(function(names)
       if #names == 0 then
         data.ensure_conn_names(function(conn_names)

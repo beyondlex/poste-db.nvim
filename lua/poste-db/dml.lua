@@ -6,6 +6,16 @@ local function quote_schema(schema, dialect)
   return ident.quote(schema, dialect) .. "."
 end
 
+--- A numeric-looking cell can be a number (`2084515900853196878`) or text
+--- that merely looks numeric (`007`, `1.50`). Only the former may go out bare:
+--- a leading zero or a trailing fraction zero would change the stored value,
+--- so those stay string literals.
+local function bare_numeric_literal(s)
+  return s:match("^%-?0$") ~= nil
+    or s:match("^%-?[1-9]%d*$") ~= nil
+    or s:match("^%-?%d+%.%d*[1-9]$") ~= nil
+end
+
 --- quote a value as a SQL literal. `allow_expr` opens the `__expr:` escape
 --- hatch (the value is emitted as RAW SQL). That hatch is an EDITOR feature
 --- — the user typed it deliberately into the cell editor — so it defaults to
@@ -33,7 +43,10 @@ local function quote_val(val, dialect, allow_expr)
     if num and val:match("^%-?%d+%.?%d*$") then
       local round_trip = num == math.floor(num) and string.format("%.0f", num) or tostring(num)
       if round_trip ~= val then
-        return val
+        -- the double cannot hold this text (a bigint) — emit the exact digits
+        -- when they are a plain literal, otherwise it is text
+        if bare_numeric_literal(val) then return val end
+        return ident.quote_literal(val, dialect)
       end
       if num == math.floor(num) then
         return string.format("%d", num)
@@ -46,16 +59,16 @@ local function quote_val(val, dialect, allow_expr)
       val = val:gsub("^(%d%d%d%d%-%d%d%-%d%d)T(%d%d:%d%d:%d%d%.%d+)Z$", "%1 %2")
       val = val:gsub("^(%d%d%d%d%-%d%d%-%d%d)T(%d%d:%d%d:%d%d)Z$", "%1 %2")
     end
-    return "'" .. val:gsub("'", "''") .. "'"
+    return ident.quote_literal(val, dialect)
   end
   if type(val) == "table" then
     local ok, encoded = pcall(vim.json.encode, val)
     if ok then
-      return "'" .. encoded:gsub("'", "''") .. "'"
+      return ident.quote_literal(encoded, dialect)
     end
     return "NULL"
   end
-  return "'" .. tostring(val) .. "'"
+  return ident.quote_literal(tostring(val), dialect)
 end
 
 local function find_pk_columns(columns)

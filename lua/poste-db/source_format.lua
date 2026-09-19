@@ -507,9 +507,12 @@ end
 --- Internal: actually set conform.formatters_by_ft for poste_sql/poste_sqlite.
 --- @param conform table conform module
 local function _setup_conform_impl(conform)
+  -- conform reads the per-filetype mapping from `formatters_by_ft`; writing to
+  -- `formatters.by_ft` (as this used to) landed in a slot nothing ever read.
+  conform.formatters_by_ft = conform.formatters_by_ft or {}
   for _, ft in ipairs({ "poste_sql", "poste_sqlite" }) do
-    if not conform.formatters.by_ft[ft] then
-      conform.formatters.by_ft[ft] = function(bufnr)
+    if not conform.formatters_by_ft[ft] then
+      conform.formatters_by_ft[ft] = function(bufnr)
         local dialect = M.resolve_dialect(bufnr)
         local best = M.best(dialect)
         if best then

@@ -221,3 +221,29 @@ describe("format bordered table width stability", function()
         "last column byte end must sit right before the trailing │")
     end
   end)end)
+
+describe("format credential display", function()
+  -- The binary echoes resolved connection URLs (never names), so every
+  -- user-visible surface that prints them has to redact.
+  it("redacts the DSN in the error panel's message and connection line", function()
+    local lines = sql_format._test.format_error(
+      "auth failed for postgres://u:pw@h:5432/db",
+      "postgres://u:pa/ss@h:5432/db?password=hunter2")
+    local text = table.concat(lines, "\n")
+    assert.is_nil(text:find("hunter2", 1, true))
+    assert.is_nil(text:find(":pw@", 1, true))
+    assert.is_nil(text:find("pa/ss", 1, true))
+    assert.truthy(text:find("Connection: postgres://u:***@h:5432/db?password=***", 1, true))
+    assert.truthy(text:find("auth failed for postgres://u:***@h:5432/db", 1, true))
+  end)
+
+  it("redacts the DSN in a USE context-switch header", function()
+    local lines = sql_format.format_dataset({
+      body = vim.json.encode({
+        type = "use", database_name = "blog", dialect = "postgres",
+        connection = "postgres://u:pw@h:5432/db",
+      }),
+    })
+    assert.equals("  Connection: postgres://u:***@h:5432/db", lines[4])
+  end)
+end)

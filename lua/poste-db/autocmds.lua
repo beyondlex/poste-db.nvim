@@ -7,6 +7,10 @@ function M.setup()
   local sql_runner = require("poste-db.sql_runner")
   local sql_syntax = require("poste-db.syntax")
 
+  -- One group for the whole pass, cleared on re-setup: ungrouped, every
+  -- setup() call stacked another copy of each handler below.
+  local group = vim.api.nvim_create_augroup("PosteDbAutocmds", { clear = true })
+
   local function setup_db_browser_keymap(buf)
     local k = config.get_keymap("sql_source", "toggle_db_browser", "<leader>db")
     if k then
@@ -16,6 +20,7 @@ function M.setup()
   end
 
   vim.api.nvim_create_autocmd("FileType", {
+    group = group,
     pattern = { "poste_sql", "poste_sqlite" },
     callback = function(args)
       pcall(vim.treesitter.language.register, "sql", "poste_sql")
@@ -23,18 +28,29 @@ function M.setup()
       buffer_setup.setup_buffer_keymaps(args.buf)
       sql_runner.ensure_sql_keymaps(args.buf)
       setup_db_browser_keymap(args.buf)
+      -- Buffer-local: a top-level BufUnload with pattern "poste_sql" matched
+      -- against the *file name* (never literally "poste_sql"), so the
+      -- connection cleanup silently never ran.
+      vim.api.nvim_create_autocmd("BufUnload", {
+        group = vim.api.nvim_create_augroup("PosteDbSessionConn_" .. args.buf, { clear = true }),
+        buffer = args.buf,
+        callback = function(b)
+          pcall(require("poste-db.session_conn").cleanup_buf, b.buf)
+        end,
+      })
     end,
   })
 
   vim.api.nvim_create_autocmd("FileType", {
+    group = group,
     pattern = { "sql", "poste_sql", "poste_sqlite" },
     callback = function(args)
       sql_syntax.highlight_directive_comments(args.buf)
       sql_syntax.highlight_digit_prefix_fragments(args.buf)
       sql_syntax.highlight_known_error_constructs(args.buf)
-      local group = vim.api.nvim_create_augroup("PosteDbDirectiveHL_" .. args.buf, { clear = true })
+      local buf_group = vim.api.nvim_create_augroup("PosteDbDirectiveHL_" .. args.buf, { clear = true })
       vim.api.nvim_create_autocmd({ "TextChanged", "TextChangedI" }, {
-        group = group, buffer = args.buf,
+        group = buf_group, buffer = args.buf,
         callback = function()
           sql_syntax.highlight_directive_comments(args.buf)
           sql_syntax.highlight_digit_prefix_fragments(args.buf)
@@ -44,15 +60,8 @@ function M.setup()
     end,
   })
 
-  vim.api.nvim_create_autocmd("BufUnload", {
-    pattern = { "poste_sql", "poste_sqlite" },
-    callback = function(args)
-      pcall(require("poste-db.session_conn").cleanup_buf, args.buf)
-    end,
-  })
-
   vim.api.nvim_create_autocmd("BufWritePost", {
-    group = vim.api.nvim_create_augroup("PosteDbConnectionsReload", { clear = true }),
+    group = group,
     pattern = "connections.toml",
     callback = function()
       require("poste-db.ai.mentions").invalidate()
@@ -60,6 +69,7 @@ function M.setup()
   })
 
   vim.api.nvim_create_autocmd({ "BufRead", "BufNewFile" }, {
+    group = group,
     pattern = { "*.sql", "*.sqlite" },
     callback = function()
       pcall(vim.treesitter.language.register, "sql", "poste_sql")
@@ -77,9 +87,9 @@ function M.setup()
         end, { buffer = 0, noremap = true, silent = true, desc = "Trigger completion" })
       end
       local sql_keywords = { from=true, join=true, where=true, set=true, on=true, having=true, by=true, ["and"]=true, ["or"]=true, use=true }
-      local group = vim.api.nvim_create_augroup("PosteDbTrigger_" .. vim.api.nvim_get_current_buf(), { clear = true })
+      local trig_group = vim.api.nvim_create_augroup("PosteDbTrigger_" .. vim.api.nvim_get_current_buf(), { clear = true })
       vim.api.nvim_create_autocmd("CursorMovedI", {
-        group = group, buffer = 0,
+        group = trig_group, buffer = 0,
         callback = function()
           local line = vim.api.nvim_get_current_line()
           local col = vim.api.nvim_win_get_cursor(0)[2]
@@ -91,7 +101,7 @@ function M.setup()
         end,
       })
       vim.api.nvim_create_autocmd("InsertEnter", {
-        group = group, buffer = 0,
+        group = trig_group, buffer = 0,
         callback = function()
           local line = vim.api.nvim_get_current_line()
           local col = vim.api.nvim_win_get_cursor(0)[2]
