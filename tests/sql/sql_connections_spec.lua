@@ -101,6 +101,17 @@ describe("connections resolve_connection_url", function()
     assert.matches("unsupported dialect", err or "")
   end)
 
+  it("missing dialect builds a postgres URL (nil-dialect default)", function()
+    -- the is_sql_dialect gate allows nil ("defaults behave like postgres"),
+    -- but build_conn_url used to concatenate the nil scheme — a section
+    -- without a dialect crashed every resolution of it
+    package.loaded["poste-db.toml"].parse_file = function()
+      return { legacy = { host = "old-db", database = "main" } }
+    end
+    local url = connections.resolve_connection_url("legacy")
+    assert.equals("postgres://old-db:5432/main", url)
+  end)
+
   it("builds postgres URL from fields", function()
     package.loaded["poste-db.toml"].parse_file = function()
       return { primary = { dialect = "postgres", host = "pg.example.com", port = 5432, database = "blog", user = "alice" } }

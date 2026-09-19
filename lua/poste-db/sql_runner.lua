@@ -276,7 +276,8 @@ function M.run_sql_request()
   if ctx.connection then state.context.connection = ctx.connection end
   if ctx.database then state.context.database = ctx.database end
 
-  -- Resolve connection name to URL and pass directly (bypasses Rust connections.json lookup)
+  -- Resolve connection name to URL and pass it directly: Lua owns
+  -- connections.toml resolution (mirror rule), the binary only ever sees URLs
   local conn_url = nil
   if ctx.connection and ctx.connection ~= "" then
     local connections = require("poste-db.connections")

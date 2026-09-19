@@ -268,7 +268,9 @@ local function build_conn_url(name, conn, ensure_tunnel)
   -- Build URL from individual fields. sqlite is file-based; every other
   -- whitelisted dialect is scheme://user:pass@host:port/db with the default
   -- port from constants (single source — also consumed by display and
-  -- URL-sniffing paths).
+  -- URL-sniffing paths). A section without `dialect` is allowed by the
+  -- is_sql_dialect gate (nil "defaults behave like postgres") — make that
+  -- default real here, or the scheme concatenation dies on the nil.
   if conn.dialect == "sqlite" then
     local path = conn.path or ":memory:"
     if path == ":memory:" then
@@ -287,9 +289,9 @@ local function build_conn_url(name, conn, ensure_tunnel)
     return "sqlite:" .. path, nil
   end
 
-  local scheme = conn.dialect
+  local scheme = conn.dialect or "postgres"
   local host = conn.host or "localhost"
-  local port = conn.port or const.default_port(conn.dialect)
+  local port = conn.port or const.default_port(scheme)
   -- A `tunnel` section forwards host:port through an ssh jump host; the URL
   -- (and thus the Rust binary) only ever sees the local end of the forward.
   if conn.tunnel then
