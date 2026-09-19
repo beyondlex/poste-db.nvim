@@ -6,6 +6,7 @@ local db_browser = require("poste-db.db_browser")
 local icons = require("poste-db.db_browser.icons")
 local tree = require("poste-db.db_browser.tree")
 local actions = require("poste-db.db_browser.actions")
+local util = require("poste-db.db_browser.util")
 
 local ICONS = icons.ICONS
 local MARKER_COLLAPSED = icons.MARKER_COLLAPSED
@@ -830,5 +831,34 @@ describe("db_browser prefetch_children", function()
     -- table is prefetchable (PREFETCH_TYPES includes table), so columns query runs
     assert.is_truthy(#calls >= 1 or #conn.children[1].children ~= nil)
     async_mod.run_introspect = orig
+  end)
+end)
+
+------------------------------------------------------------------------------
+-- Line map
+------------------------------------------------------------------------------
+
+describe("db_browser line map", function()
+  it("swaps content without losing the table every context holds", function()
+    local map = { "a", "b", "c" }
+    util.set_line_map(map, { "x", "y", "z" })
+    assert.same({ "x", "y", "z" }, map)
+  end)
+
+  it("drops the tail when the re-rendered tree is shorter", function()
+    -- collapse a branch and the leftover rows still resolved to their old
+    -- nodes, so a keystroke on a line that no longer shows a table acted on it
+    local map = { "a", "b", "c", "d" }
+    util.set_line_map(map, { "x" })
+    assert.equals(1, #map)
+    assert.is_nil(map[2])
+    assert.is_nil(map[4])
+  end)
+
+  it("clears the map when the render produced nothing", function()
+    -- tree.render_tree returns nil for an invalid buffer
+    local map = { "a", "b" }
+    util.set_line_map(map, nil)
+    assert.equals(0, #map)
   end)
 end)

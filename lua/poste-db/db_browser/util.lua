@@ -36,10 +36,14 @@ function M.find_table_node(line_to_node, start_idx)
   return nil
 end
 
---- Replace line_to_node's entries with a freshly rendered line map, keeping
---- any stale entries beyond the new map's length.
+--- Sync line_to_node with a freshly rendered line map, in place so every
+--- holder of the table sees the same content. Entries past the new map are
+--- dropped: a collapsed tree is shorter than the one it replaced, and the
+--- leftover tail kept nodes that are no longer on any line.
 function M.set_line_map(line_to_node, new_map)
-  for i, n in ipairs(new_map) do line_to_node[i] = n end
+  for i = 1, math.max(#line_to_node, #(new_map or {})) do
+    line_to_node[i] = new_map and new_map[i] or nil
+  end
 end
 
 --- Re-render the browser tree from `context` and sync the line map.
