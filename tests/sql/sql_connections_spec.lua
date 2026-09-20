@@ -57,6 +57,19 @@ describe("connections find_connections_toml", function()
     util_stub.find_file_upwards = function() return nil end
     assert.equals(first, connections.find_connections_toml(tmpdir))
   end)
+
+  it("discovers a connections.toml created AFTER a miss", function()
+    -- the negative result used to be cached as `false` with no mtime to
+    -- invalidate and no invalidate() hook, so following the setup docs
+    -- (create connections.toml, then USE it) worked only after a restart
+    util_stub.find_file_upwards = function() return nil end
+    assert.is_nil(connections.find_connections_toml(tmpdir))
+
+    local config_path = tmpdir .. "/connections.toml"
+    vim.fn.writefile({ "[test]", "dialect = \"sqlite\"" }, config_path)
+    util_stub.find_file_upwards = function() return config_path end
+    assert.equals(config_path, connections.find_connections_toml(tmpdir))
+  end)
 end)
 
 describe("connections resolve_connection_url", function()
