@@ -135,10 +135,26 @@ describe("connections resolve_connection_url", function()
       connections.resolve_connection_url("quoted"))
   end)
 
+  it("renders an integral float port as an integer, not 5432.0", function()
+    -- `port = 5432.0` is a TOML float and tonumber accepts it. LuaJIT (the
+    -- only runtime Neovim ships) renders it as "5432" on concatenation, so
+    -- the URL is well-formed; this pins that, because a 5.4 host would build
+    -- `postgres://h:5432.0/blog` from the same code
+    for _, value in ipairs({ "5432.0", 5432.0 }) do
+      package.loaded["poste-db.toml"].parse_file = function()
+        return {
+          floater = { dialect = "postgres", host = "h", port = value, database = "blog" },
+        }
+      end
+      assert.equals("postgres://h:5432/blog",
+        connections.resolve_connection_url("floater"))
+    end
+  end)
+
   it("refuses a port that is not a port number instead of building a bad URL", function()
     -- `port = "{{POSTE_PORT}}"` (typo'd / unset var) reached the driver as a
     -- literal host:{{POSTE_PORT}}; an out-of-range integer had the same fate
-    for _, value in ipairs({ "{{POSTE_PORT}}", "abc", 70000, 0 }) do
+    for _, value in ipairs({ "{{POSTE_PORT}}", "abc", 70000, 0, "5432.5" }) do
       package.loaded["poste-db.toml"].parse_file = function()
         return { broken = { dialect = "postgres", host = "h", port = value } }
       end

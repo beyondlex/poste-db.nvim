@@ -311,6 +311,9 @@ local function build_conn_url(name, conn, ensure_tunnel)
       return nil,
         ("Connection '%s': port must be a number between 1 and 65535"):format(name)
     end
+    -- An integral float passes the check above and needs no coercion: Neovim's
+    -- LuaJIT renders 5432.0 as "5432" when the URL is concatenated below
+    -- (pinned by the float-port spec, since 5.4 would render "5432.0").
     port = n
   end
   -- A `tunnel` section forwards host:port through an ssh jump host; the URL
