@@ -74,3 +74,78 @@ describe("completion schema cache", function()
     assert.same({ "id", "value" }, cache()["prod/blog"].columns["metrics"])
   end)
 end)
+
+--- Item 22 follow-up: the connection-name cache had the same authority
+--- problem one level up — it cached "we have looked at connections.toml"
+--- forever, so a connection added mid-session never reached `USE <tab>`.
+describe("completion connection names", function()
+  local tmpdir
+  local saved_conn_mod, saved_toml_mod, saved_search_dir
+  local parse_calls
+
+  local function write_config(text, mtime)
+    local path = tmpdir .. "/connections.toml"
+    vim.fn.writefile(vim.split(text, "\n", { plain = true }), path)
+    -- getftime has one-second granularity: pin explicit values so the second
+    -- write cannot look like "unchanged" just because both landed now
+    vim.loop.fs_utime(path, mtime, mtime)
+    return path
+  end
+
+  local function collect()
+    local names
+    data.ensure_conn_names(function(n) names = n end)
+    vim.wait(1000, function() return names ~= nil end)
+    return names or {}
+  end
+
+  before_each(function()
+    tmpdir = vim.fn.tempname()
+    vim.fn.mkdir(tmpdir, "p")
+    parse_calls = 0
+    saved_conn_mod = package.loaded["poste-db.connections"]
+    saved_toml_mod = package.loaded["poste-db.toml"]
+    saved_search_dir = data.search_dir
+    package.loaded["poste-db.connections"] = {
+      find_connections_toml = function(dir)
+        local p = dir .. "/connections.toml"
+        return vim.fn.filereadable(p) == 1 and p or nil
+      end,
+    }
+    package.loaded["poste-db.toml"] = {
+      parse_file = function(path)
+        parse_calls = parse_calls + 1
+        local out = {}
+        for _, line in ipairs(vim.fn.readfile(path)) do
+          local name = line:match("^%[([%w%-_]+)%]$")
+          if name then out[name] = { dialect = "postgres" } end
+        end
+        return out
+      end,
+    }
+    data.search_dir = function() return tmpdir end
+  end)
+
+  after_each(function()
+    package.loaded["poste-db.connections"] = saved_conn_mod
+    package.loaded["poste-db.toml"] = saved_toml_mod
+    data.search_dir = saved_search_dir
+    pcall(vim.fn.delete, tmpdir, "rf")
+  end)
+
+  it("re-reads when connections.toml changes", function()
+    write_config("[alpha]\ndialect = \"postgres\"\n", 1700000000)
+    assert.same({ "alpha" }, collect())
+    assert.equals(1, parse_calls)
+    write_config("[alpha]\ndialect = \"postgres\"\n[beta]\ndialect = \"mysql\"\n", 1700000600)
+    assert.same({ "alpha", "beta" }, collect())
+    assert.equals(2, parse_calls, "a touched file must not serve the old names")
+  end)
+
+  it("serves the cache while the file is untouched", function()
+    write_config("[alpha]\ndialect = \"postgres\"\n", 1700000000)
+    assert.same({ "alpha" }, collect())
+    assert.same({ "alpha" }, collect())
+    assert.equals(1, parse_calls, "the same path + mtime is a cache hit")
+  end)
+end)

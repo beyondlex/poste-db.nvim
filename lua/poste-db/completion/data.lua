@@ -577,13 +577,21 @@ end
 ---------------------------------------------------------------------------
 
 local conn_names_cache = nil
+local conn_names_fp = nil -- config-path + mtime fingerprint (invalidation hint)
 
+--- Connection names for `USE <tab>`. The cache is keyed on the file's path and
+--- mtime, not on "have we looked yet": a connection added to connections.toml
+--- mid-session used to stay unsuggested until restart, because `USE` completion
+--- is the only consumer and nothing ever cleared this cache.
 function M.ensure_conn_names(callback)
-  if conn_names_cache then callback(conn_names_cache); return end
+  local search_dir = M.search_dir()
+  local config_path = require("poste-db.connections").find_connections_toml(search_dir)
+  local fp = tostring(config_path) .. "|" .. tostring(config_path and vim.fn.getftime(config_path) or nil)
+  if conn_names_cache and conn_names_fp == fp then
+    callback(conn_names_cache)
+    return
+  end
   vim.schedule(function()
-    local search_dir = M.search_dir()
-    local util = require("poste-db.util")
-    local config_path = util.find_file_upwards("connections.toml", search_dir)
     local names = {}
     if config_path then
       local toml = require("poste-db.toml")
@@ -594,6 +602,7 @@ function M.ensure_conn_names(callback)
         end
         table.sort(names)
         conn_names_cache = names
+        conn_names_fp = fp
       end
     end
     callback(names)
