@@ -30,6 +30,11 @@ or you can point it directly:
 PLENARY_PATH=/path/to/plenary.nvim tests/run.sh
 ```
 
+To iterate on one file instead of the whole suite:
+`tests/run_one.sh tests/sql/sql_format_spec.lua`. It runs the same nvim
+scaffold over a single `PlenaryBustedFile` (a few seconds versus minutes for
+the directory run) and needs the same plenary discovery.
+
 ## Ground rules
 
 - **A regression test comes with the change.** Smallest test that captures
@@ -57,7 +62,7 @@ PLENARY_PATH=/path/to/plenary.nvim tests/run.sh
 |------|------|
 | `lua/poste-db/` | All plugin code; `docs/dev/sql/README.md` is the per-module index |
 | `doc/poste-db.txt` | User manual (`:h poste-db`) — user-facing changes land here, not just the README |
-| `tests/sql/` | plenary specs; `tests/run.sh` runs the suite |
+| `tests/sql/` | plenary specs; `tests/run.sh` runs the suite, `tests/run_one.sh <file>` one spec |
 | `playground/` | Docker test databases + dialect query samples |
 | `docs/dev/sql/dialect-support.md` | Adding a SQL dialect — touchpoint checklist |
 
