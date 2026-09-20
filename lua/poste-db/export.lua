@@ -68,6 +68,11 @@ end
 
 local function generate_filename(info, ext)
   local base = (info and info.table_name) or "export"
+  -- A layout.table_name can be schema-qualified ("main.users"); the raw dot
+  -- is fine in a filename but a path separator would silently relocate the
+  -- export into a subdirectory.
+  base = base:gsub("[/\\:%s]", "_")
+  if base == "" then base = "export" end
   local ts = os.date("%Y%m%d_%H%M%S")
   return base .. "_" .. ts .. ext
 end
@@ -231,10 +236,21 @@ local function sql_escape_val(v, dialect)
   if type(v) == "boolean" then return v and "TRUE" or "FALSE" end
   local s = tostring(v):gsub("'", "''")
   if dialect == "postgres" and s:find("[%z\1-\8\11-\12\14-\31]") then
+    -- The literal becomes an E'' string, where `\` re-enters escape duty:
+    -- backslashes the VALUE carries must double first, or `C:\data\x07`'s
+    -- `\d` reads back as plain 'd'.
+    s = s:gsub("\\", "\\\\")
     s = s:gsub("[%z\1-\8\11-\12\14-\31]", function(c)
       return string.format("\\x%02X", c:byte())
     end)
     return "E'" .. s .. "'"
+  end
+  -- MySQL/MariaDB/ClickHouse interpret `\` inside ordinary literals too (and
+  -- drop the backslash: `\t` → tab, `\p` → p), so the raw-byte rule below
+  -- only holds for SQLite — on a backslash dialect the value's `\` must be
+  -- doubled or the re-imported text differs from the exported one.
+  if dialect == "mysql" or dialect == "mariadb" or dialect == "clickhouse" then
+    s = s:gsub("\\", "\\\\")
   end
   return "'" .. s .. "'"
 end
@@ -464,16 +480,25 @@ end
 
 --- Command completion helper
 function M.complete(ArgLead, CmdLine)
+  -- prefix match on plain text: f:find(ArgLead) treats the arg as a Lua
+  -- pattern, so a magic `%`/`-` on the command line errors the completion.
+  local function starts_with(list, lead)
+    local out = {}
+    for _, item in ipairs(list) do
+      if item:sub(1, #lead) == lead then out[#out + 1] = item end
+    end
+    return out
+  end
   local parts = {}
   for word in CmdLine:gmatch("%S+") do
     table.insert(parts, word)
   end
   local n = #parts
   if n == 0 or (n == 1 and not CmdLine:match("%s$")) then
-    return vim.tbl_filter(function(f) return f:find(ArgLead) ~= nil end, { "csv", "tsv", "json", "md", "sql" })
+    return starts_with({ "csv", "tsv", "json", "md", "sql" }, ArgLead)
   end
   if n == 1 or (n == 2 and not CmdLine:match("%s$")) then
-    return vim.tbl_filter(function(d) return d:find(ArgLead) ~= nil end, { "clipboard", "file" })
+    return starts_with({ "clipboard", "file" }, ArgLead)
   end
   return vim.fn.getcompletion(ArgLead, "file")
 end

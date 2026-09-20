@@ -154,6 +154,19 @@ describe("export sql_escape_val", function()
     -- a plain value keeps the plain literal (no E'' unless needed)
     assert.equals("'a''b'", export._test.sql_escape_val("a'b", "postgres"))
   end)
+
+  it("backslashes in the value survive the dialects that read them as escapes", function()
+    -- mysql/clickhouse honor \ inside ordinary literals: un-doubled, an
+    -- exported C:\path would import back as C: + TAB + ath
+    assert.equals("'C:\\\\path'", export._test.sql_escape_val("C:\\path", "mysql"))
+    assert.equals("'C:\\\\path'", export._test.sql_escape_val("C:\\path", "clickhouse"))
+    -- sqlite keeps literals verbatim — doubling there would corrupt data
+    assert.equals("'C:\\path'", export._test.sql_escape_val("C:\\path", "sqlite"))
+    -- postgres standard literals too (standard_conforming_strings)
+    assert.equals("'C:\\path'", export._test.sql_escape_val("C:\\path", "postgres"))
+    -- inside an E'' literal the value's own backslashes must double as well
+    assert.equals("E'C:\\\\data\\x07'", export._test.sql_escape_val("C:\\data\7", "postgres"))
+  end)
 end)
 
 describe("export generate_filename", function()
@@ -170,6 +183,11 @@ describe("export generate_filename", function()
   it("tolerates a missing info table", function()
     local name = export._test.generate_filename(nil, ".md")
     assert.matches("^export_", name)
+  end)
+
+  it("neutralizes path separators in a schema-qualified table name", function()
+    local name = export._test.generate_filename({ table_name = "data/tmp" }, ".csv")
+    assert.matches("^data_tmp_%d%d%d%d%d%d%d%d_%d%d%d%d%d%d%.csv$", name)
   end)
 end)
 
@@ -236,6 +254,13 @@ describe("export complete", function()
   it("offers clipboard and file destinations after a format", function()
     local dests = export.complete("", "PosteDbExport csv")
     assert.same({ "clipboard", "file" }, dests)
+  end)
+
+  it("matches the prefix plainly — a magic ArgLead neither errors nor fuzzy-matches", function()
+    assert.same({}, export.complete("%", ""))
+    assert.same({ "csv" }, export.complete("cs", ""))
+    -- "sv" is a substring of csv but not a prefix
+    assert.same({}, export.complete("sv", ""))
   end)
 end)
 

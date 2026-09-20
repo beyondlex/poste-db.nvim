@@ -23,6 +23,18 @@ describe("dml generation", function()
     assert.equals('UPDATE "blog"."posts" SET "title" = 2084515900853196878 WHERE "id" = 2084515900853196878;', sql)
   end)
 
+  it("keeps values beyond int64 exact — no LuaJIT %d clamping", function()
+    -- uint64 above 2^63-1 round-trips through a double as text; %d used to
+    -- clamp it to 9223372036854775807
+    local sql = dml.generate_insert("", "posts", { { name = "id" } },
+      { "9223372036854775808" }, "mysql")
+    assert.equals("INSERT INTO `posts` (`id`) VALUES (9223372036854775808);", sql)
+
+    -- an integer-valued float (1e20) must not clamp either
+    sql = dml.generate_insert("", "posts", { { name = "big" } }, { 1e20 }, "mysql")
+    assert.equals("INSERT INTO `posts` (`big`) VALUES (100000000000000000000);", sql)
+  end)
+
   it("generates insert statements and skips [Auto] markers", function()
     local sql = dml.generate_insert("blog", "posts", columns, {
       "[Auto]",

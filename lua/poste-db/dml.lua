@@ -34,7 +34,9 @@ local function quote_val(val, dialect, allow_expr)
   end
   if type(val) == "number" then
     if val == math.floor(val) then
-      return string.format("%d", val)
+      -- %.0f, not %d: LuaJIT clamps %d to int64 range, so a big float cell
+      -- (1e20) would silently rewrite itself to 9223372036854775807.
+      return string.format("%.0f", val)
     end
     return tostring(val)
   end
@@ -48,10 +50,10 @@ local function quote_val(val, dialect, allow_expr)
         if bare_numeric_literal(val) then return val end
         return ident.quote_literal(val, dialect)
       end
-      if num == math.floor(num) then
-        return string.format("%d", num)
-      end
-      return tostring(num)
+      -- round_trip == val: the text already is the exact literal — return it
+      -- verbatim rather than %d, which LuaJIT clamps to int64 (a uint64
+      -- above 2^63-1 came back as 9223372036854775807).
+      return val
     end
     if dialect == "mysql" or dialect == "mariadb" then
       val = val:gsub("^(%d%d%d%d%-%d%d%-%d%d)T(%d%d:%d%d:%d%d%.%d+)[%+%-]%d%d:%d%d$", "%1 %2")
