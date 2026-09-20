@@ -78,6 +78,39 @@ describe("format translated-SQL footnote", function()
       return l:find("SELECT id FROM t WHERE id > 0", 1, true) ~= nil
     end, { predicate = true }))
   end)
+
+  it("keeps every wrapped footnote row inside the panel width", function()
+    local save = vim.o.columns
+    vim.o.columns = 80
+    local parts = {}
+    for i = 1, 40 do parts[i] = "column_" .. i end
+    local sql = "SELECT " .. table.concat(parts, ", ")
+    local lines = sql_format.format_dataset({ body = vim.json.encode({
+      type = "resultset", connection = "mysql://dev", database = "db",
+      dialect = "mysql", total_rows = 1,
+      results = { {
+        columns = { { name = "id", type = "INT" } },
+        rows = { { 1 } }, row_count = 1,
+        original_sql = sql, translated_sql = sql,
+      } },
+    }) })
+    vim.o.columns = save
+    local marker
+    for i, l in ipairs(lines) do
+      if l:find("⚡", 1, true) then marker = i end
+    end
+    assert.is_truthy(marker, "no ⚡ footnote row rendered")
+    local rows = 0
+    for i = marker, #lines do
+      -- the marker row, then each continuation carries the 5-cell pad
+      if i > marker and lines[i]:sub(1, 5) ~= "     " then break end
+      rows = rows + 1
+      assert.is_true(width.display_width(lines[i]) <= 76,
+        ("footnote row %d is %d cells wide: %s"):format(i,
+          width.display_width(lines[i]), lines[i]))
+    end
+    assert.is_true(rows > 1, "expected the footnote to wrap into several rows")
+  end)
 end)
 
 describe("format wrap_text (error box)", function()
@@ -245,5 +278,33 @@ describe("format credential display", function()
       }),
     })
     assert.equals("  Connection: postgres://u:***@h:5432/db", lines[4])
+  end)
+end)
+
+describe("format wrap_line (translated-SQL footnote rows)", function()
+  it("keeps the leading indent so the ⚡ row aligns with its continuations", function()
+    -- gmatch("%S+") dropped the indent, so the marker row lost the two
+    -- columns the caller pads every continuation with
+    local rows = sql_format._test.wrap_line("  ⚡ SELECT a b c", 12)
+    assert.equals("  ⚡ SELECT", rows[1])
+    assert.equals("  a b c", rows[2])
+    -- the caller pads continuations with "     " (5 cells): the marker
+    -- prefix has to occupy exactly those 5 cells for the rows to line up
+    assert.equals(5, width.display_width("  ⚡ "))
+  end)
+
+  it("returns a line that already fits untouched", function()
+    local rows = sql_format._test.wrap_line("  ⚡ SELECT 1", 40)
+    assert.equals(1, #rows)
+    assert.equals("  ⚡ SELECT 1", rows[1])
+  end)
+
+  it("gives an over-long word its own row instead of an empty one", function()
+    -- a single token wider than the width used to emit "" first, which the
+    -- footnote renders as a blank row above the marker
+    local long = string.rep("x", 30)
+    local rows = sql_format._test.wrap_line("  ⚡" .. long, 12)
+    assert.equals(1, #rows)
+    assert.equals("  ⚡" .. long, rows[1])
   end)
 end)

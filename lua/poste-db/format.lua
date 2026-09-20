@@ -48,21 +48,27 @@ local function pad_right(s, width)
   return s .. string.rep(" ", width - dw)
 end
 
---- Wrap a long line to fit within a given display width, splitting at word boundaries.
+--- Wrap a long line to fit within a given display width, splitting at word
+--- boundaries. The leading run of whitespace becomes a hanging indent: every
+--- row carries it, so the width checked here is the width the row occupies
+--- once it reaches the buffer. A single word wider than `width` gets its own
+--- overflowing row rather than an empty row before it.
 local function wrap_line(text, width)
   if displaywidth(text) <= width then return { text } end
+  local indent = text:match("^%s*")
   local lines = {}
-  local current = ""
+  local current, fresh = indent, true
   for word in text:gmatch("%S+") do
-    local sep = #current > 0 and " " or ""
+    local sep = fresh and "" or " "
     if displaywidth(current .. sep .. word) > width then
-      table.insert(lines, current)
-      current = word
+      if not fresh then table.insert(lines, current) end
+      current, fresh = indent .. word, false
     else
       current = current .. sep .. word
+      fresh = false
     end
   end
-  if #current > 0 then table.insert(lines, current) end
+  if not fresh then table.insert(lines, current) end
   if #lines == 0 then lines = { "" } end
   return lines
 end
@@ -443,10 +449,17 @@ local function append_translated_footnote(lines, layout)
   local original = (layout.original_sql or ""):gsub("%s*\n%s*", " ")
   lines[#lines + 1] = "  -- " .. original
   lines[#lines + 1] = ""
-  local wrapped = wrap_line("  ⚡ " .. layout.translated_sql, footnote_width)
-  lines[#lines + 1] = wrapped[1]
+  -- wrap_line keeps a leading run of spaces as a hanging indent, so wrapping
+  -- the statement with the continuation pad in front of it makes every row
+  -- land inside footnote_width; the marker row then swaps that pad for the
+  -- ⚡ prefix, which occupies the same five cells.
+  local pad = "     "
+  local wrapped = wrap_line(pad .. layout.translated_sql, footnote_width)
+  local first = wrapped[1]
+  if first:sub(1, #pad) == pad then first = first:sub(#pad + 1) end
+  lines[#lines + 1] = "  ⚡ " .. first
   for i = 2, #wrapped do
-    lines[#lines + 1] = "     " .. wrapped[i]
+    lines[#lines + 1] = wrapped[i]
   end
 end
 
@@ -908,6 +921,7 @@ end
 M._test = {
   format_datetime_local = format_datetime_local,
   wrap_text = wrap_text,
+  wrap_line = wrap_line,
   format_error = M.format_error,
 }
 
