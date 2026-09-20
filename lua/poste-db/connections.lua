@@ -299,6 +299,20 @@ local function build_conn_url(name, conn, ensure_tunnel)
   local scheme = conn.dialect or "postgres"
   local host = conn.host or "localhost"
   local port = conn.port or const.default_port(scheme)
+  if conn.port ~= nil then
+    -- A quoted `port = "5432"` is legal TOML, and the tunnel path wants a
+    -- number; an unreadable one (`port = "{{POSTE_PORT}}"` after a typo'd or
+    -- unset var, or 70000) used to be concatenated straight into the URL, so
+    -- the driver got `postgres://h:{{POSTE_PORT}}/db`. Refuse it here — the
+    -- same rule the Rust store applies to the same file. The value stays out
+    -- of the message because `port = "{{POSTE_PASS}}"` is a plausible typo.
+    local n = tonumber(conn.port)
+    if not n or n ~= math.floor(n) or n < 1 or n > 65535 then
+      return nil,
+        ("Connection '%s': port must be a number between 1 and 65535"):format(name)
+    end
+    port = n
+  end
   -- A `tunnel` section forwards host:port through an ssh jump host; the URL
   -- (and thus the Rust binary) only ever sees the local end of the forward.
   if conn.tunnel then

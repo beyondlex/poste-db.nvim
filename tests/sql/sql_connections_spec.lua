@@ -125,6 +125,31 @@ describe("connections resolve_connection_url", function()
     assert.equals("postgres://old-db:5432/main", url)
   end)
 
+  it("accepts a quoted port and keeps the numeric form", function()
+    package.loaded["poste-db.toml"].parse_file = function()
+      return {
+        quoted = { dialect = "postgres", host = "h", port = "5433", database = "blog" },
+      }
+    end
+    assert.equals("postgres://h:5433/blog",
+      connections.resolve_connection_url("quoted"))
+  end)
+
+  it("refuses a port that is not a port number instead of building a bad URL", function()
+    -- `port = "{{POSTE_PORT}}"` (typo'd / unset var) reached the driver as a
+    -- literal host:{{POSTE_PORT}}; an out-of-range integer had the same fate
+    for _, value in ipairs({ "{{POSTE_PORT}}", "abc", 70000, 0 }) do
+      package.loaded["poste-db.toml"].parse_file = function()
+        return { broken = { dialect = "postgres", host = "h", port = value } }
+      end
+      local url, err = connections.resolve_connection_url("broken")
+      assert.is_nil(url, ("port = %s resolved anyway"):format(tostring(value)))
+      assert.matches("port must be a number between 1 and 65535", err or "")
+      assert.is_nil((err or ""):find("POSTE_PORT", 1, true),
+        "the value stays out of the message (it can be a mistyped secret)")
+    end
+  end)
+
   it("builds postgres URL from fields", function()
     package.loaded["poste-db.toml"].parse_file = function()
       return { primary = { dialect = "postgres", host = "pg.example.com", port = 5432, database = "blog", user = "alice" } }
