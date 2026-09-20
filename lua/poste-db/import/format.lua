@@ -150,8 +150,8 @@ function M.parse_json(text)
       elseif type(v) == "table" then
         -- nested object/array (a jsonb value): tostring would import the
         -- garbage pointer text "table: 0x…"; encode it as JSON instead
-        local ok, encoded = pcall(vim.json.encode, v)
-        table.insert(row, ok and encoded or vim.inspect(v))
+        local enc_ok, encoded = pcall(vim.json.encode, v)
+        table.insert(row, enc_ok and encoded or vim.inspect(v))
       else
         table.insert(row, tostring(v))
       end
