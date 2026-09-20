@@ -169,32 +169,46 @@ function M.snippet(text, max)
   return s
 end
 
---- Blank out quoted literals and comments so keyword scanning sees code only:
---- a `where` inside a string is not a WHERE clause, and a `--` inside a string
---- is not a comment. One pass with a small state machine — a gsub chain
---- cannot get both directions right: stripping comments first lets a `--` in a
---- literal swallow the rest of the batch (hiding a DELETE behind it), stripping
---- literals first lets an apostrophe in a comment (`-- don't`) open a literal
---- that erases real code. An unterminated literal or block comment runs to end
---- of input, which is what the server does with it too. Newlines are kept so
---- line structure survives for the callers that map back to the buffer.
+--- Blank out quoted literals, comments and dollar-quoted bodies so keyword
+--- scanning sees code only: a `where` inside a string is not a WHERE clause, and
+--- a `--` inside a string is not a comment. One pass with a small state machine
+--- — a gsub chain cannot get both directions right: stripping comments first
+--- lets a `--` in a literal swallow the rest of the batch (hiding a DELETE
+--- behind it), stripping literals first lets an apostrophe in a comment
+--- (`-- don't`) open a literal that erases real code. An unterminated literal,
+--- block comment or dollar-quote body runs to end of input, which is what the
+--- server does with it too. Newlines are kept so line structure survives for the
+--- callers that map back to the buffer.
+---
+--- Dollar quoting (`$$ … $$`, `$body$ … $body$`) matters for the same reason: a
+--- PL/pgSQL function body is not code the outer statement runs, so a
+--- `DELETE FROM t` inside one must neither trip this guard nor split the batch
+--- at its internal `;`.
 --- @param sql string
 --- @return string
 local QUOTE_STATE = { ["'"] = "squote", ['"'] = "dquote", ["`"] = "bquote" }
 local CLOSING_QUOTE = { squote = "'", dquote = '"', bquote = "`" }
+-- `$` starts a tag only when the closing `$` follows at once (`$$`) or a run of
+-- identifier chars (`$body$`); `$1` is a placeholder, not a tag.
+local DOLLAR_TAG = "^%$[%w_]*%$"
 
 function M.strip_non_code(sql)
   local out = {}
   local i, n = 1, #sql
   local state = "code"
+  local dollar_tag = nil
   while i <= n do
     local c = sql:sub(i, i)
     if state == "code" then
       local nx = sql:sub(i + 1, i + 1)
+      local tag = (c == "$") and sql:match(DOLLAR_TAG, i) or nil
       if c == "-" and nx == "-" then
         state, i = "line", i + 2
       elseif c == "/" and nx == "*" then
         state, i = "block", i + 2
+      elseif tag then
+        dollar_tag = tag
+        state, i = "dollar", i + #tag
       elseif QUOTE_STATE[c] then
         state, i = QUOTE_STATE[c], i + 1
       else
@@ -208,6 +222,13 @@ function M.strip_non_code(sql)
     elseif state == "block" then
       if c == "*" and sql:sub(i + 1, i + 1) == "/" then
         state, i = "code", i + 2
+      else
+        out[#out + 1] = (c == "\n") and "\n" or " "
+        i = i + 1
+      end
+    elseif state == "dollar" then
+      if sql:find(dollar_tag, i, true) == i then
+        state, dollar_tag, i = "code", nil, i + #dollar_tag
       else
         out[#out + 1] = (c == "\n") and "\n" or " "
         i = i + 1

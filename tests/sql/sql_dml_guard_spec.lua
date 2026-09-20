@@ -156,6 +156,44 @@ describe("dml_guard strip_non_code", function()
   it("leaves code untouched when there is nothing to strip", function()
     assert.equals("DELETE FROM t WHERE id = 1", strip("DELETE FROM t WHERE id = 1"))
   end)
+
+  -- A PL/pgSQL body is not code the outer statement runs: before this, its
+  -- keywords stayed visible (so a DELETE inside one tripped the gate) and its
+  -- internal `;` split the batch.
+  it("blanks a dollar-quoted body including its tags", function()
+    local out = strip("CREATE FUNCTION f() AS $$ DELETE FROM t $$ LANGUAGE plpgsql")
+    assert.is_nil(out:find("DELETE", 1, true))
+    assert.is_nil(out:find("$$", 1, true))
+    assert.truthy(out:find("CREATE FUNCTION f() AS", 1, true))
+    assert.truthy(out:find("LANGUAGE plpgsql", 1, true))
+  end)
+
+  it("keeps a tagged body and its newlines", function()
+    local out = strip("CREATE OR REPLACE FUNCTION f() AS $body$\n  DELETE FROM t;\n$body$ LANGUAGE sql")
+    assert.is_nil(out:find("DELETE", 1, true))
+    assert.equals(2, select(2, out:gsub("\n", "")))
+  end)
+
+  it("treats $n placeholders as code", function()
+    assert.equals("SELECT $1, $2", strip("SELECT $1, $2"))
+  end)
+
+  it("runs an unterminated dollar quote to end of input", function()
+    local out = strip("SELECT $$ a\nb")
+    assert.is_nil(out:find("a", 1, true))
+    assert.is_nil(out:find("b", 1, true))
+    assert.truthy(out:find("\n", 1, true))
+  end)
+
+  it("regex_scan ignores DML written inside a dollar-quoted body", function()
+    local hits = guard._test.regex_scan(
+      "CREATE FUNCTION f() AS $$ DELETE FROM t $$ LANGUAGE plpgsql")
+    assert.equals(0, #hits)
+    -- the same verb outside a body is still reported
+    hits = guard._test.regex_scan("CREATE FUNCTION f() AS $$ SELECT 1 $$ LANGUAGE plpgsql; DELETE FROM t")
+    assert.equals(1, #hits)
+    assert.equals("delete", hits[1].kind)
+  end)
 end)
 
 describe("dml_guard scan_text", function()
