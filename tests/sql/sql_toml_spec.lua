@@ -163,4 +163,32 @@ describe("toml inline containers", function()
     assert.equals("jump@bastion", cfg.dest)
     assert.equals(2222, cfg.port)
   end)
+
+  it("rejects [[array-of-tables]] instead of making a \"[name\" section", function()
+    local res, err = toml.parse('[[srv]]\nurl = "mysql://h/db"')
+    assert.is_nil(res)
+    assert.equals("Array-of-tables headers ([[name]]) are not supported", err)
+  end)
+
+  it("rejects dotted keys instead of storing a flat \"a.b\"", function()
+    -- `tunnel.to = "h"` read as key "tunnel.to" never reached
+    -- tunnel.normalize_cfg, so the connection looked fine and failed at use
+    local res, err = toml.parse('[srv]\ntunnel.to = "h"')
+    assert.is_nil(res)
+    assert.equals("Dotted keys (a.b = …) are not supported: tunnel.to", err)
+  end)
+
+  it("keeps dotted section names: the header is the connection name", function()
+    local res, err = toml.parse('[my-app.prod]\ndialect = "redis"')
+    assert.is_nil(err)
+    assert.equals("redis", res["my-app.prod"].dialect)
+  end)
+
+  it("does not echo the offending text for a malformed value line", function()
+    -- the line may be a mistyped `password "s3cret"`; the old message
+    -- printed it verbatim into :PosteDbHealth / the notify popup
+    local res, err = toml.parse('password "s3cret-value"')
+    assert.is_nil(res)
+    assert.falsy(err:find("s3cret%-value", 1, false))
+  end)
 end)
