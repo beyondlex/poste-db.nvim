@@ -579,10 +579,11 @@ end
 local conn_names_cache = nil
 local conn_names_fp = nil -- config-path + mtime fingerprint (invalidation hint)
 
---- Connection names for `USE <tab>`. The cache is keyed on the file's path and
+--- Connection names for `-- @connection <tab>` (and the connection-kind
+--- fallback under `-- @database`). The cache is keyed on the file's path and
 --- mtime, not on "have we looked yet": a connection added to connections.toml
---- mid-session used to stay unsuggested until restart, because `USE` completion
---- is the only consumer and nothing ever cleared this cache.
+--- mid-session used to stay unsuggested until restart, because directive
+--- completion is the only consumer and nothing ever cleared this cache.
 function M.ensure_conn_names(callback)
   local search_dir = M.search_dir()
   local config_path = require("poste-db.connections").find_connections_toml(search_dir)
