@@ -26,6 +26,40 @@ describe("explain", function()
       assert.truthy(err:find("single statement"))
     end)
 
+    -- The single-statement check used to be a plain `find(";")`, so it also
+    -- counted separators that are part of the statement's own text.
+    it("ignores semicolons inside quoted literals", function()
+      assert.equals("EXPLAIN SELECT 'a;b'", explain.wrap_sql("postgres", "SELECT 'a;b'"))
+      assert.equals("EXPLAIN SELECT \"a;b\" FROM `t;x`",
+        explain.wrap_sql("mysql", 'SELECT "a;b" FROM `t;x`'))
+      -- a doubled quote is an escaped quote inside the literal, not its close
+      assert.equals("EXPLAIN SELECT 'it''s; ok'", explain.wrap_sql("postgres", "SELECT 'it''s; ok'"))
+      assert.equals("EXPLAIN SELECT '$x;'", explain.wrap_sql("postgres", "SELECT '$x;'"))
+    end)
+
+    it("ignores semicolons in comments and dollar-quoted bodies", function()
+      assert.equals("EXPLAIN SELECT 1 -- note; end",
+        explain.wrap_sql("postgres", "SELECT 1 -- note; end"))
+      assert.equals("EXPLAIN SELECT 1 /* a;b */", explain.wrap_sql("postgres", "SELECT 1 /* a;b */"))
+      local plpgsql = "CREATE FUNCTION f() AS $$ BEGIN SELECT 1; END; $$ LANGUAGE plpgsql"
+      assert.equals("EXPLAIN " .. plpgsql, explain.wrap_sql("postgres", plpgsql))
+      -- $1 placeholders are not dollar-quote tags
+      assert.equals("EXPLAIN SELECT $1, $2", explain.wrap_sql("postgres", "SELECT $1, $2"))
+    end)
+
+    it("still rejects a real statement break after quoted text", function()
+      for _, sql in ipairs({
+        "SELECT 'a'; SELECT 2",
+        "INSERT INTO t VALUES ('a;b', 'c'); INSERT INTO t VALUES (1)",
+        "SELECT $$ a $$ ; SELECT 2",
+        "SELECT ';'; SELECT 2",
+      }) do
+        local wrapped, err = explain.wrap_sql("postgres", sql)
+        assert.is_nil(wrapped, sql)
+        assert.truthy(err:find("single statement"), sql)
+      end
+    end)
+
     it("rejects empty statements", function()
       local wrapped, err = explain.wrap_sql("postgres", "   ")
       assert.is_nil(wrapped)

@@ -34,6 +34,53 @@ local function clean_stmt(content)
   return table.concat(out, "\n")
 end
 
+--- Index of the first `;` that actually ends a statement, or nil.
+--- A plain `find(";")` counted separators that are part of the statement's own
+--- text: `SELECT 'a;b'` (and any PL/pgSQL `$$ … ; … $$` body) got refused with
+--- "EXPLAIN runs a single statement". Quote, comment and dollar-quote bodies
+--- are skipped; an unterminated opener swallows the rest of the input, which
+--- leaves the database to reject the statement — EXPLAIN's job here is only
+--- to refuse a cursor sitting on several statements.
+--- @param sql string
+--- @return number|nil
+local function find_statement_break(sql)
+  local i, n = 1, #sql
+  while i <= n do
+    local c = sql:sub(i, i)
+    if c == ";" then
+      return i
+    elseif c == "'" or c == '"' or c == "`" then
+      -- Run to the closing quote. A doubled quote (`''`) is an escaped quote
+      -- inside the literal, so the scan steps over the pair and keeps going.
+      local j = i
+      while true do
+        j = sql:find(c, j + 1, true)
+        if not j then return nil end
+        if sql:sub(j + 1, j + 1) ~= c then break end
+        j = j + 1
+      end
+      i = j + 1
+    elseif c == "-" and sql:sub(i, i + 1) == "--" then
+      local nl = sql:find("\n", i, true)
+      i = nl and (nl + 1) or (n + 1)
+    elseif c == "/" and sql:sub(i, i + 1) == "/*" then
+      local close = sql:find("*/", i + 2, true)
+      i = close and (close + 2) or (n + 1)
+    elseif c == "$" then
+      local tag = sql:match("^%$[%w_]*%$", i)
+      if tag then
+        local body = sql:find(tag, i + #tag, true)
+        i = body and (body + #tag) or (n + 1)
+      else
+        i = i + 1
+      end
+    else
+      i = i + 1
+    end
+  end
+  return nil
+end
+
 --- Wrap a statement in the dialect's EXPLAIN form.
 --- @param dialect string|nil base dialect (nil behaves like postgres)
 --- @param stmt string
@@ -50,7 +97,7 @@ function M.wrap_sql(dialect, stmt)
   local inner = trimmed:gsub("%s*;%s*$", "")
   -- exec-file splits the file into statements; an EXPLAIN wrapping several
   -- of them would explain (at best) only the first.
-  if inner:find(";", 1, true) then
+  if find_statement_break(inner) then
     return nil, "EXPLAIN runs a single statement — put the cursor on one statement"
   end
   return prefix .. inner, nil
