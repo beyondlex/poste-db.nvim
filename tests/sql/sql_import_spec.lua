@@ -140,6 +140,18 @@ describe("JSON parsing", function()
     assert.is_nil(result)
     assert.is_not_nil(err)
   end)
+
+  it("serializes nested objects and arrays as JSON text, not pointer strings", function()
+    local json = '[{"id":1,"meta":{"tags":["a","b"]}}]'
+    local result = import._parse_json_for_test(json)
+    local meta_idx
+    for i, k in ipairs(result.columns) do
+      if k == "meta" then meta_idx = i end
+    end
+    local v = result.rows[1][meta_idx]
+    assert.is_not_nil(v:find('"tags"'))
+    assert.is_nil(v:find("table:"))
+  end)
 end)
 
 describe("format detection", function()
