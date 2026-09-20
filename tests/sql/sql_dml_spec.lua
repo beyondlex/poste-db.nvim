@@ -119,6 +119,36 @@ describe("dml generation", function()
     assert.equals(1, counts.insert)
   end)
 
+  it("emits statements in row order and SET parts in column order", function()
+    -- keys inserted in scrambled order into the edit_state tables; the
+    -- generated batch must still read 1, 2, 3 and "a" before "c"
+    local cols = { { name = "a", primary_key = true }, { name = "b" }, { name = "c" } }
+    local stmts = dml.generate_dml({
+      modified_cells = {
+        ["3:3"] = { col = 3, old_val = "x", new_val = "z3" },
+        ["3:2"] = { col = 2, old_val = "x", new_val = "y3" },
+        ["1:2"] = { col = 2, old_val = "x", new_val = "y1" },
+        ["2:2"] = { col = 2, old_val = "x", new_val = "y2" },
+      },
+      deleted_rows = {},
+      added_rows = {},
+    }, {
+      layout = { schema = "", table_name = "t", columns = cols },
+      rows_source = {
+        { 1, "x", "x" },
+        { 2, "x", "x" },
+        { 3, "x", "x" },
+      },
+    }, "postgres")
+
+    local sqls = {}
+    for _, s in ipairs(stmts) do sqls[#sqls + 1] = s.sql end
+    assert.equals(3, #stmts)
+    assert.equals('UPDATE "t" SET "b" = \'y1\' WHERE "a" = 1;', sqls[1])
+    assert.matches('"a" = 2', sqls[2])
+    assert.equals('UPDATE "t" SET "b" = \'y3\', "c" = \'z3\' WHERE "a" = 3;', sqls[3])
+  end)
+
   it("skips and reports statements it refuses to generate", function()
     -- row 1 all-NULL beyond the PK-less layout: the update must be refused
     -- and surfaced via the skipped list, not emitted as table-wide SQL

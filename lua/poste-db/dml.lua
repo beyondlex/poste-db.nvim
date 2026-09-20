@@ -206,8 +206,15 @@ function M.generate_dml(es, tab, dialect)
     end
   end
 
-  for row_idx, mods in pairs(row_mods) do
+  -- Sorted row order: the batch is replayable and the SQL log stable;
+  -- pairs() would emit a different statement order per commit.
+  local mod_rows = {}
+  for row_idx in pairs(row_mods) do mod_rows[#mod_rows + 1] = row_idx end
+  table.sort(mod_rows)
+  for _, row_idx in ipairs(mod_rows) do
+    local mods = row_mods[row_idx]
     if row_idx <= #rows_source then
+      table.sort(mods, function(a, b) return a.col < b.col end) -- stable SET order
       local original_row = {}
       for i = 1, #columns do
         original_row[i] = rows_source[row_idx][i]
@@ -224,7 +231,10 @@ function M.generate_dml(es, tab, dialect)
     end
   end
 
-  for row_idx, _ in pairs(es.deleted_rows or {}) do
+  local del_rows = {}
+  for row_idx in pairs(es.deleted_rows or {}) do del_rows[#del_rows + 1] = row_idx end
+  table.sort(del_rows)
+  for _, row_idx in ipairs(del_rows) do
     if row_idx <= #rows_source then
       local sql, err = M.generate_delete(schema, table_name, columns, rows_source[row_idx], dialect)
       if sql then
