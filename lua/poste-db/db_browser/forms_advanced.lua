@@ -20,8 +20,6 @@ local function close_active()
   active_form = nil
 end
 
-local word_wrap = layout.word_wrap
-
 --- Apply a `multi_select` pick to the current set, returning the new value as a
 --- list in `choices` order (so generated SQL is deterministic).
 local function apply_toggle(choices, current, picked)
@@ -121,9 +119,66 @@ local function build_rows(sections, dialect)
   return rows, focusable
 end
 
-local function render(rows, title, width, sql_lines)
+local FOOTER = {
+  { key = "q", label = "Cancel" },
+  { key = "y", label = "Copy" },
+  { key = "s", label = "Execute" },
+  { key = "j/k", label = "move" },
+  { key = "Enter", label = "edit" },
+  { key = "Space", label = "toggle" },
+}
+
+--- The shortcut bar, wrapped to the dialog width.
+--- layout.keymaps emits a single unbroken line: at the default 80-column form
+--- its 77 columns leave one to spare, and any narrower float simply cuts the
+--- tail off — the `Space toggle` hint disappears with no signal. Each line here
+--- holds as many entries as fit, so the bar wraps instead of truncating. Entries
+--- are ASCII, so one byte width serves both the fit test and the columns.
+---@param width number
+---@return { lines: string[], highlights: table[] }
+local function footer_lines(width)
+  local indent = "  "
+  local sep = "  "
+  local lines, highlights = {}, {}
+  local chunk = {}
+
+  local function emit(entries)
+    local parts, pos = {}, #indent
+    for i, e in ipairs(entries) do
+      if i > 1 then pos = pos + #sep end
+      local segment = "[" .. e.key .. " " .. e.label .. "]"
+      table.insert(parts, segment)
+      local key_start = pos + 1
+      table.insert(highlights, { line = #lines, col_start = key_start, col_end = key_start + #e.key, hl_group = "PosteDbFormShortcut" })
+      local label_start = key_start + #e.key + 1
+      table.insert(highlights, { line = #lines, col_start = label_start, col_end = label_start + #e.label, hl_group = "PosteDbFormDim" })
+      pos = pos + #segment
+    end
+    table.insert(lines, indent .. table.concat(parts, sep))
+  end
+
+  local used = #indent
+  for _, e in ipairs(FOOTER) do
+    local w = #("[" .. e.key .. " " .. e.label .. "]")
+    -- The first entry of a line is never dropped, even in a form too narrow for
+    -- it: an empty line would hide the shortcut entirely.
+    if #chunk > 0 and used + #sep + w > width then
+      emit(chunk)
+      chunk = {}
+      used = #indent
+    end
+    table.insert(chunk, e)
+    used = used + (#chunk > 1 and #sep or 0) + w
+  end
+  if #chunk > 0 then emit(chunk) end
+  return { lines = lines, highlights = highlights }
+end
+
+--- @return lines, highlights, row_line  row_line[row index] = buffer line (1-based)
+local function render(rows, width, sql_lines)
   local lines = {}
   local highlights = {}
+  local row_line = {}
   local li = 0
 
   local function append(res)
@@ -145,11 +200,16 @@ local function render(rows, title, width, sql_lines)
   end
 
   local prev_was_content = false
-  for _, row in ipairs(rows) do
+  for ri, row in ipairs(rows) do
+    -- The row's own line, recorded as it is emitted: a preview occupies as many
+    -- lines as its wrap, and a section header can be preceded by a blank
+    -- separator, so the row index is not a buffer line.
+    row_line[ri] = li + 1
     if row.type == "section_header" then
       if prev_was_content then
         table.insert(lines, "")
         li = li + 1
+        row_line[ri] = li + 1 -- the separator belongs to the gap, not the header
       end
       append(layout.section_title({ text = row.section.title, indent = 2 }))
     elseif row.type == "field" then
@@ -185,21 +245,9 @@ local function render(rows, title, width, sql_lines)
   table.insert(lines, "")
   table.insert(lines, "")
   li = li + 2
-  append(layout.keymaps({
-    mapping = {
-      { key = "q", label = "Cancel" },
-      { key = "y", label = "Copy" },
-      { key = "s", label = "Execute" },
-      { key = "j/k", label = "move" },
-      { key = "Enter", label = "edit" },
-      { key = "Space", label = "toggle" },
-    },
-    key_hl = "PosteDbFormShortcut",
-    value_hl = "PosteDbFormDim",
-    indent = 2,
-  }))
+  append(footer_lines(width))
 
-  return lines, highlights
+  return lines, highlights, row_line
 end
 
 function M.open(opts)
@@ -224,7 +272,6 @@ function M.open(opts)
   local focus_idx = 1
   local editing = false
   local closed = false
-  local height = 20
 
   local function get_current_focus_row()
     if #focusable == 0 then return nil end
@@ -246,64 +293,45 @@ function M.open(opts)
     return {}
   end
 
-  local function calc_height()
-    local h = 2
-    for _, row in ipairs(rows) do
-      if row.type == "preview" then
-        local sl = get_sql_lines()
-        local indent = "    "
-        local max_line = width - #indent
-        local line_count = 0
-        if sl and #sl > 0 then
-          for _, sl_line in ipairs(sl) do
-            line_count = line_count + #word_wrap(sl_line, max_line)
-          end
-        else
-          line_count = 1
-        end
-        h = h + line_count
-      else
-        h = h + 1
-      end
-    end
-    return math.min(h, opts.height or 40) + 2
+  -- dialog.open gives a bordered float exactly `width - 2` of content, and this
+  -- form always opens one, so the first render can wrap the preview at the real
+  -- width rather than a second, guessed-at one.
+  local content_width = width - 2
+
+  --- Render the current state: SQL preview included. on_change runs here and
+  --- only here — the height used to be derived from a second call to it, so a
+  --- preview that varied between the two made the window the wrong size.
+  local function draw()
+    sql_lines = get_sql_lines()
+    return render(rows, content_width, sql_lines)
+  end
+
+  local function height_for(lines)
+    return math.min(#lines, opts.height or 40) + 2 -- +2: the rounded border
   end
 
   local dlg = dialog.open({
     title = title,
     width = width,
-    height = calc_height(),
+    height = height_for(draw()),
     border = "rounded",
     backdrop = false,
     close_on_leave = false,
   })
 
   local function refresh()
-    sql_lines = get_sql_lines()
-    height = calc_height()
-    vim.api.nvim_win_set_config(dlg.win, { height = height })
+    local lines, highlights, row_line = draw()
+    vim.api.nvim_win_set_config(dlg.win, { height = height_for(lines) })
 
-    local lines, highlights = render(rows, title, dlg.content_width, sql_lines)
     dlg:update(lines, highlights)
 
     if #focusable > 0 then
-      local ri = focusable[focus_idx]
-      local target_line = ri
-      for i = 1, ri - 1 do
-        local r = rows[i]
-        if r.type == "preview" then
-          local indent = "    "
-          local max_line = dlg.content_width - #indent
-          if sql_lines and #sql_lines > 0 then
-            for _, sl in ipairs(sql_lines) do
-              target_line = target_line + #word_wrap(sl, max_line) - 1
-            end
-          end
-        end
+      local target_line = row_line[focusable[focus_idx]]
+      if target_line then
+        vim.api.nvim_buf_clear_namespace(dlg.buf, ns, 0, -1)
+        vim.api.nvim_buf_add_highlight(dlg.buf, ns, "Visual", target_line - 1, 0, -1)
+        pcall(vim.api.nvim_win_set_cursor, dlg.win, { target_line, 3 })
       end
-      vim.api.nvim_buf_clear_namespace(dlg.buf, ns, 0, -1)
-      vim.api.nvim_buf_add_highlight(dlg.buf, ns, "Visual", target_line - 1, 0, -1)
-      pcall(vim.api.nvim_win_set_cursor, dlg.win, { target_line, 3 })
     end
   end
 
@@ -545,6 +573,9 @@ M._test = {
   apply_toggle = apply_toggle,
   new_list_entry = new_list_entry,
   entry_values = entry_values,
+  build_rows = build_rows,
+  render = render,
+  footer_lines = footer_lines,
 }
 
 return M
