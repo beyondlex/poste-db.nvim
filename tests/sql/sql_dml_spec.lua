@@ -255,3 +255,55 @@ describe("literal quoting", function()
       "a plain integer that round-trips stays a bare literal")
   end)
 end)
+
+describe("the column type decides whether digits are a number", function()
+  local function cols_with(ctype_field, ctype)
+    local col = { name = "code" }
+    col[ctype_field] = ctype
+    return { col }
+  end
+
+  local function insert(ctype_field, ctype, val, dialect)
+    return dml.generate_insert(nil, "t", cols_with(ctype_field, ctype), { val }, dialect)
+  end
+
+  it("quotes digits heading for a text column", function()
+    -- bare 42 is an integer literal: postgres has no `text = integer`
+    -- operator and MySQL answers by storing 42 where the cell said '042'
+    assert.equals([[INSERT INTO "t" ("code") VALUES ('42');]], insert("ctype", "varchar", "42", "postgres"))
+    assert.equals([[INSERT INTO `t` (`code`) VALUES ('007');]], insert("type", "text", "007", "mysql"))
+    assert.equals([[INSERT INTO "t" ("code") VALUES ('42');]], insert("col_type", "character varying", "42", "postgres"))
+  end)
+
+  it("leaves digits bare for a numeric column", function()
+    assert.equals([[INSERT INTO "t" ("code") VALUES (42);]], insert("ctype", "integer", "42", "postgres"))
+    assert.equals([[INSERT INTO "t" ("code") VALUES (1.5);]], insert("type", "numeric(10,2)", "1.5", "postgres"))
+    assert.equals([[INSERT INTO "t" ("code") VALUES ('1.50');]],
+      insert("type", "numeric(10,2)", "1.50", "postgres"),
+      "a precision a double cannot carry stays the cell's own text")
+    assert.equals([[INSERT INTO "t" ("code") VALUES (2084515900853196878);]],
+      insert("ctype", "bigint", "2084515900853196878", "postgres"))
+  end)
+
+  it("keeps working for a column with no type at all", function()
+    -- callers that never had a type to pass (and every spec written before the
+    -- type was plumbed through) read as permissive as they did
+    assert.equals([[INSERT INTO "t" ("code") VALUES (42);]], insert("ctype", nil, "42", "postgres"))
+  end)
+
+  it("quotes the same value in a WHERE clause, where a mismatch fails the statement", function()
+    -- no primary key, so every non-NULL value is a WHERE target; comparing a
+    -- text column to a bare integer is something postgres refuses to plan at
+    -- all (`operator does not exist: text = integer`)
+    local cols = { { name = "code", ctype = "varchar" }, { name = "seq", ctype = "integer" } }
+    local sql = dml.generate_delete(nil, "t", cols, { "42", 7 }, "postgres")
+    assert.equals([[DELETE FROM "t" WHERE "code" = '42' AND "seq" = 7;]], sql)
+  end)
+
+  it("quotes it in an UPDATE SET too", function()
+    local cols = { { name = "code", ctype = "varchar" }, { name = "id", ctype = "integer", primary_key = true } }
+    local sql = dml.generate_update(nil, "t", cols,
+      { { col = 1, new_val = "007" } }, { "42", 7 }, "postgres")
+    assert.equals([[UPDATE "t" SET "code" = '007' WHERE "id" = 7;]], sql)
+  end)
+end)

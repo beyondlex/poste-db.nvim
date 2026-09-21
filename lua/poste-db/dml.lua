@@ -1,5 +1,6 @@
 local M = {}
 local ident = require("poste-db.ident")
+local types = require("poste-db.types")
 
 local function quote_schema(schema, dialect)
   if not schema or schema == "" then return "" end
@@ -21,7 +22,9 @@ end
 --- — the user typed it deliberately into the cell editor — so it defaults to
 --- FALSE: imported CSV/JSON cells starting with `__expr:` must become plain
 --- string literals, never executed SQL (a CSV cell is untrusted input).
-local function quote_val(val, dialect, allow_expr)
+--- `col_type` is the column the value is going into, when the caller knows it:
+--- a digit string in a text column is the characters, not a number.
+local function quote_val(val, dialect, allow_expr, col_type)
   if val == nil or val == vim.NIL then
     return "NULL"
   end
@@ -43,6 +46,12 @@ local function quote_val(val, dialect, allow_expr)
   if type(val) == "string" then
     local num = tonumber(val)
     if num and val:match("^%-?%d+%.?%d*$") then
+      if not types.is_numeric((col_type or ""):lower()) then
+        -- The column holds text, so the digits are the data. Written bare this
+        -- is an integer literal, which postgres rejects for a text column and
+        -- the other servers answer by storing something else.
+        return ident.quote_literal(val, dialect)
+      end
       local round_trip = num == math.floor(num) and string.format("%.0f", num) or tostring(num)
       if round_trip ~= val then
         -- the double cannot hold this text (a bigint) — emit the exact digits
@@ -73,6 +82,14 @@ local function quote_val(val, dialect, allow_expr)
   return ident.quote_literal(tostring(val), dialect)
 end
 
+--- A column's type, from whichever field its shape carries: normalized columns
+--- (`import/mapping.normalize_columns`) say `type`, dataset layout columns say
+--- `ctype`. Nil means the caller had no type, which keeps the older behavior.
+local function col_type_of(col)
+  if not col then return nil end
+  return col.type or col.ctype or col.col_type
+end
+
 local function find_pk_columns(columns)
   local pks = {}
   for i, col in ipairs(columns or {}) do
@@ -83,11 +100,11 @@ local function find_pk_columns(columns)
   return pks
 end
 
-local function where_eq(col_name, val, dialect, allow_expr)
+local function where_eq(col_name, val, dialect, allow_expr, col_type)
   if val == nil or val == vim.NIL then
     return ident.quote(col_name, dialect) .. " IS NULL"
   end
-  return ident.quote(col_name, dialect) .. " = " .. quote_val(val, dialect, allow_expr)
+  return ident.quote(col_name, dialect) .. " = " .. quote_val(val, dialect, allow_expr, col_type)
 end
 
 local function build_where(columns, pk_cols, row_values, dialect, allow_expr)
@@ -96,7 +113,7 @@ local function build_where(columns, pk_cols, row_values, dialect, allow_expr)
     for _, ci in ipairs(pk_cols) do
       local col = columns[ci]
       local val = row_values[ci]
-      parts[#parts + 1] = where_eq(col.name, val, dialect)
+      parts[#parts + 1] = where_eq(col.name, val, dialect, nil, col_type_of(col))
     end
     return table.concat(parts, " AND ")
   end
@@ -104,7 +121,7 @@ local function build_where(columns, pk_cols, row_values, dialect, allow_expr)
   for i, col in ipairs(columns or {}) do
     local val = row_values[i]
     if val ~= nil and val ~= vim.NIL then
-      parts[#parts + 1] = where_eq(col.name, val, dialect, allow_expr)
+      parts[#parts + 1] = where_eq(col.name, val, dialect, allow_expr, col_type_of(col))
     end
   end
   return table.concat(parts, " AND ")
@@ -120,7 +137,8 @@ function M.generate_update(schema, table_name, columns, modifications, row_value
   for _, mod in ipairs(modifications or {}) do
     local col = columns and columns[mod.col]
     if col then
-      set_parts[#set_parts + 1] = ident.quote(col.name, dialect) .. " = " .. quote_val(mod.new_val, dialect, allow_expr)
+      set_parts[#set_parts + 1] = ident.quote(col.name, dialect)
+        .. " = " .. quote_val(mod.new_val, dialect, allow_expr, col_type_of(col))
     end
   end
   if #set_parts == 0 then
@@ -155,7 +173,7 @@ function M.generate_insert(schema, table_name, columns, row_values, dialect, all
     local val = row_values and row_values[i]
     if val ~= "[Auto]" and val ~= nil then
       col_parts[#col_parts + 1] = ident.quote(col.name, dialect)
-      val_parts[#val_parts + 1] = quote_val(val, dialect, allow_expr)
+      val_parts[#val_parts + 1] = quote_val(val, dialect, allow_expr, col_type_of(col))
     end
   end
 
