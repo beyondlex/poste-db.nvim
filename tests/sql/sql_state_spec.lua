@@ -68,6 +68,80 @@ describe("poste-db.state binary resolution", function()
   end)
 end)
 
+--- The second return value is what `:PosteDbInfo` and `:checkhealth poste-db`
+--- print: five candidates can win, the install path outranks `$PATH`, and
+--- "why is my own build not being used" has no answer without the name.
+describe("poste-db.state binary resolution source", function()
+  local uv = vim.uv or vim.loop
+  local created, empty_dir
+  local saved = {}
+
+  local function stub_binary(mode)
+    local p = vim.fn.tempname()
+    vim.fn.writefile({ "#!/bin/sh", "echo poste 1.0.0" }, p)
+    assert.truthy(uv.fs_chmod(p, mode))
+    created[#created + 1] = p
+    return p
+  end
+
+  before_each(function()
+    created = {}
+    empty_dir = vim.fn.tempname()
+    assert.truthy(vim.fn.mkdir(empty_dir, "p"))
+    saved = {
+      g = vim.g.poste_binary,
+      env = vim.env.POSTE_BINARY,
+      path = vim.env.PATH,
+      cfg = state.config.poste_binary,
+    }
+    vim.env.PATH = empty_dir
+    state.config.poste_binary = empty_dir .. "/not-configured"
+    vim.cmd("unlet! g:poste_binary")
+    vim.env.POSTE_BINARY = nil
+  end)
+  after_each(function()
+    if saved.g == nil then vim.cmd("unlet! g:poste_binary") else vim.g.poste_binary = saved.g end
+    vim.env.POSTE_BINARY = saved.env
+    vim.env.PATH = saved.path
+    state.config.poste_binary = saved.cfg
+    for _, p in ipairs(created) do vim.fn.delete(p) end
+    vim.fn.delete(empty_dir, "rf")
+  end)
+
+  it("names g:poste_binary when it answers", function()
+    vim.g.poste_binary = stub_binary(tonumber("755", 8))
+    local _, source = state.find_poste_binary()
+    assert.equals("g:poste_binary", source)
+  end)
+
+  it("names $POSTE_BINARY when the config path is not runnable", function()
+    vim.env.POSTE_BINARY = stub_binary(tonumber("755", 8))
+    local _, source = state.find_poste_binary()
+    assert.equals("$POSTE_BINARY", source)
+  end)
+
+  it("names the installed release when only that candidate is usable", function()
+    local exe = stub_binary(tonumber("755", 8))
+    state.config.poste_binary = exe
+    local path, source = state.find_poste_binary()
+    assert.equals(vim.fn.fnamemodify(exe, ":p"), path)
+    assert.equals("installed release", source)
+  end)
+
+  it("names $PATH when the binary comes from there", function()
+    vim.fn.writefile({ "#!/bin/sh", "echo poste 1.0.0" }, empty_dir .. "/poste")
+    assert.truthy(uv.fs_chmod(empty_dir .. "/poste", tonumber("755", 8)))
+    local _, source = state.find_poste_binary()
+    assert.equals("$PATH", source)
+  end)
+
+  it("returns no source with no path when nothing is usable", function()
+    local path, source = state.find_poste_binary()
+    assert.is_nil(path)
+    assert.is_nil(source)
+  end)
+end)
+
 describe("poste-db.state poste_version", function()
   local uv = vim.uv or vim.loop
   local files = {}

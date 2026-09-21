@@ -48,9 +48,10 @@ function M.setup()
   vim.api.nvim_create_user_command("PosteDbInfo", function()
     local sep = "─"
     local parts = { sep }
-    local binary = state.find_poste_binary()
+    local binary, source = state.find_poste_binary()
     if binary then
       parts[#parts + 1] = "poste_binary: " .. binary
+      parts[#parts + 1] = "from:         " .. source
       local mtime = (vim.uv or vim.loop).fs_stat(binary)
       if mtime then
         parts[#parts + 1] = "built:       " .. os.date("%Y-%m-%d %H:%M:%S", mtime.mtime.sec)

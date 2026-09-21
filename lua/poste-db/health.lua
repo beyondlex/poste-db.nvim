@@ -20,13 +20,15 @@ function M.check()
   -- Poste binary (vendored state, family dissolution: the binary is
   -- REQUIRED here — exec-file/session are the SQL transport)
   local state = require("poste-db.state")
-  local binary = state.find_poste_binary()
+  local binary, source = state.find_poste_binary()
   if binary then
-    ok("poste binary: " .. binary)
+    -- The source is the actionable half: five candidates can win, and the
+    -- installed release outranks a $PATH build the user expects to be used.
+    ok("poste binary: " .. binary .. " (from " .. source .. ")")
     local version = state.poste_version(binary)
     if version then ok("poste version: " .. version) end
   else
-    error("poste binary not found — run :PosteInstall or set vim.g.poste_binary")
+    error("poste binary not found — run :PosteInstall, or set vim.g.poste_binary / $POSTE_BINARY")
   end
 
   -- curl
