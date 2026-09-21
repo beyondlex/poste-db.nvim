@@ -14,6 +14,18 @@ local function flush_items(callback, items)
   callback(items)
 end
 
+--- The word the cursor is inside, after a `.`.
+---
+--- Rust already isolated it; re-matching `line_before` here is a second copy of
+--- that rule and a narrower one — `[%w_]+%.` cannot see a quoted qualifier, so
+--- `"p"."ti` filtered on an empty prefix and listed every column.
+local function typed_prefix(rust_ctx, line_before)
+  if rust_ctx and rust_ctx.prefix ~= nil then
+    return rust_ctx.prefix
+  end
+  return line_before:match("[%w_]+%.([%w_]*)$") or ""
+end
+
 function M.handle_directives(line_before, callback)
   if line_before:match(const.DIRECTIVE_PREFIX_PATTERN .. const.DIRECTIVE_CONNECTION) then
     -- The `%s+(%S*)$` form is the only one that can yield a prefix: matching
@@ -111,7 +123,7 @@ local function handle_database(line_before, ctx_data, callback)
 end
 
 local function handle_dot_column(bufnr, line_before, cursor_line, ctx_data, rust_ctx, callback)
-  local col_prefix = line_before:match("[%w_]+%.([%w_]*)$") or ""
+  local col_prefix = typed_prefix(rust_ctx, line_before)
   local _, alias_map, schema_map = ctx.get_tables_and_alias(bufnr, cursor_line or vim.fn.line("."), rust_ctx)
   local real_tbl = alias_map[ctx_data] or ctx_data
   local schema = rust_ctx and rust_ctx.ctx_schema or schema_map[real_tbl]
@@ -124,9 +136,9 @@ local function handle_dot_column(bufnr, line_before, cursor_line, ctx_data, rust
   end)
 end
 
-local function handle_schema_table(line_before, ctx_data, dialect, callback)
+local function handle_schema_table(line_before, ctx_data, dialect, rust_ctx, callback)
   local schema_name = ctx_data
-  local tbl_prefix = line_before:match("[%w_]+%.([%w_]*)$") or ""
+  local tbl_prefix = typed_prefix(rust_ctx, line_before)
   data.ensure_tables_for_db(schema_name, function()
     local key = data.conn_key()
     local db_cache_key = key .. "/db:" .. schema_name
@@ -331,7 +343,7 @@ function M.dispatch(opts, ctx_type, ctx_data, rust_ctx, callback)
   end
 
   if ctx_type == "schema_table" then
-    return handle_schema_table(line_before, ctx_data, dialect, callback)
+    return handle_schema_table(line_before, ctx_data, dialect, rust_ctx, callback)
   end
 
   if ctx_type == "table" then

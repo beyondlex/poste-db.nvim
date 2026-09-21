@@ -290,6 +290,47 @@ describe("get_items dot_column resolves alias", function()
     assert.is_true(labels["id"], "should have id column from authors table")
     assert.is_true(labels["bio"], "should have bio column from authors table")
   end)
+
+  -- `tag` next to `title` makes a prefix that lost its last character visible:
+  -- "ti" keeps the list at title, "t" lets both through, and a re-derived empty
+  -- prefix lets everything through.
+  local function seed_posts_with_two_t_columns()
+    sql_comp.cache_columns("posts", {
+      { name = "id" }, { name = "title" }, { name = "tag" }, { name = "author_id" },
+    })
+  end
+
+  local function labels_of(items)
+    local labels = {}
+    for _, item in ipairs(items) do labels[item.label] = true end
+    return labels
+  end
+
+  it("a quoted qualifier keeps its prefix filter", function()
+    seed_posts_with_two_t_columns()
+    local buf = make_buf({ "###", 'SELECT * FROM posts "p" WHERE "p"."ti' })
+    local items = nil
+    get_items(buf, 'SELECT * FROM posts "p" WHERE "p"."ti', 2, function(r) items = r end)
+    assert.is_not_nil(items)
+    local labels = labels_of(items)
+    assert.is_true(labels["title"], "title should match prefix 'ti'")
+    assert.is_nil(labels["tag"], "tag must not match a 'ti' prefix")
+    assert.is_nil(labels["id"], "id must not match a 'ti' prefix")
+  end)
+
+  it("a cursor mid-line still reads the word it is inside", function()
+    seed_posts_with_two_t_columns()
+    -- The buffer line continues past the cursor, so line_before is only a
+    -- prefix of it: the qualifier has to come from the word under the cursor,
+    -- not from the end of the line.
+    local buf = make_buf({ "###", "SELECT * FROM posts p WHERE p.ti, p.id" })
+    local items = nil
+    get_items(buf, "SELECT * FROM posts p WHERE p.ti", 2, function(r) items = r end)
+    assert.is_not_nil(items)
+    local labels = labels_of(items)
+    assert.is_true(labels["title"], "title should match prefix 'ti'")
+    assert.is_nil(labels["tag"], "tag must not match a 'ti' prefix")
+  end)
 end)
 
 -- ── 7. Dedup in get_completions (blink path) ─────────────────────────────────
