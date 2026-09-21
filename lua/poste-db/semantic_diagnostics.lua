@@ -363,8 +363,13 @@ local function build_schema(tables, columns, db)
   for _, t in ipairs(tables or {}) do known[t:lower()] = true end
   local col_lookup = {}
   for tbl, cols in pairs(columns or {}) do
-    col_lookup[tbl] = {}
-    for _, c in ipairs(cols or {}) do col_lookup[tbl][c:lower()] = true end
+    -- Folded like `known` above: unquoted identifiers fold to lowercase in
+    -- postgres and are case-insensitive in MySQL/SQLite, and the cache can
+    -- hold one table under two spellings because the fetch used to key it by
+    -- the name as typed.
+    local key = tbl:lower()
+    col_lookup[key] = col_lookup[key] or {}
+    for _, c in ipairs(cols or {}) do col_lookup[key][c:lower()] = true end
   end
   return { known_tables = known, columns = col_lookup, db = db }
 end
@@ -456,7 +461,7 @@ local function fetch_columns(buf, conn, db, tbl, callback)
 
   run_introspect(args, function(items)
     _schema_cache[cache_key] = _schema_cache[cache_key] or { tables = {}, columns = {} }
-    _schema_cache[cache_key].columns[tbl] = vim.tbl_map(function(i) return i.name end, items)
+    _schema_cache[cache_key].columns[tbl:lower()] = vim.tbl_map(function(i) return i.name end, items)
   end, callback)
 end
 
@@ -629,12 +634,16 @@ function M.update(buf)
         if db_of_ref == false then return nil end
         local target_db = db_of_ref or db
         local target_schema = schema_for(conn, target_db)
-        if not target_schema or not target_schema.known_tables[tbl_name:lower()] then
+        local lower_tbl = tbl_name:lower()
+        if not target_schema or not target_schema.known_tables[lower_tbl] then
           return nil
         end
-        local cols = target_schema.columns[tbl_name]
-        if not cols then
-          local key = target_db .. "." .. tbl_name
+        -- `next(cols) == nil` is an empty cached list, which no real table can
+        -- have: treat it as not known yet rather than as "this table has no
+        -- columns", which would flag every reference to it.
+        local cols = target_schema.columns[lower_tbl]
+        if not cols or not next(cols) then
+          local key = target_db .. "." .. lower_tbl
           if not pending_column_fetches[key] then
             pending_column_fetches[key] = { conn = conn, db = target_db, tbl = tbl_name }
           end

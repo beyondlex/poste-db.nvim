@@ -48,6 +48,19 @@ local function sql_buf(sql)
   return buf
 end
 
+--- Messages `M.update` put on that buffer, sorted so `assert.same` is stable.
+local function msgs(sql)
+  local out = {}
+  local buf = sql_buf(sql)
+  sem.update(buf)
+  for _, d in ipairs(vim.diagnostic.get(buf)) do
+    if d.source == "poste-db" then out[#out + 1] = d.message end
+  end
+  table.sort(out)
+  vim.api.nvim_buf_delete(buf, { force = true })
+  return out
+end
+
 describe("semantic_diagnostics invalidate", function()
   before_each(function()
     sem._test.set_cache("connA/blog", { tables = { "old" } })
@@ -182,18 +195,6 @@ describe("semantic_diagnostics cross-database references", function()
     return
   end
 
-  local function msgs(sql)
-    local out = {}
-    local buf = sql_buf(sql)
-    sem.update(buf)
-    for _, d in ipairs(vim.diagnostic.get(buf)) do
-      if d.source == "poste-db" then out[#out + 1] = d.message end
-    end
-    table.sort(out)
-    vim.api.nvim_buf_delete(buf, { force = true })
-    return out
-  end
-
   before_each(function()
     fake_ctx = { connection = "connA", database = "blog" }
     sem.invalidate(nil)
@@ -231,5 +232,73 @@ describe("semantic_diagnostics cross-database references", function()
   -- `--database` cannot introspect at all.
   it("stays silent for a database whose schema was never fetched", function()
     assert.same({}, msgs("SELECT id FROM newdb.accounts;"))
+  end)
+end)
+
+-- Unquoted identifiers fold to lowercase in postgres and are case-insensitive
+-- in MySQL and SQLite, so `USERS` and `users` are the same table. The table
+-- *list* was already compared case-insensitively; the per-table column maps
+-- were keyed by the name as it happened to be typed, which left both the
+-- lookup and the cached entry unable to find the other spelling. The dangerous
+-- direction is the fetch: `introspect --table USERS` legitimately returns no
+-- rows on postgres, that empty list got cached under "USERS", and every column
+-- of the real table was then reported missing until the next invalidation.
+describe("semantic_diagnostics table-name case", function()
+  if not has_sql_parser then
+    it("is skipped when the parser is unavailable", function()
+      pending("Tree-sitter SQL parser unavailable in this Neovim environment")
+    end)
+    return
+  end
+
+  before_each(function()
+    fake_ctx = { connection = "connA", database = "blog" }
+    sem.invalidate(nil)
+  end)
+
+  after_each(function()
+    sem.invalidate(nil)
+    fake_ctx = {}
+  end)
+
+  it("finds columns cached under the lowercase name when the SQL shouts", function()
+    sem._test.set_cache("connA/blog", {
+      tables = { "users" },
+      columns = { users = { "id", "name" } },
+    })
+    assert.same({}, msgs("SELECT USERS.name FROM USERS;"))
+    assert.same({ "Column 'zzz' not found in table 'USERS'" },
+      msgs("SELECT USERS.zzz FROM USERS;"))
+  end)
+
+  it("finds columns cached under a shouted name when the SQL is quiet", function()
+    sem._test.set_cache("connA/blog", {
+      tables = { "users" },
+      columns = { USERS = { "id", "name" } },
+    })
+    assert.same({}, msgs("SELECT users.name FROM users;"))
+    assert.same({ "Column 'zzz' not found in table 'users'" },
+      msgs("SELECT users.zzz FROM users;"))
+  end)
+
+  -- Both spellings resolve to one list, so the ambiguous merge keeps working
+  -- whichever way the file is written.
+  it("merges cached column lists that differ only by case", function()
+    sem._test.set_cache("connA/blog", {
+      tables = { "users" },
+      columns = { users = { "id" }, USERS = { "name" } },
+    })
+    assert.same({}, msgs("SELECT users.id, USERS.name FROM users;"))
+  end)
+
+  -- An empty list is what `introspect --type columns` answers for a name the
+  -- server does not have, not proof that a real table has no columns. Reading
+  -- it as the latter flagged every reference in the statement.
+  it("treats a cached empty column list as unknown rather than as no columns", function()
+    sem._test.set_cache("connA/blog", {
+      tables = { "users" },
+      columns = { users = {} },
+    })
+    assert.same({}, msgs("SELECT zzz, name FROM users;"))
   end)
 end)
