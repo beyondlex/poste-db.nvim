@@ -172,18 +172,41 @@ end)
 
 describe("db_browser copy_ddl dialect_table_exists_sql", function()
   it("uses information_schema + DATABASE() on mysql", function()
-    local sql = ddl_mod.dialect_table_exists_sql("mysql", nil)
+    local sql = ddl_mod.dialect_table_exists_sql("mysql", nil, "posts")
     assert.matches("information_schema%.TABLES", sql)
     assert.matches("TABLE_SCHEMA = DATABASE%(%)", sql)
+    assert.matches("TABLE_NAME = 'posts'", sql)
   end)
 
   it("scopes postgres to the schema, defaulting to public", function()
-    assert.matches("table_schema = 'app'", ddl_mod.dialect_table_exists_sql("postgres", "app"))
-    assert.matches("table_schema = 'public'", ddl_mod.dialect_table_exists_sql("postgres", nil))
+    assert.matches("table_schema = 'app'", ddl_mod.dialect_table_exists_sql("postgres", "app", "posts"))
+    assert.matches("table_schema = 'public'", ddl_mod.dialect_table_exists_sql("postgres", nil, "posts"))
   end)
 
   it("uses sqlite_master for other dialects", function()
-    assert.matches("sqlite_master", ddl_mod.dialect_table_exists_sql("sqlite", nil))
+    assert.matches("sqlite_master", ddl_mod.dialect_table_exists_sql("sqlite", nil, "posts"))
+  end)
+
+  -- The probe runs on every paste. A broken literal does not just fail the
+  -- query: the caller fails closed on error, so the collision search then sees
+  -- every candidate as taken and never stops bumping suffixes.
+  it("doubles an apostrophe in the probed name instead of closing the literal", function()
+    assert.equals(
+      "SELECT EXISTS (SELECT FROM information_schema.tables"
+        .. " WHERE table_schema = 'public' AND table_name = 'it''s')",
+      ddl_mod.dialect_table_exists_sql("postgres", "public", "it's"))
+  end)
+
+  it("doubles an apostrophe in the schema too", function()
+    assert.equals(
+      "SELECT EXISTS (SELECT FROM information_schema.tables"
+        .. " WHERE table_schema = 'o''b' AND table_name = 'posts')",
+      ddl_mod.dialect_table_exists_sql("postgres", "o'b", "posts"))
+  end)
+
+  it("escapes the backslash a mysql literal reads as an escape character", function()
+    local sql = ddl_mod.dialect_table_exists_sql("mysql", nil, "a\\b")
+    assert.is_true(sql:find("TABLE_NAME = 'a\\\\b'", 1, true) ~= nil, sql)
   end)
 end)
 

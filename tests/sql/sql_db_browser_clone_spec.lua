@@ -25,6 +25,63 @@ describe("db_browser clone pick_clone_default", function()
     assert.equals("blog_copy2", t.pick_clone_default("blog_copy", existing))
   end)
 end)
+describe("db_browser resolve_conflict_names", function()
+  local target = { conn = "t", db = "other", dialect = "postgres" }
+
+  local function with_hooked_exists(taken, fn)
+    local calls = {}
+    _G.poste_db_copy_test_hooks = {
+      exists = function(_t, name, _schema, cb)
+        calls[#calls + 1] = name
+        cb(taken(name, #calls))
+      end,
+    }
+    local ok, err = pcall(fn, calls)
+    _G.poste_db_copy_test_hooks = nil
+    assert(ok, tostring(err))
+    return calls
+  end
+
+  it("keeps a free name and suffixes a colliding one", function()
+    local resolved
+    with_hooked_exists(function(name)
+      return name == "posts" or name == "posts_copy" or name == "posts_copy2"
+    end, function()
+      copy.resolve_conflict_names(target, {
+        { name = "posts" }, { name = "users" },
+      }, function(names) resolved = names end, function() error("must not cancel") end,
+      { skip_dialogs = true })
+    end)
+    -- posts bumps past both taken candidates; users is free on the first probe
+    assert.are.same({ "posts_copy3", "users" }, resolved)
+  end)
+
+  it("resolves everything in one pass when no item collides", function()
+    local resolved
+    local calls = with_hooked_exists(function() return false end, function()
+      copy.resolve_conflict_names(target, { { name = "a" }, { name = "b" } },
+        function(names) resolved = names end, function() error("must not cancel") end,
+        { skip_dialogs = true })
+    end)
+    assert.are.same({ "a", "b" }, resolved)
+    assert.are.same({ "a", "b" }, calls)
+  end)
+
+  -- The existence probe fails closed: a query that errors (lost connection,
+  -- revoked information_schema grant) reports "taken". Without a ceiling the
+  -- suffix search re-probes forever and the paste never starts.
+  it("stops bumping suffixes at the cap when every name reports taken", function()
+    local resolved
+    local calls = with_hooked_exists(function() return true end, function()
+      copy.resolve_conflict_names(target, { { name = "posts" } },
+        function(names) resolved = names end, function() error("must not cancel") end,
+        { skip_dialogs = true })
+    end)
+    assert.equals(t.MAX_NAME_BUMPS + 1, #calls, "probe count must stop at the cap")
+    assert.are.same({ "posts_copy" .. (t.MAX_NAME_BUMPS + 1) }, resolved)
+  end)
+end)
+
 describe("db_browser copy progress spinner", function()
   local function collect_dialog_lines()
     local lines = {}

@@ -142,18 +142,29 @@ function M.prepare_table_ddl(ddl, target_table_name, table_name, schema, dialect
   return table.concat(seq_stmts, "\n")
 end
 
-function M.dialect_table_exists_sql(dialect, schema)
+--- Existence probe for a paste target: table OR view (a same-named view
+--- collides with a table in every engine here).
+---
+--- The name and schema are rendered through `quote_literal` at build time
+--- instead of being spliced into a hand-written `'%s'`: an apostrophe is legal
+--- inside a quoted identifier, and one in the probed name closed the literal
+--- early, made the query error out, and the caller's fail-closed handler then
+--- reported *every* candidate name as taken — the auto-suffix loop never
+--- terminated.
+function M.dialect_table_exists_sql(dialect, schema, name)
   if dialect == "mysql" or dialect == "mariadb" then
     -- information_schema (not SHOW TABLES) so views collide correctly too.
     return "SELECT TABLE_NAME FROM information_schema.TABLES"
-      .. " WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '%s'"
+      .. " WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = "
+      .. ident.quote_literal(name, dialect)
   elseif dialect == "postgres" then
     return "SELECT EXISTS (SELECT FROM information_schema.tables"
-      .. " WHERE table_schema = '" .. (schema or "public") .. "'"
-      .. " AND table_name = '%s')"
+      .. " WHERE table_schema = " .. ident.quote_literal(schema or "public", dialect)
+      .. " AND table_name = " .. ident.quote_literal(name, dialect) .. ")"
   else
     return "SELECT name FROM sqlite_master"
-      .. " WHERE type IN ('table','view') AND name='%s'"
+      .. " WHERE type IN ('table','view') AND name = "
+      .. ident.quote_literal(name, dialect)
   end
 end
 

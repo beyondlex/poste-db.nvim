@@ -88,7 +88,7 @@ local function introspect_ddl(conn_name, db_name, table_name, on_result, on_erro
 end
 
 local function check_table_exists(conn_name, database, dialect, name, on_result, on_error, schema)
-  local sql = dialect_table_exists_sql(dialect, schema):format(name)
+  local sql = dialect_table_exists_sql(dialect, schema, name)
   run_sql_on_conn(conn_name, database, sql, function(output)
     local ok, parsed = pcall(vim.json.decode, output)
     if not ok or not parsed then
@@ -113,6 +113,10 @@ end
 
 -- --------------------------------------------------------- conflict naming
 
+--- Ceiling on the `<name>_copy` / `_copy2` / … auto-suffix search. See
+--- `bump_until_free`.
+local MAX_NAME_BUMPS = 100
+
 local function make_default_input()
   ---@param prompt string
   ---@param default string
@@ -133,6 +137,11 @@ end
 ---                              name, which is itself re-checked and bumped
 ---                              automatically if taken
 --- - cancelling the dialog    → aborts the whole paste (on_cancel)
+---
+--- With `opts.skip_dialogs` the same collision search runs silently: every
+--- colliding item takes its first free `_copy` name and `on_cancel` never
+--- fires. That is how `paste_objects` calls this today — the paste is one
+--- confirm dialog away, and its progress view lists the resulting names.
 ---
 ---@param target table {conn, db, dialect}
 ---@param items table[] {name=..., schema=?}
@@ -164,6 +173,14 @@ function M.resolve_conflict_names(target, items, on_resolved, on_cancel, opts)
     end
 
     local function bump_until_free(i, base, suffix, cb)
+      -- The probe fails closed (a permission error on information_schema, a
+      -- connection that died mid-paste), so an unbounded search here is an
+      -- unbounded stream of queries that never resolves. Past the cap, return
+      -- the candidate as-is and let CREATE fail loudly instead of hanging.
+      if suffix > MAX_NAME_BUMPS then
+        cb(base .. "_copy" .. tostring(suffix))
+        return
+      end
       local candidate = base .. "_copy" .. (suffix > 1 and tostring(suffix) or "")
       exists_fn(target, candidate, items[i].schema, function(found)
         if not found then cb(candidate) else bump_until_free(i, base, suffix + 1, cb) end
@@ -442,7 +459,8 @@ end
 --- Copy/paste pipeline shared by yank-paste and legacy multi-select.
 ---
 --- Stage 1 probe sizes (async, tolerant) →
---- Stage 2 resolve conflicts via dialogs (tables/views only) →
+--- Stage 2 resolve conflicts (tables/views only; auto-renamed silently,
+---           see resolve_conflict_names / skip_dialogs) →
 --- Stage 3 confirm dialog → Stage 4 sequential execution with progress.
 ---
 ---@param source table {conn, db, dialect}
@@ -693,6 +711,7 @@ end
 M._test = {
   pick_clone_default = pick_clone_default,
   show_paste_progress = show_paste_progress,
+  MAX_NAME_BUMPS = MAX_NAME_BUMPS,
 }
 
 return M
