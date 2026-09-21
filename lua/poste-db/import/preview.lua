@@ -84,8 +84,10 @@ local function build_preview_lines(table_info, total_rows, valid_count, bad_rows
 
   add("")
   add("Column mapping:")
-  local max_import_w = math.max(4, 0)
-  local max_table_w = math.max(5, 0)
+  -- The two column headers ("file", "table") are the minimum widths, so the
+  -- separator row never comes out shorter than the header it underlines.
+  local max_import_w = 4
+  local max_table_w = 5
   for _, mc in ipairs(col_map) do
     local iw = vim.fn.strdisplaywidth(mc.import_name)
     local tw = vim.fn.strdisplaywidth(mc.table_col.name .. " (" .. mc.table_col.col_type .. ")")
@@ -179,14 +181,22 @@ function M.show_preview(table_info, total_rows, valid_count, bad_rows,
 
   local highlights = {}
   local parsed_li = 2
+  -- One colour per count on the "Parsed: N rows total, N valid, N with errors"
+  -- line. Byte 9 is just past the "Parsed: " prefix; a line that stops matching
+  -- that format just yields fewer highlights instead of erroring.
+  -- A zero error count is deliberately left uncoloured: red on "0 with errors"
+  -- made every clean file look like it had a problem.
+  local count_groups = { "Number", "String" }
+  if #bad_rows > 0 then table.insert(count_groups, "DiagnosticError") end
   local parsed_text = lines[parsed_li + 1]
   if parsed_text then
-    local s1, e1 = parsed_text:find("%d+", 9)
-    local s2, e2 = parsed_text:find("%d+", e1 + 1)
-    local s3, e3 = parsed_text:find("%d+", e2 + 1)
-    if s1 then table.insert(highlights, { line = parsed_li, col_start = s1 - 1, col_end = e1, hl_group = "Number" }) end
-    if s2 then table.insert(highlights, { line = parsed_li, col_start = s2 - 1, col_end = e2, hl_group = "String" }) end
-    if s3 then table.insert(highlights, { line = parsed_li, col_start = s3 - 1, col_end = e3, hl_group = "DiagnosticError" }) end
+    local pos = 9
+    for _, group in ipairs(count_groups) do
+      local s, e = parsed_text:find("%d+", pos)
+      if not s then break end
+      table.insert(highlights, { line = parsed_li, col_start = s - 1, col_end = e, hl_group = group })
+      pos = e + 1
+    end
   end
   for _, li in ipairs(orange_rows) do
     table.insert(highlights, { line = li - 1, col_start = 0, col_end = #content[li], hl_group = "DiagnosticWarn" })
