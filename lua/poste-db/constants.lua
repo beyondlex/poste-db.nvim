@@ -117,10 +117,15 @@ function M.supports_transactions(dialect)
   return not M.DIALECTS_WITHOUT_TRANSACTIONS[M.normalize_dialect(dialect)]
 end
 
---- Connection URL scheme prefixes → base dialect, ordered, first match wins.
+--- Connection URL scheme prefixes → base dialect, ordered, first match wins
+--- (the prefixes are mutually exclusive, so the order is not load-bearing —
+--- but it is the order the Rust mirror reads too).
 --- The single source for URL sniffing (session_conn, completion/data,
 --- semantic_diagnostics) and, inverted, for URL building in connections.lua.
---- Keep in sync with the Rust scheme chains (exec_file/session/introspect).
+--- Rust mirror: `Protocol::from_sql_url` in poste.nvim's
+--- crates/poste-core/src/request.rs — one chain now (exec_file, session and
+--- introspect all call it), pinned by that file's scheme test. A scheme added
+--- here and not there fails only when a connection runs.
 M.URL_SCHEMES = {
   { "^sqlite:", "sqlite" },
   { "^postgres://", "postgres" },
