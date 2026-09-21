@@ -54,8 +54,7 @@ local function new_list_entry(sub_fields)
     end
     entry[sf.key] = v
   end
-  entry._collapsed = true
-  entry._summary = "new entry"
+  entry._collapsed = false -- open on purpose: a new entry is there to be filled in
   return entry
 end
 
@@ -90,6 +89,31 @@ local function to_display(field)
   return tostring(v)
 end
 
+--- One sub-field of an entry, shaped like a field so the existing editors (text,
+--- select, multi_select, bool) work on it unchanged. The template is shared by
+--- every entry, hence the copy; an edit lands back on the entry in `refresh`.
+local function entry_subfield(entry, sf)
+  local v = entry[sf.key]
+  if v == nil then v = sf.value end
+  return {
+    key = sf.key,
+    label = sf.label,
+    kind = sf.kind,
+    choices = sf.choices,
+    value = type(v) == "table" and vim.deepcopy(v) or v,
+  }
+end
+
+--- An entry's values on one line — all that a collapsed entry shows. Computed as
+--- it renders, so an edit cannot leave it advertising the old values.
+local function entry_summary(entry, sub_fields)
+  local parts = {}
+  for _, sf in ipairs(sub_fields or {}) do
+    table.insert(parts, tostring(sf.label) .. "=" .. to_display(entry_subfield(entry, sf)))
+  end
+  return table.concat(parts, "  ")
+end
+
 local function build_rows(sections, dialect)
   local rows = {}
   local focusable = {}
@@ -105,7 +129,22 @@ local function build_rows(sections, dialect)
           table.insert(rows, { type = "field", field = field, section = section })
           table.insert(focusable, #rows)
           for ei, entry in ipairs(field.value or {}) do
-            table.insert(rows, { type = "list_entry", field = field, entry = entry, entry_idx = ei, section = section, collapsed = entry._collapsed or false })
+            local collapsed = entry._collapsed == true
+            table.insert(rows, { type = "list_entry", field = field, entry = entry,
+              entry_idx = ei, section = section, collapsed = collapsed })
+            table.insert(focusable, #rows)
+            -- An expanded entry shows its sub-fields as editable rows. Without
+            -- them the entry is a line nobody can fill in or delete: `list` is
+            -- the one field kind whose values the generated SQL depends on.
+            if not collapsed then
+              for _, sf in ipairs(field.sub_fields or {}) do
+                if not (sf.dialect and sf.dialect ~= dialect) then
+                  table.insert(rows, { type = "field", field = entry_subfield(entry, sf),
+                    entry = entry, list_field = field, section = section, nested = true })
+                  table.insert(focusable, #rows)
+                end
+              end
+            end
           end
         else
           table.insert(rows, { type = "field", field = field, section = section })
@@ -174,6 +213,11 @@ local function footer_lines(width)
   return { lines = lines, highlights = highlights }
 end
 
+--- Entry sub-fields sit one level under their entry line (which is itself
+--- indented four columns), so the nesting reads the same at a glance.
+local NESTED_INDENT = "      "
+local function row_indent(row) return row.nested and NESTED_INDENT or "  " end
+
 --- @return lines, highlights, row_line  row_line[row index] = buffer line (1-based)
 local function render(rows, width, sql_lines)
   local lines = {}
@@ -194,7 +238,7 @@ local function render(rows, width, sql_lines)
   local label_width = 0
   for _, row in ipairs(rows) do
     if row.type == "field" and row.field then
-      local dw = vim.fn.strdisplaywidth("  " .. row.field.label .. ":")
+      local dw = vim.fn.strdisplaywidth(row_indent(row) .. row.field.label .. ":")
       if dw > label_width then label_width = dw end
     end
   end
@@ -215,7 +259,7 @@ local function render(rows, width, sql_lines)
     elseif row.type == "field" then
       local f = row.field
       local display = to_display(f)
-      local label = "  " .. f.label .. ":"
+      local label = row_indent(row) .. f.label .. ":"
       local pad = label_width - vim.fn.strdisplaywidth(label)
       if pad < 0 then pad = 0 end
       table.insert(lines, label .. string.rep(" ", pad) .. "  " .. display)
@@ -229,12 +273,11 @@ local function render(rows, width, sql_lines)
       }))
       prev_was_content = true
     elseif row.type == "list_entry" then
+      -- The marker is the entry's own state: rows are rebuilt whenever the
+      -- structure changes, so a flag on the row would be lost on the next one.
       local marker = row.collapsed and "▶" or "▼"
-      local summary = "entry " .. row.entry_idx
-      if row.entry and row.entry._summary then
-        summary = row.entry._summary
-      end
-      table.insert(lines, "    " .. marker .. " " .. summary)
+      table.insert(lines, "    " .. marker .. " entry " .. tostring(row.entry_idx) .. "  "
+        .. entry_summary(row.entry, row.field.sub_fields))
       li = li + 1
       prev_was_content = true
     else
@@ -319,7 +362,12 @@ function M.open(opts)
     close_on_leave = false,
   })
 
-  local function refresh()
+  --- Redraw. `row` is the one just edited: an entry's sub-fields are edited on a
+  --- copy of the shared template (see `entry_subfield`), so the new value has to
+  --- reach the entry before anything reads it — the SQL preview included.
+  local function refresh(row)
+    if row and row.entry and row.field then row.entry[row.field.key] = row.field.value end
+
     local lines, highlights, row_line = draw()
     vim.api.nvim_win_set_config(dlg.win, { height = height_for(lines) })
 
@@ -333,6 +381,15 @@ function M.open(opts)
         pcall(vim.api.nvim_win_set_cursor, dlg.win, { target_line, 3 })
       end
     end
+  end
+
+  --- Rebuild the row list after the structure changed (an entry added, collapsed
+  --- or removed) and keep the focus where it was: the rows before it are the same
+  --- ones, so its index still names the same field.
+  local function rebuild_rows()
+    rows, focusable = build_rows(sections, dialect)
+    if focus_idx > #focusable then focus_idx = math.max(1, #focusable) end
+    refresh()
   end
 
   local function safe_close()
@@ -374,8 +431,10 @@ function M.open(opts)
     if not row then return end
 
     if row.type == "list_entry" then
-      row.collapsed = not row.collapsed
-      refresh()
+      -- The state lives on the entry: the row it is drawn from is rebuilt from
+      -- the entries on every structural change.
+      row.entry._collapsed = not row.collapsed
+      rebuild_rows()
       return
     end
 
@@ -386,7 +445,7 @@ function M.open(opts)
 
     if f.kind == "bool" then
       f.value = not f.value
-      refresh()
+      refresh(row)
       return
     end
 
@@ -415,7 +474,7 @@ function M.open(opts)
         f.value = apply_toggle(choices, current, picked)
         if dlg.win and vim.api.nvim_win_is_valid(dlg.win) then
           vim.api.nvim_set_current_win(dlg.win)
-          refresh()
+          refresh(row)
         end
       end)
       return
@@ -427,7 +486,15 @@ function M.open(opts)
       if not f.value then f.value = {} end
       table.insert(f.value, entry)
       rows, focusable = build_rows(sections, dialect)
+      -- Land on the new entry rather than at the end of the form: it opens
+      -- expanded because its default values are what the user came to change.
       focus_idx = #focusable
+      for fi, ri in ipairs(focusable) do
+        if rows[ri].entry == entry then
+          focus_idx = fi
+          break
+        end
+      end
       refresh()
       return
     end
@@ -448,7 +515,7 @@ function M.open(opts)
         end
         if dlg.win and vim.api.nvim_win_is_valid(dlg.win) then
           vim.api.nvim_set_current_win(dlg.win)
-          refresh()
+          refresh(row)
         end
       end)
       return
@@ -466,7 +533,7 @@ function M.open(opts)
       end
       if dlg.win and vim.api.nvim_win_is_valid(dlg.win) then
         vim.api.nvim_set_current_win(dlg.win)
-        refresh()
+        refresh(row)
       end
     end)
   end
@@ -511,14 +578,22 @@ function M.open(opts)
 
   local function delete_list_entry()
     local row = get_current_focus_row()
-    if not row or row.type ~= "list_entry" then return end
-    local field = row.field
+    -- Anywhere inside the entry, so that `d` means "this entry" whether the
+    -- cursor is on its line or on one of its fields.
+    if not row or not row.entry then return end
+    local field = row.list_field or row.field
     local idx = row.entry_idx
-    if field and field.value then
+    if not idx then
+      for i, e in ipairs(field and field.value or {}) do
+        if e == row.entry then
+          idx = i
+          break
+        end
+      end
+    end
+    if field and field.value and idx then
       table.remove(field.value, idx)
-      rows, focusable = build_rows(sections, dialect)
-      if focus_idx > #focusable then focus_idx = #focusable end
-      refresh()
+      rebuild_rows()
     end
   end
 
@@ -573,6 +648,8 @@ M._test = {
   apply_toggle = apply_toggle,
   new_list_entry = new_list_entry,
   entry_values = entry_values,
+  entry_subfield = entry_subfield,
+  entry_summary = entry_summary,
   build_rows = build_rows,
   render = render,
   footer_lines = footer_lines,

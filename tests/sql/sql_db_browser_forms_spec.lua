@@ -39,7 +39,9 @@ describe("db_browser forms_advanced list entries", function()
     assert.same({ "SELECT" }, entry.privileges)
     assert.equals(false, entry.with_grant_option)
     assert.equals("", entry.grantee)
-    assert.equals(true, entry._collapsed)
+    -- A new entry starts expanded, because its sub-fields are the reason it was
+    -- added; collapsing it would hide the only rows the user can edit.
+    assert.equals(false, entry._collapsed)
   end)
 
   it("deep-copies table defaults so entries do not share a list", function()
