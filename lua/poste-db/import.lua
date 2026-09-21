@@ -183,9 +183,17 @@ local function process_import(content, filepath, table_info, table_cols)
   end
 
   if #unmatched_import > 0 then
+    -- The message prints `unmatched_import` as the problem, then used to print
+    -- `parsed.columns` under "matched:" — the whole file header again, i.e. the
+    -- union of both sets, which reads as "these matched" while the import was
+    -- being blocked for exactly those columns.
+    local matched = {}
+    for _, mc in ipairs(col_map) do
+      table.insert(matched, mc.import_name)
+    end
     vim.notify("Import blocked: file has columns not in table " .. table_info.name
       .. ": " .. table.concat(unmatched_import, ", ")
-      .. " (matched: " .. table.concat(parsed.columns, ", ") .. ")",
+      .. " (matched: " .. table.concat(matched, ", ") .. ")",
       vim.log.levels.ERROR)
     return
   end
