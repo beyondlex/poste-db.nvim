@@ -157,7 +157,9 @@ function M.expand_or_child(buf_line, context)
       node.expanded = true
       util.render_tree(context)
     else
-      util.refresh_subtree(node, context, node.node_type, vim.fn.getcwd())
+      -- Same directory as every other fetch: the search dir decides which
+      -- connections.json the CLI picks up, and cwd is only its fallback.
+      util.refresh_subtree(node, context, node.node_type, get_search_dir(context.source_buf))
     end
   else
     -- Already expanded → jump to first child (next line)
@@ -301,6 +303,17 @@ local function highlight_match_chars(buf, line_to_node, matches)
   end
 end
 
+--- The window actually showing the browser buffer. `do_jump` moves the cursor
+--- from a `vim.schedule` after an async expand, so window 0 may by then be a
+--- code buffer the user switched to — and the jump would scroll that one.
+local function browser_win_for(buf)
+  if not buf or not vim.api.nvim_buf_is_valid(buf) then return nil end
+  for _, win in ipairs(vim.api.nvim_list_wins()) do
+    if vim.api.nvim_win_get_buf(win) == buf then return win end
+  end
+  return nil
+end
+
 local function do_jump(index)
   local s = search_state
   if #s.matches == 0 then return end
@@ -322,13 +335,14 @@ local function do_jump(index)
       highlight_match_chars(ctx.browser_buf, ctx.line_to_node, s.matches)
 
       -- Line-level highlight only on current match
+      local win = browser_win_for(ctx.browser_buf)
       for i, n in ipairs(ctx.line_to_node) do
         if n == match.node then
           local target_line = i + HEADER_LINES
           vim.api.nvim_buf_clear_namespace(ctx.browser_buf, search_hl_ns, 0, -1)
           vim.api.nvim_buf_add_highlight(ctx.browser_buf, search_hl_ns, "PosteDbBrowserSearchMatch",
             target_line - 1, 0, -1)
-          vim.api.nvim_win_set_cursor(0, { target_line, 0 })
+          if win then vim.api.nvim_win_set_cursor(win, { target_line, 0 }) end
           break
         end
       end
@@ -403,7 +417,10 @@ end
 
 function M.search_prev()
   if #search_state.matches == 0 then return end
-  do_jump(search_state.current - 1)
+  -- current 0 means "searched, never jumped": from there N is the last match.
+  -- ((0 - 1 - 1) % n) + 1 would land on the second-to-last and skip it.
+  local cur = search_state.current
+  do_jump(cur > 0 and cur - 1 or #search_state.matches)
 end
 
 function M.show_column_info(buf_line, context)
