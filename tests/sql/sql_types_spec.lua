@@ -34,6 +34,14 @@ describe("types is_numeric", function()
     -- whether the literal is bare or quoted.
     assert.is_true(types.is_numeric("int4range"))
   end)
+
+  it("pins the other direction: a wrapped type reads as not numeric", function()
+    -- ClickHouse spells a nullable Int32 `Nullable(Int32)`, whose root word is
+    -- `nullable`, so a digit cell aimed at it goes out quoted — which is what
+    -- the server accepts on insert anyway. Widening the lookup is a change to
+    -- make with a spec here, not by surprise.
+    assert.is_false(types.is_numeric("nullable(int32)"))
+  end)
 end)
 
 describe("types is_integer_name", function()
