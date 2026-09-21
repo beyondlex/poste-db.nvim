@@ -26,6 +26,9 @@ when none of those exist. "Usable" means readable **and** executable: a file
 without the exec bit is skipped rather than picked over a working `PATH` entry.
 On Windows each candidate is tried both as spelled and with `.exe` appended,
 which is where the installer and cargo actually put the binary.
+The download itself is bounded (10s to connect, 180s for the archive), so a
+network that black-holes it reports a failed install instead of freezing
+startup.
 
 Full documentation lives in `doc/poste-db.txt` (`:h poste-db`), with a
 [quick reference](docs/user/sql/quick-reference.md) for the everyday keys.

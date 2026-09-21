@@ -37,8 +37,11 @@ leaving the editor.
 The `poste` Rust binary talks to the databases (see |poste-db-requirements|):
 a usable one (readable and executable) is picked up from `g:poste_binary`,
 `$POSTE_BINARY`, the install path, a local dev build or `PATH`, and only
-downloaded from the poste.nvim releases when none of those exists. All Lua
-lives in this repo — there is no runtime dependency on poste.nvim itself.
+downloaded from the poste.nvim releases when none of those exists. That
+download is bounded — 10s to connect, 180s for the archive — so a network that
+black-holes it fails at startup with a message instead of freezing the editor.
+All Lua lives in this repo — there is no runtime dependency on poste.nvim
+itself.
 
 Supported dialects: PostgreSQL, MySQL/MariaDB, SQLite, SQL Server,
 ClickHouse, plus PostgreSQL/MySQL-compatible aliases (cockroachdb, tidb,
