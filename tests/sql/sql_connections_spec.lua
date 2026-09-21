@@ -622,6 +622,17 @@ describe("connections env var resolution", function()
     vim.fn.writefile({ '{"POSTE_TEST_FLAT": "flat-value"}' }, tmpdir .. "/env.json")
     assert.equals("flat-value", connections.get_env_vars(tmpdir).POSTE_TEST_FLAT)
   end)
+
+  it("expands a reference whose name is not an identifier", function()
+    -- An env.json key may be any string; the CLI's pattern accepts everything
+    -- up to the closing braces, so a narrower one here means the editor
+    -- hands the driver literal braces on a file the CLI resolves.
+    vim.fn.writefile({ '{"dev": {"POSTE_TEST-HYPHENATED": "h1"}}' }, tmpdir .. "/env.json")
+    local vars = connections.get_env_vars(tmpdir)
+    assert.equals("h1", connections.substitute_vars("{{POSTE_TEST-HYPHENATED}}", vars))
+    -- prose that only looks like a reference is still untouched
+    assert.equals("{{ not a var }}", connections.substitute_vars("{{ not a var }}", vars))
+  end)
 end)
 
 describe("connections apply_connection", function()

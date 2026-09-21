@@ -182,7 +182,11 @@ function M.substitute_vars(s, vars, depth)
   end
   depth = depth or 0
   if depth >= 10 then return s end
-  local result = (s:gsub("{{([%w_.]+)}}", function(name)
+  -- The name is "anything up to the closing brace pair", which is Rust's
+  -- `\{\{([^}]+)\}\}`: env.json keys are not limited to identifier characters,
+  -- and a reference this side refuses to expand reaches the driver as literal
+  -- braces while the CLI resolves the same file.
+  local result = (s:gsub("{{(.-)}}", function(name)
     return vars[name] or "{{" .. name .. "}}"
   end))
   if result:find("{{", 1, true) then
