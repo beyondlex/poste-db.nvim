@@ -226,6 +226,17 @@ describe("poste-db.ai.actions", function()
       assert.is_nil(actions._test.append_header(
         { connection = "my-blog" }, "-- @connection other\nSELECT 1"))
     end)
+
+    it("treats only a directive line as an existing directive", function()
+      -- `-- @connection` inside a statement is data. Every other reader of the
+      -- directive (constants.match_directive, file_exec.lua, the Rust CLI)
+      -- requires the line to *start* with `-- @`, and an unanchored check here
+      -- silently dropped the header, so the block ran on whatever connection
+      -- the buffer happened to have instead of the chat scope's.
+      local lines = actions._test.append_header(
+        { connection = "my-blog" }, "SELECT '-- @connection other' AS note")
+      assert.are.same({ "-- @connection my-blog" }, lines)
+    end)
   end)
 
   describe("execute_sql", function()

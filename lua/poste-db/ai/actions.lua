@@ -5,6 +5,7 @@
 
 local M = {}
 
+local constants = require("poste-db.constants")
 local dml_guard = require("poste-db.dml_guard")
 
 --- Read-only statement keywords (Lua patterns have no alternation, hence the
@@ -75,6 +76,21 @@ function M.confirm_sql(sql)
   return choice == 1
 end
 
+--- True when the block already names a connection with a directive *line*.
+--- Anchored on purpose: constants.match_directive, file_exec.lua and the Rust
+--- CLI all require the line to start with `-- @`, and an unanchored
+--- `text:match("%-%-%s*@connection")` here counted a directive living inside a
+--- string literal or a prose comment, dropped the header, and let the block
+--- run on the buffer's connection instead of the chat scope's.
+--- @param text string
+--- @return boolean
+local function has_connection_directive(text)
+  for line in text:gmatch("[^\r\n]+") do
+    if constants.match_directive(line, "connection") then return true end
+  end
+  return false
+end
+
 --- Header directive lines for appending an AI-authored block into a SQL
 --- buffer (poste-ai's `ga` action) — binds the block to the chat scope set
 --- with /connections and /databases. Nil when no connection is bound or the
@@ -85,7 +101,7 @@ end
 function M.append_header(scope, text)
   local conn = scope and scope.connection
   if not conn then return nil end
-  if text and text:match("%-%-%s*@connection") then return nil end
+  if text and has_connection_directive(text) then return nil end
   local lines = { "-- @connection " .. conn }
   if scope.database then
     lines[#lines + 1] = "-- @database " .. scope.database
