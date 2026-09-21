@@ -48,6 +48,11 @@ M.current_env = "dev"
 --- plenary spawns for each spec file start without the user config, so a
 --- `vim.g` set in a test bootstrap is invisible to them while the environment
 --- is inherited.
+---
+--- This is the family's binary contract (see `poste.nvim/docs/schema.md`, Global
+--- conventions): a candidate is usable only when it is both readable and
+--- executable, and `install.ensure()` asks this function instead of repeating
+--- the walk -- a second copy there had already drifted once.
 --- @return string|nil absolute path, or nil when no usable binary was found
 function M.find_poste_binary()
   -- Readable is not enough: a downloaded/copied file without the exec bit (or
