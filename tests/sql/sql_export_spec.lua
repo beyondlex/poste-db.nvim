@@ -267,10 +267,48 @@ end)
 describe("export run", function()
   local dataset = require("poste-db.dataset")
 
+  -- The system clipboard is shared machine state. `provider#clipboard` shells
+  -- out to pbcopy/pbpaste on every access, so any other process that writes in
+  -- between the two calls wins: with 12 headless Neovims each setting a unique
+  -- value and reading it straight back, 11 read someone else's. That is why
+  -- this file reported 34/0 on its own and 33/1 (this case) inside the 95-file
+  -- suite. g:clipboard is consulted on every access, unlike the once-loaded
+  -- builtin provider, so this in-process provider takes over no matter what
+  -- touched "+" earlier.
+  local prev_clipboard
+  local copied
+
+  before_each(function()
+    prev_clipboard = vim.g.clipboard
+    copied = {}
+    local function copy(reg)
+      return function(lines)
+        copied[reg] = lines
+        return 0
+      end
+    end
+    local function paste(reg)
+      return function()
+        return copied[reg] or { "" }
+      end
+    end
+    vim.g.clipboard = {
+      name = "poste-db-spec",
+      copy = { ["+"] = copy("+"), ["*"] = copy("*") },
+      paste = { ["+"] = paste("+"), ["*"] = paste("*") },
+    }
+  end)
+
   after_each(function()
     dataset.tabs = {}
     dataset.active_tab_idx = 0
+    vim.g.clipboard = prev_clipboard
   end)
+
+  --- The fake provider stores the line list the exporter handed to setreg().
+  local function clipboard(reg)
+    return table.concat(copied[reg or "+"] or {}, "\n")
+  end
 
   local function install_tab()
     dataset.tabs[1] = {
@@ -298,14 +336,19 @@ describe("export run", function()
     local lines = vim.fn.readfile(out)
     assert.equals("id,name", lines[1])
     assert.equals("1,Alice", lines[2])
+    -- The documented behaviour is that a file export leaves the absolute path
+    -- on the clipboard, not the payload.
+    assert.equals(vim.fn.fnamemodify(out, ":p"), clipboard())
+    assert.equals("", clipboard("*"))
   end)
 
   it("copies to the clipboard for destination=clipboard", function()
     install_tab()
-    local saved = vim.fn.getreg("+")
     export.run("csv", "clipboard")
-    assert.truthy(vim.fn.getreg("+"):find("id,name"))
-    vim.fn.setreg("+", saved)
+    assert.equals("id,name\n1,Alice", clipboard())
+    -- The unnamed register gets the same text, so a paste in the result buffer
+    -- works even where no system clipboard tool exists.
+    assert.equals("id,name\n1,Alice", vim.fn.getreg('"'))
   end)
 
   it("exports only the first result set", function()
