@@ -4,6 +4,7 @@ local sql_state = require("poste-db.state")
 local tree = require("poste-db.db_browser.tree")
 local async = require("poste-db.db_browser.async")
 local actions = require("poste-db.db_browser.actions")
+local util = require("poste-db.db_browser.util")
 local HEADER_LINES = require("poste-db.db_browser.icons").HEADER_LINES
 local notify = require("poste-db.db_browser.notify")
 local yank = require("poste-db.db_browser.yank")
@@ -64,7 +65,12 @@ local function render_tree()
   if not browser_buf or not vim.api.nvim_buf_is_valid(browser_buf) then return end
   local conn_label = sql_state.db_browser.connection or "No connection"
   local new_map = tree.render_tree(browser_buf, line_to_node, root_nodes, conn_label, multi_select)
-  line_to_node = new_map
+  -- Synced in place, never reassigned: `make_context` hands this same table to
+  -- actions, and the search state keeps one across an async jump. Reassigning
+  -- the local left every earlier context holding the previous table, so a
+  -- render triggered through a stored context updated a map no keymap reads and
+  -- the live one kept lines pointing at nodes that were no longer on screen.
+  util.set_line_map(line_to_node, new_map)
   update_statusline()
 end
 
@@ -110,7 +116,11 @@ local function toggle_multi_select_on_table(buf_line)
   local total_lines = vim.api.nvim_buf_line_count(browser_buf)
   local next_line = buf_line + 1
   if next_line <= total_lines then
-    vim.api.nvim_win_set_cursor(browser_win or 0, { next_line, 0 })
+    -- Window 0, not the stored `browser_win`: this runs from a buffer-local
+    -- keymap, so the current window is the one the user is tabbing through —
+    -- and `browser_win` is whichever window first opened the buffer, which a
+    -- closed split or a `:sall` can leave behind.
+    vim.api.nvim_win_set_cursor(0, { next_line, 0 })
   end
 end
 
@@ -855,6 +865,13 @@ end
 
 function M.close()
   exit_multi_select()
+  -- A running search keeps the context it started from: its line map and its
+  -- copy of the root list. Rebuilding the tree on the next open invalidates
+  -- both, so `n` afterwards would jump through nodes that are no longer on
+  -- screen — and the match highlights would stay on the hidden buffer.
+  if browser_buf and vim.api.nvim_buf_is_valid(browser_buf) then
+    actions.search_clear(make_context())
+  end
   if browser_win and vim.api.nvim_win_is_valid(browser_win) then
     vim.api.nvim_win_close(browser_win, true)
     browser_win = nil
@@ -890,16 +907,15 @@ function M.refresh_by_conn(conn_name, db_name)
   node.children = nil
   node.expanded = false
   node.loading = true
-  local new_map = tree.render_tree(browser_buf, line_to_node, root_nodes, sql_state.db_browser.connection or "No connection", multi_select)
-  line_to_node = new_map
+  -- The shared render path, not a private copy of it: this used to call
+  -- tree.render_tree directly and reassign the map, which skipped the
+  -- statusline update and detached every context already handed to an action.
+  render_tree()
 
   local search_dir = M.get_search_dir()
   async.fetch_children(node, function()
     node.expanded = true
-    vim.schedule(function()
-      local nm = tree.render_tree(browser_buf, line_to_node, root_nodes, sql_state.db_browser.connection or "No connection", multi_select)
-      line_to_node = nm
-    end)
+    vim.schedule(render_tree)
   end, search_dir)
 end
 
@@ -910,5 +926,18 @@ function M.toggle()
     M.open()
   end
 end
+
+--- Exposed for tests: drives a render against a scratch buffer, which needs no
+--- CLI binary, connection, or window.
+M._test = {
+  render_tree = render_tree,
+  make_context = make_context,
+  line_map = function() return line_to_node end,
+  attach = function(buf, nodes)
+    browser_buf = buf
+    root_nodes = nodes or {}
+    util.set_line_map(line_to_node, {})
+  end,
+}
 
 return M
