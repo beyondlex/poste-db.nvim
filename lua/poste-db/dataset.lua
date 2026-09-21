@@ -244,4 +244,18 @@ function M.compute_view_indices(tab)
   tab.view_indices = indices
 end
 
+--- Recompute how many pages `total_rows` fills and pull `tab.page` back inside
+--- them. Every render path must call this: the count was otherwise only ever
+--- written by the paginated branch, so a filter or sort that shrank the view
+--- left a stale `num_pages` (and an out-of-range `page`) behind — the winbar
+--- advertised "P:7/20" over ten visible rows and `H`/`L` climbed that phantom
+--- page count without the buffer ever changing.
+--- @return integer num_pages
+function M.apply_page_bounds(tab, total_rows)
+  local pages = math.max(1, math.ceil((total_rows or 0) / tab.page_size))
+  tab.num_pages = pages
+  tab.page = math.min(math.max(tab.page or 1, 1), pages)
+  return pages
+end
+
 return M

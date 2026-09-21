@@ -27,9 +27,10 @@ function M.refresh_page()
     total_rows = tab.layout.total_rows or #tab.layout.rows
   end
 
-  if total_rows and tab.pagination_enabled and total_rows > tab.page_size then
-    tab.num_pages = math.ceil(total_rows / tab.page_size)
-    tab.page = math.min(tab.page or 1, tab.num_pages)
+  -- One place decides both how many pages the view fills and whether this
+  -- refresh renders a page or the whole set.
+  local pages = D.apply_page_bounds(tab, total_rows)
+  if tab.pagination_enabled and pages > 1 then
     local page_rows = math.min(tab.page_size, total_rows - (tab.page - 1) * tab.page_size)
     tab.visible_rows = page_rows
 
@@ -51,6 +52,9 @@ function M.refresh_page()
       tab.cursor.row = page_rows
     end
   else
+    -- Either paging is off or the whole view fits on one page: the renderer
+    -- emits every row from the top, so the count above is what keeps the
+    -- counter honest after the row set shrinks.
     tab.visible_rows = total_rows or 0
     local page_size = total_rows or 0
     if tab.view_indices then

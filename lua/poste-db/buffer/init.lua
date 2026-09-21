@@ -681,10 +681,12 @@ function M.render_dataset(lines, meta, opts)
       tab.layout.table_name = meta.table_name
     end
 
+    -- The row set can shrink under a filter without any paginated math running,
+    -- so the count is recomputed on both branches — a stale one leaves the
+    -- winbar pointing at pages that aren't there.
     local total_for_pagination = meta.total_rows or meta.row_count
-    if tab.pagination_enabled and total_for_pagination > tab.page_size then
-      tab.num_pages = math.ceil(total_for_pagination / tab.page_size)
-      tab.page = math.min(tab.page or 1, tab.num_pages)
+    local pages = D.apply_page_bounds(tab, total_for_pagination)
+    if tab.pagination_enabled and pages > 1 then
       tab.visible_rows = tab.page_size
     else
       tab.visible_rows = meta.row_count
