@@ -237,6 +237,13 @@ remembered.
 CSV/JSON can be imported into a table from the DB browser's context menu
 ("Import data") — a preview maps columns before anything is written.
 
+File columns are matched to table columns by name (case-insensitive), and a
+column the table does not have aborts the import rather than being dropped.
+In the values themselves, an empty cell omits the column — so its DEFAULT or
+sequence applies — while the text NULL (any case) writes an explicit NULL.
+The preview shows the first three data rows and the first five rejected ones;
+every row in the file is still validated and imported.
+
 ==============================================================================
 11. DB BROWSER                                              *poste-db-browser*
 
@@ -364,7 +371,9 @@ All options go to `require("poste-db.init").setup(opts)`; defaults shown:
       default_max_rows = 0,          -- 0 = unlimited (client-side paging)
       session_max_rows = 0,          -- server-side cap for poste session runs
       export_path = nil,             -- default export directory
-      import_chunk_size = 100,
+      import_chunk_size = 100,       -- INSERTs per import batch; read as a
+                                     -- number and clamped to >= 1, so a typo
+                                     -- costs a slow import, not a hung one
       debug = false,
       confirm_unfiltered_dml = true, -- gate DELETE/UPDATE without WHERE
       width_mode = "nvim",           -- or "terminal" — see |poste-db-width-mode|
