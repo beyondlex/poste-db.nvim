@@ -155,4 +155,38 @@ describe("file_exec", function()
       assert.matches("<redacted>", logged[1])
     end)
   end)
+
+  -- The same anchored rule the Rust CLI applies (crates/poste-cli/src/
+  -- exec_file.rs::extract_connection_directive, whose test spells out the two
+  -- rejected shapes): a directive is a whole line, because the lines it reads
+  -- are also the lines the CLI strips from the SQL body.
+  describe("extract_connection_directive", function()
+    local function directive_in(lines)
+      local saved = vim.fn.readfile
+      vim.fn.readfile = function() return lines end
+      local ok, got = pcall(function()
+        return require("poste-db.file_exec")._test.extract_connection_directive("/x.sql")
+      end)
+      vim.fn.readfile = saved
+      assert.is_true(ok)
+      return got
+    end
+
+    it("reads a directive line, indented or not", function()
+      assert.equals("pg-dev", directive_in({ "-- @connection pg-dev", "SELECT 1;" }))
+      assert.equals("pg-dev", directive_in({ "   --@connection pg-dev" }))
+      assert.equals("pg-dev", directive_in({ "-- @database blog", "", "-- @connection pg-dev" }))
+    end)
+
+    it("ignores a directive-looking comment that is not a directive line", function()
+      assert.is_nil(directive_in({ "SELECT 1; -- @connection stray" }))
+      assert.is_nil(directive_in({ "/* -- @connection stray */" }))
+      assert.is_nil(directive_in({ "SELECT '-- @connection stray' AS note" }))
+    end)
+
+    it("needs a value", function()
+      assert.is_nil(directive_in({ "-- @connection" }))
+      assert.equals("pg-dev", directive_in({ "-- @connection", "-- @connection pg-dev" }))
+    end)
+  end)
 end)

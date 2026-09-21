@@ -2,6 +2,7 @@ local state = require("poste-db.state")
 local dialog = require("poste-db.dialog")
 local layout = require("poste-db.layout")
 local connections = require("poste-db.connections")
+local constants = require("poste-db.constants")
 
 local M = {}
 
@@ -200,11 +201,19 @@ local function create_progress_win()
   })
 end
 
+--- The file's own `-- @connection` directive, if any.
+--- The pattern comes from constants.match_directive rather than a local copy:
+--- the directive must be recognised by the same anchored rule the completion
+--- handlers and the Rust CLI (`extract_connection_directive`, which strips the
+--- very lines it reads) use, or a `-- @connection` that only looks like one --
+--- trailing a statement, inside a block comment -- would choose the database.
+--- @param filepath string
+--- @return string|nil
 local function extract_connection_directive(filepath)
   local ok, content = pcall(vim.fn.readfile, filepath)
   if not ok or not content then return nil end
   for _, line in ipairs(content) do
-    local conn_match = line:match("^%s*%-%-%s*@connection%s+(.+)")
+    local conn_match = constants.match_directive(line, "connection")
     if conn_match then return vim.trim(conn_match) end
   end
   return nil
@@ -486,5 +495,10 @@ function M.run(opts)
     })
   end
 end
+
+--- Internals exposed for the specs.
+M._test = {
+  extract_connection_directive = extract_connection_directive,
+}
 
 return M
