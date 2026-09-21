@@ -1,7 +1,6 @@
 --- Dataset cell navigation --- cursor movement, header float, raw mode, sort, yank.
 local D = require("poste-db.dataset")
 local C = require("poste-db.constants")
-local state = require("poste-db.state")
 local sql_state = require("poste-db.state")
 
 local sql_highlights = require("poste-db.highlights")
@@ -44,7 +43,7 @@ local function T_report()
   lines[#lines + 1] = string.format("  total: %7.3fms", total)
   local msg = table.concat(lines, "\n")
   T_clear()
-  state.log("TRACE", "move_cell trace:\n" .. msg)
+  sql_state.log("TRACE", "move_cell trace:\n" .. msg)
 end
 
 local function focus_cell(tab, row, col, update_header)

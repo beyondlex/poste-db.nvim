@@ -1,7 +1,6 @@
 --- SQL Dataset buffer — core: state, keymaps, tab switching, render, close.
 local D = require("poste-db.dataset")
 local C = require("poste-db.constants")
-local state = require("poste-db.state")
 local sql_state = require("poste-db.state")
 
 local config = require("poste-db.config")
@@ -625,7 +624,7 @@ function M.render_dataset(lines, meta, opts)
       if opts.keep_tabs then
         data = tab.data
       else
-        local ok, d = pcall(vim.json.decode, state.last_response and state.last_response.body or "{}")
+        local ok, d = pcall(vim.json.decode, sql_state.last_response and sql_state.last_response.body or "{}")
         if ok then data = d end
       end
     end

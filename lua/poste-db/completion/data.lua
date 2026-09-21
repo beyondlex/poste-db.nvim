@@ -1,7 +1,6 @@
 --- SQL completion — data + cache layer.
 --- Provides keyword tables, connection context resolution, lazy-fetch
 --- (tables/columns/databases via the Rust CLI), and binary helpers.
-local state = require("poste-db.state")
 local sql_state = require("poste-db.state")
 local const = require("poste-db.constants")
 
@@ -221,7 +220,7 @@ function M.conn_key()
     return ctx.connection .. "/" .. (ctx.database or "")
   end
   if compat.opt("debug") then
-    state.log("WARN", "SQL completion: no connection context found")
+    sql_state.log("WARN", "SQL completion: no connection context found")
   end
   return nil
 end
@@ -246,7 +245,7 @@ end
 ---------------------------------------------------------------------------
 
 function M.find_binary()
-  return state.find_poste_binary()
+  return sql_state.find_poste_binary()
 end
 
 function M.search_dir()

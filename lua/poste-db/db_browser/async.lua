@@ -1,5 +1,4 @@
 local state = require("poste-db.state")
-local sql_state = require("poste-db.state")
 
 local tree = require("poste-db.db_browser.tree")
 local async = require("poste-db.async")
@@ -160,7 +159,7 @@ function M.fetch_children(node, callback, search_dir, opts)
   end
 
   local conn = node.node_type == "connection" and node.name
-    or (node.meta and node.meta.connection) or sql_state.db_browser.connection
+    or (node.meta and node.meta.connection) or state.db_browser.connection
 
   local dialect = "postgres"
   if node.meta and node.meta.dialect then
