@@ -24,6 +24,8 @@ piece is the `poste` binary — a usable one is picked up from
 downloaded from [poste.nvim](https://github.com/beyondlex/poste.nvim) releases
 when none of those exist. "Usable" means readable **and** executable: a file
 without the exec bit is skipped rather than picked over a working `PATH` entry.
+On Windows each candidate is tried both as spelled and with `.exe` appended,
+which is where the installer and cargo actually put the binary.
 
 Full documentation lives in `doc/poste-db.txt` (`:h poste-db`), with a
 [quick reference](docs/user/sql/quick-reference.md) for the everyday keys.
@@ -71,7 +73,9 @@ On first setup the plugin looks for a usable `poste` binary — in
 or in the current directory, then `PATH` — and only downloads from
 poste.nvim releases (SHA256-verified) into that install path when none of those
 is runnable. "Runnable" means readable **and** executable, so a
-copied-but-not-chmod'ed file cannot mask a working `PATH` entry. To use
+copied-but-not-chmod'ed file cannot mask a working `PATH` entry; on Windows a
+candidate also matches `<name>.exe`, which is the file the installer writes and
+cargo builds (both spellings work). To use
 your own build — e.g. a worktree with unreleased dialect work — set
 `vim.g.poste_binary = "/path/to/poste"` (or `export POSTE_BINARY=…` for
 headless/CI processes, which never see a `vim.g`) before setup.

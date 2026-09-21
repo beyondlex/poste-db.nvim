@@ -52,8 +52,9 @@ and PG-family to `postgres`.
 - The `poste` Rust binary (resolved by `state.find_poste_binary()`:
   `g:poste_binary` > `$POSTE_BINARY` > `stdpath("data")/poste/bin/poste` >
   a local dev build > `PATH`, each candidate required to be readable and
-  executable; auto-installed from poste.nvim releases when none is usable.
-  No poste.nvim installation required)
+  executable — and on Windows also tried as `<candidate>.exe`, the file the
+  installer writes; auto-installed from poste.nvim releases when none is
+  usable. No poste.nvim installation required)
 - blink.cmp (recommended) or nvim-cmp for completion
 - Optional: poste-ai.nvim for the AI chat, sqlfluff/sqlfmt/sql-formatter or
   pg_format for `:PosteDbFormat`
