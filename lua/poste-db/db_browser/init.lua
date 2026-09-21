@@ -215,6 +215,58 @@ local function start_copy(buf_line)
   end)
 end
 
+--- Where a yank-register paste lands, resolved from the node under the cursor.
+--- A database node is the target, and so is anything nested under it — the
+--- cursor rests on a table or a column more often than on the database itself.
+--- For sqlite the connection node *is* the database, so the same walk-up has to
+--- name the connection; for a non-sqlite connection with a whole-database yank
+--- the target is a clone instead (a new database gets created there).
+---@param node table the node under the cursor
+---@param entry table the yanked register entry
+---@return table? nil when nothing around the cursor can take the paste
+local function resolve_paste_target(node, entry)
+  local target_db, conn_node, clone_conn
+  local is_sqlite_conn = false
+
+  if node.node_type == "connection" then
+    conn_node = node
+  elseif node.node_type == "database" then
+    target_db = node
+  else
+    local cur = node.parent
+    while cur do
+      if cur.node_type == "connection" then conn_node = cur; break end
+      if cur.node_type == "database" then target_db = cur; break end
+      cur = cur.parent
+    end
+  end
+
+  if conn_node then
+    if conn_node.meta and conn_node.meta.dialect == "sqlite" then
+      is_sqlite_conn = true
+    elseif entry.kind == "database" then
+      clone_conn = conn_node
+    end
+  end
+
+  if not target_db and not is_sqlite_conn and not clone_conn then return nil end
+
+  return {
+    node = target_db,
+    clone_conn = clone_conn,
+    is_sqlite_conn = is_sqlite_conn,
+    -- The connection the CLI is addressed by. `target_db`'s own is authoritative;
+    -- otherwise it is the connection the walk-up landed on — never `node.name`,
+    -- which for a table under a sqlite connection is a table name.
+    conn = (target_db and target_db.meta and target_db.meta.connection)
+      or conn_node.name,
+    db = target_db and (target_db.name or (target_db.meta and target_db.meta.database)) or nil,
+    dialect = (node.meta and node.meta.dialect)
+      or (target_db and target_db.meta and target_db.meta.dialect)
+      or entry.dialect,
+  }
+end
+
 local function make_context()
   local conn_label = sql_state.db_browser.connection or "No connection"
   return {
@@ -381,58 +433,24 @@ local function setup_browser_buffer()
         notify.info("Nothing yanked. Use <Tab> to select tables, or press y on a table/view/database to yank.")
         return
       end
-      -- Resolve target: cursor must be on or under a database node.
-      -- For sqlite connections (dialect "sqlite"), the connection node itself
-      -- acts as the effective database. For a whole-database yank, a non-sqlite
-      -- connection node is a CLONE target: a new database is created there.
+      -- Resolve target: the cursor must be on or under a database node (or, for
+      -- sqlite, a connection). See resolve_paste_target.
       local node = tree.get_node_at_line(line_to_node, buf_line)
       if not node then return end
 
-      local target_db = nil
-      local is_sqlite_conn_target = false
-      local clone_conn = nil
-
-      if node.node_type == "database" then
-        target_db = node
-      elseif node.node_type == "connection" then
-        if node.meta and node.meta.dialect == "sqlite" then
-          is_sqlite_conn_target = true
-        elseif entry.kind == "database" then
-          clone_conn = node
-        end
-      else
-        -- Walk up to find enclosing database or connection.
-        local cur = node
-        while cur do
-          if cur.node_type == "database" then target_db = cur; break end
-          if cur.node_type == "connection" then
-            if cur.meta and cur.meta.dialect == "sqlite" then
-              is_sqlite_conn_target = true
-            elseif entry.kind == "database" then
-              clone_conn = cur
-            end
-            break
-          end
-          cur = cur.parent
-        end
-      end
-
-      if not target_db and not is_sqlite_conn_target and not clone_conn then
+      local target = resolve_paste_target(node, entry)
+      if not target then
         notify.info("Move cursor to a target database (or sqlite connection) to paste, "
           .. "or to a connection to clone")
         return
       end
 
-      -- Resolve target connection/db/dialect from the target node.
-      local target_conn = (target_db and target_db.meta and target_db.meta.connection)
-        or node.name
-      local target_db_name = (target_db and (target_db.name or target_db.meta.database))
-        or nil
-      local target_dialect = (node.meta and node.meta.dialect)
-        or (target_db and target_db.meta and target_db.meta.dialect)
-        or entry.dialect
-
-      -- For sqlite connection target, target_db_name stays nil (connection == db).
+      local target_db = target.node
+      local clone_conn = target.clone_conn
+      local is_sqlite_conn_target = target.is_sqlite_conn
+      local target_conn = target.conn
+      local target_db_name = target.db
+      local target_dialect = target.dialect
 
       local copy_mod = require("poste-db.db_browser.copy")
 
@@ -932,6 +950,7 @@ end
 M._test = {
   render_tree = render_tree,
   make_context = make_context,
+  resolve_paste_target = resolve_paste_target,
   line_map = function() return line_to_node end,
   attach = function(buf, nodes)
     browser_buf = buf

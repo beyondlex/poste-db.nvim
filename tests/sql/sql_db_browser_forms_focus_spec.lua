@@ -1,4 +1,4 @@
---- Item 44: the form's focus highlight and cursor are positioned through a
+--- Item 47: the form's focus highlight and cursor are positioned through a
 --- row→line map built during rendering, and the window is sized from the same
 --- render. Both used to be derived independently, so the selection landed on the
 --- wrong line and the shortcut bar was cut off — vertically and horizontally.

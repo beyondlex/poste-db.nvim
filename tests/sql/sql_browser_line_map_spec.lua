@@ -1,4 +1,4 @@
---- Item 45: the browser's line→node map is shared by identity. Keymap handlers
+--- Item 48: the browser's line→node map is shared by identity. Keymap handlers
 --- build a context (`make_context`) and hand it to actions, some of which keep
 --- it across an async jump and render through it. A render that replaced the
 --- module's table instead of syncing it left the two copies drifting: the live
