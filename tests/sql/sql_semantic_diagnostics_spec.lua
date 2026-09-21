@@ -302,3 +302,77 @@ describe("semantic_diagnostics table-name case", function()
     assert.same({}, msgs("SELECT zzz, name FROM users;"))
   end)
 end)
+
+-- `database.schema.table` is legal in postgres and ClickHouse, and the grammar
+-- hands it over as one `object_reference` of five children. Only the shapes
+-- with one and three children were destructured, so `blog.public.users` became
+-- a table literally named "blog.public.users" and was reported missing from
+-- whichever database the statement happened to run against.
+--
+-- The reading chosen here: the leftmost component is the database (true for
+-- postgres, MySQL and ClickHouse alike), the components it skips are schemas,
+-- and a schema has no representation in the per-database cache -- so the name
+-- is checked against its database with the schema left unchecked. `public`
+-- below deliberately holds a *different* users list from `blog`; mistaking the
+-- qualifier for the database, or the middle component for the table, would
+-- disagree with every case here.
+describe("semantic_diagnostics three-part references", function()
+  if not has_sql_parser then
+    it("is skipped when the parser is unavailable", function()
+      pending("Tree-sitter SQL parser unavailable in this Neovim environment")
+    end)
+    return
+  end
+
+  before_each(function()
+    fake_ctx = { connection = "connA", database = "blog" }
+    sem.invalidate(nil)
+    sem._test.set_cache("connA/blog", {
+      tables = { "users" },
+      columns = { users = { "id", "name" } },
+    })
+    sem._test.set_cache("connA/public", {
+      tables = { "users" },
+      columns = { users = { "id", "full_name" } },
+    })
+  end)
+
+  after_each(function()
+    sem.invalidate(nil)
+    fake_ctx = {}
+  end)
+
+  it("checks the trailing name against the leading database, not the schema", function()
+    -- `name` is in blog.users and not in public.users.
+    assert.same({}, msgs("SELECT name FROM blog.public.users;"))
+    assert.same({ "Column 'full_name' not found in table 'users'" },
+      msgs("SELECT full_name FROM blog.public.users;"))
+  end)
+
+  it("reports a missing table by its own name, not the whole dotted string", function()
+    assert.same({ "Table 'ghost' not found in database 'blog'" },
+      msgs("SELECT 1 FROM blog.public.ghost;"))
+  end)
+
+  it("applies the same reading to INSERT", function()
+    assert.same({}, msgs("INSERT INTO blog.public.users (name) VALUES (1);"))
+    assert.same({ "Column 'bogus' not found in table 'users'" },
+      msgs("INSERT INTO blog.public.users (bogus) VALUES (1);"))
+  end)
+
+  it("says nothing about a database it has not cached", function()
+    -- Not fetching on demand is the existing rule for qualified references;
+    -- what matters is that `newdb.users` is never checked against blog.
+    assert.same({}, msgs("SELECT 1 FROM newdb.users;"))
+    assert.same({}, msgs("SELECT full_name FROM newdb.users;"))
+    assert.same({}, msgs("SELECT 1 FROM newdb.public.users;"))
+  end)
+
+  it("checks a fully qualified column against its table, not its dotted prefix", function()
+    -- `blog.users.col` used to be looked up as a table named "blog.users",
+    -- which matched nothing, so every typo in it was accepted.
+    assert.same({ "Column 'bogus' not found in table 'users'" },
+      msgs("SELECT blog.users.bogus FROM users;"))
+    assert.same({}, msgs("SELECT blog.users.name FROM users;"))
+  end)
+end)

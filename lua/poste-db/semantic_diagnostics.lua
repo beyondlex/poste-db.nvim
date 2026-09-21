@@ -62,6 +62,53 @@ local function extract_references_from_node(stmt_node, buf)
     return start_row + 1, start_col + 1, end_row + 1, end_col + 1
   end
 
+  --- Strip the quoting a dialect writes around an identifier: backticks (MySQL),
+  --- double quotes (postgres/ANSI), brackets (SQL Server). These nodes are not
+  --- dialect-specific, so all of them can arrive here.
+  --- @param text string
+  --- @return string
+  local function unquote(text)
+    return (text:gsub("^[`\"'\\[]+", ""):gsub("[]`\"'\\]+$", ""))
+  end
+
+  --- Destructure an `object_reference` written as identifier ("." identifier)*.
+  --- The trailing identifier is the table; the leading one is the qualifier
+  --- (a database in MySQL/ClickHouse, a schema in postgres for two-part refs).
+  --- For three or more parts the leftmost is still the database and the middle
+  --- ones are schemas, which the per-database cache cannot express -- so the
+  --- qualifier is always `names[1]` and the components it skips simply go
+  --- unchecked. `unqualified` tells the caller the name stood alone.
+  ---
+  --- Only the 3-child case used to be destructured, so the legal postgres
+  --- `FROM blog.public.users` became one table literally named
+  --- "blog.public.users" and was always reported missing.
+  ---
+  --- A shape that is not a plain dotted list is reported whole instead, which
+  --- is what the callers did before; a dotted list ending in an empty
+  --- identifier (a stray quote, a dangling dot) yields no name at all, since
+  --- the raw text would then be blamed on a table the user never wrote.
+  --- @param obj TSNode
+  --- @return string|nil qualifier, string|nil name, TSNode|nil name_node, boolean unqualified
+  local function dotted_reference(obj)
+    local names, name_nodes, plain = {}, {}, true
+    for c in obj:iter_children() do
+      if c:type() == "identifier" then
+        names[#names + 1] = unquote(vim.treesitter.get_node_text(c, buf))
+        name_nodes[#name_nodes + 1] = c
+      elseif c:type() ~= "." then
+        plain = false
+      end
+    end
+    if #names == 0 or not plain then
+      local whole = unquote(vim.treesitter.get_node_text(obj, buf))
+      return nil, whole ~= "" and whole or nil, obj, false
+    end
+    local qualifier = #names >= 2 and names[1] or nil
+    if qualifier == "" then qualifier = nil end
+    local name = names[#names]
+    return qualifier, name ~= "" and name or nil, name_nodes[#name_nodes], #names == 1
+  end
+
   -- CTE names (WITH a AS (...) SELECT ... FROM a) are scoped aliases, not
   -- real tables. Collect them so references to a CTE are never validated
   -- against the schema — including recursive self-references and references
@@ -106,7 +153,7 @@ local function extract_references_from_node(stmt_node, buf)
   end
 
   local function add_table(name, node, db_prefix, start_node)
-    name = name:gsub("^[`\"'\\[]+", ""):gsub("[]`\"'\\]+$", "")
+    name = unquote(name)
     if name == "" then return end
     if cte_names[name:lower()] then return end
     local key = name:lower() .. ":" .. node:start() .. ":" .. node:end_()
@@ -122,7 +169,7 @@ local function extract_references_from_node(stmt_node, buf)
   end
 
   local function add_column(name, tbl, node)
-    name = name:gsub("^[`\"'\\[]+", ""):gsub("[]`\"'\\]+$", "")
+    name = unquote(name)
     if name == "" then return end
     local key = (tbl or "") .. "." .. name:lower() .. ":" .. node:start() .. ":" .. node:end_()
     if seen_cols[key] then return end
@@ -178,24 +225,13 @@ local function extract_references_from_node(stmt_node, buf)
       local tbl_node = nil
       for c in node:iter_children() do
         if c:type() == "object_reference" then
-          local children = {}
-          for gc in c:iter_children() do
-            children[#children + 1] = { type = gc:type(), text = vim.treesitter.get_node_text(gc, buf), node = gc }
-          end
-          if #children == 3 and children[1].type == "identifier" and children[2].type == "." and children[3].type == "identifier" then
-            db_prefix = children[1].text:gsub("^[`\"'\\[]+", ""):gsub("[]`\"'\\]+$", "")
-            if db_prefix == "" then db_prefix = nil end
-            tbl_name = children[3].text:gsub("^[`\"'\\[]+", ""):gsub("[]`\"'\\]+$", "")
-            if tbl_name ~= "" then tbl_node = children[3].node else tbl_name = nil end
-          elseif #children == 1 and children[1].type == "identifier" then
-            tbl_name = children[1].text:gsub("^[`\"'\\[]+", ""):gsub("[]`\"'\\]+$", "")
-            if tbl_name ~= "" then tbl_node = children[1].node else tbl_name = nil end
-          else
-            tbl_name = vim.treesitter.get_node_text(c, buf):gsub("^[`\"'\\[]+", ""):gsub("[]`\"'\\]+$", "")
-            if tbl_name ~= "" then tbl_node = c else tbl_name = nil end
+          local qualifier, name, name_node = dotted_reference(c)
+          db_prefix = qualifier
+          if name then
+            tbl_name, tbl_node = name, name_node
           end
         elseif c:type() == "identifier" and tbl_name then
-          alias = vim.treesitter.get_node_text(c, buf):gsub("^[`\"'\\[]+", ""):gsub("[]`\"'\\]+$", "")
+          alias = unquote(vim.treesitter.get_node_text(c, buf))
           if alias == "" then alias = nil end
         end
       end
@@ -226,29 +262,14 @@ local function extract_references_from_node(stmt_node, buf)
       if is_in_insert then
         local parent = node:parent()
         if parent and parent:type() == "invocation" then return end
-        local children = {}
-        for gc in node:iter_children() do
-          children[#children + 1] = { type = gc:type(), text = vim.treesitter.get_node_text(gc, buf), node = gc }
-        end
-        if #children == 3 and children[1].type == "identifier" and children[2].type == "." and children[3].type == "identifier" then
-          local db = children[1].text:gsub("^[`\"'\\[]+", ""):gsub("[]`\"'\\]+$", "")
-          if db == "" then db = nil end
-          local tn = children[3].text:gsub("^[`\"'\\[]+", ""):gsub("[]`\"'\\]+$", "")
-          if tn ~= "" then
-            add_table(tn, children[3].node, db)
-            table.insert(from_tables, tn)
-          end
-        elseif #children == 1 and children[1].type == "identifier" then
-          local tn = children[1].text:gsub("^[`\"'\\[]+", ""):gsub("[]`\"'\\]+$", "")
-          if tn ~= "" then
-            local merged_tn, span_start = merge_digit_fragment(buf, node, tn, children[1].node)
-            add_table(merged_tn, children[1].node, nil, span_start)
-            table.insert(from_tables, merged_tn)
-          end
-        else
-          local tn = vim.treesitter.get_node_text(node, buf):gsub("^[`\"'\\[]+", ""):gsub("[]`\"'\\]+$", "")
-          if tn ~= "" then
-            add_table(tn, node)
+        local qualifier, tn, tn_node, unqualified = dotted_reference(node)
+        if tn then
+          if unqualified then
+            local merged, span_start = merge_digit_fragment(buf, node, tn, tn_node)
+            add_table(merged, tn_node, nil, span_start)
+            table.insert(from_tables, merged)
+          else
+            add_table(tn, tn_node, qualifier)
             table.insert(from_tables, tn)
           end
         end
@@ -296,10 +317,16 @@ local function extract_references_from_node(stmt_node, buf)
         parts[#parts + 1] = { type = c:type(), text = vim.treesitter.get_node_text(c, buf), node = c }
       end
       if #parts == 3 and parts[1].type == "object_reference" and parts[2].type == "." and parts[3].type == "identifier" then
-        local qualifier = parts[1].text:gsub("^[`\"'\\[]+", ""):gsub("[]`\"'\\]+$", "")
-        local col_name = parts[3].text
-        local actual_table = alias_map[qualifier] or qualifier
-        add_column(col_name, actual_table, parts[3].node)
+        -- The qualifier is itself a dotted list when the column is written out
+        -- as `db.table.col`; the table is its last component, and the ones
+        -- before it name the database/schema -- which database to check comes
+        -- from the FROM clause, not from here. Taking the raw text used to
+        -- look up a table named "otherdb.users", which never matches.
+        local _, qualifier_tbl = dotted_reference(parts[1].node)
+        local qualifier = qualifier_tbl or unquote(parts[1].text)
+        if qualifier ~= "" then
+          add_column(unquote(parts[3].text), alias_map[qualifier] or qualifier, parts[3].node)
+        end
       elseif #parts == 1 and parts[1].type == "identifier" then
         local col_name = parts[1].text
         if col_name ~= "*" and not col_name:match("^@") then
@@ -600,9 +627,17 @@ function M.update(buf)
           goto continue_table
         end
         local target_db = tbl.db_prefix or db
-        local target_schema = schema_for(conn, target_db)
         local lower = tbl.name:lower()
-        if target_schema then
+        local target_schema = schema_for(conn, target_db)
+        if not target_schema then
+          -- That database has no cached table list, so nothing is known about
+          -- this table -- and it must not be recorded as belonging to the
+          -- statement's own database either, or the columns it qualifies would
+          -- be checked against the wrong list. `false` already means "this name
+          -- has no single database to check", so unqualified columns of the
+          -- same name are skipped below.
+          if tbl.db_prefix then ref_db[lower] = false end
+        else
           local seen_db = ref_db[lower]
           if seen_db == nil then
             ref_db[lower] = target_db
