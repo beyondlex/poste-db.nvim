@@ -11,6 +11,18 @@ local hl_ns = icons.hl_ns
 
 local M = {}
 
+--- A JSON `null` decodes to vim.NIL, which is **truthy**, so the `x or ""`
+--- fallback used everywhere here lets it straight through — and every later
+--- `" " .. meta.col_type` or `meta.extra:lower()` then errors out, which for
+--- `flatten_tree` means the whole browser refuses to draw. Collapse a null to
+--- the fallback at the node boundary, where the value is still cheap to judge.
+--- @param value any decoded JSON value
+--- @param fallback any
+function M.null_or(value, fallback)
+  if value == nil or type(value) == "userdata" then return fallback end
+  return value
+end
+
 function M.make_connection_node(conn_info)
   return {
     node_type = "connection",
@@ -62,11 +74,11 @@ function M.make_table_node(item, schema, database, conn_name)
     expanded = false,
     loading = false,
     meta = {
-      table_type = item.type or "BASE TABLE",
+      table_type = M.null_or(item.type, "BASE TABLE"),
       schema = schema,
       database = database,
       connection = conn_name,
-      comment = item.comment or "",
+      comment = M.null_or(item.comment, ""),
     },
   }
 end
@@ -89,11 +101,15 @@ function M.make_column_node(item)
     expanded = false,
     loading = false,
     meta = {
-      col_type = item.type or "?",
+      -- col_type/extra/comment reach string operations in flatten_tree and the
+      -- info float, so a null has to become the placeholder here. `default` and
+      -- `collation` stay as they are: their readers test for vim.NIL, and a NULL
+      -- default is a different fact from no default.
+      col_type = M.null_or(item.type, "?"),
       nullable = item.nullable,
       default = item.default,
-      extra = item.extra or "",
-      comment = item.comment or "",
+      extra = M.null_or(item.extra, ""),
+      comment = M.null_or(item.comment, ""),
       collation = item.collation,
       is_pk = is_pk,
       icon = icon,

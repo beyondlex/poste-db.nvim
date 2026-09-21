@@ -303,7 +303,7 @@ end
 
 local function do_jump(index)
   local s = search_state
-    if #s.matches == 0 then return end
+  if #s.matches == 0 then return end
 
   index = ((index - 1) % #s.matches) + 1
   s.current = index
@@ -424,12 +424,21 @@ function M.show_column_info(buf_line, context)
   end
 
   add("Type",     meta.col_type)
-  add("Default",  meta.default ~= vim.NIL and tostring(meta.default) or "(null)")
-  add("Nullable", meta.nullable == true and "YES" or (meta.nullable == false and "NO" or "?"))
-  if meta.extra and meta.extra ~= "" then
-    add("Extra", meta.extra)
+  -- A NULL default (`DEFAULT NULL`) and no default at all are different facts;
+  -- the old `tostring()` collapsed the absent one into the word "nil".
+  if meta.default == vim.NIL then
+    add("Default", "(null)")
+  elseif meta.default ~= nil then
+    add("Default", tostring(meta.default))
   end
-  add("Comment",  meta.comment ~= "" and ("'" .. meta.comment .. "'") or nil)
+  add("Nullable", meta.nullable == true and "YES" or (meta.nullable == false and "NO" or "?"))
+  add("Extra",    meta.extra)
+  -- Tested before the concatenation, not inside add(): a NULL comment used to
+  -- reach `"'" .. meta.comment` and throw.
+  local comment = meta.comment
+  if comment ~= nil and comment ~= vim.NIL and comment ~= "" then
+    add("Comment", "'" .. tostring(comment) .. "'")
+  end
   add("Collation", meta.collation)
 
   vim.schedule(function()
