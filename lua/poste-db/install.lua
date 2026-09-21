@@ -191,55 +191,20 @@ end
 
 --- Ensure the binary is available.
 --- Called at plugin startup. Returns the binary path if found, nil otherwise.
---- Checks (in order): vim.g.poste_binary, user config, local dev build,
---- default data path, then attempted download.
+--- The search itself belongs to `state.find_poste_binary()`: one rule, one
+--- copy. The second copy this function used to carry had drifted — no
+--- runnability test (a readable-but-not-executable override was returned as
+--- the answer, and the download that would have replaced it was skipped), no
+--- `$POSTE_BINARY`, and no `$PATH` lookup, which made the documented
+--- "put target/release/poste in your PATH" install trigger a release download
+--- that then took precedence over the user's own build. What this function
+--- adds is only what a lookup cannot: downloading a release when nothing
+--- usable exists anywhere.
 function M.ensure()
-  -- 0. Global override (same first-class source as state.find_poste_binary):
-  --    a user pointing vim.g.poste_binary at a worktree/dev build must not
-  --    trigger a release download at startup.
-  local g = vim.g.poste_binary
-  if g and g ~= "" and vim.fn.filereadable(g) == 1 then
-    return vim.fn.fnamemodify(g, ":p")
-  end
+  local found = require("poste-db.state").find_poste_binary()
+  if found then return found end
 
-  -- 1. User-configured path (state.config.poste_binary).
-  local state = require("poste-db.state")
-  if state.config.poste_binary ~= "" then
-    local p = state.config.poste_binary
-    if vim.fn.filereadable(p) == 1 then
-      return vim.fn.fnamemodify(p, ":p")
-    end
-  end
-
-  -- 2. Local dev build relative to plugin install dir (works when poste is added
-  --    to rtp from a repo checkout, regardless of Neovim's CWD)
-  local src = debug.getinfo(1, "S").source
-  local plugin_root = src:sub(1, 1) == "@" and src:sub(2):match("^(.+/)lua/poste%-db/")
-  if plugin_root then
-    for _, p in ipairs({
-      plugin_root .. "target/debug/poste",
-      plugin_root .. "target/release/poste",
-    }) do
-      if vim.fn.filereadable(p) == 1 then
-        return vim.fn.fnamemodify(p, ":p")
-      end
-    end
-  end
-
-  -- 3. CWD-relative local dev build (in-repo development from poste dir)
-  for _, path in ipairs({ "./target/debug/poste", "./target/release/poste" }) do
-    if vim.fn.filereadable(path) == 1 then
-      return vim.fn.fnamemodify(path, ":p")
-    end
-  end
-
-  -- 4. Default installed path (stdpath data)
-  local bp = binary_path()
-  if vim.fn.filereadable(bp) == 1 then
-    return bp
-  end
-
-  -- 5. Fallback: attempt download
+  -- Fallback: attempt download
   local ok = M.download("latest")
   if not ok then
     vim.notify(
