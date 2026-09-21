@@ -82,6 +82,73 @@ describe("db_browser resolve_conflict_names", function()
   end)
 end)
 
+describe("db_browser default existence probe", function()
+  -- Exercises the real probe (no `exists` hook): resolve_conflict_names must
+  -- ask about the schema the paste writes into, and `dialect_table_exists_sql`
+  -- already supports the argument — only the caller can drop it. The SQL text
+  -- is the observable, so the transport is stubbed one level below.
+  local sql_conn = require("poste-db.db_browser.sql_conn")
+  local original_run
+
+  before_each(function() original_run = sql_conn.run end)
+  after_each(function() sql_conn.run = original_run end)
+
+  local function respond_with(taken_for)
+    local seen = {}
+    sql_conn.run = function(_conn, _db, sql, on_result)
+      seen[#seen + 1] = sql
+      local rows = taken_for(#seen) and "[[true]]" or "[]"
+      on_result(vim.json.encode({ body = '{"results":[{"columns":["r"],"rows":' .. rows .. "}]}" }))
+    end
+    return seen
+  end
+
+  local always_free = function() return false end
+
+  local function resolve(target, items)
+    local resolved
+    copy.resolve_conflict_names(target, items, function(names) resolved = names end,
+      function() error("must not cancel") end, { skip_dialogs = true })
+    return resolved
+  end
+
+  it("probes the item's schema on postgres", function()
+    local seen = respond_with(always_free)
+    resolve({ conn = "t", db = "app", dialect = "postgres" }, { { name = "users", schema = "app" } })
+    assert.equals(1, #seen)
+    assert.matches("table_schema = 'app'", seen[1])
+    assert.matches("table_name = 'users'", seen[1])
+  end)
+
+  it("falls back to public when the item carries no schema", function()
+    local seen = respond_with(always_free)
+    resolve({ conn = "t", db = "blog", dialect = "postgres" }, { { name = "users" } })
+    assert.matches("table_schema = 'public'", seen[1])
+  end)
+
+  it("keeps the schema on the bumped candidate too", function()
+    -- users and users_copy taken, users_copy2 free.
+    local seen = respond_with(function(i) return i <= 2 end)
+    local names = resolve({ conn = "t", db = "app", dialect = "postgres" },
+      { { name = "users", schema = "app" } })
+    assert.are.same({ "users_copy2" }, names)
+    assert.equals(3, #seen)
+    assert.matches("table_schema = 'app'", seen[1])
+    assert.matches("table_name = 'users_copy'", seen[2])
+    assert.matches("table_schema = 'app'", seen[2])
+  end)
+
+  -- MySQL's SHOW CREATE TABLE emits an unqualified name, so the paste lands in
+  -- the connection's current database and DATABASE() is the matching probe even
+  -- if an item happens to carry a schema.
+  it("probes the current database on mysql", function()
+    local seen = respond_with(always_free)
+    resolve({ conn = "t", db = "shop", dialect = "mysql" }, { { name = "users", schema = "shop" } })
+    assert.matches("TABLE_SCHEMA = DATABASE%(%)", seen[1])
+    assert.matches("TABLE_NAME = 'users'", seen[1])
+  end)
+end)
+
 describe("db_browser copy progress spinner", function()
   local function collect_dialog_lines()
     local lines = {}

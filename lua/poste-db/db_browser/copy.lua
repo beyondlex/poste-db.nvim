@@ -153,10 +153,16 @@ function M.resolve_conflict_names(target, items, on_resolved, on_cancel, opts)
   local hooks = _G.poste_db_copy_test_hooks or {}
   local exists_fn = hooks.exists
     or function(t, name, schema, cb)
+      -- `schema` must reach the probe: on postgres the paste recreates the
+      -- table under its source schema (the fetched DDL carries the qualifier),
+      -- while the probe's `schema` parameter defaulted to "public". Dropping
+      -- it made every collision check answer about the wrong namespace — a
+      -- taken name in `app` looked free (CREATE then fails) and a taken name
+      -- in `public` bumped a free `app` table to a pointless `_copy`.
       check_table_exists(t.conn, t.db, t.dialect, name, cb, function(err)
         vim.schedule(function() vim.notify("Copy: " .. tostring(err), vim.log.levels.ERROR) end)
         cb(true) -- fail closed: pretend it exists rather than clobber it
-      end)
+      end, schema)
     end
   local input_fn = hooks.input or make_default_input()
 
