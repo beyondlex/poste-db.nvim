@@ -76,7 +76,10 @@ your own build — e.g. a worktree with unreleased dialect work — set
 `vim.g.poste_binary = "/path/to/poste"` (or `export POSTE_BINARY=…` for
 headless/CI processes, which never see a `vim.g`) before setup.
 
-Run `:checkhealth poste-db` to verify the installation.
+Run `:checkhealth poste-db` to verify the installation. Both it and
+`:PosteDbInfo` name the candidate that won (`from: $PATH`, `(from installed
+release)`, …) — the install path outranks `PATH`, so that label is the quickest
+answer to "why isn't my own build being used".
 
 ## Usage
 

@@ -58,7 +58,10 @@ and PG-family to `postgres`.
 - Optional: poste-ai.nvim for the AI chat, sqlfluff/sqlfmt/sql-formatter or
   pg_format for `:PosteDbFormat`
 
-Run `:checkhealth poste-db` to verify your installation.
+Run `:checkhealth poste-db` to verify your installation. It names the
+candidate that won (the install path outranks `PATH`, which is why a stray
+download can mask your own build); `:PosteDbInfo` prints the same `from:`
+line with the binary's build time and version.
 
 ==============================================================================
 3. SETUP                                                        *poste-db-setup*
