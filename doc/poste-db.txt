@@ -241,6 +241,10 @@ File columns are matched to table columns by name (case-insensitive), and a
 column the table does not have aborts the import rather than being dropped.
 In the values themselves, an empty cell omits the column — so its DEFAULT or
 sequence applies — while the text NULL (any case) writes an explicit NULL.
+What a cell means depends on the column it lands in: digits are a number in a
+numeric column and the characters themselves in a text column (`007` stays
+`007`), and `true`/`false` is a boolean only where a boolean fits (including
+MySQL's `tinyint(1)` and `bit(1)`), elsewhere plain text.
 The preview shows the first three data rows and the first five rejected ones;
 every row in the file is still validated and imported.
 
