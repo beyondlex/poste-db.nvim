@@ -369,6 +369,58 @@ local function build_schema(tables, columns, db)
   return { known_tables = known, columns = col_lookup, db = db }
 end
 
+--- Launch an introspect job and hand its decoded `items` list to `store`.
+---
+--- Both fetch helpers used to open-code this callback shape, and both could
+--- leave the caller's in-flight flag set forever. Two measured Neovim
+--- behaviours do that: `jobstart()` *throws* E475 when argv[0] is missing or
+--- not executable (and argv[0] comes from `find_poste_binary`, so a binary
+--- removed by a reinstall or a stale `g:poste_binary` reaches it), and a job
+--- that exits without writing to stdout still fires `on_stdout` — with a
+--- single empty line, which the old guards returned on without calling back.
+--- `settle` guarantees the callback runs exactly once, so a failed fetch
+--- re-arms the next `M.update()` instead of muting that buffer for the rest of
+--- the session.
+--- @param args string[]  argv, never a shell string: the binary path is user config
+--- @param store fun(items: any[])  called with the decoded items on success
+--- @param callback fun(success: boolean)
+local function run_introspect(args, store, callback)
+  local settled = false
+  local function settle(success)
+    if settled then return end
+    settled = true
+    callback(success)
+  end
+
+  local ok, job = pcall(vim.fn.jobstart, args, {
+    stdout_buffered = true,
+    on_stdout = function(_, data)
+      if not data then return end
+      while #data > 0 and data[#data] == "" do data[#data] = nil end
+      if #data == 0 then return end
+      local decoded, parsed = pcall(vim.json.decode, table.concat(data, "\n"))
+      if decoded and parsed and parsed.items then
+        store(parsed.items)
+        settle(true)
+      else
+        settle(false)
+      end
+    end,
+    -- Exit without a decoded payload is a failure even for code 0: reporting
+    -- success would re-enter the same cold-cache fetch on every update.
+    on_exit = function() settle(false) end,
+  })
+  if not ok then
+    -- The path is a filesystem location the plugin already prints in
+    -- `:PosteDbInfo`, so naming it here is the diagnosis; the connection URL
+    -- in the same argv is not repeated anywhere.
+    pcall(state.log, "WARN", "semantic_diagnostics: cannot launch poste binary: " .. tostring(args[1]))
+    settle(false)
+  elseif type(job) ~= "number" or job <= 0 then
+    settle(false)
+  end
+end
+
 --- Fetch tables for a database and cache them.
 --- Calls the Rust CLI directly. Stores in _schema_cache with key conn.."/"..db.
 --- Calls callback(true) on success, callback(false) on failure.
@@ -383,27 +435,10 @@ local function fetch_tables(buf, conn, db, callback)
   local args = { binary, "introspect", "--connection-url", url,
     "--type", "tables", "--database", db }
 
-  vim.fn.jobstart(args, {
-    stdout_buffered = true,
-    on_stdout = function(_, data)
-      if not data then return end
-      while #data > 0 and data[#data] == "" do data[#data] = nil end
-      if #data == 0 then return end
-      local ok, parsed = pcall(vim.json.decode, table.concat(data, "\n"))
-      if ok and parsed and parsed.items then
-        _schema_cache[cache_key] = _schema_cache[cache_key] or { tables = {}, columns = {} }
-        _schema_cache[cache_key].tables = vim.tbl_map(function(i) return i.name end, parsed.items)
-        vim.schedule(function() callback(true) end)
-      else
-        vim.schedule(function() callback(false) end)
-      end
-    end,
-    on_exit = function(_, code)
-      if code ~= 0 then
-        vim.schedule(function() callback(false) end)
-      end
-    end,
-  })
+  run_introspect(args, function(items)
+    _schema_cache[cache_key] = _schema_cache[cache_key] or { tables = {}, columns = {} }
+    _schema_cache[cache_key].tables = vim.tbl_map(function(i) return i.name end, items)
+  end, callback)
 end
 
 --- Fetch columns for a table and cache them.
@@ -419,27 +454,10 @@ local function fetch_columns(buf, conn, db, tbl, callback)
   local args = { binary, "introspect", "--connection-url", url,
     "--type", "columns", "--table", tbl, "--database", db }
 
-  vim.fn.jobstart(args, {
-    stdout_buffered = true,
-    on_stdout = function(_, data)
-      if not data then return end
-      while #data > 0 and data[#data] == "" do data[#data] = nil end
-      if #data == 0 then return end
-      local ok, parsed = pcall(vim.json.decode, table.concat(data, "\n"))
-      if ok and parsed and parsed.items then
-        _schema_cache[cache_key] = _schema_cache[cache_key] or { tables = {}, columns = {} }
-        _schema_cache[cache_key].columns[tbl] = vim.tbl_map(function(i) return i.name end, parsed.items)
-        vim.schedule(function() callback(true) end)
-      else
-        vim.schedule(function() callback(false) end)
-      end
-    end,
-    on_exit = function(_, code)
-      if code ~= 0 then
-        vim.schedule(function() callback(false) end)
-      end
-    end,
-  })
+  run_introspect(args, function(items)
+    _schema_cache[cache_key] = _schema_cache[cache_key] or { tables = {}, columns = {} }
+    _schema_cache[cache_key].columns[tbl] = vim.tbl_map(function(i) return i.name end, items)
+  end, callback)
 end
 
 function M.clear(buf)
