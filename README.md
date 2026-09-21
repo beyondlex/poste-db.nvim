@@ -19,9 +19,11 @@ Drop the image at .github/assets/dataset.png and uncomment.
 
 Part of the [Poste](https://github.com/beyondlex/poste.nvim) family. The
 plugin is fully self-contained (shared infra is vendored); the one shared
-piece is the `poste` binary, installed automatically on first setup from
-[poste.nvim](https://github.com/beyondlex/poste.nvim) releases — or point
-`vim.g.poste_binary` at your own build.
+piece is the `poste` binary — a usable one is picked up from
+`vim.g.poste_binary`, `$POSTE_BINARY`, a local dev build or `PATH`, and only
+downloaded from [poste.nvim](https://github.com/beyondlex/poste.nvim) releases
+when none of those exist. "Usable" means readable **and** executable: a file
+without the exec bit is skipped rather than picked over a working `PATH` entry.
 
 Full documentation lives in `doc/poste-db.txt` (`:h poste-db`), with a
 [quick reference](docs/user/sql/quick-reference.md) for the everyday keys.
@@ -63,10 +65,16 @@ Suggested path: .github/assets/dataset-panel.png
 }
 ```
 
-On first setup the `poste` binary is downloaded from poste.nvim releases
-(SHA256-verified) into `stdpath("data")/poste/bin/poste`. To use your own
-build — e.g. a worktree with unreleased dialect work — set
-`vim.g.poste_binary = "/path/to/poste"` before setup.
+On first setup the plugin looks for a usable `poste` binary — in
+`vim.g.poste_binary`, then `$POSTE_BINARY`, then the install path
+(`stdpath("data")/poste/bin/poste`), then a local dev build next to the plugin
+or in the current directory, then `PATH` — and only downloads from
+poste.nvim releases (SHA256-verified) into that install path when none of those
+is runnable. "Runnable" means readable **and** executable, so a
+copied-but-not-chmod'ed file cannot mask a working `PATH` entry. To use
+your own build — e.g. a worktree with unreleased dialect work — set
+`vim.g.poste_binary = "/path/to/poste"` (or `export POSTE_BINARY=…` for
+headless/CI processes, which never see a `vim.g`) before setup.
 
 Run `:checkhealth poste-db` to verify the installation.
 
@@ -316,7 +324,7 @@ require("poste-db").setup({
 ## Requirements
 
 - Neovim >= 0.10.0
-- `poste` binary (auto-installed from poste.nvim releases on first setup; `vim.g.poste_binary` overrides)
+- `poste` binary (found via `vim.g.poste_binary`, `$POSTE_BINARY`, a local build or `PATH`; otherwise auto-installed from poste.nvim releases on first setup)
 - blink.cmp (recommended) or nvim-cmp for completion
 - `ssh` on PATH for `tunnel` connections
 
