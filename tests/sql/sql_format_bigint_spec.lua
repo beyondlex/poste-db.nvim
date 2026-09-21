@@ -59,6 +59,32 @@ describe("format bigint precision", function()
     assert.is_true(layout.numeric_cols[2], "bigint column should be flagged numeric for right-alignment")
   end)
 
+  it("flags a size-tagged or dialect-spelled numeric declaration for alignment", function()
+    -- the alignment question is the same one the import mapper and the DML
+    -- generators ask, so it now goes through the same root-word lookup:
+    -- `decimal(10,2)` and ClickHouse's `UInt64` align like the bare name does,
+    -- and a text column full of digit strings still does not
+    local layout = format.plan_resultset_layout({
+      type = "resultset",
+      total_rows = 1,
+      results = { {
+        columns = {
+          { name = "amount", type = "decimal(10,2)" },
+          { name = "counter", type = "UInt64" },
+          { name = "zip", type = "varchar(10)" },
+        },
+        rows = { { "10.50", "18446744073709551615", "10001" } },
+      } },
+      connection = "",
+      database = "",
+      dialect = "mysql",
+    })
+    -- [1] is the row-number gutter, so the columns start at [2]
+    assert.is_true(layout.numeric_cols[2])
+    assert.is_true(layout.numeric_cols[3])
+    assert.is_false(layout.numeric_cols[4], "a text column of digits is left-aligned like text")
+  end)
+
   it("formats floats with a capped decimal precision", function()
     assert.equals("578.472", format.format_number(578.47196567559))
     assert.equals("123.45", format.format_number(123.45))

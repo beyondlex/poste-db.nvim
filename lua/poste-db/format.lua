@@ -6,15 +6,8 @@ local dataset = require("poste-db.dataset")
 -- would shadow the module binding (luacheck W431).
 local wutil = require("poste-db.width")
 local log = require("poste-db.log")
+local types = require("poste-db.types")
 local M = {}
-
---- Normalized numeric ctypes (see normalize_type) eligible for right-alignment
---- even when values arrive as strings (precision-preserving JSON strings).
-local NUMERIC_CTYPES = {
-  integer = true, int = true, bigint = true, smallint = true,
-  serial = true, bigserial = true, smallserial = true,
-  numeric = true, decimal = true, real = true, float = true, money = true,
-}
 
 ---------------------------------------------------------------------------
 -- Helpers
@@ -253,7 +246,12 @@ local function is_numeric_column(rows, col_idx, col_meta)
   local is_numeric_type = false
   if col_meta and col_meta.type then
     local ctype = normalize_type(col_meta.type)
-    is_numeric_type = NUMERIC_CTYPES[ctype] == true
+    -- the same root-word lookup the import mapper and the DML generators use,
+    -- so a size-tagged or dialect-flavoured declaration (`decimal(10,2)`,
+    -- `UInt64`) aligns the way the bare name does. An empty ctype means the
+    -- server gave nothing, and guessing that a text column is numeric is not
+    -- what alignment is for.
+    is_numeric_type = ctype ~= "" and types.is_numeric(ctype)
   end
   for _, row in ipairs(rows) do
     local val = row[col_idx]
