@@ -74,7 +74,14 @@ function M.execute_import(table_info, valid_rows, col_map, table_cols, callback)
   end
 
   local norm_cols = mapping.normalize_columns(table_cols)
-  local chunk_size = config.config.import_chunk_size or 100
+  -- `import_chunk_size` is user config, and both failure modes of an
+  -- unclamped value are silent: a size below 1 makes the end index precede the
+  -- start, so the chunk holds no statement, `end_idx + 1` is `start_idx` again,
+  -- and the loop re-sends the same empty chunk forever; a non-numeric value
+  -- throws mid-import, after the first chunks have already been written.
+  local chunk_size = tonumber(config.config.import_chunk_size) or 100
+  if chunk_size < 1 then chunk_size = 1 end
+  chunk_size = math.floor(chunk_size)
   local total_imported = 0
   local all_errors = {}
 
