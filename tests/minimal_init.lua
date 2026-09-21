@@ -24,6 +24,14 @@ if vim.g.poste_binary == nil then
   end
 end
 
+-- Export the resolved path for the specs plenary runs in a *child* nvim: that
+-- process is started without `-u`, so it never evaluates this file and would
+-- otherwise find no binary at all -- every Rust-dependent assertion then either
+-- prints SKIP or fails on an empty completion list.
+if vim.env.POSTE_BINARY == nil then
+  vim.env.POSTE_BINARY = vim.g.poste_binary
+end
+
 -- Optional: poste-ai.nvim (AI chat integration tests are skipped when absent)
 if vim.fn.isdirectory("../poste-ai.nvim") == 1 then
   vim.opt.runtimepath:append("../poste-ai.nvim")
