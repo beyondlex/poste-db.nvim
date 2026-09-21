@@ -250,6 +250,40 @@ WHERE "a" = ? AND "b" = ?;
   end)
 end)
 
+describe("db_browser operations insert_template", function()
+  local function table_with(columns)
+    local children = {}
+    for _, c in ipairs(columns) do
+      table.insert(children, { node_type = "column", name = c[1], meta = { is_pk = c[2] } })
+    end
+    return table_node({ meta = { dialect = "postgres" }, children = children })
+  end
+
+  local function render(node)
+    local src = vim.api.nvim_create_buf(false, true)
+    local ok, err = pcall(operations.insert_template, node, { source_buf = src })
+    local lines = vim.api.nvim_buf_get_lines(src, 0, -1, false)
+    vim.api.nvim_buf_delete(src, { force = true })
+    assert.is_true(ok, tostring(err))
+    for i, l in ipairs(lines) do
+      if l:match("^INSERT INTO") then return l end
+    end
+    return "<no INSERT line in:\n" .. table.concat(lines, "\n") .. ")"
+  end
+
+  it("leaves the serial key out of the column list", function()
+    assert.equals('INSERT INTO "users" ("name", "bio")',
+      render(table_with({ { "id", true }, { "name", false }, { "bio", false } })))
+  end)
+
+  it("falls back to the key columns for a junction table", function()
+    -- With every column part of the key the skip-everything list came out
+    -- empty: `INSERT INTO "users" ()`, which no engine parses.
+    assert.equals('INSERT INTO "users" ("a", "b")',
+      render(table_with({ { "a", true }, { "b", true } })))
+  end)
+end)
+
 describe("db_browser operations select_star", function()
   --- Run `fn` with the cursor parked on `line` of a throwaway window, which is
   --- what leaf rows resolve their table through.

@@ -602,6 +602,14 @@ function M.insert_template(node, context)
       table.insert(col_names, ident.quote(c.name, dialect))
     end
   end
+  -- A junction table has no non-key column to offer: skipping every primary
+  -- key left `INSERT INTO "t" ()`, which no engine parses. Fall back to the
+  -- key itself, the same way update_template does for its SET list.
+  if #col_names == 0 then
+    for _, c in ipairs(cols) do
+      table.insert(col_names, ident.quote(c.name, dialect))
+    end
+  end
 
   local lines, cursor_offset = build_directive_lines(table_node, conn)
   table.insert(lines, "INSERT INTO " .. qualified_table_ref(table_node, dialect) .. " (" .. table.concat(col_names, ", ") .. ")")
