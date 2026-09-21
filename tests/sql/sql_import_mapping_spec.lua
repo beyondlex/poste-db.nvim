@@ -21,16 +21,29 @@ describe("import mapping coerce_value", function()
     assert.equals(vim.NIL, mapping.coerce_value("null", "int"))
     assert.equals(vim.NIL, mapping.coerce_value("Null", "text"))
     assert.equals(vim.NIL, mapping.coerce_value("(null)", "text"))
-    assert.is_true(mapping.coerce_value("True", "varchar"))
-    assert.is_true(mapping.coerce_value("TRUE", "varchar"))
-    assert.is_false(mapping.coerce_value("False", "int"))
+    assert.is_true(mapping.coerce_value("True", "boolean"))
+    assert.is_true(mapping.coerce_value("TRUE", "bool"))
+    assert.is_false(mapping.coerce_value("False", "boolean"))
     assert.equals("true-ish", mapping.coerce_value("true-ish", "text"), "prefix is not a boolean")
     assert.equals("nullify", mapping.coerce_value("nullify", "text"), "prefix is not NULL")
   end)
 
-  it("coerces booleans before numeric parsing", function()
-    assert.is_true(mapping.coerce_value("true", "varchar"))
-    assert.is_false(mapping.coerce_value("FALSE", "int"))
+  it("reads true/false as a boolean only where a boolean fits", function()
+    -- Coerced into a text column the Lua boolean becomes an unquoted TRUE in
+    -- the INSERT: postgres rejects it, MySQL stores 1. The file said "true";
+    -- the row holds something else. So the word is data unless the column can
+    -- hold a boolean — including MySQL's spellings of one.
+    assert.equals("True", mapping.coerce_value("True", "varchar"))
+    assert.equals("true", mapping.coerce_value("true", "text"))
+    assert.equals("FALSE", mapping.coerce_value("FALSE", "int"))
+    assert.equals("true", mapping.coerce_value("true", "character varying(50)"))
+    assert.is_true(mapping.coerce_value("true", "tinyint(1)"), "MySQL boolean")
+    assert.is_false(mapping.coerce_value("false", "BIT"))
+    assert.is_true(mapping.coerce_value("true", "bit(1)"))
+    assert.is_true(mapping.coerce_value("true", ""), "no type from introspection stays permissive")
+  end)
+
+  it("coerces 1/0 only for boolean columns", function()
     assert.is_true(mapping.coerce_value("1", "boolean"), "1/0 only for boolean columns")
     assert.is_false(mapping.coerce_value("0", "bool"))
     assert.equals(1, mapping.coerce_value("1", "int"), "1 stays numeric on non-boolean columns")
@@ -43,10 +56,10 @@ describe("import mapping coerce_value", function()
     assert.equals("1e3", mapping.coerce_value("1e3", "int"), "exponent form does not match the numeric pattern")
   end)
 
-  it("pins the current quirk: non-integral value into an integer column falls back to string", function()
-    -- The integer guard has an empty then-branch, so "3.7" into an INT column
-    -- passes through as the raw string instead of truncating or erroring.
-    -- Flagged in the audit; change deliberately, not silently.
+  it("leaves a fraction headed for an integer column as a string", function()
+    -- The integer guard refuses to round, so the cell keeps the text it was
+    -- given and the database decides. Rounding here would store 3 (or 4) for a
+    -- file that said 3.7, with nothing left to show the mismatch.
     assert.equals("3.7", mapping.coerce_value("3.7", "integer"))
     assert.equals(3, mapping.coerce_value("3.0", "integer"), "integral floats still coerce to number")
   end)
@@ -152,5 +165,52 @@ describe("import mapping validate_and_type", function()
     local valid, bad = mapping.validate_and_type({ { "NULL", "x" } }, cols)
     assert.equals(1, #valid)
     assert.equals(0, #bad)
+  end)
+end)
+
+describe("import mapping the file to the INSERT, end to end", function()
+  -- mapping and dml are the two halves of one promise: what the cell says is
+  -- what the column stores. Either half alone can look right and still
+  -- rewrite the value, so this drives the real chain (validate_and_type ->
+  -- normalize_columns -> generate_insert) the way import/execute does.
+  local table_cols = {
+    { name = "id", col_type = "bigint", is_pk = true },
+    { name = "code", col_type = "varchar(20)", is_pk = false },
+    { name = "active", col_type = "boolean", is_pk = false },
+    { name = "note", col_type = "text", is_pk = false },
+  }
+  local col_map = {
+    { import_idx = 1, import_name = "id", table_col = table_cols[1], table_idx = 1 },
+    { import_idx = 2, import_name = "code", table_col = table_cols[2], table_idx = 2 },
+    { import_idx = 3, import_name = "active", table_col = table_cols[3], table_idx = 3 },
+    { import_idx = 4, import_name = "note", table_col = table_cols[4], table_idx = 4 },
+  }
+
+  local function insert_of(row)
+    local dml = require("poste-db.dml")
+    local valid = mapping.validate_and_type({ row }, col_map)
+    return dml.generate_insert("public", "t", mapping.normalize_columns(table_cols),
+      valid[1], "postgres")
+  end
+
+  it("keeps text in a text column and a number in a numeric one", function()
+    assert.equals([[INSERT INTO "public"."t" ("id", "code", "active", "note") VALUES (42, '007', NULL, 'true');]],
+      insert_of({ "42", "007", "NULL", "true" }))
+  end)
+
+  it("writes a real boolean where a boolean belongs", function()
+    assert.equals([[INSERT INTO "public"."t" ("id", "code", "active", "note") VALUES (1, 'x', TRUE, NULL);]],
+      insert_of({ "1", "x", "true", "NULL" }))
+  end)
+
+  it("omits a column the file has nothing for", function()
+    -- an empty cell is 'leave this column out' (DEFAULT applies), not NULL
+    local dml = require("poste-db.dml")
+    local cols = { { name = "id", col_type = "bigint", is_pk = true },
+                   { name = "note", col_type = "text", is_pk = false } }
+    local cm = { { import_idx = 1, import_name = "id", table_col = cols[1], table_idx = 1 } }
+    local valid = mapping.validate_and_type({ { "7" } }, cm)
+    assert.equals([[INSERT INTO "public"."t" ("id") VALUES (7);]],
+      dml.generate_insert("public", "t", mapping.normalize_columns(cols), valid[1], "postgres"))
   end)
 end)

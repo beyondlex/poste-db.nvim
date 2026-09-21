@@ -1,23 +1,18 @@
+local types = require("poste-db.types")
+
 local M = {}
 
-local INTEGER_TYPES = {
-  integer = true, int = true, int2 = true, int4 = true, int8 = true,
-  smallint = true, bigint = true, serial = true, bigserial = true,
-  tinyint = true, mediumint = true,
-}
-
---- Root type names that hold numbers. Introspection reports `numeric(10,2)` or
---- `double precision`, so only the leading word is looked up.
-local NUMERIC_TYPES = vim.tbl_extend("force", INTEGER_TYPES, {
-  numeric = true, decimal = true, dec = true, fixed = true,
-  float = true, float4 = true, float8 = true, double = true, real = true,
-  money = true, smallmoney = true, oid = true,
-})
-
-local function is_numeric_col(ctype)
+--- The `true`/`false` spelling of a value is a boolean only in a column that
+--- can hold one — MySQL spells it `tinyint(1)`/`bit(1)` — or when introspection
+--- gave no type at all. Coerced anywhere else it becomes an unquoted TRUE in
+--- the INSERT, which postgres rejects for a text column and MySQL answers by
+--- storing `1`: the file said "true", the table holds something else.
+local function takes_boolean_literal(ctype)
   if ctype == "" then return true end
-  local root = ctype:match("^%a[%a_]*")
-  return root == nil or NUMERIC_TYPES[root] == true
+  return ctype:find("bool", 1, true) ~= nil
+    or ctype == "bit"
+    or ctype:find("^bit%(%s*1%s*%)") ~= nil
+    or ctype:find("^tinyint%(%s*1%s*%)") ~= nil
 end
 
 --- A double carries 53 bits of mantissa, so `9050341234567890123` arrives back as
@@ -32,14 +27,15 @@ function M.coerce_value(str, col_type)
   if s == "" then return nil end
 
   -- NULL/true/false literals match case-insensitively: CSV exports write
-  -- NULL (databases), null (JSON tools), True/False (Python csv), and only
-  -- the all-lower and all-upper spellings used to coerce.
+  -- NULL (databases), null (JSON tools), True/False (Python csv).
   local lower = s:lower()
   if lower == "null" or lower == "(null)" then return vim.NIL end
 
   local ctype = (col_type or ""):lower()
-  if lower == "true" then return true end
-  if lower == "false" then return false end
+  if takes_boolean_literal(ctype) then
+    if lower == "true" then return true end
+    if lower == "false" then return false end
+  end
   if ctype == "boolean" or ctype == "bool" then
     if s == "1" then return true end
     if s == "0" then return false end
@@ -50,9 +46,9 @@ function M.coerce_value(str, col_type)
   -- integer column is not being handed a fraction.
   local num = tonumber(s)
   if num and s:match("^%-?%d+%.?%d*$")
-    and is_numeric_col(ctype)
+    and types.is_numeric(ctype)
     and math.abs(num) < MAX_EXACT_DOUBLE
-    and not (INTEGER_TYPES[ctype] and num ~= math.floor(num)) then
+    and not (types.is_integer_name(ctype) and num ~= math.floor(num)) then
     return num
   end
 
