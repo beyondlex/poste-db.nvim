@@ -262,7 +262,7 @@ describe("import flow integration", function()
 
     local parsed = import._parse_csv_for_test(csv)
     local col_map, _, _ = import._build_column_map_for_test(parsed.columns, tcols)
-    local valid, bad = import._validate_and_type_for_test(parsed.rows, col_map, tcols)
+    local valid, bad = import._validate_and_type_for_test(parsed.rows, col_map)
 
     assert.equals(0, #bad)
     assert.equals(2, #valid)
@@ -286,7 +286,7 @@ describe("import flow integration", function()
 
     local parsed = import._parse_csv_for_test(csv)
     local col_map, _, _ = import._build_column_map_for_test(parsed.columns, tcols)
-    local valid, bad = import._validate_and_type_for_test(parsed.rows, col_map, tcols)
+    local valid, bad = import._validate_and_type_for_test(parsed.rows, col_map)
 
     assert.equals(1, #valid)
     assert.equals(1, #bad)
@@ -302,7 +302,7 @@ describe("import flow integration", function()
 
     local parsed = import._parse_csv_for_test(csv)
     local col_map, _, _ = import._build_column_map_for_test(parsed.columns, tcols)
-    local valid, bad = import._validate_and_type_for_test(parsed.rows, col_map, tcols)
+    local valid, bad = import._validate_and_type_for_test(parsed.rows, col_map)
 
     assert.equals(1, #valid)
     assert.equals(0, #bad)

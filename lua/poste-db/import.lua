@@ -190,7 +190,7 @@ local function process_import(content, filepath, table_info, table_cols)
     return
   end
 
-  local valid_rows, bad_rows = mapping.validate_and_type(parsed.rows, col_map, table_cols, unmatched_table)
+  local valid_rows, bad_rows = mapping.validate_and_type(parsed.rows, col_map)
 
   preview.show_preview(table_info, #parsed.rows, #valid_rows, bad_rows,
     col_map, unmatched_import, unmatched_table, parsed.columns, parsed.rows, function(action)

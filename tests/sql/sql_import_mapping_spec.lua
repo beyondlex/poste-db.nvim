@@ -114,7 +114,7 @@ describe("import mapping build_row_values", function()
       { import_idx = 1, table_idx = 1 },
     }
     local row = { "a", "b", "c" }
-    assert.same({ "a", nil, "b" }, mapping.build_row_values(row, col_map, 3))
+    assert.same({ "a", nil, "b" }, mapping.build_row_values(row, col_map))
   end)
 end)
 
@@ -136,7 +136,7 @@ describe("import mapping validate_and_type", function()
       { "1", "alice" },
       { "NULL", "bob" },
     }
-    local valid, bad = mapping.validate_and_type(import_rows, col_map(), table_cols, {})
+    local valid, bad = mapping.validate_and_type(import_rows, col_map())
     assert.equals(1, #valid)
     assert.same({ 1, "alice" }, valid[1])
     assert.equals(1, #bad)
@@ -149,7 +149,7 @@ describe("import mapping validate_and_type", function()
   it("allows null PK when the column is auto-generated", function()
     local cols = col_map()
     cols[1].table_col = { name = "id", col_type = "int", is_pk = true, extra = "auto_increment" }
-    local valid, bad = mapping.validate_and_type({ { "NULL", "x" } }, cols, table_cols, {})
+    local valid, bad = mapping.validate_and_type({ { "NULL", "x" } }, cols)
     assert.equals(1, #valid)
     assert.equals(0, #bad)
   end)

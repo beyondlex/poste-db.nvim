@@ -94,11 +94,13 @@ function M.build_column_map(parsed_cols, table_cols)
   return col_map, unmatched_import, unmatched_table
 end
 
-function M.build_row_values(import_row, col_map, num_table_cols)
+--- Lay the file's values out by *table* column position.
+--- A table column the file has no value for stays absent, which is what the
+--- INSERT generator reads as "omit this column" (so the default or the
+--- sequence applies) — as opposed to `vim.NIL`, an explicit NULL. The row is
+--- therefore deliberately sparse; there is no length to pad.
+function M.build_row_values(import_row, col_map)
   local row_values = {}
-  for i = 1, num_table_cols do
-    row_values[i] = nil
-  end
   for _, mc in ipairs(col_map) do
     row_values[mc.table_idx] = import_row[mc.import_idx]
   end
@@ -117,12 +119,17 @@ function M.normalize_columns(table_cols)
   return cols
 end
 
-function M.validate_and_type(import_rows, col_map, table_cols, unmatched_table)
+--- Coerce every mapped cell and reject rows whose primary key came out null.
+--- The table columns the file does not supply are *not* an error — they stay
+--- absent and the database decides — so this needs nothing beyond `col_map`,
+--- whose `table_col` entries carry the type and key information. Previewing the
+--- unmatched columns is the caller's concern.
+function M.validate_and_type(import_rows, col_map)
   local valid = {}
   local bad = {}
 
   for ri, import_row in ipairs(import_rows) do
-    local row_vals = M.build_row_values(import_row, col_map, #table_cols)
+    local row_vals = M.build_row_values(import_row, col_map)
     local row_errors = {}
 
     for _, mc in ipairs(col_map) do
