@@ -29,20 +29,18 @@ local get_columns_from_node = ops_sql.get_columns_from_node
 ---------------------------------------------------------------------------
 
 --- SELECT * LIMIT 100 for table/view; insert at end of source buffer.
+---
+--- A view is a `table` node carrying `meta.table_type == "VIEW"` (tree.lua):
+--- the browser has no `"view"` node type, so no check here can key off one.
 function M.select_star(node, context)
   local table_node = node
-  if node.node_type == "column" then
-    table_node = find_table_node(context, context.line_to_node[node] and 0 or 0)
+  if table_node.node_type ~= "table" then
+    -- A column or any other leaf/group row: resolve to the table the cursor
+    -- actually sits under, the same way rename does.
+    table_node = find_table_node(context, vim.fn.line(".") - HEADER_LINES)
   end
 
-  -- Fallback: walk up from current line to find table
   if not table_node or table_node.node_type ~= "table" then
-    local buf_line = vim.fn.line(".")
-    local idx = buf_line - HEADER_LINES
-    table_node = find_table_node(context, idx)
-  end
-
-  if not table_node or (table_node.node_type ~= "table" and table_node.node_type ~= "view") then
     notify.info("Move cursor to a table or view node")
     return
   end
@@ -63,12 +61,12 @@ end
 --- Show DDL for table/view in a float window.
 function M.show_ddl(node, context)
   local table_node = node
-  if node.node_type ~= "table" and node.node_type ~= "view" then
+  if table_node.node_type ~= "table" then
     -- For index/key nodes, walk up to table
     table_node = find_table_node(context, vim.fn.line(".") - HEADER_LINES)
   end
 
-  if not table_node or (table_node.node_type ~= "table" and table_node.node_type ~= "view") then
+  if not table_node or table_node.node_type ~= "table" then
     notify.info("DDL is only available for tables and views")
     return
   end
@@ -563,19 +561,14 @@ function M.new_column(node, context)
       cursor_offset = cursor_offset + 1
     end
 
-    local add_col = "ALTER TABLE " .. ident.quote(table_node.name, dialect) .. " ADD COLUMN " .. ident.quote(col_name, dialect) .. " " .. col_type
-    if not nullable then add_col = add_col .. " NOT NULL" end
-    if default_val ~= "" then add_col = add_col .. " DEFAULT " .. default_val end
-    add_col = add_col .. ";"
-
-    if dialect == "mysql" then
-      add_col = "ALTER TABLE " .. ident.quote(table_node.name, dialect) .. " ADD COLUMN " .. ident.quote(col_name, dialect) .. " " .. col_type
-      if not nullable then add_col = add_col .. " NOT NULL" end
-      if default_val ~= "" then add_col = add_col .. " DEFAULT " .. default_val end
-      add_col = add_col .. ";"
+    -- Schema-qualified where the dialect resolves it: a bare name here made
+    -- the ALTER land on public.<table> for anything browsed in another schema.
+    local stmt = ops_sql.add_column_sql(
+      qualified_table_ref(table_node, dialect), ident.quote(col_name, dialect),
+      col_type, nullable, default_val, dialect)
+    for _, line in ipairs(stmt) do
+      table.insert(lines, line)
     end
-
-    table.insert(lines, add_col)
     table.insert(lines, "")
 
     insert_into_source(context, lines, cursor_offset)

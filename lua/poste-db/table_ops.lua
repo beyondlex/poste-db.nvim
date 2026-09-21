@@ -2,6 +2,8 @@
 --- Generates DDL SQL and inserts it into the source buffer for review/execution.
 --- Keymaps registered on the DB Browser buffer: ma/mr/md/mt
 local config = require("poste-db.config")
+local ident = require("poste-db.ident")
+local ops_sql = require("poste-db.db_browser.ops_sql")
 
 local M = {}
 
@@ -10,18 +12,21 @@ local M = {}
 ---------------------------------------------------------------------------
 
 --- Insert DDL lines into the source buffer and notify.
+---
+--- `ddl` may come back multi-line: the SQLite generators answer with a
+--- comment block instead of DDL, and `gen_add_column` appends a caveat note.
+--- `nvim_buf_set_lines` rejects any item containing a newline, so a single
+--- string had to be split first — otherwise the whole insert aborted and the
+--- buffer stayed untouched.
 local function insert_ddl(source_buf, ddl, label)
   if not source_buf or not vim.api.nvim_buf_is_valid(source_buf) then
     vim.notify("No source SQL buffer", vim.log.levels.WARN)
     return
   end
 
-  local lines = {
-    "",
-    "-- " .. label,
-    ddl,
-    "",
-  }
+  local lines = { "", "-- " .. label }
+  vim.list_extend(lines, vim.split(ddl, "\n", { plain = true }))
+  lines[#lines + 1] = ""
 
   local line_count = vim.api.nvim_buf_line_count(source_buf)
   vim.api.nvim_buf_set_lines(source_buf, line_count, line_count, false, lines)
@@ -37,44 +42,33 @@ local function insert_ddl(source_buf, ddl, label)
 end
 
 --- Quote an identifier based on dialect.
-local function quote(name, dialect)
-  if dialect == "mysql" or dialect == "mariadb" then
-    return "`" .. name:gsub("`", "``") .. "`"
-  else
-    return '"' .. name:gsub('"', '""') .. '"'
-  end
-end
+--- Delegated to poste-db.ident so the two DDL generators in this repo cannot
+--- drift: this copy predated clickhouse and mssql and still double-quoted a
+--- clickhouse name, which that engine spells with backticks.
+local quote = ident.quote
 
 ---------------------------------------------------------------------------
 -- DDL generation (pure Lua — no CLI round-trip needed for simple DDL)
 ---------------------------------------------------------------------------
 
 --- Generate ADD COLUMN DDL.
---- SQLite rejects `ADD COLUMN c T NOT NULL` without a DEFAULT (the added
---- column must materialize a value for existing rows) — annotate the DDL so
---- the review step catches it before the server does.
+--- The spelling lives in db_browser.ops_sql so the browser form and this prompt
+--- flow cannot drift apart; it returns lines, and this caller keeps its own
+--- single-string contract (insert_ddl splits again on newlines).
 local function gen_add_column(table_name, col_name, col_type, nullable, default_val, dialect)
   local q = function(n) return quote(n, dialect) end
-  local sql = string.format("ALTER TABLE %s ADD COLUMN %s %s", q(table_name), q(col_name), col_type)
-  if not nullable then
-    sql = sql .. " NOT NULL"
-  end
-  if default_val and default_val ~= "" then
-    sql = sql .. " DEFAULT " .. default_val
-  end
-  sql = sql .. ";"
-  if not nullable and not (default_val and default_val ~= "") and dialect == "sqlite" then
-    sql = sql .. "\n-- SQLite: a NOT NULL added column requires a DEFAULT; add one above."
-  end
-  return sql
+  return table.concat(ops_sql.add_column_sql(
+    q(table_name), q(col_name), col_type, nullable, default_val, dialect), "\n")
 end
 
 --- Generate RENAME COLUMN DDL.
---- MSSQL has no RENAME COLUMN — sp_rename is the only form.
+--- MSSQL has no RENAME COLUMN — sp_rename is the only form, and it takes its
+--- arguments as string literals: the names go through quote_literal so an
+--- apostrophe inside one doubles instead of closing the literal early.
 local function gen_rename_column(table_name, old_name, new_name, dialect)
   if dialect == "mssql" then
-    return string.format("EXEC sp_rename '%s.%s', '%s', 'COLUMN';",
-      table_name, old_name, new_name)
+    return "EXEC sp_rename " .. ident.quote_literal(table_name .. "." .. old_name, dialect)
+      .. ", " .. ident.quote_literal(new_name, dialect) .. ", 'COLUMN';"
   end
   local q = function(n) return quote(n, dialect) end
   return string.format(

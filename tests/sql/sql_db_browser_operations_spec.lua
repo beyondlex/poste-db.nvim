@@ -249,3 +249,54 @@ WHERE "a" = ? AND "b" = ?;
 ]], render(table_with({ { "a", true }, { "b", true }, { "name", false } })))
   end)
 end)
+
+describe("db_browser operations select_star", function()
+  --- Run `fn` with the cursor parked on `line` of a throwaway window, which is
+  --- what leaf rows resolve their table through.
+  local function at_line(line, fn)
+    local view = vim.api.nvim_create_buf(false, true)
+    vim.api.nvim_buf_set_lines(view, 0, -1, false, { "1", "2", "3", "4", "5" })
+    local win = vim.api.nvim_open_win(view, true, {
+      relative = "editor", width = 30, height = 5, row = 0, col = 0,
+    })
+    vim.api.nvim_win_set_cursor(win, { line, 0 })
+    local ok, err = pcall(fn)
+    vim.api.nvim_win_close(win, true)
+    vim.api.nvim_buf_delete(view, { force = true })
+    assert.is_true(ok, tostring(err))
+  end
+
+  local function first_sql_line(src, prefix)
+    for _, l in ipairs(vim.api.nvim_buf_get_lines(src, 0, -1, false)) do
+      if l:find(prefix, 1, true) then return l end
+    end
+    return "<no SELECT line in:\n" .. table.concat(vim.api.nvim_buf_get_lines(src, 0, -1, false), "\n") .. ")"
+  end
+
+  it("resolves a column row to the table above it in the line map", function()
+    local tbl = table_node({ meta = { schema = "app", database = "blog", dialect = "postgres" } })
+    local col = column_node()
+    local src = vim.api.nvim_create_buf(false, true)
+    at_line(4, function()
+      operations.select_star(col, { source_buf = src, line_to_node = { [3] = tbl, [4] = col } })
+    end)
+    assert.equals('SELECT * FROM "app"."users" LIMIT 100;', first_sql_line(src, "SELECT"))
+    vim.api.nvim_buf_delete(src, { force = true })
+  end)
+
+  it("keeps the view row it was called on", function()
+    -- A view is a `table` node tagged meta.table_type = "VIEW". There is no
+    -- "view" node type in the browser, so a view row must be used as-is rather
+    -- than re-resolved to whatever table sits above it.
+    local view = table_node({
+      name = "active_users",
+      meta = { schema = "app", database = "blog", dialect = "postgres", table_type = "VIEW" },
+    })
+    local src = vim.api.nvim_create_buf(false, true)
+    at_line(1, function()
+      operations.select_star(view, { source_buf = src, line_to_node = {} })
+    end)
+    assert.equals('SELECT * FROM "app"."active_users" LIMIT 100;', first_sql_line(src, "SELECT"))
+    vim.api.nvim_buf_delete(src, { force = true })
+  end)
+end)

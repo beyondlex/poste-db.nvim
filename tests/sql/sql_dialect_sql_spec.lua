@@ -26,12 +26,29 @@ end)
 
 describe("db_browser rename SQL", function()
   it("spells a table rename per dialect", function()
-    assert.equals('ALTER TABLE "orders" RENAME TO "purchases";',
+    assert.equals('ALTER TABLE "public"."orders" RENAME TO "purchases";',
       ops_sql.rename_table_sql(table_node(), "purchases", "postgres"))
     assert.equals("RENAME TABLE `orders` TO `purchases`;",
       ops_sql.rename_table_sql(table_node(), "purchases", "mysql"))
     assert.equals('ALTER TABLE "orders" RENAME TO "purchases";',
       ops_sql.rename_table_sql(table_node(), "purchases", "sqlite"))
+  end)
+
+  -- Postgres resolves an unqualified name through the session search_path, so
+  -- a bare `ALTER TABLE "orders"` renamed (or failed on) whatever `public`
+  -- happened to hold — not the schema the browser row came from. Every other
+  -- generator here already went through qualified_table_ref; rename was the
+  -- odd one out.
+  it("targets the browsed schema, like the SELECT template does", function()
+    local node = table_node({ meta = { schema = "app", database = "blog" } })
+    local ref = ops_sql.qualified_table_ref(node, "postgres")
+    assert.equals("ALTER TABLE " .. ref .. ' RENAME TO "purchases";',
+      ops_sql.rename_table_sql(node, "purchases", "postgres"))
+    assert.equals('ALTER TABLE "app"."orders" RENAME TO "purchases";',
+      ops_sql.rename_table_sql(node, "purchases", "postgres"))
+    -- sqlite has no schema to qualify with even if a node carries one
+    assert.equals('ALTER TABLE "orders" RENAME TO "purchases";',
+      ops_sql.rename_table_sql(node, "purchases", "sqlite"))
   end)
 
   it("renames an mssql table through sp_rename, unquoted and schema-qualified", function()
@@ -47,7 +64,10 @@ describe("db_browser rename SQL", function()
     assert.equals("EXEC sp_rename 'dbo.orders.total', 'amount', 'COLUMN';",
       ops_sql.rename_column_sql(
         table_node({ meta = { schema = "dbo", database = "blog" } }), col, "amount", "mssql"))
-    assert.equals('ALTER TABLE "orders" RENAME COLUMN "total" TO "amount";',
+    assert.equals('ALTER TABLE "app"."orders" RENAME COLUMN "total" TO "amount";',
+      ops_sql.rename_column_sql(
+        table_node({ meta = { schema = "app", database = "blog" } }), col, "amount", "postgres"))
+    assert.equals('ALTER TABLE "public"."orders" RENAME COLUMN "total" TO "amount";',
       ops_sql.rename_column_sql(table_node(), col, "amount", "postgres"))
     assert.equals("ALTER TABLE `orders` CHANGE COLUMN `total` `amount` INT;",
       ops_sql.rename_column_sql(table_node(), col, "amount", "mysql"))
@@ -57,6 +77,30 @@ describe("db_browser rename SQL", function()
     local col = { node_type = "column", name = "o'brien", meta = {} }
     assert.equals("EXEC sp_rename 'orders.o''brien', 'name', 'COLUMN';",
       ops_sql.rename_column_sql(table_node({ meta = {} }), col, "name", "mssql"))
+  end)
+end)
+
+describe("db_browser ADD COLUMN", function()
+  it("assembles type, NOT NULL and DEFAULT in one statement", function()
+    assert.same({ 'ALTER TABLE "app"."orders" ADD COLUMN "note" TEXT NOT NULL DEFAULT \'\';' },
+      ops_sql.add_column_sql('"app"."orders"', '"note"', "TEXT", false, "''", "postgres"))
+  end)
+
+  -- The browser form used to re-spell this inline (and rebuild the same string
+  -- again in a no-op mysql branch), so the SQLite caveat only existed on the
+  -- prompt path.
+  it("appends the SQLite caveat as its own line, never inside the statement", function()
+    assert.same({
+      'ALTER TABLE "t" ADD COLUMN "c" INT NOT NULL;',
+      "-- SQLite: a NOT NULL added column requires a DEFAULT; add one above.",
+    }, ops_sql.add_column_sql('"t"', '"c"', "INT", false, "", "sqlite"))
+  end)
+
+  it("stays quiet once a DEFAULT makes the SQLite form legal", function()
+    assert.same({ 'ALTER TABLE "t" ADD COLUMN "c" INT NOT NULL DEFAULT 0;' },
+      ops_sql.add_column_sql('"t"', '"c"', "INT", false, "0", "sqlite"))
+    assert.same({ 'ALTER TABLE "t" ADD COLUMN "c" INT;' },
+      ops_sql.add_column_sql('"t"', '"c"', "INT", true, nil, "postgres"))
   end)
 end)
 

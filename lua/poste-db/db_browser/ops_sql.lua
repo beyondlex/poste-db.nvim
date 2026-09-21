@@ -55,6 +55,31 @@ function M.qualified_table_ref(table_node, dialect)
   return schema_prefix .. ident.quote(table_node.name, dialect)
 end
 
+--- `ALTER TABLE … ADD COLUMN`, spelled once.
+---
+--- Both generators used to re-spell this inline and had drifted: the browser
+--- form dropped the SQLite caveat (and rebuilt the identical string a second
+--- time inside a `dialect == "mysql"` branch that changed nothing), while the
+--- prompt flow kept it. The refs arrive pre-quoted so the browser can pass a
+--- schema-qualified table (see `qualified_table_ref`) — a bare name there made
+--- the generated ALTER depend on the session search_path.
+--- @param table_ref string
+--- @param col_ref string
+--- @return string[] the statement, plus a caveat line where the server rejects it
+function M.add_column_sql(table_ref, col_ref, col_type, nullable, default_val, dialect)
+  local has_default = default_val ~= nil and default_val ~= ""
+  local sql = "ALTER TABLE " .. table_ref .. " ADD COLUMN " .. col_ref .. " " .. col_type
+  if not nullable then sql = sql .. " NOT NULL" end
+  if has_default then sql = sql .. " DEFAULT " .. default_val end
+  local lines = { sql .. ";" }
+  -- SQLite rejects a NOT NULL added column without a DEFAULT: existing rows
+  -- have no value to materialize for it.
+  if dialect == "sqlite" and not nullable and not has_default then
+    table.insert(lines, "-- SQLite: a NOT NULL added column requires a DEFAULT; add one above.")
+  end
+  return lines
+end
+
 --- `SELECT *` with a row cap, spelled for the dialect. T-SQL has no LIMIT
 --- clause — the count goes in front as TOP.
 function M.select_star_sql(table_ref, dialect, count)
@@ -83,15 +108,17 @@ local function mssql_object_ref(node)
 end
 
 --- Rename DDL for a table node, spelled for the dialect.
+--- The target is schema-qualified where the dialect resolves names that way
+--- (postgres); the new name stays bare — a rename does not move the table.
 function M.rename_table_sql(node, new_name, dialect)
   if dialect == "mssql" then
     return sp_rename(mssql_object_ref(node), new_name, nil)
   end
   if dialect == "mysql" then
-    return "RENAME TABLE " .. ident.quote(node.name, dialect)
+    return "RENAME TABLE " .. M.qualified_table_ref(node, dialect)
       .. " TO " .. ident.quote(new_name, dialect) .. ";"
   end
-  return "ALTER TABLE " .. ident.quote(node.name, dialect)
+  return "ALTER TABLE " .. M.qualified_table_ref(node, dialect)
     .. " RENAME TO " .. ident.quote(new_name, dialect) .. ";"
 end
 
@@ -100,13 +127,14 @@ function M.rename_column_sql(table_node, col_node, new_name, dialect)
   if dialect == "mssql" then
     return sp_rename(mssql_object_ref(table_node) .. "." .. col_node.name, new_name, "COLUMN")
   end
+  local table_ref = M.qualified_table_ref(table_node, dialect)
   if dialect == "mysql" then
     local col_type = col_node.meta and col_node.meta.col_type or "TEXT"
-    return "ALTER TABLE " .. ident.quote(table_node.name, dialect)
+    return "ALTER TABLE " .. table_ref
       .. " CHANGE COLUMN " .. ident.quote(col_node.name, dialect)
       .. " " .. ident.quote(new_name, dialect) .. " " .. col_type .. ";"
   end
-  return "ALTER TABLE " .. ident.quote(table_node.name, dialect)
+  return "ALTER TABLE " .. table_ref
     .. " RENAME COLUMN " .. ident.quote(col_node.name, dialect)
     .. " TO " .. ident.quote(new_name, dialect) .. ";"
 end
