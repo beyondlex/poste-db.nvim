@@ -168,12 +168,24 @@ function M.dialect_table_exists_sql(dialect, schema, name)
   end
 end
 
+--- Earliest routine keyword position. A plain
+--- `upper:find("PROCEDURE") or upper:find("FUNCTION")` answers with a *later*
+--- occurrence whenever the body mentions the other kind: a PL/pgSQL body with
+--- the word "procedure" in it anchored the scan after the real name, so the
+--- substitution missed and the paste silently re-created (with PG's
+--- `CREATE OR REPLACE`, replaced) the *source* routine instead of a copy.
+local function routine_kw_pos(upper)
+  local proc, func = upper:find("PROCEDURE"), upper:find("FUNCTION")
+  if proc and func then return math.min(proc, func) end
+  return proc or func
+end
+
 --- Replace a routine's own name inside its SHOW CREATE/pg_get_functiondef
 --- text (first occurrence after the PROCEDURE/FUNCTION keyword, so DEFINER
 --- clauses are untouched).
 function M.rename_routine_in_def(dialect, def, src, tgt)
   local upper = def:upper()
-  local kw_pos = upper:find("PROCEDURE") or upper:find("FUNCTION")
+  local kw_pos = routine_kw_pos(upper)
   if not kw_pos then return def end
 
   if dialect == "mysql" or dialect == "mariadb" then

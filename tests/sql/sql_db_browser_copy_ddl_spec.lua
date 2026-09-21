@@ -230,6 +230,20 @@ describe("db_browser copy_ddl rename_routine_in_def", function()
     assert.equals("CREATE FUNCTION func_copy() RETURNS void AS $$ BEGIN END $$;", out)
   end)
 
+  it("anchors on the first routine keyword, not a later mention in the body", function()
+    -- pg_get_functiondef output starts with CREATE FUNCTION; a body that says
+    -- the word "procedure" must not move the anchor past the real name.
+    local def = "CREATE FUNCTION func_a() RETURNS void AS $$ BEGIN RAISE 'not a procedure'; END $$;"
+    local out = ddl_mod.rename_routine_in_def("postgres", def, "func_a", "func_copy")
+    assert.equals("CREATE FUNCTION func_copy() RETURNS void AS $$ BEGIN RAISE 'not a procedure'; END $$;", out)
+  end)
+
+  it("does the same for a mysql function whose body mentions procedure", function()
+    local def = "CREATE FUNCTION `func_a`() RETURNS int BEGIN SELECT 'a procedure'; END"
+    local out = ddl_mod.rename_routine_in_def("mysql", def, "func_a", "func_copy")
+    assert.equals("CREATE FUNCTION `func_copy`() RETURNS int BEGIN SELECT 'a procedure'; END", out)
+  end)
+
   it("returns the definition unchanged when no routine keyword is present", function()
     local def = "CREATE TABLE t (id int);"
     assert.equals(def, ddl_mod.rename_routine_in_def("postgres", def, "t", "t_copy"))
