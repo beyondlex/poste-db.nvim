@@ -57,14 +57,6 @@ local function back_over_word(line_text, from)
   return p
 end
 
-function M.build_context_detect_command(bin, offset, dialect)
-  local dialect_flag = ""
-  if dialect and dialect ~= "" then
-    dialect_flag = " --dialect " .. dialect
-  end
-  return string.format("%s context detect %d%s", vim.fn.shellescape(bin), offset, dialect_flag)
-end
-
 function M.extract_sql_block(all_lines, line_num, line_text, end_col)
   local block_start = 1
   if line_num > 1 then

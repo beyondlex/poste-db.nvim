@@ -1,11 +1,6 @@
 local detect = require("poste-db.nav.detect")
 
 describe("nav_detect", function()
-  it("builds a context detect command with optional dialect", function()
-    local cmd = detect.build_context_detect_command("/tmp/poste", 12, "postgres")
-    assert.equals(vim.fn.shellescape("/tmp/poste") .. " context detect 12 --dialect postgres", cmd)
-  end)
-
   it("extracts the SQL block around the current line", function()
     local info = detect.extract_sql_block({
       "### query",
