@@ -513,10 +513,11 @@ function M.update(buf)
     end
 
     local diags = {}
+    -- Keyed by "<database>.<table as written>": the same table name in two
+    -- databases of one file is two different column lists.
     local pending_column_fetches = {}
-    local last_conn, last_db = nil, nil
-    local schema = nil
     local dialect_for = {}
+    local schemas_built = {}
 
     local function get_dialect(conn)
       if conn == nil or conn == "" then return nil end
@@ -528,6 +529,30 @@ function M.update(buf)
       return dialect_for[conn] or nil
     end
 
+    --- The schema a reference should be checked against, or nil when that
+    --- database has no cached table list.
+    ---
+    --- A cached-but-different database must not fall back to the statement's
+    --- own schema. `SELECT full_name FROM otherdb.users` used to be validated
+    --- against `blog`'s `users`, so a real column was reported missing and a
+    --- typo that happened to name a `blog.users` column was accepted -- wrong
+    --- in both directions, with a message naming the database it never read.
+    --- "not cached" is therefore "cannot check", never "wrong".
+    --- @param conn string
+    --- @param db string
+    --- @return table|nil
+    local function schema_for(conn, db)
+      local key = conn .. "/" .. db
+      local built = schemas_built[key]
+      if built == nil then
+        local cached = _schema_cache[key]
+        built = (cached and cached.tables and #cached.tables > 0)
+          and build_schema(cached.tables, cached.columns or {}, db) or false
+        schemas_built[key] = built
+      end
+      return built or nil
+    end
+
     for _, stmt_node in ipairs(stmt_nodes) do
       local stmt_line = stmt_node:start() + 1
 
@@ -536,33 +561,30 @@ function M.update(buf)
       local db = ctx.database or default_ctx.database
       if not conn or not db then goto continue end
 
-      if conn ~= last_conn or db ~= last_db then
-        local cache_key = conn .. "/" .. db
-        local cached = _schema_cache[cache_key]
-
-        if cached and cached.tables and #cached.tables > 0 then
-          schema = build_schema(cached.tables, cached.columns or {}, db)
-        else
-          schema = nil
-          if not _pending_checks[buf] then
-            _pending_checks[buf] = true
-            fetch_tables(buf, conn, db, function(success)
-              _pending_checks[buf] = nil
-              if success and vim.api.nvim_buf_is_valid(buf) then
-                vim.schedule(function()
-                  M.update(buf)
-                end)
-              end
-            end)
-          end
+      local schema = schema_for(conn, db)
+      if not schema then
+        if not _pending_checks[buf] then
+          _pending_checks[buf] = true
+          fetch_tables(buf, conn, db, function(success)
+            _pending_checks[buf] = nil
+            if success and vim.api.nvim_buf_is_valid(buf) then
+              vim.schedule(function()
+                M.update(buf)
+              end)
+            end
+          end)
         end
-        last_conn, last_db = conn, db
+        goto continue
       end
-
-      if not schema then goto continue end
 
       local refs = extract_references_from_node(stmt_node, buf)
       if #refs.tables == 0 and #refs.columns == 0 then goto continue end
+
+      -- Which database a column's table lives in comes from the FROM list, so
+      -- record it there while the qualified names are still in hand. `false`
+      -- marks a name used by two different databases in one statement -- an
+      -- unresolvable tie, and guessing would recreate the fallback bug above.
+      local ref_db = {}
 
       for _, tbl in ipairs(refs.tables) do
         -- Built-in system schemas (pg_catalog, information_schema, mysql, ...)
@@ -572,71 +594,77 @@ function M.update(buf)
         if is_catalog_ref(tbl.db_prefix, tbl.name, get_dialect(conn)) then
           goto continue_table
         end
-        local target_db = tbl.db_prefix or schema.db
-        local target_schema = schema
-        if tbl.db_prefix and tbl.db_prefix ~= schema.db then
-          local cache_key = conn .. "/" .. tbl.db_prefix
-          local cached = _schema_cache[cache_key]
-          if cached and cached.tables and #cached.tables > 0 then
-            target_schema = build_schema(cached.tables, cached.columns or {}, tbl.db_prefix)
+        local target_db = tbl.db_prefix or db
+        local target_schema = schema_for(conn, target_db)
+        local lower = tbl.name:lower()
+        if target_schema then
+          local seen_db = ref_db[lower]
+          if seen_db == nil then
+            ref_db[lower] = target_db
+          elseif seen_db ~= false and seen_db ~= target_db then
+            ref_db[lower] = false
+          end
+          if not target_schema.known_tables[lower] then
+            table.insert(diags, {
+              lnum = tbl.lnum - 1,
+              col = tbl.col - 1,
+              end_lnum = tbl.end_lnum - 1,
+              end_col = tbl.end_col - 1,
+              severity = vim.diagnostic.severity.WARN,
+              source = "poste-db",
+              message = string.format("Table '%s' not found in database '%s'", tbl.name, target_db),
+            })
           end
         end
-        if target_schema and not target_schema.known_tables[tbl.name:lower()] then
-          table.insert(diags, {
-            lnum = tbl.lnum - 1,
-            col = tbl.col - 1,
-            end_lnum = tbl.end_lnum - 1,
-            end_col = tbl.end_col - 1,
-            severity = vim.diagnostic.severity.WARN,
-            source = "poste-db",
-            message = string.format("Table '%s' not found in database '%s'", tbl.name, target_db),
-          })
-        end
         ::continue_table::
+      end
+
+      --- Why this column is unknown to the table that qualifies it, or nil
+      --- when nothing can be said about it.
+      --- @param col table  one entry of `refs.columns`
+      --- @param tbl_name string  the qualifier, alias-resolved during extraction
+      --- @return string|nil message
+      local function column_problem(col, tbl_name)
+        local db_of_ref = ref_db[tbl_name:lower()]
+        if db_of_ref == false then return nil end
+        local target_db = db_of_ref or db
+        local target_schema = schema_for(conn, target_db)
+        if not target_schema or not target_schema.known_tables[tbl_name:lower()] then
+          return nil
+        end
+        local cols = target_schema.columns[tbl_name]
+        if not cols then
+          local key = target_db .. "." .. tbl_name
+          if not pending_column_fetches[key] then
+            pending_column_fetches[key] = { conn = conn, db = target_db, tbl = tbl_name }
+          end
+          return nil
+        end
+        if cols[col.name:lower()] then return nil end
+        return string.format("Column '%s' not found in table '%s'", col.name, tbl_name)
       end
 
       for _, col in ipairs(refs.columns) do
         -- Skip columns that match a SELECT alias (e.g. ORDER BY alias ref)
         if refs.select_aliases and refs.select_aliases[col.name:lower()] then goto continue_col end
+        -- An unqualified column is only checkable when the statement has one
+        -- table; with a join there is no way to know which side it came from.
+        local message
         if col.table then
-          if schema.known_tables[col.table:lower()] then
-            local cols = schema.columns[col.table]
-            if cols then
-              if not cols[col.name:lower()] then
-                table.insert(diags, {
-                  lnum = col.lnum - 1,
-                  col = col.col - 1,
-                  end_lnum = col.end_lnum - 1,
-                  end_col = col.end_col - 1,
-                  severity = vim.diagnostic.severity.WARN,
-                  source = "poste-db",
-                  message = string.format("Column '%s' not found in table '%s'", col.name, col.table),
-                })
-              end
-            else
-              pending_column_fetches[col.table] = { conn = conn, db = db }
-            end
-          end
+          message = column_problem(col, col.table)
         elseif #refs.from_tables == 1 then
-          local ptable = refs.from_tables[1]
-          if schema.known_tables[ptable:lower()] then
-            local cols = schema.columns[ptable]
-            if cols then
-              if not cols[col.name:lower()] then
-                table.insert(diags, {
-                  lnum = col.lnum - 1,
-                  col = col.col - 1,
-                  end_lnum = col.end_lnum - 1,
-                  end_col = col.end_col - 1,
-                  severity = vim.diagnostic.severity.WARN,
-                  source = "poste-db",
-                  message = string.format("Column '%s' not found in table '%s'", col.name, ptable),
-                })
-              end
-            else
-              pending_column_fetches[ptable] = { conn = conn, db = db }
-            end
-          end
+          message = column_problem(col, refs.from_tables[1])
+        end
+        if message then
+          table.insert(diags, {
+            lnum = col.lnum - 1,
+            col = col.col - 1,
+            end_lnum = col.end_lnum - 1,
+            end_col = col.end_col - 1,
+            severity = vim.diagnostic.severity.WARN,
+            source = "poste-db",
+            message = message,
+          })
         end
         ::continue_col::
       end
@@ -656,10 +684,10 @@ function M.update(buf)
       })
     end
 
-    for tbl_name, ctx_info in pairs(pending_column_fetches) do
+    for _, pending in pairs(pending_column_fetches) do
       if _pending_checks[buf] then _updating = false; return end
       _pending_checks[buf] = true
-      fetch_columns(buf, ctx_info.conn, ctx_info.db, tbl_name, function(success)
+      fetch_columns(buf, pending.conn, pending.db, pending.tbl, function(success)
         _pending_checks[buf] = nil
         if success and vim.api.nvim_buf_is_valid(buf) then
           vim.schedule(function()

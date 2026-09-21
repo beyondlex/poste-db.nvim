@@ -40,6 +40,14 @@ end
 -- silently green tests that never fetched.
 local has_sql_parser = require("poste-db.ts_stmt").check_parser()
 
+--- Scratch buffer holding one SQL snippet, in a filetype `M.update` accepts.
+local function sql_buf(sql)
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(sql, "\n"))
+  vim.api.nvim_set_option_value("filetype", "sql", { buf = buf })
+  return buf
+end
+
 describe("semantic_diagnostics invalidate", function()
   before_each(function()
     sem._test.set_cache("connA/blog", { tables = { "old" } })
@@ -83,8 +91,8 @@ end)
 -- A stuck flag is silent and permanent: every later update() skips the fetch,
 -- so the buffer stays unchecked for the rest of the session even after the
 -- binary is restored. Each case below starts broken on purpose and then
--- asserts that a working binary is actually reached. The last three are
-  -- controls: they settled correctly even before the fix, and they pin the
+-- asserts that a working binary is actually reached. The last two are
+-- controls: they settled correctly even before the fix, and they pin the
 -- rule that a failed fetch re-arms the next attempt rather than muting it.
 describe("semantic_diagnostics fetch failure recovery", function()
   if not has_sql_parser then
@@ -103,13 +111,6 @@ describe("semantic_diagnostics fetch failure recovery", function()
     uv.fs_chmod(path, 493) -- 0o755, the same requirement minimal_init notes
     created[#created + 1] = path
     return path
-  end
-
-  local function sql_buf(sql)
-    local buf = vim.api.nvim_create_buf(false, true)
-    vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(sql, "\n"))
-    vim.api.nvim_set_option_value("filetype", "sql", { buf = buf })
-    return buf
   end
 
   local function cached(key)
@@ -165,4 +166,70 @@ describe("semantic_diagnostics fetch failure recovery", function()
       vim.api.nvim_buf_delete(buf, { force = true })
     end)
   end
+end)
+
+-- `otherdb.users` and `blog.users` are different tables, so a reference
+-- qualified with a database name has to be checked against the schema of the
+-- database it names. `M.update` used to keep validating with the *statement's*
+-- schema whenever the qualified database was not (yet) cached, which produced
+-- a confident wrong answer in both directions: a real column reported as
+-- missing, and a typo accepted because it happened to exist locally.
+describe("semantic_diagnostics cross-database references", function()
+  if not has_sql_parser then
+    it("is skipped when the parser is unavailable", function()
+      pending("Tree-sitter SQL parser unavailable in this Neovim environment")
+    end)
+    return
+  end
+
+  local function msgs(sql)
+    local out = {}
+    local buf = sql_buf(sql)
+    sem.update(buf)
+    for _, d in ipairs(vim.diagnostic.get(buf)) do
+      if d.source == "poste-db" then out[#out + 1] = d.message end
+    end
+    table.sort(out)
+    vim.api.nvim_buf_delete(buf, { force = true })
+    return out
+  end
+
+  before_each(function()
+    fake_ctx = { connection = "connA", database = "blog" }
+    sem.invalidate(nil)
+    sem._test.set_cache("connA/blog", {
+      tables = { "users", "orders" },
+      columns = { users = { "id", "name" }, orders = { "id" } },
+    })
+    sem._test.set_cache("connA/otherdb", {
+      tables = { "users" },
+      columns = { users = { "id", "full_name" } },
+    })
+  end)
+
+  after_each(function()
+    sem.invalidate(nil)
+    fake_ctx = {}
+  end)
+
+  it("accepts a column that exists in the referenced database", function()
+    assert.same({}, msgs("SELECT full_name FROM otherdb.users;"))
+  end)
+
+  it("reports a column that only exists in the current database", function()
+    assert.same({ "Column 'name' not found in table 'users'" },
+      msgs("SELECT name FROM otherdb.users;"))
+  end)
+
+  it("still reports a table that is missing from the referenced database", function()
+    assert.same({ "Table 'orders' not found in database 'otherdb'" },
+      msgs("SELECT id FROM otherdb.orders;"))
+  end)
+
+  -- An uncached database is not evidence of a typo, so nothing is claimed.
+  -- This is a deliberate miss: a prefix may also be a postgres *schema*, which
+  -- `--database` cannot introspect at all.
+  it("stays silent for a database whose schema was never fetched", function()
+    assert.same({}, msgs("SELECT id FROM newdb.accounts;"))
+  end)
 end)
