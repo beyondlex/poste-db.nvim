@@ -68,6 +68,21 @@ function M.curl_argv(flags, url, out, max_time)
   }
 end
 
+--- Compare the downloaded archive's digest with the one the release carries.
+--- Hex SHA-256 is case-insensitive by construction, but the tools disagree
+--- about which case to print: `sha256sum` and `shasum` print lowercase, which
+--- is what the release `.sha256` asset holds, while `certutil -hashfile` prints
+--- uppercase. An exact compare therefore reports "Checksum mismatch — download
+--- corrupted" for a perfectly good archive on a Windows box that has no Git in
+--- `PATH` — i.e. precisely the machine that reaches the certutil branch — and
+--- deletes the download, so every startup re-downloads and re-fails.
+--- @param actual string digest computed from the downloaded file
+--- @param expected string digest from the release asset
+--- @return boolean
+function M.checksum_matches(actual, expected)
+  return actual:lower() == expected:lower()
+end
+
 --- Archive extension for the platform.
 local function archive_ext(platform)
   if platform:find("windows") then return ".zip" end
@@ -140,7 +155,7 @@ local function verify_checksum(archive_path, platform, version)
     vim.notify("[Poste] No SHA256 tool found — skipped checksum verification", vim.log.levels.WARN)
     return true
   end
-  return actual == expected
+  return M.checksum_matches(actual, expected)
 end
 
 --- Download and install the poste binary.
