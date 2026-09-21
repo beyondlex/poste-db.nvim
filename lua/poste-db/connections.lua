@@ -114,8 +114,32 @@ local function load_dotenv(search_dir)
   return vars
 end
 
+--- Keep only scalar entries of an env section, as strings.
+--- Mirrors the Rust CLI's `scalar_vars`: numbers and booleans are values (the
+--- natural thing to write in a JSON file), while a nested object or array is
+--- structure, not a variable. Dropping it is also what keeps resolution
+--- alive — a table handed to `gsub`'s replacement raises
+--- "invalid replacement value (a table)" and takes the whole config down.
+--- @param section table
+--- @return table<string,string>
+local function scalar_env_vars(section)
+  local result = {}
+  for k, v in pairs(section) do
+    local t = type(v)
+    if t == "string" then
+      result[k] = v
+    elseif t == "number" or t == "boolean" then
+      result[k] = tostring(v)
+    end
+  end
+  return result
+end
+
 --- Load `env.json` vars for the current environment (matches the Rust
---- binary's `--env` flow: `{ "dev": { ... }, "prod": { ... } }`).
+--- binary's `--env` flow: `{ "dev": { ... }, "prod": { ... } }`).  A file
+--- without the requested stanza is read as a flat var map, which is what the
+--- CLI does — otherwise `poste connection list` resolves a URL the editor
+--- claims has no variables at all.
 --- @param search_dir string
 --- @return table<string,string>
 local function load_env_json_vars(search_dir)
@@ -126,11 +150,10 @@ local function load_env_json_vars(search_dir)
   local ok2, parsed = pcall(vim.json.decode, table.concat(data, "\n"))
   if not ok2 or type(parsed) ~= "table" then return {} end
   local envs = parsed.envs or parsed
-  local vars = envs[state.current_env or "dev"]
-  if type(vars) ~= "table" then return {} end
-  local result = {}
-  for k, v in pairs(vars) do result[k] = v end
-  return result
+  local section = envs[state.current_env or "dev"]
+  if type(section) ~= "table" then section = envs end
+  if type(section) ~= "table" then return {} end
+  return scalar_env_vars(section)
 end
 
 --- Merge all environment sources.

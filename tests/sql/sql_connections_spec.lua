@@ -592,6 +592,36 @@ describe("connections env var resolution", function()
     end
     assert.equals("from-envjson", connections.get_env_vars(other_dir).POSTE_TEST_DB_PASS)
   end)
+
+  it("keeps structural env.json entries out of the substitution table", function()
+    vim.fn.writefile({
+      '{"dev": {"POSTE_TEST_HOST": "h1", "POSTE_TEST_LABELS": {"team": "db"},'
+        .. ' "POSTE_TEST_NOTHING": null}}',
+    }, tmpdir .. "/env.json")
+    local vars = connections.get_env_vars(tmpdir)
+    assert.is_nil(vars.POSTE_TEST_LABELS)
+    assert.is_nil(vars.POSTE_TEST_NOTHING)
+    -- A table reaching gsub's replacement raises
+    -- "invalid replacement value (a table)", which used to abort the whole
+    -- connection resolution; the reference now stays literal, as the CLI
+    -- leaves it when the name is no variable at all.
+    assert.equals("h1/{{POSTE_TEST_LABELS}}",
+      connections.substitute_vars("{{POSTE_TEST_HOST}}/{{POSTE_TEST_LABELS}}", vars))
+  end)
+
+  it("keeps env.json numbers and booleans as usable values", function()
+    vim.fn.writefile({
+      '{"dev": {"POSTE_TEST_PORT": 5432, "POSTE_TEST_DEBUG": true}}',
+    }, tmpdir .. "/env.json")
+    local vars = connections.get_env_vars(tmpdir)
+    assert.equals("5432", vars.POSTE_TEST_PORT)
+    assert.equals("true", vars.POSTE_TEST_DEBUG)
+  end)
+
+  it("reads a flat env.json as vars for every environment", function()
+    vim.fn.writefile({ '{"POSTE_TEST_FLAT": "flat-value"}' }, tmpdir .. "/env.json")
+    assert.equals("flat-value", connections.get_env_vars(tmpdir).POSTE_TEST_FLAT)
+  end)
 end)
 
 describe("connections apply_connection", function()
