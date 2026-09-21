@@ -415,7 +415,7 @@ local function update_winbar()
   if count < total then
     table.insert(parts, "  %#PosteDbDatasetMetaDim#filtered%#PosteDbDatasetMeta#")
   end
-  table.insert(parts, "  %#PosteDbDatasetMetaDim#│  q=close  f=filter  F=clear  C=delete-all  ↵=expand%#PosteDbDatasetMeta#")
+  table.insert(parts, "  %#PosteDbDatasetMetaDim#│  q=close  f=filter  F=clear  y=copy  r=to buffer  C=delete-all  ↵=expand%#PosteDbDatasetMeta#")
   pcall(vim.api.nvim_set_option_value, "winbar", table.concat(parts), { win = win })
 end
 
@@ -558,6 +558,52 @@ function M.clear_filter()
   render()
 end
 
+--- Lines for the scratch buffer `r` hands the statement to: an optional
+--- connection directive, then the SQL verbatim.
+---
+--- A logged `connection` is either a name or a redacted URL (`sql_log` runs
+--- `redact_url` on write when no name override was given). Only the name is
+--- usable: a `postgres://user:***@host/db` line would be echoed into the
+--- buffer, and the directive parser would try to resolve that as a stanza.
+local function rerun_lines(entry)
+  local lines = {}
+  local conn = entry.connection
+  if type(conn) == "string" and conn ~= "" and not conn:find("://", 1, true) then
+    table.insert(lines, "-- @connection " .. conn)
+  end
+  for line in (tostring(entry.sql or "") .. "\n"):gmatch("([^\n]*)\n") do
+    table.insert(lines, line)
+  end
+  return lines
+end
+
+M._rerun_lines = rerun_lines
+
+--- Open `lines` in a fresh, listed `.sql` buffer and focus it. Setting the
+--- filetype is what makes the buffer runnable: the plugin's FileType
+--- autocommand installs the guarded run keymap there.
+function M._open_in_sql_buffer(lines)
+  local new_buf = vim.api.nvim_create_buf(true, false)
+  vim.api.nvim_buf_set_lines(new_buf, 0, -1, true, lines)
+  vim.bo[new_buf].filetype = "sql"
+  vim.api.nvim_win_set_buf(0, new_buf)
+  -- Park on the statement, not the directive: the cursor line is where the
+  -- runner resolves context and picks the statement under point. Matched
+  -- literally because `rerun_lines` is what writes the line — a `^%-%s*@`
+  -- pattern looks right and never matches, since the directive has two dashes.
+  local first = (lines[1] or ""):sub(1, 4) == "-- @" and 2 or 1
+  pcall(vim.api.nvim_win_set_cursor, 0, { first, 0 })
+  return new_buf
+end
+
+--- `r`: take the entry's SQL into a real `.sql` buffer.
+---
+--- Deliberately *not* an execution. The viewer has no DML guard, no
+--- confirmation step and no dataset window, and a logged `DELETE` is exactly
+--- as destructive the second time; the `.sql` buffer has all three. So `r`
+--- closes the float and hands the statement (plus its connection directive) to
+--- a buffer the user runs from, rather than firing it from a window whose
+--- keystrokes were never meant to reach a database.
 function M.re_run()
   local idx = M.get_entry_at_cursor()
   if not idx then return end
@@ -566,10 +612,10 @@ function M.re_run()
     vim.notify("No SQL to re-run", vim.log.levels.WARN)
     return
   end
-  local sql = entry.sql
-  vim.fn.setreg('"', sql)
-  vim.fn.setreg("+", sql)
-  vim.notify("SQL yanked to default register — paste into a .sql buffer and run", vim.log.levels.INFO)
+  local lines = rerun_lines(entry)
+  M.close()
+  M._open_in_sql_buffer(lines)
+  vim.notify("SQL moved to a buffer — run it with <CR>", vim.log.levels.INFO)
 end
 
 function M.yank_sql()

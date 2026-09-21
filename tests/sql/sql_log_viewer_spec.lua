@@ -269,3 +269,54 @@ describe("log viewer _entry_table", function()
     assert.is_nil(log._entry_table({ sql = "BEGIN" }))
   end)
 end)
+
+describe("log viewer _rerun_lines", function()
+  it("prefixes a connection *name* with the directive the runner reads", function()
+    assert.same({ "-- @connection blog-db", "SELECT 1;" },
+      log._rerun_lines({ connection = "blog-db", sql = "SELECT 1;" }))
+  end)
+
+  it("drops a redacted URL, which is not a stanza name", function()
+    assert.same({ "SELECT 1;" }, log._rerun_lines({
+      connection = "postgres://blog:***@localhost:5432/blog", sql = "SELECT 1;",
+    }))
+  end)
+
+  it("keeps a multi-line statement one buffer line per line", function()
+    assert.same({ "SELECT 1", "FROM t;" }, log._rerun_lines({ sql = "SELECT 1\nFROM t;" }))
+  end)
+
+  it("emits a single empty line for an entry with no SQL", function()
+    assert.same({ "" }, log._rerun_lines({}))
+  end)
+end)
+
+describe("log viewer _open_in_sql_buffer", function()
+  local start_bufs = #vim.api.nvim_list_bufs()
+
+  it("writes the lines into a fresh listed sql buffer and focuses it", function()
+    local b = log._open_in_sql_buffer({ "-- @connection blog-db", "SELECT 1;" })
+    assert.equals(b, vim.api.nvim_get_current_buf())
+    assert.same({ "-- @connection blog-db", "SELECT 1;" },
+      vim.api.nvim_buf_get_lines(b, 0, -1, true))
+    assert.equals("sql", vim.bo[b].filetype)
+    assert.is_true(vim.bo[b].buflisted, "an unlisted buffer is wiped on quit, SQL and all")
+    assert.equals(start_bufs + 1, #vim.api.nvim_list_bufs())
+  end)
+
+  it("puts the cursor on the statement, past the directive", function()
+    log._open_in_sql_buffer({ "-- @connection blog-db", "SELECT 1;" })
+    assert.equals(2, vim.api.nvim_win_get_cursor(0)[1])
+  end)
+
+  it("puts the cursor on line 1 when there is no directive", function()
+    log._open_in_sql_buffer({ "SELECT 1;" })
+    assert.equals(1, vim.api.nvim_win_get_cursor(0)[1])
+  end)
+
+  after_each(function()
+    for _, b in ipairs(vim.api.nvim_list_bufs()) do
+      if b > start_bufs then vim.api.nvim_buf_delete(b, { force = true }) end
+    end
+  end)
+end)
