@@ -142,6 +142,89 @@ describe("poste-db.state binary resolution source", function()
   end)
 end)
 
+--- The installer writes `poste.exe` on Windows and cargo builds `poste.exe`
+--- into target/{debug,release}/, while every candidate this lookup offers is
+--- spelled without the extension: resolving only the bare name made startup
+--- download a release it could never find again, so it re-downloaded on every
+--- launch and `:checkhealth` reported no binary.
+describe("poste-db.state binary resolution on Windows", function()
+  local uv = vim.uv or vim.loop
+  local dir
+  local saved
+
+  local function write_exe(p)
+    vim.fn.writefile({ "#!/bin/sh", "echo poste 1.0.0" }, p)
+    assert.truthy(uv.fs_chmod(p, tonumber("755", 8)))
+    return p
+  end
+
+  before_each(function()
+    dir = vim.fn.tempname()
+    assert.truthy(vim.fn.mkdir(dir, "p"))
+    saved = {
+      g = vim.g.poste_binary,
+      env = vim.env.POSTE_BINARY,
+      path = vim.env.PATH,
+      cfg = state.config.poste_binary,
+      is_windows = state.is_windows,
+    }
+    vim.env.PATH = dir
+    vim.cmd("unlet! g:poste_binary")
+    vim.env.POSTE_BINARY = nil
+    state.config.poste_binary = dir .. "/not-configured"
+  end)
+  after_each(function()
+    state.is_windows = saved.is_windows
+    state.config.poste_binary = saved.cfg
+    if saved.g == nil then vim.cmd("unlet! g:poste_binary") else vim.g.poste_binary = saved.g end
+    vim.env.POSTE_BINARY = saved.env
+    vim.env.PATH = saved.path
+    vim.fn.delete(dir, "rf")
+  end)
+
+  it("finds the .exe the installer wrote", function()
+    state.is_windows = true
+    local exe = write_exe(dir .. "/poste.exe")
+    state.config.poste_binary = dir .. "/poste"
+    local path, source = state.find_poste_binary()
+    assert.equals(vim.fn.fnamemodify(exe, ":p"), path)
+    assert.equals("installed release", source)
+  end)
+
+  it("adds the .exe to a g:poste_binary spelled without one", function()
+    -- Configuring the extension-less name is what the docs tell Windows users
+    -- to type, and the file beside it is the one that runs.
+    state.is_windows = true
+    local exe = write_exe(dir .. "/poste.exe")
+    vim.g.poste_binary = dir .. "/poste"
+    local path, source = state.find_poste_binary()
+    assert.equals(vim.fn.fnamemodify(exe, ":p"), path)
+    assert.equals("g:poste_binary", source)
+  end)
+
+  it("prefers the exact candidate over the .exe guess", function()
+    state.is_windows = true
+    local exact = write_exe(dir .. "/poste")
+    write_exe(dir .. "/poste.exe")
+    state.config.poste_binary = dir .. "/poste"
+    local path = state.find_poste_binary()
+    assert.equals(vim.fn.fnamemodify(exact, ":p"), path)
+  end)
+
+  it("does not run a .exe off Windows", function()
+    -- POSIX has no extension rule: a file named poste.exe there is not the
+    -- `poste` the user asked for, and picking it would execute the wrong thing.
+    -- The candidate lives in a subdirectory so the $PATH arm cannot answer
+    -- instead and turn this into a vacuous pass.
+    state.is_windows = false
+    local install_dir = dir .. "/install"
+    assert.truthy(vim.fn.mkdir(install_dir, "p"))
+    write_exe(install_dir .. "/poste.exe")
+    state.config.poste_binary = install_dir .. "/poste"
+    assert.is_nil(state.find_poste_binary())
+  end)
+end)
+
 describe("poste-db.state poste_version", function()
   local uv = vim.uv or vim.loop
   local files = {}
