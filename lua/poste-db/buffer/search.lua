@@ -75,6 +75,15 @@ local function compute_matches(tab, text)
   tab.search_total_matches = total_count
 end
 
+--- Is the dataset currently paged, i.e. does a view position map to a screen
+--- row only relative to `tab.page`? The conjunction appears in three places
+--- (highlighting, jumping, filtering) and they must agree: switching pages is
+--- what turns `match.row` (a view position) into a buffer row, and a caller
+--- that guesses differently highlights the row above or below the match.
+local function is_paginated(tab)
+  return (tab.pagination_enabled and tab.num_pages and tab.num_pages > 1 and tab.layout) and true or false
+end
+
 --- Re-derive search matches after view_indices changed (sort/filter) so stale
 --- view-position matches don't point at rows that are no longer results.
 function M.recompute_after_view_change()
@@ -114,19 +123,30 @@ function M.apply_search_highlights()
   if not tab.meta then return end
 
   local data_start = tab.meta.data_start_line
-  local page = tab.page or 1
+  local paginated = is_paginated(tab)
+  local page = paginated and (tab.page or 1) or 1
+  -- The per-page buckets exist so a jump can find which page to switch to;
+  -- with paging off the renderer puts every row on one screen, so slicing by
+  -- bucket would hide all matches past `page_size` while n/N still walked them.
+  local matches
+  if paginated then
+    matches = tab.search_matches_by_page and tab.search_matches_by_page[page]
+    if not matches then return end
+  else
+    matches = tab.search_matches
+  end
 
-  local matches = tab.search_matches_by_page and tab.search_matches_by_page[page]
-  if not matches then return end
-
-  for _, match in ipairs(matches) do
-    local vis_row = match.row - (page - 1) * tab.page_size
+  for mi, match in ipairs(matches) do
+    local vis_row = match.row
+    if paginated then vis_row = vis_row - (page - 1) * tab.page_size end
     local buf_line = data_start + vis_row - 1
     local line = vim.api.nvim_buf_get_lines(D.dataset_buffer, buf_line - 1, buf_line, false)[1]
     if line then
       local range = sql_highlights.find_cell_range(line, match.col + 1)
       if range then
-        local current = match.global_match_idx == tab.search_idx
+        -- in the flat list the position IS the global index; the buckets carry
+        -- the field instead, since they restart numbering on every page
+        local current = (match.global_match_idx or mi) == tab.search_idx
         local hl = current and "PosteDbDatasetSearchCurrent" or "PosteDbDatasetSearchMatch"
         vim.api.nvim_buf_set_extmark(D.dataset_buffer, D.search_ns, buf_line - 1, range.ext_start, {
           end_row = buf_line - 1,
@@ -135,16 +155,15 @@ function M.apply_search_highlights()
           priority = 150,
         })
         -- fg-emphasize just the matched characters, layered over the
-        -- whole-cell tint above. extmark cols are 0-based: s/e are 1-based
-        -- byte spans within cell_text (which starts at ext_start), so the
-        -- start col is ext_start + s - 2. end_col is EXCLUSIVE, which
-        -- numerically equals the 1-based inclusive end — the same convention
-        -- the whole-cell mark above uses.
-        local s, e = match_span(line:sub(range.ext_start, range.ext_end), tab.search_text)
+        -- whole-cell tint above. `cell_text` is exactly the bytes the mark
+        -- above covers (ext_start..ext_end, 0-based inclusive of ext_start and
+        -- exclusive of ext_end), so a 1-based span s..e inside it starts at
+        -- 0-based ext_start + s - 1 and ends (exclusive) at ext_start + e.
+        local s, e = match_span(line:sub(range.ext_start + 1, range.ext_end), tab.search_text)
         if s then
-          vim.api.nvim_buf_set_extmark(D.dataset_buffer, D.search_ns, buf_line - 1, range.ext_start + s - 2, {
+          vim.api.nvim_buf_set_extmark(D.dataset_buffer, D.search_ns, buf_line - 1, range.ext_start + s - 1, {
             end_row = buf_line - 1,
-            end_col = range.ext_start + e - 1,
+            end_col = range.ext_start + e,
             hl_group = current and "PosteDbDatasetSearchCurrentText" or "PosteDbDatasetSearchMatchText",
             priority = 151,
           })
@@ -161,8 +180,7 @@ jump_to_search_match = function(idx)
   if not match then return end
   tab.search_idx = idx
 
-  local paginated = tab.pagination_enabled and tab.num_pages and tab.num_pages > 1
-    and tab.layout
+  local paginated = is_paginated(tab)
   if paginated then
     local match_page = math.ceil(match.row / tab.page_size)
     if match_page ~= tab.page then
@@ -171,8 +189,8 @@ jump_to_search_match = function(idx)
     end
   end
 
-  local posize = paginated and tab.page_size or nil
-  local vis_row = posize and (match.row - (tab.page - 1) * posize) or match.row
+  local vis_row = match.row
+  if paginated then vis_row = match.row - (tab.page - 1) * tab.page_size end
   sql_state.cell.row = vis_row
   sql_state.cell.col = match.col
   local line = require("poste-db.buffer.nav").position_cursor(vis_row, match.col)
@@ -309,9 +327,7 @@ function M.filter_by_current_cell()
   local layout = tab.layout
   if not layout then return end
   local row, col = sql_state.cell.row, sql_state.cell.col
-  local paginated = tab.pagination_enabled and tab.num_pages and tab.num_pages > 1
-    and tab.layout
-  if paginated then
+  if is_paginated(tab) then
     row = row + (tab.page - 1) * tab.page_size
   end
   local col_name = tab.meta.columns and tab.meta.columns[col] and tab.meta.columns[col].name or tostring(col)
