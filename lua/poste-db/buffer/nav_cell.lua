@@ -1,18 +1,22 @@
 --- Dataset cell navigation --- extract, format, yank, highlight individual cells.
 local C = require("poste-db.constants")
 local sql_state = require("poste-db.state")
+local sql_format = require("poste-db.format")
 
 local sql_highlights = require("poste-db.highlights")
 
 local M = {}
 
+-- `row` is the visible row within the rendered page; the data lives in the
+-- full result set, so page/sort/filter offsets must be undone first.
 function M.get_resultset_cell(tab, row, col)
   if not tab or not tab.data or not tab.meta or tab.meta.type ~= "resultset" then return nil end
   local data = tab.data
   if not data or not data.results or #data.results == 0 then return nil end
   local res = data.results[1]
-  if not res.rows or not res.rows[row] then return nil end
-  return res, res.rows[row][col]
+  local src_row = sql_format.source_row_of(tab.meta, row)
+  if not src_row or not res.rows or not res.rows[src_row] then return nil end
+  return res, res.rows[src_row][col]
 end
 
 function M.json_pretty(val, indent)

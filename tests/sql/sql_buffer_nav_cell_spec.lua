@@ -26,6 +26,20 @@ describe("buffer_nav_cell", function()
     assert.equals("b", value)
   end)
 
+  it("maps a visible page row to its source row before reading the cell", function()
+    local _, value = cell.get_resultset_cell({
+      data = {
+        results = {
+          { rows = { { "page1", "x" }, { "page2", "y" } } },
+        },
+      },
+      -- page 2 shows only source row 2; visible row 1 is that row
+      meta = { type = "resultset", row_sources = { 2 } },
+    }, 1, 1)
+
+    assert.equals("page2", value)
+  end)
+
   it("pretty prints json strings", function()
     local text, ft = cell.pretty_print('{"a":1}')
     assert.equals("json", ft)
