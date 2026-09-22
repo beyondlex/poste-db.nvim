@@ -1,6 +1,8 @@
 --- Dataset cell editor — pure functions for value conversion, validation,
 --- edit state tracking. No vim.ui calls (those are in nav.lua).
 
+local types = require("poste-db.types")
+
 local M = {}
 
 ---------------------------------------------------------------------------
@@ -96,9 +98,28 @@ end
 -- Value parsing
 ---------------------------------------------------------------------------
 
+--- Can this column hold anything but the characters as typed?
+--- `types.is_numeric` is the shared root-word check, so it covers the dialect
+--- spellings the exact-name table below misses (`UInt64`, `numeric(10,2)`);
+--- json is the other family whose cell is stored parsed, because the editor
+--- shows and re-reads it as a table. No column at all answers yes: an unknown
+--- target keeps the older, permissive inference every caller predating this
+--- parameter relied on.
+local function infers_non_text(col_meta)
+  local ctype = col_meta and col_meta.ctype
+  if not ctype then return true end
+  ctype = ctype:lower()
+  return types.is_numeric(ctype) or is_type(ctype, "json")
+end
+
 --- Parse a user input string into a typed value suitable for SQL.
 --- Handles: JSON, UUID, datetime, numbers, booleans, NULL.
-function M.parse_value(input, old_val)
+--- @param col_meta table|nil the column being edited, when the caller knows it.
+---   Decisive for text columns: digits typed into a varchar cell are the data,
+---   and inferring a number there made `validate_value` reject the edit — even
+---   the no-op edit of a cell that already read "42" — so it could not be saved.
+---   The DML layer has always agreed (`quote_val`'s col_type check).
+function M.parse_value(input, old_val, col_meta)
   if input == "(NULL)" then return vim.NIL end
   if input == "null" or input == "NULL" then return vim.NIL end
   if input == "" then
@@ -108,6 +129,8 @@ function M.parse_value(input, old_val)
 
   -- Expressions (computed in SQL)
   if input:match("^__expr:") then return input end
+
+  if not infers_non_text(col_meta) then return input end
 
   -- Preserve integers/decimals that can't round-trip through a LuaJIT double
   -- (|value| >= 2^53). Returning them as strings keeps bigint digits exact.

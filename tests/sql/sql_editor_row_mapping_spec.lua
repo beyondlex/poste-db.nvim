@@ -230,4 +230,27 @@ describe("editor edits address source rows", function()
     assert.equals(61, added.row_idx, "tracked by source index")
     assert.equals(11, state.cell.row, "the new row is visible 11 of page 2")
   end)
+
+  ---------------------------------------------------------------------------
+  -- The same edit through the live prompt, because the column has to be handed
+  -- to the parser at this call site. Dropping the argument there left every
+  -- `parse_value` spec green — those call the function directly — while the
+  -- varchar cell went back to rejecting its own contents.
+  ---------------------------------------------------------------------------
+  it("keeps the text of a varchar cell when the input reads as a number", function()
+    install_tab(1, identity(60))
+    local answer
+    vim.ui.input = function(_, cb) answer = cb end
+    state.cell.row, state.cell.col = 1, 2 -- source row 1, the varchar column
+    nav.edit_cell()
+    answer("42")
+
+    assert.equals("42", tab.layout.rows[1][2],
+      "the cell holds the characters, not the integer they spell")
+    assert.is_true(tab.edit_state.modified_cells["1:2"] ~= nil,
+      "a rejected edit records nothing, so a missing key means validation refused it")
+    local stmts = dml.generate_dml(tab.edit_state, tab, "postgres")
+    assert.equals(1, #stmts)
+    assert.equals([[UPDATE "users" SET "name" = '42' WHERE "id" = 1;]], stmts[1].sql)
+  end)
 end)

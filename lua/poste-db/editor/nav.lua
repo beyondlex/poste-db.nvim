@@ -252,7 +252,7 @@ function cell_editors.text(row_idx, col_idx, col_meta, old_val)
     default = initial_text,
   }, function(input)
     if input == nil then return end
-    local new_val = cell.parse_value(input, old_val)
+    local new_val = cell.parse_value(input, old_val, col_meta)
     if new_val == nil then return end
     local ok, err = cell.validate_value(new_val, col_meta)
     if not ok then

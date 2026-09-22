@@ -3,6 +3,7 @@
 
 local editor = require("poste-db.editor")
 local edit_commit = require("poste-db.edit_commit")
+local dml = require("poste-db.dml")
 
 ---------------------------------------------------------------------------
 -- UT1: parse_value — various input → value conversions
@@ -94,6 +95,87 @@ describe("parse_value", function()
     local result = editor.parse_value("Infinity", "old")
     assert.equals("number", type(result))
     assert.equals(math.huge, result)
+  end)
+
+  ---------------------------------------------------------------------------
+  -- The same inference read against the target column. A `varchar` cell holds
+  -- the characters, and the DML layer already writes it that way
+  -- (`sql_dml_spec`: "quotes digits heading for a text column"). Inferring a
+  -- number here instead handed `validate_value` a number for a text column,
+  -- which it rejects — so such a cell could not be saved at all, not even by
+  -- pressing ENTER on its own prefilled text.
+  ---------------------------------------------------------------------------
+  describe("with a known column type", function()
+    it("keeps digits as text for a varchar column", function()
+      local result = editor.parse_value("42", "42", { ctype = "varchar" })
+      assert.equals("string", type(result))
+      assert.equals("42", result)
+    end)
+
+    it("lets a numeric-looking text cell round-trip through validation", function()
+      local col_meta = { ctype = "text" }
+      local new_val = editor.parse_value("42", "42", col_meta)
+      local ok, err = editor.validate_value(new_val, col_meta)
+      assert.is_true(ok, "the unchanged edit must be accepted, got: " .. tostring(err))
+    end)
+
+    it("keeps 'true' as text for a text column", function()
+      assert.equals("true", editor.parse_value("true", "true", { ctype = "text" }))
+    end)
+
+    it("keeps JSON text as text for a text column", function()
+      local result = editor.parse_value('{"a":1}', '{"a":1}', { ctype = "varchar" })
+      assert.equals("string", type(result))
+      assert.equals('{"a":1}', result)
+    end)
+
+    it("keeps digits as text for a ClickHouse String column", function()
+      assert.equals("42", editor.parse_value("42", "42", { ctype = "string" }))
+    end)
+
+    it("still infers a number for a numeric column", function()
+      local result = editor.parse_value("42", "42", { ctype = "integer" })
+      assert.equals("number", type(result))
+      assert.equals(42, result)
+    end)
+
+    it("still infers a number for a ClickHouse UInt64 column", function()
+      assert.equals(42, editor.parse_value("42", "42", { ctype = "uint64" }))
+    end)
+
+    it("still decodes JSON for a jsonb column", function()
+      local result = editor.parse_value('{"a":1}', nil, { ctype = "jsonb" })
+      assert.equals("table", type(result))
+      assert.equals(1, result.a)
+    end)
+
+    it("keeps the NULL and expression sentinels working for a text column", function()
+      assert.equals(vim.NIL, editor.parse_value("(NULL)", "42", { ctype = "text" }))
+      assert.equals(vim.NIL, editor.parse_value("NULL", "42", { ctype = "text" }))
+      assert.equals(vim.NIL, editor.parse_value("", "42", { ctype = "text" }))
+      assert.equals("", editor.parse_value("''", "42", { ctype = "text" }))
+      assert.equals("__expr:now()",
+        editor.parse_value("__expr:now()", "42", { ctype = "text" }))
+    end)
+
+    it("still keeps a bigint exact when the column is numeric", function()
+      assert.equals("2084515900853196878",
+        editor.parse_value("2084515900853196878", "0", { ctype = "bigint" }),
+        "the digit-preserving path is about double range, not the column family")
+    end)
+
+    it("hands the DML builder text, so the literal keeps its quotes", function()
+      -- the other layer of the same rule: `quote_val` only writes `'42'` when
+      -- the value is still a string, so an inferred number would have gone out
+      -- as the integer literal `42` and postgres would reject it for a text
+      -- column (`operator does not exist: text = integer`)
+      local cols = { { name = "code", ctype = "varchar" },
+                     { name = "id", ctype = "integer", primary_key = true } }
+      local new_val = editor.parse_value("42", "42", cols[1])
+      local sql = dml.generate_update(nil, "t", cols,
+        { { col = 1, new_val = new_val } }, { "x", 7 }, "postgres")
+      assert.equals([[UPDATE "t" SET "code" = '42' WHERE "id" = 7;]], sql)
+    end)
   end)
 end)
 
