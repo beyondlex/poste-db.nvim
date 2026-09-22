@@ -113,7 +113,11 @@ execute_drop = function(table_node, qualified, conn, schema_prefix, context)
     on_response = function(resp)
       vim.schedule(function()
         if resp.has_error then
-          vim.notify("Failed to drop table '" .. qualified .. "'", vim.log.levels.ERROR)
+          -- Say WHY. The DROP usually fails on something the user can act on
+          -- (a dependent view, a permission), and that text only exists in
+          -- this response — the journal is not where one looks mid-action.
+          local reason = exec_run.first_error(resp) or "unknown error"
+          vim.notify("Failed to drop table '" .. qualified .. "': " .. reason, vim.log.levels.ERROR)
           return
         end
         notify.info("Dropped table: " .. qualified)
@@ -373,7 +377,10 @@ local function start_batch_drop(items, conn_label, search_dir, context)
           if cancelled then return end
           if resp.has_error then
             results[it.label] = { status = "error" }
-            errors[it.label] = "DROP failed"
+            -- The progress dialog's "Press [q] to see errors" promises the
+            -- reason; store the server's text rather than a restatement of
+            -- the ✘ the row already shows.
+            errors[it.label] = exec_run.first_error(resp) or "DROP failed"
             failed = failed + 1
           else
             results[it.label] = { status = "done" }

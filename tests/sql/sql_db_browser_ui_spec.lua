@@ -1,5 +1,6 @@
 --- DB Browser UI lifecycle: multi-select markers surviving a re-render (15) and
---- the batch-drop progress dialog not leaking a global `q` (14).
+--- the batch-drop progress dialog not leaking a global `q` (14), plus the drop
+--- failure paths quoting the server's reason instead of "DROP failed".
 local util = require("poste-db.db_browser.util")
 local icons = require("poste-db.db_browser.icons")
 local ops_drop = require("poste-db.db_browser.ops_drop")
@@ -139,5 +140,89 @@ describe("db_browser batch drop progress dialog", function()
     -- every later window (and macro recording)
     assert.is_false(global_normal("q"))
     assert.is_true(bound_in_window("q"))
+  end)
+end)
+
+describe("db_browser drop failures quote the server", function()
+  local exec_run_real = require("poste-db.exec_run")
+  local node, context, dispatch, notices, notify_saved, browser_buf
+
+  local function float_lines()
+    local out = {}
+    for _, win in ipairs(floats()) do
+      local ok, buf = pcall(vim.api.nvim_win_get_buf, win)
+      if ok then
+        for _, l in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do
+          out[#out + 1] = l
+        end
+      end
+    end
+    return out
+  end
+
+  local function failed_response(reason)
+    return { status = "error", has_error = true, results = { { error = reason } } }
+  end
+
+  before_each(function()
+    dispatch, notices = {}, {}
+    notify_saved = vim.notify
+    vim.notify = function(msg, level) notices[#notices + 1] = { msg = msg, level = level } end
+    node = { node_type = "table", name = "t1", meta = { connection = "test-conn", database = "blog" } }
+    browser_buf = vim.api.nvim_create_buf(false, true)
+    context = {
+      root_nodes = {}, source_buf = nil, browser_buf = browser_buf, line_to_node = {},
+    }
+    package.loaded["poste-db.connections"] = {
+      resolve_connection_url = function() return "postgres://u@h:5432/blog", nil end,
+      name_for_url = function() return nil end,
+    }
+    -- Only the dispatcher is faked. The batch drop finishes after the response
+    -- arrives, which runs the parent refresh and a tree re-render — that needs a
+    -- real buffer to write into. __index keeps the real first_error, the helper
+    -- under test here.
+    package.loaded["poste-db.exec_run"] = setmetatable({
+      run_async = function(_, _, callbacks)
+        dispatch[#dispatch + 1] = callbacks
+        return 1
+      end,
+    }, { __index = exec_run_real })
+  end)
+
+  after_each(function()
+    vim.notify = notify_saved
+    close_floats()
+    if browser_buf and vim.api.nvim_buf_is_valid(browser_buf) then
+      vim.api.nvim_buf_delete(browser_buf, { force = true })
+    end
+    package.loaded["poste-db.connections"] = saved.connections
+    package.loaded["poste-db.exec_run"] = saved.exec_run
+  end)
+
+  it("a refused single DROP TABLE says why", function()
+    ops_drop.drop_table(node, context)
+    assert.is_true(fire_buffer_map(vim.api.nvim_get_current_buf(), "y"))
+    assert.is_true(vim.wait(2000, function() return #dispatch > 0 end, 10))
+
+    dispatch[1].on_response(failed_response("dependent views exist"))
+    assert.is_true(vim.wait(2000, function() return #notices > 0 end, 10))
+    -- "Failed to drop table 't1'" alone told the user nothing: the reason only
+    -- exists in this response, and the journal is not where one looks mid-action.
+    assert.truthy(notices[1].msg:find("dependent views exist", 1, true))
+  end)
+
+  it("the batch summary dialog lists the reason, not just the ✘", function()
+    ops_drop.batch_drop_tables({ [node] = true }, context)
+    assert.is_true(fire_buffer_map(vim.api.nvim_get_current_buf(), "y"))
+    assert.is_true(vim.wait(2000, function() return #dispatch > 0 end, 10))
+
+    dispatch[1].on_response(failed_response("permission denied for table t1"))
+    local seen = vim.wait(2000, function()
+      for _, line in ipairs(float_lines()) do
+        if line:find("permission denied", 1, true) then return true end
+      end
+      return false
+    end, 10)
+    assert.is_true(seen, "the dialog promises 'Press [q] to see errors'")
   end)
 end)

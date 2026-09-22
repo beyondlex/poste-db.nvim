@@ -275,3 +275,19 @@ describe("exec_run", function()
     end)
   end)
 end)
+
+describe("exec_run.first_error", function()
+  it("returns the first in-band statement error", function()
+    local resp = { results = { { row_count = 0 }, { error = "table t does not exist" } } }
+    assert.equals("table t does not exist", exec_run.first_error(resp))
+  end)
+
+  it("treats an empty error string as no error", function()
+    assert.is_nil(exec_run.first_error({ results = { { error = "" } } }))
+  end)
+
+  it("is nil for a response with no results at all", function()
+    assert.is_nil(exec_run.first_error({}))
+    assert.is_nil(exec_run.first_error(nil))
+  end)
+end)
