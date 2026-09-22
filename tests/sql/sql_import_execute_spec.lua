@@ -1,4 +1,5 @@
--- Tests for `import/execute.lua` — the chunk loop.
+-- Tests for `import/execute.lua` — the chunk loop and what each chunk reports
+-- about itself.
 --
 -- This is the only part of the import path that talks to the database, and the
 -- only one whose failure mode is a hang instead of a message: the chunk index
@@ -169,5 +170,96 @@ describe("import execute chunking", function()
     local statuses = {}
     for _, entry in ipairs(logged) do statuses[#statuses + 1] = entry.status end
     assert.same({ "success", "error", "success" }, statuses)
+  end)
+end)
+
+--- What each chunk *says about itself* in the journal, and what the summary
+--- claims. The chunk loop above decides when the import stops; these decide
+--- whether a user who comes back an hour later can tell which rows landed.
+describe("import chunk outcomes", function()
+  local notices, notice_saved
+
+  before_each(function()
+    load_module()
+    original_chunk = config.config.import_chunk_size
+    notices = {}
+    notice_saved = vim.notify
+    vim.notify = function(msg, level) notices[#notices + 1] = { msg = msg, level = level } end
+  end)
+
+  after_each(function()
+    vim.notify = notice_saved
+    config.config.import_chunk_size = original_chunk
+  end)
+
+  it("names the failing statements in the chunk's journal entry", function()
+    respond = function(chunk_no, sql)
+      local results = {}
+      for _ = 1, statements(sql) do results[#results + 1] = { affected_rows = 1 } end
+      if chunk_no == 2 then
+        results[1] = { error = "duplicate key value violates unique constraint \"t_pkey\"" }
+        results[2] = { error = "null value in column \"n\" violates not-null constraint" }
+      end
+      return { has_error = chunk_no == 2, body = vim.json.encode({ results = results }) }
+    end
+    run(2, 4)
+    assert.equals("success", logged[1].status)
+    assert.equals("error", logged[2].status)
+    -- The count is the chunk's own; the text is the first real server message,
+    -- not a placeholder that says only "something here failed".
+    assert.truthy(logged[2].error_msg)
+    assert.equals("2 statement(s) in this chunk failed: duplicate key value violates unique constraint \"t_pkey\"",
+      logged[2].error_msg)
+    assert.is_nil(logged[1].error_msg)
+  end)
+
+  it("journals a failure it cannot read as an error, and still reports it", function()
+    -- A response that arrived as a failure with a body that will not decode:
+    -- nothing per-statement is knowable, but the chunk was rejected.
+    respond = function() return { has_error = true, body = "{ not json" } end
+    local res = run(2, 4)
+    for i, entry in ipairs(logged) do
+      assert.equals("error", entry.status, "chunk " .. i .. " was journaled as success")
+      assert.equals("The chunk's response reported a failure and its results could not be read",
+        entry.error_msg)
+    end
+    assert.equals(2, #res.errors, "one reported error per chunk")
+    assert.equals(1, #dialogs)
+    local last = notices[#notices]
+    assert.equals(vim.log.levels.WARN, last.level)
+    assert.truthy(last.msg:find("%(2 chunk%(s%) with errors%)"), last.msg)
+  end)
+
+  it("treats a statement error as a failure even without the aggregate flag", function()
+    respond = function(chunk_no, sql)
+      local results = {}
+      for _ = 1, statements(sql) do results[#results + 1] = { affected_rows = 1 } end
+      if chunk_no == 1 then results[1] = { error = "relation \"public.t\" does not exist" } end
+      -- has_error deliberately false: the results are the evidence here.
+      return { has_error = false, body = vim.json.encode({ results = results }) }
+    end
+    run(2, 2)
+    assert.equals("error", logged[1].status)
+    assert.truthy(logged[1].error_msg:find('relation "public.t" does not exist'))
+  end)
+
+  it("counts one chunk with several failures as one chunk in the summary", function()
+    respond = function(chunk_no, sql)
+      local results = {}
+      for _ = 1, statements(sql) do results[#results + 1] = { affected_rows = 1 } end
+      -- One chunk holding both rows, and both of them rejected.
+      if chunk_no == 1 then
+        for i = 1, #results do
+          results[i] = { error = "check constraint \"ck_n\" is violated" }
+        end
+      end
+      return { has_error = chunk_no == 1, body = vim.json.encode({ results = results }) }
+    end
+    local res = run(2, 2)
+    assert.equals(2, #res.errors, "the two rejected statements")
+    assert.equals(1, #logged)
+    local last = notices[#notices]
+    assert.truthy(last.msg:find("%(1 chunk%(s%) with errors%)"), last.msg)
+    assert.is_nil(last.msg:find("%(2 chunk%(s%)"), nil, true)
   end)
 end)

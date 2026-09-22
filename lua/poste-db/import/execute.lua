@@ -7,6 +7,11 @@ local dialog = require("poste-db.dialog")
 
 local M = {}
 
+--- What a chunk says about itself when the response reported a failure and the
+--- body carried nothing readable to explain it. Shared by the journal entry and
+--- the error dialog so the two cannot disagree about what was seen.
+local UNREADABLE_CHUNK = "The chunk's response reported a failure and its results could not be read"
+
 local function dedup_error(msg)
   local s = msg:match("^error returned from database: (.*)")
   if not s then s = msg end
@@ -107,7 +112,16 @@ function M.execute_import(table_info, valid_rows, col_map, table_cols, callback)
           table_info.schema and (table_info.schema .. ".") or "",
           table_info.name)
         if #all_errors > 0 then
-          vim.notify(msg .. string.format(" (%d chunk(s) with errors)", #all_errors), vim.log.levels.WARN)
+          -- `all_errors` is one entry per rejected *statement* (plus one per
+          -- dead process), so its length is not a chunk count: a chunk whose
+          -- three rows all hit a constraint used to announce itself as
+          -- "3 chunk(s) with errors", which reads as though much more of the
+          -- file went bad than did.
+          local bad_chunks = {}
+          for _, e in ipairs(all_errors) do bad_chunks[e.chunk_start] = true end
+          local n_chunks = 0
+          for _ in pairs(bad_chunks) do n_chunks = n_chunks + 1 end
+          vim.notify(msg .. string.format(" (%d chunk(s) with errors)", n_chunks), vim.log.levels.WARN)
           show_import_errors(all_errors)
         else
           vim.notify(msg, vim.log.levels.INFO)
@@ -144,18 +158,32 @@ function M.execute_import(table_info, valid_rows, col_map, table_cols, callback)
         local ok_body, body = pcall(vim.json.decode, resp.body or "{}")
         if not ok_body or type(body) ~= "table" then body = {} end
 
-        local has_error = false
-        if resp.has_error and body.results then
-          for ri, result in ipairs(body.results) do
-            if result.error and result.error ~= "" then
-              has_error = true
-              table.insert(all_errors, {
-                row = start_idx + ri - 1,
-                chunk_start = start_idx, chunk_end = end_idx,
-                error = result.error,
-              })
-            end
+        -- Read the statements first, the flag second. `has_error` is the
+        -- binary's aggregate, and an unreadable body is exactly the case where
+        -- the aggregate is missing while the truth is known: the response
+        -- arrived as a failure. Taking the results unconditionally also means a
+        -- per-statement error cannot be dropped because a flag was not set.
+        local chunk_errors = {}
+        for ri, result in ipairs(body.results or {}) do
+          if result.error and result.error ~= "" then
+            chunk_errors[#chunk_errors + 1] = result.error
+            table.insert(all_errors, {
+              row = start_idx + ri - 1,
+              chunk_start = start_idx, chunk_end = end_idx,
+              error = result.error,
+            })
           end
+        end
+        local has_error = (resp.has_error == true) or #chunk_errors > 0
+        if has_error and #chunk_errors == 0 then
+          -- The chunk was rejected and nothing names why. Recording it keeps the
+          -- error dialog and the WARN summary honest: without this entry an
+          -- import whose every chunk failed ends as "Imported 0 rows" at INFO
+          -- level, which is true and useless.
+          table.insert(all_errors, {
+            chunk_start = start_idx, chunk_end = end_idx,
+            error = UNREADABLE_CHUNK,
+          })
         end
 
         local affected = 0
@@ -168,30 +196,29 @@ function M.execute_import(table_info, valid_rows, col_map, table_cols, callback)
         total_imported = total_imported + affected
 
         local elapsed = vim.fn.reltimefloat(vim.fn.reltime(chunk_start)) * 1000
+        -- One chunk, one entry, one difference between the two outcomes: what
+        -- the reason text says. Greedy mode means the statements that did not
+        -- error are committed, so the entry has to say *which* statements
+        -- errored — "One or more statements failed" tells a user reviewing the
+        -- log nothing about which rows to re-import.
+        local reason
         if has_error then
-          edit_commit.write_log({
-            source = "import",
-            table_name = table_info.schema and (table_info.schema .. "." .. table_info.name) or table_info.name,
-            connection = table_info.connection or "",
-            dialect = table_info.dialect or "",
-            database = table_info.database or "",
-            sql = sql_content,
-            status = "error",
-            elapsed_ms = math.floor(elapsed + 0.5),
-            error_msg = "One or more statements in chunk failed",
-          })
-        else
-          edit_commit.write_log({
-            source = "import",
-            table_name = table_info.schema and (table_info.schema .. "." .. table_info.name) or table_info.name,
-            connection = table_info.connection or "",
-            dialect = table_info.dialect or "",
-            database = table_info.database or "",
-            sql = sql_content,
-            status = "success",
-            elapsed_ms = math.floor(elapsed + 0.5),
-          })
+          reason = #chunk_errors > 0
+            and string.format("%d statement(s) in this chunk failed: %s",
+              #chunk_errors, chunk_errors[1])
+            or UNREADABLE_CHUNK
         end
+        edit_commit.write_log({
+          source = "import",
+          table_name = table_info.schema and (table_info.schema .. "." .. table_info.name) or table_info.name,
+          connection = table_info.connection or "",
+          dialect = table_info.dialect or "",
+          database = table_info.database or "",
+          sql = sql_content,
+          status = has_error and "error" or "success",
+          elapsed_ms = math.floor(elapsed + 0.5),
+          error_msg = reason,
+        })
 
         send_chunk(end_idx + 1)
       end,
