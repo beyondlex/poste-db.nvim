@@ -34,22 +34,44 @@ local function split_name(name)
   return parts
 end
 
-function M.quote(name, dialect, depth)
-  depth = depth or 0
+--- An object the database told us about: a table, column, schema or database
+--- name, taken from introspection or from a tree node. Quoted as exactly one
+--- identifier. A dot is part of the name here — Postgres and MySQL both accept
+--- `CREATE TABLE "staging.v1"` — and splitting it would retarget the statement
+--- at a different object (`"staging"."v1"`), so an UPDATE or DROP aimed at the
+--- table in front of the user would either error out or hit `v1` in `staging`.
+function M.quote(name, dialect)
   if not name or name == "" or name == "*" then return name or "" end
-  -- Unreachable from a caller that does not pass `depth`: split_name hands the
-  -- parts down already dot-free, so the recursion is one level deep. It still
-  -- quotes rather than returns the name, because a raw identifier is both wrong
-  -- and injectable, and this guard is the only path that could emit one.
-  if depth > 10 then return quote_one(name, dialect) end
-  local parts = split_name(name)
-  if parts then
-    for i, part in ipairs(parts) do
-      parts[i] = M.quote(part, dialect, depth + 1)
-    end
-    return table.concat(parts, ".")
-  end
   return quote_one(name, dialect)
+end
+
+--- A reference someone typed into a prompt, or that was parsed out of SQL text
+--- (`schema.table`, `db.schema.table`): split on the dots and quote each part.
+--- Degenerate dots stay inside the name — see `split_name`.
+--- This is the only place the split belongs, and it is a judgement call: from
+--- the string alone `staging.v1` (one table) and `staging.v1` (table `v1` in
+--- schema `staging`) are indistinguishable. Here the caller's context says a
+--- qualifier was intended, which is not true of an introspected name.
+function M.quote_ref(name, dialect)
+  if not name or name == "" or name == "*" then return name or "" end
+  local parts = split_name(name)
+  if not parts then return quote_one(name, dialect) end
+  -- quote_one, not M.quote_ref: split_name only returns dot-free parts, so one
+  -- pass is enough, and it keeps this function free of a recursion guard.
+  for i, part in ipairs(parts) do
+    parts[i] = quote_one(part, dialect)
+  end
+  return table.concat(parts, ".")
+end
+
+--- Whether `quote_ref` will split this name, i.e. whether it reads as a
+--- qualified reference rather than as one name that carries dots. Callers that
+--- decide "should I prepend the schema myself?" need the same answer quote_ref
+--- gives — testing for a dot with `find` disagrees for `my..table`, where the
+--- split does not happen but the dot check says it did, dropping the prefix.
+function M.is_qualified(name)
+  if not name or name == "" then return false end
+  return split_name(name) ~= nil
 end
 
 function M.quote_qualified(schema, table_name, dialect)

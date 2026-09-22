@@ -4,6 +4,7 @@
 local ident = require("poste-db.ident")
 
 local quote = ident.quote
+local quote_ref = ident.quote_ref
 
 local M = {}
 
@@ -125,14 +126,15 @@ function M.prepare_table_ddl(ddl, target_table_name, table_name, schema, dialect
     local new_seq_name = seq_name:gsub(vim.pesc(table_name),
       (target_table_name:gsub("%%", "%%%%")))
     local seq_type = M.column_type_for_seq(ddl, seq_name)
-    -- Qualified nextval refs leave new_seq_name carrying the schema already
-    -- (quote() splits on the dot); prepending schema again would emit
+    -- Qualified nextval refs leave new_seq_name carrying the schema already,
+    -- and it was parsed out of SQL text rather than introspected, so it goes
+    -- through quote_ref (split on the dot); prepending schema again would emit
     -- "schema"."schema"."seq", disagreeing with the rewritten DEFAULT ref.
     local qualified
-    if schema and not new_seq_name:find(".", 1, true) then
-      qualified = q(schema) .. "." .. q(new_seq_name)
+    if schema and not ident.is_qualified(new_seq_name) then
+      qualified = q(schema) .. "." .. quote_ref(new_seq_name, dialect)
     else
-      qualified = q(new_seq_name)
+      qualified = quote_ref(new_seq_name, dialect)
     end
     table.insert(seq_stmts, "CREATE SEQUENCE IF NOT EXISTS " .. qualified .. " AS " .. seq_type .. ";")
     modified = M.rename_seq_reference(modified, seq_name, new_seq_name)

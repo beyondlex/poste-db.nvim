@@ -424,6 +424,18 @@ function M.modify_col(node, context)
   end)
 end
 
+--- CREATE TABLE target for the "New Table" form. `Name` is typed, so it may
+--- already carry the qualifier (`analytics.events`) — quote_ref splits it, and
+--- when it does the node's own schema must not be prepended again, which used
+--- to emit `"analytics"."analytics"."events"`, naming no table at all.
+local function new_table_ref(table_name, schema, dialect)
+  local qualified = ident.quote_ref(table_name, dialect)
+  if schema and dialect == "postgres" and not ident.is_qualified(table_name) then
+    qualified = ident.quote(schema, dialect) .. "." .. qualified
+  end
+  return qualified
+end
+
 --- New Table: open form with table name, generate CREATE TABLE template.
 function M.new_table(node, context)
   local dialect = get_dialect(node, context)
@@ -457,10 +469,7 @@ function M.new_table(node, context)
       cursor_offset = cursor_offset + 1
     end
 
-    local qualified = ident.quote(table_name, dialect)
-    if schema and dialect == "postgres" then
-      qualified = ident.quote(schema, dialect) .. "." .. ident.quote(table_name, dialect)
-    end
+    local qualified = new_table_ref(table_name, schema, dialect)
 
     table.insert(lines, "CREATE TABLE " .. qualified .. " (")
     table.insert(lines, "  id SERIAL PRIMARY KEY,")
@@ -710,6 +719,7 @@ M._test = {
   qualified_table_ref = qualified_table_ref,
   build_directive_lines = build_directive_lines,
   build_alter_column_sql = build_alter_column_sql,
+  new_table_ref = new_table_ref,
 }
 
 return M

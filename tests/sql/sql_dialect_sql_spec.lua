@@ -78,6 +78,23 @@ describe("db_browser rename SQL", function()
     assert.equals("EXEC sp_rename 'orders.o''brien', 'name', 'COLUMN';",
       ops_sql.rename_column_sql(table_node({ meta = {} }), col, "name", "mssql"))
   end)
+
+  -- A rename target is a bare name by contract (a rename does not move the
+  -- table), so dots inside it are the name's own: `"v1"."2"` would put the
+  -- table in a schema called v1, which is not what was typed.
+  it("keeps a dot in the new name inside the name", function()
+    assert.equals('ALTER TABLE "public"."orders" RENAME TO "v1.2";',
+      ops_sql.rename_table_sql(table_node(), "v1.2", "postgres"))
+    assert.equals("RENAME TABLE `orders` TO `v1.2`;",
+      ops_sql.rename_table_sql(table_node(), "v1.2", "mysql"))
+  end)
+
+  it("keeps a dotted source table one identifier", function()
+    local node = table_node({ name = "staging.v1" })
+    assert.equals('"public"."staging.v1"', ops_sql.qualified_table_ref(node, "postgres"))
+    assert.equals('ALTER TABLE "public"."staging.v1" RENAME TO "orders";',
+      ops_sql.rename_table_sql(node, "orders", "postgres"))
+  end)
 end)
 
 describe("db_browser ADD COLUMN", function()

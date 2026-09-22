@@ -307,3 +307,30 @@ describe("the column type decides whether digits are a number", function()
     assert.equals([[UPDATE "t" SET "code" = '007' WHERE "id" = 7;]], sql)
   end)
 end)
+
+describe("dml for identifiers that contain dots", function()
+  -- The browser hands these helpers what introspection reported, so a dot is
+  -- part of the name. The quote helper used to split every dot it saw, turning
+  -- a statement about the table on screen into one about another object.
+  local columns = { { name = "id", primary_key = true }, { name = "value" } }
+
+  local function update(schema, table_name, dialect)
+    return dml.generate_update(schema, table_name, columns,
+      { { col = 2, old_val = "a", new_val = "b" } }, { 7, "a" }, dialect)
+  end
+
+  it("keeps a dotted table name one identifier", function()
+    assert.equals([[UPDATE "public"."staging.v1" SET "value" = 'b' WHERE "id" = 7;]],
+      update("public", "staging.v1", "postgres"))
+    assert.equals([[UPDATE `app`.`staging.v1` SET `value` = 'b' WHERE `id` = 7;]],
+      update("app", "staging.v1", "mysql"))
+  end)
+
+  it("keeps a dotted column name one identifier", function()
+    local cols = { { name = "id", primary_key = true }, { name = "meta.json" } }
+    assert.equals([[INSERT INTO "public"."t" ("id", "meta.json") VALUES (7, '{"a":1}');]],
+      dml.generate_insert("public", "t", cols, { 7, '{"a":1}' }, "postgres"))
+    assert.equals([[DELETE FROM "t" WHERE "meta.json" = '{"a":1}';]],
+      dml.generate_delete(nil, "t", { cols[2] }, { '{"a":1}' }, "postgres"))
+  end)
+end)

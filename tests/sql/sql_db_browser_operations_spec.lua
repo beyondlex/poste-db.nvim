@@ -196,6 +196,33 @@ describe("db_browser operations new_query", function()
   end)
 end)
 
+describe("db_browser operations new_table_ref", function()
+  -- `Name` in the New Table form is typed, so it can arrive as a qualified
+  -- reference. quote_ref splits it, and the browsed schema must then not be
+  -- prepended again — that emitted `"analytics"."analytics"."events"`, naming
+  -- a table that does not exist.
+  it("splits a typed qualifier instead of prepending the schema again", function()
+    assert.equals('"analytics"."events"', t.new_table_ref("analytics.events", "analytics", "postgres"))
+  end)
+
+  it("prepends the browsed schema for a bare name", function()
+    assert.equals('"analytics"."events"', t.new_table_ref("events", "analytics", "postgres"))
+  end)
+
+  it("leaves the prefix to the connection for mysql and sqlite", function()
+    assert.equals("`analytics`.`events`", t.new_table_ref("analytics.events", "analytics", "mysql"))
+    assert.equals("`events`", t.new_table_ref("events", "analytics", "mysql"))
+    -- sqlite has no schema clause to qualify with
+    assert.equals('"events"', t.new_table_ref("events", "analytics", "sqlite"))
+  end)
+
+  it("still qualifies a name whose own dots are not a prefix", function()
+    -- `my..table` is one table, so no split happens and the schema still has to
+    -- go in front — testing for "contains a dot" instead dropped it here.
+    assert.equals('"analytics"."my..table"', t.new_table_ref("my..table", "analytics", "postgres"))
+  end)
+end)
+
 describe("db_browser operations update_template", function()
   --- Insert the template into a scratch buffer and return its SQL body (the
   --- `-- @…` directive header is not part of what is being asserted).
