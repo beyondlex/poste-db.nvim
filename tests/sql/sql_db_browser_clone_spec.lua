@@ -147,6 +147,30 @@ describe("db_browser default existence probe", function()
     assert.matches("TABLE_SCHEMA = DATABASE%(%)", seen[1])
     assert.matches("TABLE_NAME = 'users'", seen[1])
   end)
+
+  it("reports a refused existence probe as taken, not free", function()
+    -- A lookup the server rejected and a lookup that found nothing are the same
+    -- empty answer to a probe that only counts rows. Answering "free" here made
+    -- the paste pick a name that is in use, while the same probe failing at the
+    -- transport layer already failed closed (see `exists_fn` above).
+    local notices = {}
+    local real_notify = vim.notify
+    vim.notify = function(msg) notices[#notices + 1] = tostring(msg) end
+    sql_conn.run = function(_conn, _db, _sql, on_result)
+      on_result(vim.json.encode({
+        has_error = true,
+        body = '{"results":[{"columns":["r"],"rows":[],'
+          .. '"error":"permission denied for information_schema"}]}',
+      }))
+    end
+    local names = resolve({ conn = "t", db = "blog", dialect = "postgres" }, { { name = "posts" } })
+    vim.wait(200, function() return #notices > 0 end)
+    vim.notify = real_notify
+    assert.are.same({ "posts_copy" .. (t.MAX_NAME_BUMPS + 1) }, names,
+      "every probe must read as taken, up to the cap")
+    assert.truthy(notices[1] and notices[1]:find("permission denied for information_schema", 1, true),
+      "the server's reason must reach the user, not just the fail-closed verdict")
+  end)
 end)
 
 describe("db_browser copy progress spinner", function()

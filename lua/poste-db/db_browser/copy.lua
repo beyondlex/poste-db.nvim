@@ -90,22 +90,21 @@ end
 local function check_table_exists(conn_name, database, dialect, name, on_result, on_error, schema)
   local sql = dialect_table_exists_sql(dialect, schema, name)
   run_sql_on_conn(conn_name, database, sql, function(output)
-    local ok, parsed = pcall(vim.json.decode, output)
-    if not ok or not parsed then
-      if on_error then on_error("Failed to parse table existence check") end
+    -- "The lookup was refused" and "there is no such table" are the same empty
+    -- answer to a reader that only counts rows, and this one used to answer
+    -- `false`: the wizard then offered to create a table that was already there
+    -- (and, with `CREATE OR REPLACE`-style dialects, could replace it). Go through
+    -- the shared decoder so a failed statement reaches `on_error` instead.
+    local ok_first, result = sql_conn.decode_first_result(output)
+    if not ok_first then
+      if on_error then on_error(tostring(result)) end
       return
     end
     local exists = false
-    local body = parsed.body
-    if body then
-      local ok_body, decoded = pcall(vim.json.decode, body)
-      if ok_body and decoded and decoded.results and decoded.results[1] then
-        local r = decoded.results[1]
-        if r.rows and #r.rows > 0 and r.rows[1] and #r.rows[1] > 0 then
-          local val = r.rows[1][1]
-          exists = (type(val) == "boolean" and val) or (type(val) == "string" and val ~= "")
-        end
-      end
+    local r = result.rows
+    if r and #r > 0 and r[1] and #r[1] > 0 then
+      local val = r[1][1]
+      exists = (type(val) == "boolean" and val) or (type(val) == "string" and val ~= "")
     end
     on_result(exists)
   end, on_error)
