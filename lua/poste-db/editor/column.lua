@@ -135,6 +135,18 @@ local function run_introspection_query(query, connection, database, src_file)
   end
   local parsed = exec_run.run_sql(query, opts)
   if not parsed then return nil end
+  -- A refused introspection query and a table that genuinely has no keys arrive
+  -- with the same payload the parsers read (no rows), and the caller's cache rule
+  -- is "only on success" — so the verdict has to be consulted here, not inferred
+  -- from the rows. Returning nil for a failure keeps that promise: the metadata is
+  -- absent for this edit and the next one retries, and the user is told which of
+  -- the two happened.
+  if parsed.has_error then
+    local reason = exec_run.first_error(parsed)
+    vim.notify("Table metadata lookup failed: " .. tostring(reason or "the server reported a failure"),
+      vim.log.levels.WARN, { title = "PosteDb" })
+    return nil
+  end
   local body_ok, body = pcall(vim.json.decode, parsed.body or "{}")
   if not body_ok or not body then return nil end
   return body
