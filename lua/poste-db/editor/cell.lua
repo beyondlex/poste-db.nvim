@@ -172,6 +172,10 @@ function M.validate_value(value, col_meta)
   if value == vim.NIL then return true end
 
   local ctype = col_meta.ctype and col_meta.ctype:lower() or ""
+  -- No type at all: nothing to check against. `types.is_numeric` reads an empty
+  -- name as numeric, which is right for picking a literal's shape but would make
+  -- a non-digit string an invalid value for a column introspection never typed.
+  if ctype == "" then return true end
 
   if value == true or value == false then
     if not is_type(ctype, "boolean") then
@@ -192,11 +196,16 @@ function M.validate_value(value, col_meta)
       if value == 1 or value == 0 then return true end
       return false, "Only 0 and 1 allowed for boolean column"
     end
-    if not is_type(ctype, "numeric") then
+    -- The shared root-word checks, not this file's exact-name table: the types
+    -- introspection hands over carry parameters and widths (`numeric(10,2)`,
+    -- `UInt64`), and reading those as "not numeric" made every number an
+    -- invalid cell value — a `numeric(10,2)` column could not be edited. The
+    -- DML layer already asks `types` the same way.
+    if not types.is_numeric(ctype) then
       return false, "Cannot assign number to " .. (col_meta.ctype or "unknown") .. " column"
     end
     local val_str = tostring(value)
-    if is_type(ctype, "integer") then
+    if types.is_integer(ctype) then
       -- Two ways a double says it is not an integer, and the old guard read
       -- only the first: a point in its text, and the non-finite spellings
       -- (`tostring(math.huge)` is "inf", point-free, so an integer column
@@ -221,11 +230,11 @@ function M.validate_value(value, col_meta)
       end
       return true
     end
-    if is_type(ctype, "integer") then
+    if types.is_integer(ctype) then
       if value:match("^%-?%d+$") then return true end
       return false, "Cannot assign string to " .. (col_meta.ctype or "unknown") .. " integer column"
     end
-    if is_type(ctype, "numeric") then
+    if types.is_numeric(ctype) then
       if value:match("^%-?%d+%.?%d*$") then return true end
       return false, "Cannot assign string to " .. (col_meta.ctype or "unknown") .. " column"
     end

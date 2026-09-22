@@ -38,4 +38,15 @@ end
 --- @param ctype string already lowercased
 function M.is_integer_name(ctype) return INTEGER[ctype] == true end
 
+--- Root-word counterpart of `is_numeric`, restricted to the integer table: the
+--- same name has to read as an integer to this check as it does to that one, or
+--- a ClickHouse `UInt64` cell is numeric enough to parse and not-integer enough
+--- to skip the fraction guard. `is_integer_name` stays exact because the import
+--- mapper writes its guard around the names it is handed.
+--- @param ctype string already lowercased
+function M.is_integer(ctype)
+  local root = ctype:match("^%a[%a_]*")
+  return root ~= nil and INTEGER[root] == true
+end
+
 return M

@@ -438,6 +438,50 @@ describe("validate_value", function()
     end)
   end)
 
+  ---------------------------------------------------------------------------
+  -- The names introspection actually hands over are not the keys of the
+  -- editor's own type table: `numeric(10,2)` out of postgres' format_type,
+  -- MySQL's `decimal(10,2)`, ClickHouse spelling widths into the name
+  -- (`UInt64`, `Float64`). Reading those as "not numeric" made every number an
+  -- invalid value, so a `numeric(10,2)` column could not be edited at all. The
+  -- DML layer already asks the shared root-word check in `poste-db.types`.
+  ---------------------------------------------------------------------------
+  describe("parameterized and dialect type names", function()
+    it("accepts a number for a parameterized numeric column", function()
+      assert.is_true(editor.validate_value(3.5, col("numeric(10,2)")))
+      assert.is_true(editor.validate_value(42, col("decimal(10,2)")))
+    end)
+
+    it("accepts infinity for a ClickHouse Float64 column", function()
+      assert.is_true(editor.validate_value(math.huge, col("float64")))
+    end)
+
+    it("rejects a fraction for a width-spelled integer column", function()
+      assert.is_false(editor.validate_value(3.5, col("uint64")), "ClickHouse UInt64")
+      assert.is_false(editor.validate_value(3.5, col("int32")), "ClickHouse Int32")
+    end)
+
+    it("rejects infinity and NaN for a width-spelled integer column", function()
+      assert.is_false(editor.validate_value(math.huge, col("int32")))
+      assert.is_false(editor.validate_value(0 / 0, col("uint64")))
+    end)
+
+    it("still rejects a number for a text column however it is spelled", function()
+      assert.is_false(editor.validate_value(42, col("character varying(255)")))
+      assert.is_false(editor.validate_value(42, col("string")))
+      assert.is_false(editor.validate_value(42, col("fixedstring(8)")))
+    end)
+
+    it("checks nothing when introspection gave no type", function()
+      -- `types.is_numeric` reads an empty name as numeric on purpose, so the
+      -- validator has to stop before that branch or a plain word would become
+      -- an invalid value for a column nobody ever typed
+      assert.is_true(editor.validate_value(42, col("")))
+      assert.is_true(editor.validate_value("hello world", col("")))
+      assert.is_true(editor.validate_value("3.5", col("")))
+    end)
+  end)
+
   describe("NULL values", function()
     it("NULL is always valid", function()
       local ok = editor.validate_value(vim.NIL, col("integer"))
