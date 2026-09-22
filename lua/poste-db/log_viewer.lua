@@ -218,6 +218,18 @@ local function entry_database(entry)
   return nil
 end
 
+--- Outcome column, first character of every summary row: ✗ = the request
+--- failed, ! = it ran but delivered less than it promised (a partial edit
+--- commit), blank = success or an outcome the writer did not classify. The
+--- row-wide red tint is easy to miss in a long list and says nothing about a
+--- partial commit, which is neither success nor failure.
+local function status_mark(entry)
+  if entry.status == "error" then return "✗" end
+  if entry.status == "partial" then return "!" end
+  return " "
+end
+M._status_mark = status_mark
+
 local function compute_table_width()
   local max_w = 0
   for _, entry in ipairs(entries) do
@@ -239,6 +251,8 @@ end
 --- to assume a 15-byte timestamp (actual: 14) and a db segment of exactly
 --- TBL_W bytes — both wrong once a name has multibyte characters, since
 --- pad_table pads to display width, not bytes.
+--- Part order (see apply_highlights): 2 = outcome mark, 4 = time, 6 = db,
+--- 8 = duration, 10 = source tag, 12 = SQL preview.
 local function summary_parts(entry)
   local time = format_time(entry.ts)
   local db = pad_table(entry_database(entry) or entry_table(entry) or "?")
@@ -246,7 +260,7 @@ local function summary_parts(entry)
   local src_tag = string.format("%-7s", source_tag(entry))
   local display_sql = clean_sql(entry.sql)
   local sql = preview_sql(display_sql, 70)
-  return { "  ", time, "  ", db, "  ", ms, "  ", src_tag, " ", sql }
+  return { " ", status_mark(entry), "  ", time, "  ", db, "  ", ms, "  ", src_tag, " ", sql }
 end
 
 --- Byte range [start, end) of part `n` (1-based) in the concatenated summary.
@@ -269,10 +283,22 @@ local function apply_highlights(line_idx, entry, _)
   end
 
   local parts = summary_parts(entry)
-  local time_s, time_e = part_range(parts, 2)
-  local db_s, db_e = part_range(parts, 4)
-  local ms_s, ms_e = part_range(parts, 6)
-  local src_s, src_e = part_range(parts, 8)
+  local mark_s, mark_e = part_range(parts, 2)
+  local time_s, time_e = part_range(parts, 4)
+  local db_s, db_e = part_range(parts, 6)
+  local ms_s, ms_e = part_range(parts, 8)
+  local src_s, src_e = part_range(parts, 10)
+
+  -- Outcome mark (red ✗ / yellow !)
+  if entry.status == "error" then
+    vim.api.nvim_buf_set_extmark(buf, ns, line_idx - 1, mark_s, {
+      end_col = mark_e, hl_group = "PosteDbHistoryError", priority = 170,
+    })
+  elseif entry.status == "partial" then
+    vim.api.nvim_buf_set_extmark(buf, ns, line_idx - 1, mark_s, {
+      end_col = mark_e, hl_group = "PosteDbHistoryWarning", priority = 170,
+    })
+  end
 
   -- Timestamp (gray)
   vim.api.nvim_buf_set_extmark(buf, ns, line_idx - 1, time_s, {
@@ -358,16 +384,19 @@ local function apply_detail_highlights(line_idx, entry, detail_idx)
       highlight_sql_line(buf, ns, line_idx, line:sub(6), 5)
     end
   elseif pos <= n_sql + n_err then
-    -- Error line: vertical bar + red fg + < marker
+    -- Reason line: vertical bar + red fg + < marker. A "partial" entry stores
+    -- what was missed in the same field, but the statements did run and some
+    -- changes landed — so that one is tinted as a warning, not an error.
+    local reason_hl = entry.status == "partial" and "PosteDbHistoryWarning" or "PosteDbHistoryError"
     vim.api.nvim_buf_set_extmark(buf, ns, line_idx - 1, 0, {
-      end_col = line_len, hl_group = "PosteDbHistoryError", priority = 160,
+      end_col = line_len, hl_group = reason_hl, priority = 160,
     })
     vim.api.nvim_buf_set_extmark(buf, ns, line_idx - 1, 2, {
       virt_text = {{"│", "PosteDbDatasetMetaDim"}}, virt_text_pos = "overlay",
       priority = 90,
     })
     vim.api.nvim_buf_set_extmark(buf, ns, line_idx - 1, 3, {
-      virt_text = {{"< ", "PosteDbHistoryError"}}, virt_text_pos = "overlay",
+      virt_text = {{"< ", reason_hl}}, virt_text_pos = "overlay",
       priority = 170,
     })
   else
@@ -419,6 +448,23 @@ local function update_winbar()
   pcall(vim.api.nvim_set_option_value, "winbar", table.concat(parts), { win = win })
 end
 
+--- Edit-commit detail line: what the commit intended, and — when the writer
+--- recorded it — what actually landed. Without the second half, a partial
+--- commit expands to "Edit: 2 updates, 0 inserts, 0 deletes" and looks
+--- indistinguishable from a clean one.
+local function edit_summary_line(entry)
+  local s = entry.edit_summary
+  if not s then return nil end
+  local line = string.format("     Edit: +%d updates, %d inserts, %d deletes",
+    s.updates or 0, s.inserts or 0, s.deletes or 0)
+  if type(entry.affected_rows) == "number" then
+    local expected = (s.updates or 0) + (s.inserts or 0) + (s.deletes or 0)
+    line = line .. string.format(" · %d of %d row(s) affected", entry.affected_rows, expected)
+  end
+  return line
+end
+M._edit_summary_line = edit_summary_line
+
 local function build_lines()
   local lines = {}
   local filtered = {}
@@ -461,10 +507,9 @@ local function build_lines()
         line_idx = line_idx + 1
       end
       -- Edit summary (gray)
-      if entry.edit_summary then
-        local s = entry.edit_summary
-        table.insert(lines, string.format("     Edit: +%d updates, %d inserts, %d deletes",
-          s.updates or 0, s.inserts or 0, s.deletes or 0))
+      local edit_line = edit_summary_line(entry)
+      if edit_line then
+        table.insert(lines, edit_line)
         line_idx = line_idx + 1
       end
       table.insert(lines, "")
@@ -709,6 +754,12 @@ end
 function M._pad_table(s, width)
   if width then TBL_W = width end
   return pad_table(s)
+end
+
+--- The summary row split into its highlight parts. apply_highlights addresses
+--- them by hand-numbered index, so the part count and order are a contract.
+function M._summary_parts(entry)
+  return summary_parts(entry)
 end
 
 return M

@@ -51,6 +51,9 @@ function M.setup()
   link_if_empty("PosteDbDatasetWinbarBorder", "PosteDbDatasetBorder")
   link_if_empty("PosteDbHistorySuccess", "DiagnosticOk")
   link_if_empty("PosteDbHistoryError", "DiagnosticError")
+  -- the SQL log's "!": a request that ran but delivered less than promised
+  -- (partial edit commit). Distinct from DiagnosticError on purpose.
+  link_if_empty("PosteDbHistoryWarning", "DiagnosticWarn")
   link_if_empty("PosteDbHistorySQL", "Comment")
 
   local normal = resolve_hl("Normal")
@@ -117,7 +120,7 @@ function M.setup()
     "PosteDbDatasetInsertHint", "PosteDbDatasetError",
     "PosteDbDatasetWinbarAdded", "PosteDbDatasetWinbarModified", "PosteDbDatasetWinbarDeleted",
     "PosteDbMissingWhere",
-    "PosteDbHistorySuccess", "PosteDbHistoryError", "PosteDbHistorySQL", "PosteDbHistorySQLKeyword", "PosteDbHistoryFilter",
+    "PosteDbHistorySuccess", "PosteDbHistoryError", "PosteDbHistoryWarning", "PosteDbHistorySQL", "PosteDbHistorySQLKeyword", "PosteDbHistoryFilter",
     "PosteDbDatasetTotal", "PosteDbDatasetSucceeded", "PosteDbDatasetFailed", "PosteDbDatasetConstant", "PosteDbDatasetFilepath",
     "PosteDbCompletionKindText", "PosteDbCompletionKindField", "PosteDbCompletionKindVariable",
     "PosteDbCompletionKindClass", "PosteDbCompletionKindInterface",

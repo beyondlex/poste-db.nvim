@@ -79,6 +79,58 @@ describe("log viewer display-width helpers", function()
   end)
 end)
 
+describe("log viewer outcome marks", function()
+  it("marks a failed entry with ✗ and a partial one with !", function()
+    assert.equals("✗", log._status_mark({ status = "error" }))
+    assert.equals("!", log._status_mark({ status = "partial" }))
+    assert.equals(" ", log._status_mark({ status = "success" }))
+    assert.equals(" ", log._status_mark({}), "an entry whose writer stored no status stays unmarked")
+  end)
+
+  it("keeps the mark and the hand-numbered column parts in sync", function()
+    -- apply_highlights reads these by index (2 = mark, 4 = time, 6 = db,
+    -- 8 = duration, 10 = source tag). Insert a part without renumbering and
+    -- every column is tinted one slot off while nothing errors.
+    local parts = log._summary_parts({
+      ts = "2026-06-13T10:30:00", table = "users", status = "partial",
+      source = "dataset_commit", sql = "UPDATE users SET name = 'a'",
+    })
+    assert.equals(12, #parts)
+    assert.equals("!", parts[2])
+    assert.equals("06-13 10:30:00", parts[4])
+    assert.truthy(parts[6]:find("users", 1, true))
+    assert.truthy(parts[10]:find("commit", 1, true))
+    assert.truthy(parts[12]:find("UPDATE users", 1, true))
+  end)
+
+  it("finds partial rows through the filter", function()
+    log._set_filter_text("partial")
+    assert.is_true(log._filter_matches({ status = "partial" }))
+    assert.is_false(log._filter_matches({ status = "success" }))
+    log._set_filter_text("")
+  end)
+end)
+
+describe("log viewer _edit_summary_line", function()
+  it("shows which part of the edit set actually landed", function()
+    local line = log._edit_summary_line({
+      edit_summary = { updates = 2, inserts = 0, deletes = 0 },
+      affected_rows = 1,
+    })
+    assert.truthy(line:find("2 updates"))
+    assert.truthy(line:find("1 of 2 row%(s%) affected"))
+  end)
+
+  it("leaves the affected count out when the writer recorded none", function()
+    local line = log._edit_summary_line({ edit_summary = { updates = 1 } })
+    assert.is_nil(line:find("affected"))
+  end)
+
+  it("returns nil for an entry with no edit summary", function()
+    assert.is_nil(log._edit_summary_line({ sql = "SELECT 1" }))
+  end)
+end)
+
 describe("log viewer _filter_matches", function()
   it("matches everything when filter is empty", function()
     assert.is_true(log._filter_matches({ table = "posts" }))

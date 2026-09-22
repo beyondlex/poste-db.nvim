@@ -290,7 +290,13 @@ function M.commit_edits()
         return
       end
 
-      -- Success (or partial: statements succeeded, some matched no rows)
+      -- Success, or PARTIAL: every statement ran, but fewer rows changed than
+      -- the edit set expected (the row was concurrently changed or deleted).
+      -- A partial commit must not be journaled as a plain success: the WARN
+      -- notification scrolls away, and the journal is what `<leader>l` shows
+      -- later — a "success" row there would rewrite history and hide the fact
+      -- that some edits never landed. `detail` rides along as the entry's
+      -- error text (truncated on write) so the expanded row explains itself.
       local affected = exec.count_affected_rows(body)
 
       local msg = string.format("Committed: %d update(s), %d insert(s), %d delete(s) (%d row(s) affected)",
@@ -309,11 +315,12 @@ function M.commit_edits()
         dialect = dialect,
         database = database,
         sql = sql,
-        status = "success",
+        status = kind == "partial" and "partial" or "success",
         elapsed_ms = elapsed,
         edit_summary = summary,
         affected_rows = affected,
         mode = exec_mode,
+        error_msg = kind == "partial" and detail:sub(1, 500) or nil,
       })
       -- Clear edit state and refresh dataset in-place
       require("poste-db.editor").reset_edit_state(tab.edit_state)

@@ -11,6 +11,13 @@
 --- status, elapsed_ms, error + passthrough extras (table, edit_summary,
 --- affected_rows, rolled_back, mode). `source` tags the surface; see
 --- log_viewer's SOURCE_TAGS for the display mapping.
+---
+--- `status` vocabulary: "error" (the request failed — transport-level or an
+--- in-band statement error) and "success". One writer adds a third:
+--- "partial", for a request that ran to completion yet achieved less than it
+--- promised — a dataset edit commit whose statements matched fewer rows than
+--- there were edits. Partial rows are never written as "success", and their
+--- `error` text says what was missed, so the journal alone can be trusted.
 
 local const = require("poste-db.constants")
 local log = require("poste-db.log")
