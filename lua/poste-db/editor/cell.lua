@@ -294,6 +294,18 @@ end
 --- @param es table Edit state
 --- @param row_idx number Row index
 function M.track_row_delete(es, row_idx)
+  for i = #es.added_rows, 1, -1 do
+    if es.added_rows[i].row_idx == row_idx then
+      -- A row `o` only queued is not on the server, so there is nothing to
+      -- delete: cancelling it means dropping the insert. Marking it deleted
+      -- instead generated the INSERT anyway — the DELETE found no `rows_source`
+      -- twin at that index and was refused, so the cancelled row was committed.
+      table.remove(es.added_rows, i)
+      es.dirty = next(es.modified_cells) ~= nil or next(es.deleted_rows) ~= nil
+        or #es.added_rows > 0
+      return
+    end
+  end
   es.deleted_rows[row_idx] = true
   es.dirty = true
   for k, _ in pairs(es.modified_cells) do

@@ -71,6 +71,68 @@ local function ensure_edit_state(tab)
   return tab.edit_state
 end
 
+--- Redraw the buffer line a source row is displayed on. A source row that is
+--- off the current page has no line to fix, which is why this starts from the
+--- row rather than from the cursor.
+local function render_source_row_line(tab, row_idx)
+  local buf = get_dataset().dataset_buffer
+  if not (buf and vim.api.nvim_buf_is_valid(buf) and tab.padded and tab.meta) then return end
+  local meta = tab.meta
+  local fmt = require("poste-db.format")
+  local visible = fmt.visible_row_of(meta, row_idx)
+  if not (meta.data_start_line and visible) then return end
+  local line_idx = meta.data_start_line + visible - 1
+  local row = tab.rows_source and tab.rows_source[row_idx] or tab.layout.rows[row_idx]
+  if not row then return end
+  local new_line = fmt.render_row(row, tab.layout, fmt.row_number_of(meta, visible) or row_idx)
+  if not new_line then return end
+  if tab.padded[line_idx] then
+    tab.padded[line_idx] = "  " .. new_line
+  end
+  vim.api.nvim_set_option_value("modifiable", true, { buf = buf })
+  vim.api.nvim_buf_set_lines(buf, line_idx - 1, line_idx, false, { "  " .. new_line })
+  vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
+  require("poste-db.highlights").apply_edit_highlights(buf, tab)
+end
+
+--- Put back the pending edits of a row that is being deleted.
+--- `track_row_delete` forgets the row's `modified_cells` entries, but each edit
+--- had already overwritten `rows_source`, and that is the array a DELETE's WHERE
+--- is built from. On a table with a primary key it made no difference; on one
+--- without, the statement named the row by values no server row holds, so the
+--- commit reported success having matched nothing.
+local function revert_row_edits(tab, es, row_idx)
+  local reverted = false
+  for row_key, mod in pairs(es.modified_cells) do
+    if tonumber(row_key:match("^(%d+):")) == row_idx then
+      if tab.layout.rows[row_idx] then
+        tab.layout.rows[row_idx][mod.col] = mod.old_val
+      end
+      if tab.rows_source and tab.rows_source[row_idx] then
+        tab.rows_source[row_idx][mod.col] = mod.old_val
+      end
+      cell.clear_cell_error(es, row_key)
+      reverted = true
+    end
+  end
+  if reverted then render_source_row_line(tab, row_idx) end
+end
+
+--- Redraw the whole page from `tab.layout`, for when the row count changed and
+--- the lines below the change would otherwise keep their old positions. Returns
+--- the new meta, or nil when there is no dataset buffer to draw into.
+local function rerender_dataset_page(tab)
+  local buf = get_dataset().dataset_buffer
+  if not (buf and vim.api.nvim_buf_is_valid(buf)) then return nil end
+  local fmt = require("poste-db.format")
+  local lines, meta = fmt.render_page(tab.layout, tab.page or 1,
+    tab.page_size or const.EDITOR_PAGE_SIZE)
+  meta.table_name = tab.meta and tab.meta.table_name
+  require("poste-db.buffer").apply_rendered_page(tab, lines, meta)
+  require("poste-db.highlights").apply_edit_highlights(buf, tab)
+  return meta
+end
+
 local function apply_cell_edit(row_idx, col_idx, new_val)
   local tab = get_dataset().T()
   if not tab or not tab.layout then return end
@@ -107,32 +169,7 @@ local function apply_cell_edit(row_idx, col_idx, new_val)
   -- Clear any previous error for this cell
   cell.clear_cell_error(es, row_key)
 
-  -- Re-render the buffer line (a source row off this page has no line to fix)
-  local buf = get_dataset().dataset_buffer
-  if buf and vim.api.nvim_buf_is_valid(buf) and tab.padded and tab.meta then
-    local meta = tab.meta
-    local fmt = require("poste-db.format")
-    local visible = fmt.visible_row_of(meta, row_idx)
-    if meta.data_start_line and visible then
-      local line_idx = meta.data_start_line + visible - 1
-      local row = tab.rows_source and tab.rows_source[row_idx] or tab.layout.rows[row_idx]
-      if row then
-        local new_line = fmt.render_row(row, tab.layout,
-          fmt.row_number_of(meta, visible) or row_idx)
-        if new_line then
-          -- Update padded table
-          if tab.padded[line_idx] then
-            tab.padded[line_idx] = "  " .. new_line
-          end
-          vim.api.nvim_set_option_value("modifiable", true, { buf = buf })
-          vim.api.nvim_buf_set_lines(buf, line_idx - 1, line_idx, false, { "  " .. new_line })
-          vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
-          local sql_highlights = require("poste-db.highlights")
-          sql_highlights.apply_edit_highlights(buf, tab)
-        end
-      end
-    end
-  end
+  render_source_row_line(tab, row_idx)
 
   -- Update winbar
   if tab.edit_state.dirty then
@@ -338,7 +375,33 @@ function M.delete_row()
   if not M.is_data_row(tab, row_idx) then return end
 
   local es = ensure_edit_state(tab)
-  cell.track_row_delete(es, to_source_row(tab, row_idx))
+  local src_row = to_source_row(tab, row_idx)
+  local queued = false
+  for _, added in ipairs(es.added_rows) do
+    if added.row_idx == src_row then queued = true end
+  end
+  revert_row_edits(tab, es, src_row)
+  cell.track_row_delete(es, src_row)
+
+  if queued then
+    -- `dd` on a row `o` only queued cancels it, so its line goes with it: the
+    -- row was never on the server, and a line still standing would invite an
+    -- edit that has no insert behind it any more
+    table.remove(tab.layout.rows, src_row)
+    for _, added in ipairs(es.added_rows) do
+      if added.row_idx > src_row then added.row_idx = added.row_idx - 1 end
+    end
+    local meta = rerender_dataset_page(tab)
+    if meta and get_state().cell.row > meta.row_count then
+      get_state().cell.row = math.max(1, meta.row_count)
+    end
+    local winbar_base = require("poste-db.buffer.nav").build_status_winbar(tab.meta)
+    if get_dataset().dataset_window and vim.api.nvim_win_is_valid(get_dataset().dataset_window) then
+      pcall(vim.api.nvim_set_option_value, "winbar", winbar_base or "", { win = get_dataset().dataset_window })
+    end
+    vim.notify("Insert cancelled", vim.log.levels.INFO)
+    return
+  end
 
   -- Visual feedback: strikethrough the line
   local buf = get_dataset().dataset_buffer
@@ -377,23 +440,18 @@ function M.insert_row()
   cell.track_row_add(es, row_data, new_row_idx)
 
   -- Re-render current page to show the new row
-  local sql_format = require("poste-db.format")
-  local sql_buffer = require("poste-db.buffer")
-  local buf = get_dataset().dataset_buffer
-  if buf and vim.api.nvim_buf_is_valid(buf) then
-    local lines, meta = sql_format.render_page(tab.layout, tab.page or 1, tab.page_size or const.EDITOR_PAGE_SIZE)
-    meta.table_name = tab.meta and tab.meta.table_name
-    sql_buffer.apply_rendered_page(tab, lines, meta)
-    -- Re-apply edit highlights (green for added row)
-    local sql_highlights = require("poste-db.highlights")
-    sql_highlights.apply_edit_highlights(buf, tab)
+  local meta = rerender_dataset_page(tab)
+  if meta then
     -- Move cursor to the new row when this page renders it
+    local sql_format = require("poste-db.format")
+    local sql_highlights = require("poste-db.highlights")
     local visible = sql_format.visible_row_of(meta, new_row_idx)
     if visible then
       get_state().cell.row = visible
       local line_idx = meta.data_start_line + visible - 1
       pcall(vim.api.nvim_win_set_cursor, get_dataset().dataset_window, { line_idx, 0 })
-      sql_highlights.highlight_cell(buf, visible, get_state().cell.col or 1, meta)
+      sql_highlights.highlight_cell(get_dataset().dataset_buffer, visible,
+        get_state().cell.col or 1, meta)
     end
   end
 

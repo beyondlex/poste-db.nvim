@@ -254,3 +254,125 @@ describe("editor edits address source rows", function()
     assert.equals([[UPDATE "users" SET "name" = '42' WHERE "id" = 1;]], stmts[1].sql)
   end)
 end)
+
+---------------------------------------------------------------------------
+-- A row without a primary key is addressed by its column values, and those are
+-- the values the server holds — not the ones still sitting in the edit queue.
+---------------------------------------------------------------------------
+describe("a deleted row keeps the values it was addressed by", function()
+  local dataset, nav
+  local buf, tab
+
+  local function install()
+    local columns = {
+      { name = "code", type = "int", ctype = "integer" },
+      { name = "label", type = "text", ctype = "varchar" },
+    }
+    local rows = { { 7, "seven" }, { 8, "eight" } }
+    local source = { { 7, "seven" }, { 8, "eight" } }
+    local lines, meta = fmt.render_page({
+      columns = columns, rows = rows, col_widths = { 4, 5, 7 },
+      numeric_cols = { false, true, false }, total_rows = 2,
+      table_name = "codes", schema = "",
+    }, 1, 50)
+    local padded = {}
+    for i, line in ipairs(lines) do padded[i] = "  " .. line end
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, padded)
+    tab = {
+      data = { type = "resultset", results = { {
+        columns = columns, rows = rows, row_count = #rows,
+      } } },
+      layout = { columns = columns, rows = rows, col_widths = { 4, 5, 7 },
+        numeric_cols = { false, true, false }, total_rows = 2,
+        table_name = "codes", schema = "" },
+      rows_source = source,
+      page = 1,
+      page_size = 50,
+      num_pages = 1,
+      padded = padded,
+      meta = meta,
+      original_sql = "select * from codes",
+    }
+    dataset.tabs = { [1] = tab }
+    dataset.active_tab_idx = 1
+  end
+
+  before_each(function()
+    package.loaded["poste-db.editor.column"] = {
+      ensure_primary_key = function() return true end,
+    }
+    dataset = require("poste-db.dataset")
+    nav = require("poste-db.editor.nav")
+    buf = vim.api.nvim_create_buf(false, true)
+    dataset.dataset_buffer = buf
+    dataset.dataset_window = nil
+    install()
+  end)
+
+  after_each(function()
+    vim.api.nvim_buf_delete(buf, { force = true })
+    dataset.dataset_buffer = nil
+    dataset.dataset_window = nil
+    dataset.tabs = {}
+    dataset.active_tab_idx = 1
+    state.cell.row, state.cell.col = 1, 1
+    vim.ui.input = nil
+  end)
+
+  --- Type into the cell under the cursor and take the editor's answer.
+  local function type_into(cell_row, cell_col, text)
+    local answer
+    vim.ui.input = function(_, cb) answer = cb end
+    state.cell.row, state.cell.col = cell_row, cell_col
+    nav.edit_cell()
+    answer(text)
+  end
+
+  it("gives the queued delete back the row's original text", function()
+    type_into(1, 2, "changed")
+    assert.equals("changed", tab.layout.rows[1][2])
+
+    state.cell.row, state.cell.col = 1, 1
+    nav.delete_row()
+
+    -- the delete queue drops that row's pending edits, and the WHERE is built
+    -- from the row array the edits had overwritten: the statement named a row by
+    -- contents no row on the server has, so the commit reported success and
+    -- changed nothing
+    local stmts = dml.generate_dml(tab.edit_state, tab, "postgres")
+    assert.equals(1, #stmts)
+    assert.equals('DELETE FROM "codes" WHERE "code" = 7 AND "label" = \'seven\';', stmts[1].sql)
+    assert.equals("seven", tab.rows_source[1][2])
+    assert.equals("seven", tab.layout.rows[1][2],
+      "the struck-through line shows the row being deleted, not the edit that was discarded")
+  end)
+
+  it("cancels a queued insert instead of inserting and deleting it", function()
+    -- the phantom row has no `rows_source` twin, so its DELETE is refused for
+    -- having no WHERE target while the INSERT still went out: `dd` on the row
+    -- `o` had just queued looked like a cancel and committed the row anyway
+    nav.insert_row() -- leaves the cursor on the row it queued
+    state.cell.col = 1
+    nav.delete_row()
+
+    local es = tab.edit_state
+    assert.equals(0, #es.added_rows)
+    assert.is_nil(es.deleted_rows[3], "there is no server row behind it to delete")
+    assert.equals(2, #tab.layout.rows, "the panel drops the line it was showing")
+    assert.equals(0, #dml.generate_dml(es, tab, "postgres"))
+  end)
+
+  it("keeps the edits of the rows that were not deleted", function()
+    type_into(1, 2, "changed")
+    type_into(2, 2, "also")
+    state.cell.row, state.cell.col = 1, 1
+    nav.delete_row()
+
+    local stmts = dml.generate_dml(tab.edit_state, tab, "postgres")
+    assert.equals(2, #stmts, "row 2's update survives alongside the delete")
+    assert.equals("also", tab.layout.rows[2][2])
+    assert.equals('UPDATE "codes" SET "label" = \'also\' WHERE "code" = 8 AND "label" = \'eight\';',
+      stmts[1].sql)
+    assert.equals('DELETE FROM "codes" WHERE "code" = 7 AND "label" = \'seven\';', stmts[2].sql)
+  end)
+end)
