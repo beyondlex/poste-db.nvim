@@ -318,6 +318,34 @@ describe("poste-db.ai.actions", function()
       state_sql.last_error = nil
     end)
 
+    -- A result event whose `status` says "error" without an `error` string is
+    -- still a failure: `exec_run` counts the status, not the text. Before this
+    -- case was handled the loop found nothing to report and the turn answered
+    -- "✓ executed", with the rejected statement already journalled as an error.
+    it("reports a failure whose response carries no error text", function()
+      local state_sql = require("poste-db.state")
+      package.loaded["poste-db.executor"] = {
+        execute = function(opts)
+          opts.on_response({
+            has_error = true,
+            results = { { status = "error" } },
+            body = vim.json.encode({ results = { { status = "error" } } }),
+          })
+        end,
+      }
+      local err, note
+      actions.execute_sql("SELECT 1", {
+        { type = "context", context = "db", data = { connection = "my-blog", database = "blog" } },
+      }, function(e, n) err, note = e, n end)
+      vim.wait(500, function() return err ~= nil or note ~= nil end)
+
+      assert.is_nil(note)
+      assert.truthy(err:find("without a message", 1, true))
+      assert.is_nil(captured.rendered)
+      assert.truthy(state_sql.last_error)
+      state_sql.last_error = nil
+    end)
+
     it("surfaces SQL errors to the chat callback", function()
       package.loaded["poste-db.executor"] = {
         execute = function(opts)

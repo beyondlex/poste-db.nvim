@@ -29,6 +29,11 @@ local _log_write_count = 0
 
 local MAX_ERROR_LEN = 500
 
+--- `exec_run` counts a statement as failed from the result event's `status`,
+--- which the binary can set without ever filling in `error`. The journal line
+--- still has to say why it is red, or a reader of `<leader>l` has to guess.
+local UNEXPLAINED_FAILURE = "reported as a failed statement without an error message"
+
 local function get_log_path()
   if SQL_LOG_PATH then return SQL_LOG_PATH end
   SQL_LOG_PATH = vim.fn.stdpath("data") .. "/poste/sql_log.jsonl"
@@ -148,8 +153,9 @@ function M.result(base, resp, elapsed_ms)
   if resp and resp.has_error then
     status = "error"
     for _, r in ipairs(resp.results or {}) do
-      if r.error then first_err = tostring(r.error) break end
+      if r.error and r.error ~= "" then first_err = tostring(r.error) break end
     end
+    if not first_err then first_err = UNEXPLAINED_FAILURE end
   end
   M.record(vim.tbl_extend("force", base, {
     status = status,

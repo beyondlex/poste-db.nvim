@@ -22,6 +22,12 @@ local READONLY_KINDS = {
 --- confirmation — the safe direction.
 local WRITE_WORDS = { "insert", "update", "delete", "merge", "replace" }
 
+--- What to tell the chat when the response says a statement failed and carries
+--- no text saying so. `exec_run` counts a result as failed from its `status`
+--- field, which the binary can set without an `error`, so "no message" is a
+--- real shape of the failure — and the alternative was reporting `✓ executed`.
+local UNEXPLAINED_FAILURE = "the server reported a failed statement without a message"
+
 --- @param stmt string one statement, with literals/comments already blanked
 --- @return boolean
 local function statement_is_readonly(stmt)
@@ -199,11 +205,16 @@ function M.execute_sql(sql, refs, cb)
           results = ok_d and decoded.results or nil
         end
         for _, r in ipairs(results or {}) do
-          if r.error then
+          if r.error and r.error ~= "" then
             in_band = type(r.error) == "string" and r.error or vim.inspect(r.error)
             break
           end
         end
+        -- The flag is the failure; the text is only its explanation. Missing
+        -- text must not downgrade the outcome back to a success line — this
+        -- call answers a chat turn, and "✓ executed" is the worst thing it can
+        -- say about a statement the server rejected.
+        if not in_band then in_band = UNEXPLAINED_FAILURE end
       end
       vim.schedule(function()
         if in_band then

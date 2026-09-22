@@ -107,6 +107,30 @@ describe("exec_run journaling", function()
     flush()
   end)
 
+  -- The failure flag and its text are separate fields: `exec_run` counts a
+  -- result as failed from `status`, and a binary that sets status without
+  -- filling in `error` used to journal a red line with no reason at all.
+  it("journals a failure whose result event carries no error text", function()
+    local delivered = nil
+    exec_run.run_async("SELECT 1;", {
+      conn_url = "pg://u:pw@h/db",
+    }, {
+      on_response = function(resp) delivered = resp end,
+    })
+    cli_callbacks.on_stdout({
+      vim.json.encode({ type = "result", seq = 1, status = "error", sql = "SELECT 1;" }),
+      vim.json.encode({ type = "summary", total_time_ms = 3, dialect = "postgres" }),
+    })
+    vim.fn.wait(1000, function() return delivered ~= nil end)
+
+    local entries = read_entries()
+    assert.equals(1, #entries)
+    assert.equals("error", entries[1].status)
+    assert.truthy(entries[1].error)
+    assert.truthy(entries[1].error:find("without an error message", 1, true))
+    flush()
+  end)
+
   it("journals a transport failure via on_error (non-zero exit, no summary)", function()
     exec_run.run_async("SELECT 1;", { conn_url = "pg://u:pw@h/db" }, {
       on_error = function() end,
