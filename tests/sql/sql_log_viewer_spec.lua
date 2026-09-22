@@ -94,13 +94,24 @@ describe("log viewer outcome marks", function()
     local parts = log._summary_parts({
       ts = "2026-06-13T10:30:00", table = "users", status = "partial",
       source = "dataset_commit", sql = "UPDATE users SET name = 'a'",
-    })
+    }, 10)
     assert.equals(12, #parts)
     assert.equals("!", parts[2])
     assert.equals("06-13 10:30:00", parts[4])
-    assert.truthy(parts[6]:find("users", 1, true))
+    -- The db segment is asserted by equality now that the width is a parameter:
+    -- it used to be `find`, because the padding came out of module state that
+    -- whichever `_pad_table` call happened to run last had written.
+    assert.equals("users     ", parts[6])
     assert.truthy(parts[10]:find("commit", 1, true))
     assert.truthy(parts[12]:find("UPDATE users", 1, true))
+  end)
+
+  it("pads to the width it is given, not the last one written", function()
+    log._pad_table("anything", 20)
+    local parts = log._summary_parts({
+      ts = "2026-06-13T10:30:00", table = "users",
+    }, 7)
+    assert.equals("users  ", parts[6], "a pinned pad width must not decide another row's column")
   end)
 
   it("finds partial rows through the filter", function()

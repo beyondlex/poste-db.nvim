@@ -240,10 +240,13 @@ local function compute_table_width()
   TBL_W = math.min(math.max(max_w, 4), 25)
 end
 
-local function pad_table(s)
+--- Pad/truncate one cell to `width` display columns, or to the width computed
+--- for the current render when the caller has no opinion.
+local function pad_table(s, width)
+  local w = width or TBL_W
   local dw = vim.fn.strdisplaywidth(s)
-  if dw > TBL_W then return fit_width(s, TBL_W) end
-  return s .. string.rep(" ", TBL_W - dw)
+  if dw > w then return fit_width(s, w) end
+  return s .. string.rep(" ", w - dw)
 end
 
 --- Summary-line segments, shared by render and apply_highlights so the
@@ -253,9 +256,9 @@ end
 --- pad_table pads to display width, not bytes.
 --- Part order (see apply_highlights): 2 = outcome mark, 4 = time, 6 = db,
 --- 8 = duration, 10 = source tag, 12 = SQL preview.
-local function summary_parts(entry)
+local function summary_parts(entry, width)
   local time = format_time(entry.ts)
-  local db = pad_table(entry_database(entry) or entry_table(entry) or "?")
+  local db = pad_table(entry_database(entry) or entry_table(entry) or "?", width)
   local ms = string.format("%5s", tostring(entry.elapsed_ms or 0) .. "ms")
   local src_tag = string.format("%-7s", source_tag(entry))
   local display_sql = clean_sql(entry.sql)
@@ -750,16 +753,21 @@ function M._fit_width(s, max_w)
   return fit_width(s, max_w)
 end
 
---- Pad/truncate to the given width (defaults to the computed TBL_W).
+--- Pad/truncate to a given width; `width` nil falls back to the width computed
+--- for the current render, exactly like the render path itself. Deliberately a
+--- parameter and not a write: this hook used to assign `TBL_W`, so one spec that
+--- pinned a column width leaked it into every later row of the same process and
+--- the padding assertions had to match by `find` — which width a row got
+--- depended on which test ran first.
 function M._pad_table(s, width)
-  if width then TBL_W = width end
-  return pad_table(s)
+  return pad_table(s, width)
 end
 
 --- The summary row split into its highlight parts. apply_highlights addresses
 --- them by hand-numbered index, so the part count and order are a contract.
-function M._summary_parts(entry)
-  return summary_parts(entry)
+--- `width` pads the db segment; nil uses the current render's width.
+function M._summary_parts(entry, width)
+  return summary_parts(entry, width)
 end
 
 return M
