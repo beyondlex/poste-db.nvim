@@ -1,5 +1,6 @@
 local ts_stmt = require("poste-db.ts_stmt")
 local state = require("poste-db.state")
+local config = require("poste-db.config")
 
 local M = {}
 local _setup_done = false
@@ -22,7 +23,11 @@ function M.setup()
   -- sign-column border tree and frees the sign column for the execution
   -- status indicator
   vim.api.nvim_set_hl(0, "PosteDbSqlBoundary", { bg = 0x24293f })
-  state.apply_highlight_overrides({ "PosteDbSqlBoundary" })
+  -- The "gutter" style marks only the number column of the block. It links to
+  -- the rectangle so one override recolours both; a `bg` of its own would
+  -- drift from whatever theme the user pointed the rectangle at.
+  vim.api.nvim_set_hl(0, "PosteDbSqlBoundaryGutter", { link = "PosteDbSqlBoundary" })
+  state.apply_highlight_overrides({ "PosteDbSqlBoundary", "PosteDbSqlBoundaryGutter" })
 end
 
 local function clear_all(buf)
@@ -37,6 +42,28 @@ local function reset_last_applied()
   _last_applied.e = nil
 end
 
+local function paint_background(buf, start, stop)
+  for line = start, stop do
+    vim.api.nvim_buf_set_extmark(buf, ns, line, 0, {
+      end_row = line + 1,
+      end_col = 0,
+      hl_group = "PosteDbSqlBoundary",
+      hl_eol = true,
+      hl_mode = "combine",
+    })
+  end
+end
+
+--- Only the number column of each line — the text itself is left alone, and
+--- with it the colours the parser put there.
+local function paint_gutter(buf, start, stop)
+  for line = start, stop do
+    vim.api.nvim_buf_set_extmark(buf, ns, line, 0, {
+      number_hl_group = "PosteDbSqlBoundaryGutter",
+    })
+  end
+end
+
 local function apply_range(buf, start, stop)
   clear_all(buf)
   if not vim.api.nvim_buf_is_valid(buf) then
@@ -49,14 +76,10 @@ local function apply_range(buf, start, stop)
     return
   end
 
-  for line = start, stop do
-    vim.api.nvim_buf_set_extmark(buf, ns, line, 0, {
-      end_row = line + 1,
-      end_col = 0,
-      hl_group = "PosteDbSqlBoundary",
-      hl_eol = true,
-      hl_mode = "combine",
-    })
+  if config.config.boundary_style == "gutter" then
+    paint_gutter(buf, start, stop)
+  else
+    paint_background(buf, start, stop)
   end
   _last_applied.buf = buf
   _last_applied.s = start + 1

@@ -31,6 +31,10 @@ M.defaults = {
   -- aligned; "terminal" keeps freshly drawn rows aligned instead.
   -- See LEARNINGS.md #16.
   width_mode = "nvim",
+  -- How the statement under the cursor is marked: "background" tints a
+  -- full-width rectangle behind its lines, "gutter" tints only the number
+  -- column of those lines and leaves the text (and its parser colours) alone.
+  boundary_style = "background",
   db_browser = {
     split_position = "left",  -- "left" or "right"
     split_width = 40,
