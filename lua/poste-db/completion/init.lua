@@ -268,6 +268,21 @@ end
 
 local completion_gen = 0
 
+--- First item per label wins: the same name can arrive from more than one
+--- source (a Rust column list plus the keyword fallback). Returns the kept
+--- items *and* the label set, so a caller that appends more items afterwards
+--- can keep deduplicating against the same set.
+local function dedupe_by_label(items)
+  local seen, deduped = {}, {}
+  for _, item in ipairs(items) do
+    if not seen[item.label] then
+      seen[item.label] = true
+      table.insert(deduped, item)
+    end
+  end
+  return deduped, seen
+end
+
 function M:get_completions(blink_ctx, callback)
   completion_gen = completion_gen + 1
   local my_gen = completion_gen
@@ -302,14 +317,7 @@ function M:get_completions(blink_ctx, callback)
 
   get_items(bufnr, line_before, cursor_line, function(items)
     if my_gen ~= completion_gen then return end
-    local seen = {}
-    local deduped = {}
-    for _, item in ipairs(items) do
-      if not seen[item.label] then
-        seen[item.label] = true
-        table.insert(deduped, item)
-      end
-    end
+    local deduped, seen = dedupe_by_label(items)
     -- Append snippet items when prefix matches a trigger word
     if #prefix > 0 then
       local snippets = require("poste-db.snippets")
@@ -344,6 +352,27 @@ function M:get_completions(blink_ctx, callback)
 end
 
 function M:resolve(item, callback) callback(item) end
+
+--- Drop the caret onto a fresh `-- @database` line and pre-fill the
+--- `-- @connection` line the user just picked. Used when the completion menu
+--- stands in for the connection picker under a `-- @` directive.
+--- The database line is written *without* its trailing space and the space is
+--- fed in as a keystroke instead: that one keystroke is what opens the menu
+--- again, and writing both left the directive with two spaces on the screen.
+local function insert_directive_pair(conn_name)
+  local buf = vim.api.nvim_get_current_buf()
+  local lnum = vim.fn.line(".")
+  local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+  local indent = (lines[lnum] or ""):match("^(%s*)") or ""
+  local db_line = indent .. "-- @" .. const.DIRECTIVE_DATABASE
+  table.insert(lines, lnum, indent .. "-- @" .. const.DIRECTIVE_CONNECTION .. " " .. conn_name)
+  lines[lnum + 1] = db_line
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  vim.api.nvim_win_set_cursor(0, { lnum + 1, #db_line })
+  vim.cmd("startinsert!")
+  vim.fn.feedkeys(vim.api.nvim_replace_termcodes(" ", true, false, true), "n")
+end
+
 function M:execute(exec_ctx, item, callback, default_impl)
   if item.data and item.data.snippet then
     vim.schedule(function()
@@ -366,18 +395,7 @@ function M:execute(exec_ctx, item, callback, default_impl)
     return
   end
   if item.data and item.data.directive_fallback then
-    vim.schedule(function()
-      local buf = vim.api.nvim_get_current_buf()
-      local lnum = vim.fn.line(".")
-      local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-      local indent = (lines[lnum] or ""):match("^(%s*)") or ""
-      table.insert(lines, lnum, indent .. "-- @" .. const.DIRECTIVE_CONNECTION .. " " .. item.data.conn_name)
-      lines[lnum + 1] = indent .. "-- @" .. const.DIRECTIVE_DATABASE .. " "
-      vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-      vim.api.nvim_win_set_cursor(0, { lnum + 1, #(indent .. "-- @" .. const.DIRECTIVE_DATABASE .. " ") })
-      vim.cmd("startinsert!")
-      vim.fn.feedkeys(vim.api.nvim_replace_termcodes(" ", true, false, true), "n")
-    end)
+    vim.schedule(function() insert_directive_pair(item.data.conn_name) end)
     callback()
     return
   end
@@ -400,18 +418,7 @@ function M.source:execute(entry, callback)
   local item = (type(entry.get_completion_item) == "function" and entry:get_completion_item()) or entry.completion_item
   if not item then callback(); return end
   if item.data and item.data.directive_fallback then
-    vim.schedule(function()
-      local buf = vim.api.nvim_get_current_buf()
-      local lnum = vim.fn.line(".")
-      local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-      local indent = (lines[lnum] or ""):match("^(%s*)") or ""
-      table.insert(lines, lnum, indent .. "-- @" .. const.DIRECTIVE_CONNECTION .. " " .. item.data.conn_name)
-      lines[lnum + 1] = indent .. "-- @" .. const.DIRECTIVE_DATABASE .. " "
-      vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-      vim.api.nvim_win_set_cursor(0, { lnum + 1, #(indent .. "-- @" .. const.DIRECTIVE_DATABASE .. " ") })
-      vim.cmd("startinsert!")
-      vim.fn.feedkeys(vim.api.nvim_replace_termcodes(" ", true, false, true), "n")
-    end)
+    vim.schedule(function() insert_directive_pair(item.data.conn_name) end)
     callback()
     return
   end
@@ -422,14 +429,7 @@ function M.source:complete(params, callback)
   local bufnr = vim.api.nvim_get_current_buf()
   local cursor_line = vim.fn.line(".")
   get_items(bufnr, line_before, cursor_line, function(items)
-    local seen = {}
-    local deduped = {}
-    for _, item in ipairs(items) do
-      if not seen[item.label] then
-        seen[item.label] = true
-        table.insert(deduped, item)
-      end
-    end
+    local deduped = dedupe_by_label(items)
     debug.set("cmp_items", #deduped)
     debug.flush()
     callback({ items = deduped, isIncomplete = false })
