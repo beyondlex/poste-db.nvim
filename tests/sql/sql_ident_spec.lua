@@ -37,6 +37,28 @@ describe("ident.quote", function()
     assert.equals('"db"."schema"."table"', ident.quote("db.schema.table", "postgres"))
   end)
 
+  it("does not cap how many parts a qualified name has", function()
+    assert.equals('"a"."b"."c"."d"."e"."f"."g"."h"."i"."j"."k"."l"',
+      ident.quote("a.b.c.d.e.f.g.h.i.j.k.l", "postgres"))
+  end)
+
+  -- An empty part means the dots belong to the name itself, not to a schema or
+  -- database prefix: `"my..table"` is a real table, and splitting it into
+  -- `"my"."table"` would quietly point the statement at a different object.
+  it("keeps a name whose own text contains dots in one piece", function()
+    assert.equals('"my..table"', ident.quote("my..table", "postgres"))
+    assert.equals("`my..table`", ident.quote("my..table", "mysql"))
+  end)
+
+  it("keeps a leading or trailing dot inside the name", function()
+    assert.equals('".hidden"', ident.quote(".hidden", "postgres"))
+    assert.equals('"trailing."', ident.quote("trailing.", "postgres"))
+  end)
+
+  it("quotes a name past the recursion guard instead of emitting it raw", function()
+    assert.equals('"a.b"', ident.quote("a.b", "postgres", 11))
+  end)
+
   it("quotes a simple name with brackets for mssql", function()
     assert.equals("[users]", ident.quote("users", "mssql"))
   end)

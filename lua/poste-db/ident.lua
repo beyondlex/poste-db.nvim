@@ -1,27 +1,7 @@
 local M = {}
 
-function M.quote(name, dialect, depth)
-  depth = depth or 0
-  if depth > 10 then return name or "" end
-  if not name or name == "" or name == "*" then return name or "" end
-  local dot = name:find(".", 1, true)
-  if dot then
-    local parts = {}
-    local prev = 1
-    for i = 1, #name do
-      if name:sub(i, i) == "." then
-        if prev < i then parts[#parts + 1] = name:sub(prev, i - 1) end
-        prev = i + 1
-      end
-    end
-    if prev <= #name then parts[#parts + 1] = name:sub(prev) end
-    if #parts > 1 then
-      for i, p in ipairs(parts) do
-        parts[i] = M.quote(p, dialect, depth + 1)
-      end
-      return table.concat(parts, ".")
-    end
-  end
+--- One identifier, in the dialect's own quoting, with nothing left to split.
+local function quote_one(name, dialect)
   if dialect == "mysql" or dialect == "mariadb" or dialect == "clickhouse" then
     return "`" .. name:gsub("`", "``") .. "`"
   end
@@ -29,6 +9,47 @@ function M.quote(name, dialect, depth)
     return "[" .. name:gsub("]", "]]") .. "]"
   end
   return '"' .. name:gsub('"', '""') .. '"'
+end
+
+--- `schema.table.col` as separate parts, or nil when the dots are not separators:
+--- an empty part means the name itself contains them (`my..table`, `.hidden`,
+--- `trailing.`). Splitting those would rewrite which object the SQL points at,
+--- and a name with a dot in it is legal — Postgres and MySQL both accept
+--- `CREATE TABLE "my..table"`, and the browser introspects such a table by its
+--- exact name.
+local function split_name(name)
+  local parts = {}
+  local prev = 1
+  for i = 1, #name do
+    if name:sub(i, i) == "." then
+      parts[#parts + 1] = name:sub(prev, i - 1)
+      prev = i + 1
+    end
+  end
+  parts[#parts + 1] = name:sub(prev)
+  if #parts < 2 then return nil end
+  for _, part in ipairs(parts) do
+    if part == "" then return nil end
+  end
+  return parts
+end
+
+function M.quote(name, dialect, depth)
+  depth = depth or 0
+  if not name or name == "" or name == "*" then return name or "" end
+  -- Unreachable from a caller that does not pass `depth`: split_name hands the
+  -- parts down already dot-free, so the recursion is one level deep. It still
+  -- quotes rather than returns the name, because a raw identifier is both wrong
+  -- and injectable, and this guard is the only path that could emit one.
+  if depth > 10 then return quote_one(name, dialect) end
+  local parts = split_name(name)
+  if parts then
+    for i, part in ipairs(parts) do
+      parts[i] = M.quote(part, dialect, depth + 1)
+    end
+    return table.concat(parts, ".")
+  end
+  return quote_one(name, dialect)
 end
 
 function M.quote_qualified(schema, table_name, dialect)
