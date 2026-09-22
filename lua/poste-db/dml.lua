@@ -36,6 +36,10 @@ local function quote_val(val, dialect, allow_expr, col_type)
     return val and "TRUE" or "FALSE"
   end
   if type(val) == "number" then
+    -- Checked before the integral branch: `math.floor(inf) == inf` is true, so
+    -- an infinite value would take the `%.0f` path and come out as the word
+    -- "inf", which the servers read as a column name.
+    if ident.is_non_finite(val) then return ident.quote_literal(val, dialect) end
     if val == math.floor(val) then
       -- %.0f, not %d: LuaJIT clamps %d to int64 range, so a big float cell
       -- (1e20) would silently rewrite itself to 9223372036854775807.

@@ -162,6 +162,30 @@ describe("ident.quote_literal", function()
     assert.equals("'\\\\'", ident.quote_literal("\\", "clickhouse"))
     assert.equals("'a\\\\b'", ident.quote_literal("a\\b", "clickhouse"))
   end)
+
+  -- `tostring(math.huge)` is "inf" and `tostring(0/0)` is "nan", which a server
+  -- reads as a bare column name. These arrive from the editor: a float8 cell
+  -- holding Infinity is now the text "Infinity" (the binary's converter used to
+  -- hand it over as null), and LuaJIT's `tonumber` accepts that spelling — so a
+  -- committed edit to such a cell reaches here as a real number.
+  it("renders a non-finite double as a literal, not as the column named inf", function()
+    assert.equals("'Infinity'", ident.quote_literal(math.huge, "postgres"))
+    assert.equals("'-Infinity'", ident.quote_literal(-math.huge, "postgres"))
+    assert.equals("'NaN'", ident.quote_literal(0 / 0, "postgres"))
+  end)
+
+  it("keeps the bare inf/nan that ClickHouse spells as literals", function()
+    assert.equals("inf", ident.quote_literal(math.huge, "clickhouse"))
+    assert.equals("-inf", ident.quote_literal(-math.huge, "clickhouse"))
+    assert.equals("nan", ident.quote_literal(0 / 0, "clickhouse"))
+  end)
+
+  it("leaves every finite number exactly as tostring gives", function()
+    assert.equals("42", ident.quote_literal(42))
+    assert.equals("0", ident.quote_literal(0))
+    assert.equals("1.5", ident.quote_literal(1.5, "postgres"))
+    assert.equals("-2", ident.quote_literal(-2, "postgres"))
+  end)
 end)
 
 describe("ident.is_qualified", function()

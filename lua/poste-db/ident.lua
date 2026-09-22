@@ -81,10 +81,30 @@ function M.quote_qualified(schema, table_name, dialect)
   return M.quote(table_name, dialect)
 end
 
+--- True for the doubles `tostring` renders as words: NaN and ±infinity.
+function M.is_non_finite(val)
+  return type(val) == "number" and (val ~= val or val == math.huge or val == -math.huge)
+end
+
+--- `tostring(math.huge)` is "inf" and `tostring(0/0)` is "nan", which postgres
+--- and MySQL read as a column reference — the statement failed with "column inf
+--- does not exist". The quoted spellings below are the ones those servers parse
+--- (and what postgres prints for them), so a value that arrives as the text
+--- "Infinity" also leaves as one. ClickHouse spells its own literals `inf` and
+--- `nan`, so it keeps what `tostring` gives.
+local function non_finite_literal(val, dialect)
+  if dialect == "clickhouse" then return tostring(val) end
+  if val ~= val then return "'NaN'" end
+  return val == math.huge and "'Infinity'" or "'-Infinity'"
+end
+
 function M.quote_literal(val, dialect)
   if val == nil or val == vim.NIL then return "NULL" end
   if type(val) == "boolean" then return val and "TRUE" or "FALSE" end
-  if type(val) == "number" then return tostring(val) end
+  if type(val) == "number" then
+    if M.is_non_finite(val) then return non_finite_literal(val, dialect) end
+    return tostring(val)
+  end
   local s = tostring(val):gsub("'", "''")
   -- Backslash dialects: MySQL/MariaDB and ClickHouse both treat `\` as an
   -- escape character inside single-quoted literals — a raw `\` in the value

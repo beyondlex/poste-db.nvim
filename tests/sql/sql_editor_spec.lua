@@ -85,6 +85,16 @@ describe("parse_value", function()
     local result = editor.parse_value("  spaced  ", "old")
     assert.equals("  spaced  ", result)
   end)
+
+  -- Where a non-finite number comes from: the binary hands an infinite float8
+  -- over as the text "Infinity" (it used to arrive as null), and LuaJIT's
+  -- `tonumber` spells that a number. So committing such a cell puts math.huge
+  -- in the edit state, and the DML builder is what turns it back into a literal.
+  it("'Infinity' parses to the number infinity, not the word", function()
+    local result = editor.parse_value("Infinity", "old")
+    assert.equals("number", type(result))
+    assert.equals(math.huge, result)
+  end)
 end)
 
 ---------------------------------------------------------------------------

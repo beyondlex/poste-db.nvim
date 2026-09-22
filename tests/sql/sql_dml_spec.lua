@@ -386,3 +386,38 @@ describe("dml for identifiers that contain dots", function()
       dml.generate_delete(nil, "t", { cols[2] }, { '{"a":1}' }, "postgres"))
   end)
 end)
+
+describe("non-finite numbers in a committed value", function()
+  local cols = {
+    { name = "id", ctype = "integer", primary_key = true },
+    { name = "x", ctype = "double precision" },
+  }
+  local function update(new_val, dialect)
+    return dml.generate_update(nil, "t", cols, { { col = 2, new_val = new_val } }, { 1 }, dialect)
+  end
+
+  -- `tostring(math.huge)` is "inf", and a bare `inf` is a column reference to
+  -- the server: the statement died with "column inf does not exist" instead of
+  -- storing the value. The number reaches here because LuaJIT's `tonumber`
+  -- accepts the "Infinity" text the binary sends for an infinite float8.
+  it("writes infinity as the literal postgres parses, not as a bare inf", function()
+    assert.equals([[UPDATE "t" SET "x" = 'Infinity' WHERE "id" = 1;]], update(math.huge, "postgres"))
+    assert.equals([[UPDATE "t" SET "x" = '-Infinity' WHERE "id" = 1;]], update(-math.huge, "postgres"))
+    assert.equals([[UPDATE "t" SET "x" = 'NaN' WHERE "id" = 1;]], update(0 / 0, "postgres"))
+  end)
+
+  it("keeps the bare inf and nan that ClickHouse spells as literals", function()
+    assert.equals([[UPDATE `t` SET `x` = inf WHERE `id` = 1;]], update(math.huge, "clickhouse"))
+    assert.equals([[UPDATE `t` SET `x` = nan WHERE `id` = 1;]], update(0 / 0, "clickhouse"))
+  end)
+
+  it("leaves a finite double on the path it was already on", function()
+    assert.equals([[UPDATE "t" SET "x" = 1.5 WHERE "id" = 1;]], update(1.5, "postgres"))
+    assert.equals([[UPDATE "t" SET "x" = 2 WHERE "id" = 1;]], update(2.0, "postgres"))
+  end)
+
+  it("uses the same spelling for a WHERE value", function()
+    assert.equals([[DELETE FROM "t" WHERE "x" = 'Infinity';]],
+      dml.generate_delete(nil, "t", { cols[2] }, { math.huge }, "postgres"))
+  end)
+end)
