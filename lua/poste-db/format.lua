@@ -235,6 +235,16 @@ local function normalize_type(raw)
   return map[t] or t
 end
 
+--- The non-finite doubles arrive as text because JSON has no spelling for them
+--- (see `poste.nvim` `sql_values::float_json`): the engines print `Infinity` /
+--- `NaN`, and ClickHouse's text rows carry its own bare `inf` / `nan`. Checked
+--- only for a column whose declared type is already numeric, so a text column
+--- full of "Infinity" strings cannot borrow the exemption.
+local function is_non_finite_text(val)
+  local s = val:lower()
+  return s == "inf" or s == "-inf" or s == "infinity" or s == "-infinity" or s == "nan"
+end
+
 --- Check if a column contains only numeric values (for right-alignment).
 --- Values may arrive as Lua numbers OR as strings (bigints above 2^53 and
 --- large DECIMALs are serialized as JSON strings to preserve precision).
@@ -257,9 +267,10 @@ local function is_numeric_column(rows, col_idx, col_meta)
     local val = row[col_idx]
     if val ~= nil and val ~= vim.NIL then
       local is_number = type(val) == "number"
-      -- numeric string (bigint/decimal preserved as string)
+      -- numeric string (bigint/decimal preserved as string, or a non-finite
+      -- double spelled as text)
       local numeric_string = is_numeric_type and type(val) == "string"
-        and val:match("^%-?%d+%.?%d*$") ~= nil
+        and (val:match("^%-?%d+%.?%d*$") ~= nil or is_non_finite_text(val))
       if not is_number and not numeric_string then
         return false
       end

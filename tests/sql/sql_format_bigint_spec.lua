@@ -85,6 +85,58 @@ describe("format bigint precision", function()
     assert.is_false(layout.numeric_cols[4], "a text column of digits is left-aligned like text")
   end)
 
+  it("keeps a float column right-aligned when a row is Infinity", function()
+    -- the binary sends a non-finite double as text because JSON has no spelling
+    -- for it, so the display path sees "Infinity" in a `float8` column. A row
+    -- of it must not cost the whole column the alignment its type declares.
+    local layout = format.plan_resultset_layout({
+      type = "resultset",
+      total_rows = 2,
+      results = { {
+        columns = { { name = "ratio", type = "float8" } },
+        rows = { { "Infinity" }, { 1.5 } },
+      } },
+      connection = "",
+      database = "",
+      dialect = "postgres",
+    })
+    assert.is_true(layout.numeric_cols[2], "an Infinity row still belongs in a right-aligned float column")
+  end)
+
+  it("does not let the Infinity spelling right-align a text column", function()
+    -- the spelling is only an exemption for a column whose own type is
+    -- numeric; a varchar of "Infinity"/"NaN" is text and stays left-aligned
+    local layout = format.plan_resultset_layout({
+      type = "resultset",
+      total_rows = 1,
+      results = { {
+        columns = { { name = "note", type = "text" } },
+        rows = { { "Infinity" } },
+      } },
+      connection = "",
+      database = "",
+      dialect = "postgres",
+    })
+    assert.is_false(layout.numeric_cols[2])
+  end)
+
+  it("accepts ClickHouse's bare inf and nan spellings in a float column", function()
+    -- ClickHouse returns every value as text and spells these without the
+    -- quotes the SQL engines print, so the alignment check has to know both
+    local layout = format.plan_resultset_layout({
+      type = "resultset",
+      total_rows = 2,
+      results = { {
+        columns = { { name = "ratio", type = "Float64" } },
+        rows = { { "nan" }, { "-inf" } },
+      } },
+      connection = "",
+      database = "",
+      dialect = "clickhouse",
+    })
+    assert.is_true(layout.numeric_cols[2])
+  end)
+
   it("formats floats with a capped decimal precision", function()
     assert.equals("578.472", format.format_number(578.47196567559))
     assert.equals("123.45", format.format_number(123.45))
