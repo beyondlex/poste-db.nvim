@@ -253,6 +253,25 @@ describe("editor edits address source rows", function()
     assert.equals(1, #stmts)
     assert.equals([[UPDATE "users" SET "name" = '42' WHERE "id" = 1;]], stmts[1].sql)
   end)
+
+  it("keeps the word CURRENT_TIMESTAMP as text in a varchar cell", function()
+    -- the datetime prompt means the expression when it reads that word; here it
+    -- must stay a string. The two spellings differ only by the column, so the
+    -- promotion belongs in the datetime editor — doing it in `parse_value` for
+    -- every column would silently un-quote a text column's own contents.
+    install_tab(1, identity(60))
+    local answer
+    vim.ui.input = function(_, cb) answer = cb end
+    state.cell.row, state.cell.col = 1, 2
+    nav.edit_cell()
+    answer("CURRENT_TIMESTAMP")
+
+    assert.equals("CURRENT_TIMESTAMP", tab.layout.rows[1][2])
+    local stmts = dml.generate_dml(tab.edit_state, tab, "postgres")
+    assert.equals(1, #stmts)
+    assert.equals([[UPDATE "users" SET "name" = 'CURRENT_TIMESTAMP' WHERE "id" = 1;]],
+      stmts[1].sql)
+  end)
 end)
 
 ---------------------------------------------------------------------------

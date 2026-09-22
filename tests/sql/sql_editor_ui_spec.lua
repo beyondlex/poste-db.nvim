@@ -160,6 +160,22 @@ describe("cell editors that prompt for typed text", function()
       sql_for_row())
   end)
 
+  it("means the same thing when the candidate's word is typed instead of picked", function()
+    -- the word is the entry directly above "Custom…" in the list, and the prompt
+    -- refused it: `validate_value` saw a string with no leading digit and answered
+    -- "Invalid date format", so the one spelling that means *the server's now*
+    -- worked only one of the two ways it was offered
+    edit(3, "Custom…", "CURRENT_TIMESTAMP")
+    assert.equals("__expr:CURRENT_TIMESTAMP", tab.layout.rows[1][3])
+    assert.equals("UPDATE `orders` SET `created_at` = CURRENT_TIMESTAMP WHERE `id` = 1;",
+      sql_for_row())
+  end)
+
+  it("reads a typed expression regardless of case, like the server does", function()
+    edit(3, "Custom…", "current_timestamp")
+    assert.equals("__expr:CURRENT_TIMESTAMP", tab.layout.rows[1][3])
+  end)
+
   it("restores the column default instead of writing NULL", function()
     edit(2, "<default>", nil)
     -- `nil` reads as "no value" further down: the row table lost the slot and

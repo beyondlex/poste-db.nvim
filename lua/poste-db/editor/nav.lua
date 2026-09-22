@@ -228,6 +228,22 @@ local function datetime_now_text(ctype)
   return os.date("%Y-%m-%d %H:%M:%S")
 end
 
+--- The SQL expression this picker offers, and the only word the prompt will read
+--- as one. List and prompt share these two definitions so they cannot disagree
+--- about what a word means: typing the entry right above "Custom…" used to come
+--- back as "Invalid date format", because only the pick became
+--- `__expr:CURRENT_TIMESTAMP` and typed text reached `validate_value`, which
+--- wants a leading digit.
+local DATETIME_EXPR = "CURRENT_TIMESTAMP"
+
+local function as_datetime_expr(input)
+  if not input then return nil end
+  if input:upper():match("^%s*(%S+)%s*$") == DATETIME_EXPR then
+    return "__expr:" .. DATETIME_EXPR
+  end
+  return input
+end
+
 function cell_editors.boolean(row_idx, col_idx, col_meta, old_val)
   local choices = { "(NULL)", "true", "false" }
   vim.ui.select(choices, {
@@ -249,11 +265,14 @@ end
 
 function cell_editors.datetime(row_idx, col_idx, col_meta, old_val)
   local now = datetime_now_text(col_meta.ctype)
+  -- `date` and `time` columns get no expression candidate, so their prompt reads
+  -- no expression either: `has_expr` is the one condition the two share
+  local has_expr = not (col_meta.ctype == "date" or col_meta.ctype == "time")
   local choices
-  if col_meta.ctype == "date" or col_meta.ctype == "time" then
-    choices = { "(NULL)", now }
+  if has_expr then
+    choices = { "(NULL)", now, DATETIME_EXPR }
   else
-    choices = { "(NULL)", now, "CURRENT_TIMESTAMP" }
+    choices = { "(NULL)", now }
   end
   table.insert(choices, "Custom…")
   vim.ui.select(choices, {
@@ -275,12 +294,13 @@ function cell_editors.datetime(row_idx, col_idx, col_meta, old_val)
         prompt = (col_meta.name or "value") .. ": ",
         default = has_value and tostring(old_val) or now,
       }, function(input)
-        apply_typed_edit(row_idx, col_idx, col_meta, old_val, input)
+        apply_typed_edit(row_idx, col_idx, col_meta, old_val,
+          has_expr and as_datetime_expr(input) or input)
       end)
       return
     end
-    if choice == "CURRENT_TIMESTAMP" then
-      apply_cell_edit(row_idx, col_idx, "__expr:CURRENT_TIMESTAMP")
+    if choice == DATETIME_EXPR then
+      apply_cell_edit(row_idx, col_idx, "__expr:" .. DATETIME_EXPR)
     else
       apply_cell_edit(row_idx, col_idx, choice)
     end
