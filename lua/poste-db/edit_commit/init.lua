@@ -186,9 +186,11 @@ function M.commit_edits()
 
   local sql, summary, skipped = M.generate_combined_dml(es, tab, dialect)
   if skipped and #skipped > 0 then
-    -- statements that could not target a row safely (e.g. an all-NULL row
-    -- with no primary key) were refused by the generator, never executed
-    vim.notify("Skipped " .. #skipped .. " edit(s) — no safe WHERE target:\n"
+    -- each line names what was refused and why (`update row 3 skipped: no WHERE
+    -- target …`, or one whole-batch line when the result set has no table name);
+    -- the count stays out of the header because a batch-level refusal is one line
+    -- for several edits
+    vim.notify("Some edits were not committed:\n"
       .. table.concat(skipped, "\n"), vim.log.levels.WARN)
   end
   if not sql then

@@ -215,6 +215,22 @@ function M.generate_dml(es, tab, dialect)
   local schema = tab.layout.schema or ""
   local table_name = tab.layout.table_name or ""
 
+  -- No table name means the dataset never resolved one. The browser always knows
+  -- the node it opened, so this is the buffer path, where the name comes from
+  -- reading the SQL text and a JOIN, a subquery or `FROM a, b` resolves to no
+  -- single table. Generating anyway produced `UPDATE "public". SET …`:
+  -- `ident.quote("")` is `""`, so the schema prefix was left with a dangling dot,
+  -- and the server answered with a syntax error for every row in the batch.
+  if table_name == "" then
+    if next(es.modified_cells or {}) or next(es.deleted_rows or {})
+      or #(es.added_rows or {}) > 0 then
+      return stmts, { "no table name for this result set — it came from SQL that "
+        .. "does not resolve to one table; open the table in the database browser "
+        .. "to edit its rows" }
+    end
+    return stmts, skipped
+  end
+
   local row_mods = {}
   for row_key, mod in pairs(es.modified_cells or {}) do
     local row_idx = tonumber(row_key:match("^(%d+):"))

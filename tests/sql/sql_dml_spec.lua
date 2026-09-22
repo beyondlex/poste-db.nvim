@@ -178,6 +178,58 @@ describe("dml generation", function()
   end)
 end)
 
+describe("generate_dml with a result set that has no table name", function()
+  -- `layout.table_name` is empty when the dataset came from SQL text that does
+  -- not resolve to one table (a 2+ table JOIN, a subquery, `FROM a, b`). Before
+  -- the guard the generators interpolated `ident.quote("")` — which is `""` — and
+  -- emitted `UPDATE "blog". SET …`, so every row of the batch failed in the
+  -- server with a syntax error and no hint of the real cause.
+  local cols = {
+    { name = "id", ctype = "integer", primary_key = true },
+    { name = "note", ctype = "text" },
+  }
+
+  local function tab(table_name)
+    return {
+      layout = { schema = "blog", table_name = table_name, columns = cols },
+      rows_source = { { 1, "keep" } },
+    }
+  end
+
+  it("refuses an update with one reason that names the cause", function()
+    local stmts, skipped = dml.generate_dml({
+      modified_cells = { ["1:2"] = { col = 2, old_val = "keep", new_val = "new" } },
+    }, tab(""), "postgres")
+    assert.equals(0, #stmts)
+    assert.equals(1, #skipped)
+    assert.truthy(skipped[1]:find("no table name", 1, true), skipped[1])
+    assert.truthy(skipped[1]:find("database browser", 1, true), skipped[1])
+  end)
+
+  it("refuses a nil name, a delete and an insert the same way", function()
+    local _, skipped_del = dml.generate_dml({ deleted_rows = { [1] = true } },
+      tab(nil), "postgres")
+    assert.equals(1, #skipped_del)
+    assert.truthy(skipped_del[1]:find("no table name", 1, true))
+
+    local stmts_ins, skipped_ins = dml.generate_dml({
+      added_rows = { { data = { 2, "fresh" } } },
+    }, tab(""), "postgres")
+    assert.equals(0, #stmts_ins)
+    assert.equals(1, #skipped_ins)
+  end)
+
+  it("says nothing when there is nothing pending", function()
+    -- "No changes to commit" is the true message for an empty edit_state; the
+    -- missing table name must not turn a no-op into a warning
+    local stmts, skipped = dml.generate_dml({
+      modified_cells = {}, deleted_rows = {}, added_rows = {},
+    }, tab(""), "postgres")
+    assert.equals(0, #stmts)
+    assert.equals(0, #skipped)
+  end)
+end)
+
 describe("generate_insert __expr gating", function()
   local cols = { { name = "note", ctype = "text" } }
 
