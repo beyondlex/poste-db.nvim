@@ -364,6 +364,11 @@ function M.filter_by_current_cell()
     view_indices = tab.view_indices,
     row_number_mode = "view",
   })
+  -- The filter replaced `view_indices`, and matches are keyed by view position,
+  -- so a live search describes rows that may no longer be in the view at all.
+  -- Same guard the sort path calls; without it the winbar keeps counting the
+  -- pre-filter matches and n/N walks positions past the last rendered row.
+  M.recompute_after_view_change()
 end
 
 function M.clear_filter_search()
