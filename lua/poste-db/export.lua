@@ -331,9 +331,21 @@ local function export_to_file(data_result, info, format_value, path)
     vim.notify("Cannot write to " .. path, vim.log.levels.ERROR)
     return
   end
-  f:write(text)
+  -- Check both halves: a full disk or a revoked directory must not end in the
+  -- success notify below with the data sitting in a stale .tmp beside it.
+  local ok_write, write_err = pcall(function() f:write(text) end)
   f:close()
-  os.rename(tmp, path)
+  if not ok_write then
+    os.remove(tmp)
+    vim.notify("Export failed while writing: " .. tostring(write_err), vim.log.levels.ERROR)
+    return
+  end
+  local renamed = os.rename(tmp, path)
+  if not renamed then
+    os.remove(tmp)
+    vim.notify("Export failed: could not move the file into place at " .. path, vim.log.levels.ERROR)
+    return
+  end
   local abs_path = vim.fn.fnamemodify(path, ":p")
   vim.fn.setreg("+", abs_path)
   vim.fn.setreg('"', abs_path)
