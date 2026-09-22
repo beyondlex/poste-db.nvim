@@ -361,3 +361,77 @@ describe("db_browser operations select_star", function()
     vim.api.nvim_buf_delete(src, { force = true })
   end)
 end)
+
+--- The DDL float's failure path: what the user reads, and what the journal
+--- keeps, has to be the reason the process gave — not just its exit code.
+describe("db_browser operations show_ddl failure reporting", function()
+  local sql_log = require("poste-db.sql_log")
+  local cli = require("poste-db.cli")
+  local path, opts, saved_run, saved_connections, saved_notify
+
+  local function read_entries()
+    local out = {}
+    for _, l in ipairs(vim.fn.readfile(path)) do
+      table.insert(out, vim.json.decode(l))
+    end
+    return out
+  end
+
+  before_each(function()
+    path = vim.fn.tempname() .. ".jsonl"
+    sql_log.set_log_path(path)
+    opts = nil
+    saved_run = cli.run_async
+    cli.run_async = function(_, cb)
+      opts = cb
+      return 1
+    end
+    saved_connections = package.loaded["poste-db.connections"]
+    package.loaded["poste-db.connections"] = {
+      resolve_connection_url = function() return "pg://u:pw@h/db" end,
+    }
+    -- ERROR notifies print through the error channel in a headless run and
+    -- crash plenary's harness when they land after the test ended.
+    saved_notify = vim.notify
+    vim.notify = function() end
+  end)
+
+  after_each(function()
+    -- Drain before restoring the stub: the failure notify is `vim.schedule`d,
+    -- and letting it land on the real handler prints mid-next-test.
+    vim.wait(100, function() return false end)
+    vim.notify = saved_notify
+    cli.run_async = saved_run
+    package.loaded["poste-db.connections"] = saved_connections
+    sql_log.set_log_path(nil)
+    if path and vim.fn.filereadable(path) == 1 then vim.fn.delete(path) end
+  end)
+
+  local function ddl_node()
+    return table_node({ meta = { schema = "public", database = "blog", connection = "pg-dev" } })
+  end
+
+  it("journals the stderr text of a rejected fetch", function()
+    operations.show_ddl(ddl_node(), {})
+    opts.on_stderr({ 'relation "users" does not exist' })
+    opts.on_exit(1)
+
+    local entries = read_entries()
+    assert.equals(1, #entries)
+    assert.equals("error", entries[1].status)
+    assert.equals('relation "users" does not exist', entries[1].error)
+    assert.equals("pg-dev", entries[1].connection)
+    -- The URL is argv, not something the journal should carry.
+    assert.is_nil(entries[1].sql:find("pg://", 1, true))
+  end)
+
+  it("journals the exit code when the process said nothing", function()
+    operations.show_ddl(ddl_node(), {})
+    opts.on_stderr({ "" })
+    opts.on_exit(3)
+
+    local entries = read_entries()
+    assert.equals(1, #entries)
+    assert.equals("exit 3", entries[1].error)
+  end)
+end)

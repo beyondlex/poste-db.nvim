@@ -98,6 +98,7 @@ function M.show_ddl(node, context)
   journal.connection = conn -- friendly name beats the redacted URL here
   local t0 = vim.uv.now()
   local journaled = false
+  local stderr_buf = {}
   local function journal_once(status, error_msg)
     if journaled then return end
     journaled = true
@@ -147,13 +148,21 @@ function M.show_ddl(node, context)
     end,
     on_stderr = function(data)
       if not data then return end
+      -- Keep what the process said: `on_exit` reports the failure, and the
+      -- stderr text is the only reason a user gets without re-running the
+      -- command by hand. (async.lua's introspect does the same.)
+      for _, l in ipairs(data) do
+        if l ~= "" then stderr_buf[#stderr_buf + 1] = l end
+      end
     end,
     on_exit = function(code)
       if code ~= 0 then
+        local reason = table.concat(stderr_buf, "\n")
+        if reason == "" then reason = "exit " .. tostring(code) end
         vim.schedule(function()
-          vim.notify("DDL fetch failed (exit " .. tostring(code) .. ")", vim.log.levels.ERROR)
+          vim.notify("DDL fetch failed: " .. reason, vim.log.levels.ERROR)
         end)
-        journal_once("error", "exit code " .. tostring(code))
+        journal_once("error", reason)
       end
     end,
   })

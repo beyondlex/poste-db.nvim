@@ -506,6 +506,7 @@ function M.show_table_info(buf_line, context)
       error_msg = error_msg,
     }))
   end
+  local stderr_buf = {}
 
   cli.run_async(cmd, {
     on_stdout = function(data)
@@ -581,6 +582,11 @@ function M.show_table_info(buf_line, context)
     end,
     on_stderr = function(data)
       if not data or #data == 0 then return end
+      -- Surfaced live, and kept for the journal line below: an exit code on its
+      -- own tells a user reviewing `<leader>l` nothing they can act on.
+      for _, l in ipairs(data) do
+        if l ~= "" then stderr_buf[#stderr_buf + 1] = l end
+      end
       vim.schedule(function()
         notify.warn("Table info: " .. table.concat(data, "\n"))
       end)
@@ -590,7 +596,8 @@ function M.show_table_info(buf_line, context)
         vim.schedule(function()
           notify.warn("Table info fetch failed (exit " .. tostring(code) .. ")")
         end)
-        journal_once("error", "exit code " .. tostring(code))
+        local reason = table.concat(stderr_buf, "\n")
+        journal_once("error", reason ~= "" and reason or ("exit code " .. tostring(code)))
       end
     end,
   })
