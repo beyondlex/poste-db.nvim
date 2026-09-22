@@ -193,8 +193,63 @@ describe("get_completions line_before", function()
   end)
 end)
 
--- ── 14. get_keyword_length edge cases ────────────────────────────────────
+-- ── 5b. the no-ctx fallback branch ───────────────────────────────────────────
+-- When the caller passes no blink ctx the source reads the cursor itself.
+-- col(".") is 1-indexed and names the character *at* the cursor, so the
+-- fallback has to drop one for `line_before` to mean the same thing it does
+-- on the blink path — otherwise the character under the cursor leaks into the
+-- prefix and completions are filtered by a letter that isn't typed yet.
 
+describe("get_completions without a blink ctx", function()
+  local line = "SELECT * FROM authors WHERE id"
+
+  local function labels_of(result)
+    local set = {}
+    for _, item in ipairs(result and result.items or {}) do set[item.label] = true end
+    local keys = vim.tbl_keys(set)
+    table.sort(keys)
+    return table.concat(keys, ",")
+  end
+
+  before_each(function()
+    local state = require("poste-db.state")
+    state.context = { connection = "test-conn", database = "blog" }
+    sql_comp.cache_tables({ { name = "authors" } })
+    sql_comp.cache_columns("authors", { { name = "id" }, { name = "username" } })
+    local buf = vim.api.nvim_create_buf(false, true)
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "###", line })
+    vim.api.nvim_buf_set_option(buf, "filetype", "poste_sql")
+    vim.api.nvim_set_current_buf(buf)
+    -- Cursor on the "i" of `id`, i.e. the word is still ahead of it.
+    vim.api.nvim_win_set_cursor(0, { 2, #line - 2 })
+  end)
+
+  it("matches the blink branch when the cursor sits mid-word", function()
+    local via_ctx, via_cursor
+    sql_comp.new():get_completions({ line = line, cursor = { 2, #line - 2 } },
+      function(r) via_ctx = r end)
+    sql_comp.new():get_completions(nil, function(r) via_cursor = r end)
+
+    assert.is_not_nil(via_ctx)
+    assert.is_not_nil(via_cursor)
+    local a = labels_of(via_ctx)
+    -- Empty prefix on the ctx path, so every column of `authors` qualifies.
+    -- The fallback used to see "...WHERE i" and keep only labels matching "i".
+    assert.is_true(a:find("username", 1, true) ~= nil, "expected both columns on the ctx path: " .. a)
+    assert.equals(a, labels_of(via_cursor))
+  end)
+
+  it("treats a ctx without a cursor as no ctx at all", function()
+    local with_cursor, without_cursor
+    sql_comp.new():get_completions({ line = line, cursor = { 2, #line - 2 } },
+      function(r) with_cursor = r end)
+    sql_comp.new():get_completions({ line = line }, function(r) without_cursor = r end)
+    assert.is_not_nil(without_cursor)
+    assert.equals(labels_of(with_cursor), labels_of(without_cursor))
+  end)
+end)
+
+-- ── 14. get_keyword_length edge cases ────────────────────────────────────
 describe("get_keyword_length", function()
   local src = sql_comp.new()
 

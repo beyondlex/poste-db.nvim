@@ -264,16 +264,22 @@ function M:get_completions(blink_ctx, callback)
   local bufnr = vim.api.nvim_get_current_buf()
   local cursor_line, cursor_col, line
   if blink_ctx and blink_ctx.cursor then
+    -- cursor[1] is a 1-indexed line (nvim_win_get_cursor) and cursor[2] is a
+    -- 0-indexed byte column, so sub(1, col) is exactly the text left of the
+    -- cursor.
     cursor_line = blink_ctx.cursor[1]
     cursor_col = blink_ctx.cursor[2]
     line = blink_ctx.line or ""
   else
+    -- Stand-in for a caller that passes no ctx. col(".") is 1-indexed and
+    -- names the character *at* the cursor, so it needs the -1 to mean the
+    -- same thing as blink's column — otherwise `line_before` swallows the
+    -- character under the cursor and the offset is one short of the word
+    -- being typed.
     cursor_line = vim.fn.line(".")
-    cursor_col = vim.fn.col(".")
+    cursor_col = vim.fn.col(".") - 1
     line = vim.api.nvim_get_current_line()
   end
-  -- blink.cmp's ctx.cursor[1] is from nvim_win_get_cursor (1-indexed).
-  -- No normalization needed — already 1-indexed.
   local line_before = line:sub(1, cursor_col)
 
   if compat.opt("debug") then
