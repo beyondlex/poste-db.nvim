@@ -14,6 +14,7 @@ local const = require("poste-db.constants")
 -- aware SQL masker, and the DML guard and ai/actions already split statements
 -- with it, so EXPLAIN cannot disagree with them about where a statement ends.
 local dml_guard = require("poste-db.dml_guard")
+local verdict = require("poste-db.verdict")
 
 local EXPLAIN_PREFIX = {
   postgres = "EXPLAIN ",
@@ -84,8 +85,15 @@ function M.plan_lines(resp)
   if not result then
     return nil, "EXPLAIN returned no plan"
   end
-  if result.error and result.error ~= "" then
-    return nil, result.error
+  -- The flag decides, the text only explains — and the caller concatenates
+  -- whatever comes back, so a `vim.NIL` error field had to be filtered out
+  -- rather than passed through as "the reason".
+  local failed, err_text = verdict.classify(result)
+  if not failed and resp.has_error == true then
+    failed, err_text = true, verdict.UNEXPLAINED_FAILURE
+  end
+  if failed then
+    return nil, err_text
   end
 
   local columns = result.columns or {}

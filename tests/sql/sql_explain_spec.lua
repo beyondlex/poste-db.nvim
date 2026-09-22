@@ -109,6 +109,33 @@ describe("explain", function()
       assert.truthy(err:find("relation does not exist"))
     end)
 
+    it("reports a rejected EXPLAIN that carried no message", function()
+      -- Without the flag the caller got `{}` back and opened an empty float, so
+      -- "the server refused to explain this" looked like "there is no plan".
+      local lines, err = explain.plan_lines({
+        has_error = true,
+        results = { { columns = {}, rows = {}, failed = true } },
+      })
+      assert.is_nil(lines)
+      assert.equals(require("poste-db.verdict").UNEXPLAINED_FAILURE, err)
+    end)
+
+    it("returns a string reason for a null or structured error", function()
+      -- The caller does `"EXPLAIN: " .. err`, so a `vim.NIL` error field raised
+      -- inside the response handler instead of naming the failure.
+      local lines, err = explain.plan_lines({
+        results = { { columns = {}, rows = {}, error = vim.NIL, failed = true } },
+      })
+      assert.is_nil(lines)
+      assert.equals("string", type(err))
+      local lines2, err2 = explain.plan_lines({
+        results = { { columns = {}, rows = {}, error = { code = 7 } } },
+      })
+      assert.is_nil(lines2)
+      assert.equals("string", type(err2))
+      assert.truthy(err2:find("7", 1, true))
+    end)
+
     it("reports a missing response", function()
       local lines, err = explain.plan_lines(nil)
       assert.is_nil(lines)

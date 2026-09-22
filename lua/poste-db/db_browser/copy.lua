@@ -284,9 +284,9 @@ local function check_response(output, label, on_error)
   end
   -- `status`/`has_error` on the envelope are the binary's own verdict, and they
   -- are not the same field as a result's text: a driver can flag the statement
-  -- without saying why, and a batch can fail on a later statement than the one
-  -- `check_result_error` inspects. Falling through here would have clone report
-  -- "copied" about a statement the server rejected.
+  -- without saying why, and a response can carry the verdict without carrying a
+  -- result at all. Falling through here would have clone report "copied" about a
+  -- statement the server rejected.
   if parsed.has_error or parsed.status == "error" or decoded.has_error then
     on_error("the response reported a failure whose statement carried no message")
     return false

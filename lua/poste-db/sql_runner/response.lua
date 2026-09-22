@@ -13,8 +13,14 @@ local statement = require("poste-db.statement")
 local sql_format = require("poste-db.format")
 local dataset = require("poste-db.dataset")
 local sql_buffer = require("poste-db.buffer")
+local verdict = require("poste-db.verdict")
 
 local M = {}
+
+--- Was this statement failed, and with what text? See `poste-db.verdict`: the
+--- flag is the verdict, the message only explains it, and a silent failure is a
+--- shape a run can really arrive in.
+local classify_result = verdict.classify
 
 --- Compute the indicator line for a statement: the statement's FIRST line
 --- (0-based), so the sign-column spinner / ✓ / ✘ sits beside the statement
@@ -107,9 +113,9 @@ function M.handle(deps, parsed)
       local tab_idx = 0
       local hide_empty = config.config.hide_empty_result_tabs ~= false
       for i, result in ipairs(results) do
-        if result.error then
+        local failed, err_text = classify_result(result)
+        if failed then
           deps.entry.error = true
-          local err_text = type(result.error) == "string" and result.error or vim.inspect(result.error)
           state.last_error = {
             message = err_text,
             sql = statement.get_stmt_sql(deps.buf_lines, deps.stmt_lines, i, deps.visual_sel_end or #deps.buf_lines) or deps.buf_content,
@@ -200,10 +206,16 @@ function M.handle(deps, parsed)
         src_buf = deps.src_buf,
       })
 
-      local has_err = results[1] and results[1].error
+      -- The envelope verdict counts too: `has_error` is set from each event's
+      -- `status`, so a failure whose text arrived empty would still be a
+      -- failure. Reading only `results[1].error` is what painted a green ✓
+      -- beside a statement the server rejected silently.
+      local has_err, err_text = classify_result(results[1])
+      if not has_err and parsed.has_error == true then
+        has_err, err_text = true, verdict.UNEXPLAINED_FAILURE
+      end
       if has_err then
         deps.entry.error = true
-        local err_text = type(results[1].error) == "string" and results[1].error or vim.inspect(results[1].error)
         state.last_error = {
           message = err_text,
           sql = deps.buf_content or "",

@@ -2,6 +2,7 @@
 --- Extracted from db_browser/copy.lua: string/table in, string/table out —
 --- no IO, no dialogs, directly unit-testable.
 local ident = require("poste-db.ident")
+local verdict = require("poste-db.verdict")
 
 local quote = ident.quote
 local quote_ref = ident.quote_ref
@@ -37,11 +38,19 @@ function M.extract_elapsed(r)
   return "?"
 end
 
+--- First statement failure in a copy/DDL response, with its text when there is
+--- one. Scans every statement rather than just the first: a copy can run a batch
+--- (`SET` prelude, several DDLs), and stopping at results[1] left a rejected later
+--- statement to be reported by the caller's coarse envelope sentence, or not at
+--- all. `message` stays first-result-only — it is a legacy CLI field, and on later
+--- results it carries notes rather than failures.
 function M.check_result_error(decoded)
-  if decoded and decoded.results and decoded.results[1] then
-    local r = decoded.results[1]
-    if M.has_value(r.error) then return r.error end
-    if M.has_value(r.message) then return r.message end
+  local results = decoded and decoded.results
+  if type(results) ~= "table" then return nil end
+  for i, r in ipairs(results) do
+    local failed, text = verdict.classify(r)
+    if failed then return text end
+    if i == 1 and M.has_value(r.message) then return r.message end
   end
   return nil
 end

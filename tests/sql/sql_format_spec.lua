@@ -308,3 +308,52 @@ describe("format wrap_line (translated-SQL footnote rows)", function()
     assert.equals("  ⚡" .. long, rows[1])
   end)
 end)
+
+describe("format_dataset affected responses", function()
+  local verdict = require("poste-db.verdict")
+
+  local function affected_resp(results, extra)
+    return { body = vim.json.encode(vim.tbl_extend("force",
+      { type = "affected", results = results }, extra or {})) }
+  end
+
+  it("renders a rejected statement as ERROR even when it said nothing", function()
+    -- The verdict is the `failed` flag, not the presence of a message: this shape
+    -- printed "Query OK" for an INSERT the server turned down.
+    local lines, meta = sql_format.format_dataset(affected_resp({
+      { failed = true, affected_rows = 0, execution_time_ms = 3 },
+    }))
+    assert.equals("error", meta.type)
+    local text = table.concat(lines, "\n")
+    assert.is_nil(text:find("Query OK", 1, true))
+    assert.truthy(text:find("ERROR", 1, true))
+    assert.truthy(text:find(verdict.UNEXPLAINED_FAILURE, 1, true))
+  end)
+
+  it("names the server's message when there is one", function()
+    local lines, meta = sql_format.format_dataset(affected_resp({
+      { error = "unique constraint failed", affected_rows = 0, execution_time_ms = 1 },
+    }))
+    assert.equals("error", meta.type)
+    assert.truthy(table.concat(lines, "\n"):find("unique constraint failed", 1, true))
+  end)
+
+  it("numbers per-statement rows and keeps a success beside a failure", function()
+    local lines, meta = sql_format.format_dataset(affected_resp({
+      { affected_rows = 2, execution_time_ms = 1 },
+      { failed = true, execution_time_ms = 4 },
+    }))
+    assert.equals("error", meta.type)
+    local text = table.concat(lines, "\n")
+    assert.truthy(text:find("Statement 1: 2 row(s) affected", 1, true))
+    assert.truthy(text:find("Statement 2: ERROR", 1, true))
+  end)
+
+  it("reports a plain DML as affected rows", function()
+    local lines, meta = sql_format.format_dataset(affected_resp({
+      { affected_rows = 1, execution_time_ms = 2 },
+    }))
+    assert.equals("affected", meta.type)
+    assert.truthy(table.concat(lines, "\n"):find("1 row(s) affected", 1, true))
+  end)
+end)

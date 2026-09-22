@@ -7,6 +7,7 @@ local dataset = require("poste-db.dataset")
 local wutil = require("poste-db.width")
 local log = require("poste-db.log")
 local types = require("poste-db.types")
+local verdict = require("poste-db.verdict")
 local M = {}
 
 ---------------------------------------------------------------------------
@@ -504,10 +505,13 @@ function M.format_dataset(r)
     local has_err = false
     local results = data.results or {}
     for i, res in ipairs(results) do
-      if res.error then
+      -- The flag decides, the text only explains. `affected` responses are where
+      -- a silently rejected INSERT/UPDATE used to print "Query OK" — the only
+      -- thing missing was a message.
+      local failed, err_text = verdict.classify(res)
+      if failed then
         has_err = true
         local ms = tonumber(res.execution_time_ms) or 0
-        local err_text = type(res.error) == "string" and res.error or vim.inspect(res.error)
         local msg
         if #results > 1 then
           msg = string.format("  Statement %d: ERROR · %s · %dms", i, err_text, ms)

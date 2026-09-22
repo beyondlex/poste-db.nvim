@@ -69,6 +69,31 @@ describe("db_browser copy_ddl result field extraction", function()
     assert.is_nil(ddl_mod.check_result_error({ results = {} }))
     assert.is_nil(ddl_mod.check_result_error(nil))
   end)
+
+  it("scans past the first statement for a rejection", function()
+    -- A copy runs a batch (prelude plus several statements); stopping at
+    -- results[1] left a later rejection to the caller's coarse envelope sentence.
+    assert.equals("permission denied for schema finance",
+      ddl_mod.check_result_error({ results = {
+        { row_count = 1 },
+        { error = "permission denied for schema finance" },
+      } }))
+    -- `message` is a first-result field: a note on a later statement is not a
+    -- failure, and reading it as one would refuse a copy that worked.
+    assert.is_nil(ddl_mod.check_result_error({ results = { { row_count = 1 }, { message = "ok" } } }))
+  end)
+
+  it("names a flagged statement that carried no text", function()
+    local text = ddl_mod.check_result_error({ results = { { failed = true } } })
+    assert.truthy(text:find("without a message", 1, true))
+  end)
+
+  it("ignores an empty or null error field", function()
+    -- An empty string used to reach `on_error("")`: a failure notice with
+    -- nothing in it. `vim.NIL` is worse still — callers concatenate it.
+    assert.is_nil(ddl_mod.check_result_error({ results = { { error = "" } } }))
+    assert.is_nil(ddl_mod.check_result_error({ results = { { error = vim.NIL } } }))
+  end)
 end)
 
 describe("db_browser copy_ddl extract_schema_from_ddl", function()
