@@ -262,4 +262,47 @@ describe("import chunk outcomes", function()
     assert.truthy(last.msg:find("%(1 chunk%(s%) with errors%)"), last.msg)
     assert.is_nil(last.msg:find("%(2 chunk%(s%)"), nil, true)
   end)
+
+  it("names a rejected statement that carried no message, not an unreadable body", function()
+    -- `failed` is the verdict and `error` only its explanation. Reading the text
+    -- alone left this chunk with an empty error list, so the entry fell through to
+    -- the "results could not be read" sentence — blaming the decoder for a body
+    -- that decoded fine, in the journal and in the error dialog alike.
+    respond = function(chunk_no, sql)
+      local results = {}
+      for _ = 1, statements(sql) do results[#results + 1] = { affected_rows = 1 } end
+      if chunk_no == 1 then results[1] = { failed = true, affected_rows = 0 } end
+      return { has_error = chunk_no == 1, body = vim.json.encode({ results = results }) }
+    end
+    run(2, 2)
+    assert.equals("error", logged[1].status)
+    assert.truthy(logged[1].error_msg:find("the server reported a failed statement without a message", 1, true),
+      logged[1].error_msg)
+    assert.is_nil(logged[1].error_msg:find("could not be read", 1, true))
+  end)
+
+  it("keeps a refused statement's row count out of what was imported", function()
+    -- The summary line prints this sum as "Imported N rows", and a driver can
+    -- report matched rows beside a statement it then rejects.
+    respond = function(chunk_no, sql)
+      local results = {}
+      for _ = 1, statements(sql) do results[#results + 1] = { affected_rows = 1 } end
+      if chunk_no == 1 then
+        results[1] = { error = "check constraint \"ck_n\" is violated", affected_rows = 7 }
+      end
+      return { has_error = chunk_no == 1, body = vim.json.encode({ results = results }) }
+    end
+    local res = run(2, 2)
+    assert.equals(1, res.imported, "the refused statement applied nothing")
+    assert.equals(1, logged[1].affected_rows, "the failed chunk still records what landed")
+    assert.equals("error", logged[1].status)
+  end)
+
+  it("records the landed row count on a successful chunk too", function()
+    respond = all_ok()
+    run(2, 4)
+    assert.equals(2, #logged)
+    assert.equals(2, logged[1].affected_rows)
+    assert.equals(2, logged[2].affected_rows)
+  end)
 end)

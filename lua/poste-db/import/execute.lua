@@ -4,6 +4,7 @@ local dml = require("poste-db.dml")
 local edit_commit = require("poste-db.edit_commit")
 local mapping = require("poste-db.import.mapping")
 local dialog = require("poste-db.dialog")
+local verdict = require("poste-db.verdict")
 
 local M = {}
 
@@ -165,12 +166,17 @@ function M.execute_import(table_info, valid_rows, col_map, table_cols, callback)
         -- per-statement error cannot be dropped because a flag was not set.
         local chunk_errors = {}
         for ri, result in ipairs(body.results or {}) do
-          if result.error and result.error ~= "" then
-            chunk_errors[#chunk_errors + 1] = result.error
+          -- The flag decides, the text explains. Reading only `error` left a
+          -- rejected-but-silent statement out of `chunk_errors`, and the entry
+          -- below then said "its results could not be read" about a body that
+          -- decoded fine — naming the wrong cause for the same failure.
+          local failed, err_text = verdict.classify(result)
+          if failed then
+            chunk_errors[#chunk_errors + 1] = err_text
             table.insert(all_errors, {
               row = start_idx + ri - 1,
               chunk_start = start_idx, chunk_end = end_idx,
-              error = result.error,
+              error = err_text,
             })
           end
         end
@@ -189,8 +195,13 @@ function M.execute_import(table_info, valid_rows, col_map, table_cols, callback)
         local affected = 0
         if body.results then
           for _, result in ipairs(body.results) do
-            local ar = result.affected_rows
-            if type(ar) == "number" then affected = affected + ar end
+            -- A rejected statement applied nothing, so its number stays out of the
+            -- count: this sum is what the summary line prints as "Imported N rows",
+            -- and a driver can report matched rows for a statement it then refused.
+            if not verdict.classify(result) then
+              local ar = result.affected_rows
+              if type(ar) == "number" then affected = affected + ar end
+            end
           end
         end
         total_imported = total_imported + affected
@@ -217,6 +228,15 @@ function M.execute_import(table_info, valid_rows, col_map, table_cols, callback)
           sql = sql_content,
           status = has_error and "error" or "success",
           elapsed_ms = math.floor(elapsed + 0.5),
+          -- Rows that really landed, on both outcomes. Under greedy mode the
+          -- statements a chunk did not reject are committed, so a failed chunk's
+          -- entry has to say how much of it took — otherwise the journal records a
+          -- failure whose size is unknown and the only way back is to re-import
+          -- everything and see what conflicts. The viewer shows this number for
+          -- edit entries (they carry an `edit_summary` to compare against); for an
+          -- import it stays in the JSON, where `total_imported` is the figure the
+          -- on-screen summary already prints.
+          affected_rows = affected,
           error_msg = reason,
         })
 
