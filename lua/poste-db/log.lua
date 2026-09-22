@@ -83,12 +83,6 @@ function M.redact_cmd(cmd)
   return table.concat(parts, " ")
 end
 
-function M.redact_cmd_str(cmd)
-  if type(cmd) ~= "string" then return cmd end
-  return cmd:gsub("(--connection%-url [^%s]+)", "--connection-url <redacted>")
-    :gsub("(--connection [^%s]+)", "--connection <redacted>")
-end
-
 local function log(level, msg)
   state.log(level, M.redact_url(msg))
 end

@@ -70,7 +70,9 @@ local introspect = require("poste-db.ai.introspect").run
 
 local function clean_comment(comment)
   if type(comment) ~= "string" or comment == "" then return nil end
-  return comment:gsub("%s+", " ")
+  -- Parenthesized so `gsub`'s second return (the count) cannot leak into a
+  -- caller's table constructor.
+  return (comment:gsub("%s+", " "))
 end
 
 --- "- name (comment): id: int, user_id: int" — comment helps the AI map

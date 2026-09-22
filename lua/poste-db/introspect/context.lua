@@ -8,7 +8,9 @@ local SKIP_KEYWORDS = {
 
 local function strip_q(s)
   if not s then return "" end
-  return s:gsub("^`", ""):gsub("`$", ""):gsub('^"', ''):gsub('"$', '')
+  -- The parens matter: `gsub` also returns its substitution count, which
+  -- would ride along into any caller that splices this into `{ ... }`.
+  return (s:gsub("^`", ""):gsub("`$", ""):gsub('^"', ''):gsub('"$', ''))
 end
 
 local function pick_table_match(parsed_tables, word_lower)

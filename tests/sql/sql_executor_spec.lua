@@ -29,7 +29,6 @@ package.loaded["poste-db.log"] = {
   info_fmt = function() end,
   warn_fmt = function() end,
   redact_cmd = function(s) return s end,
-  redact_cmd_str = function(s) return s end,
   redact_url = function(s) return s end,
 }
 package.loaded["poste-db.session_conn"] = {
