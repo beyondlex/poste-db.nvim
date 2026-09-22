@@ -203,6 +203,11 @@ The result grid (filetype `poste_dataset`) supports:
     a              Ask the AI about this result (or the last error)
     g?             Keymap help
 
+The statusline's `P:page/n` counts the rows the current filter and sort
+leave, not the query's raw total, so it cannot name a page `H`/`L` cannot
+reach; with pagination off it reads `All` and a search marks every match on
+screen instead of one page's worth.
+
 The history sidebar (JetBrains-style) lists this session's requests; `<CR>`
 switches between them, `d` deletes an entry.
 
@@ -272,6 +277,21 @@ The `ma`/`mr`/`md`/`mt` DDL generators insert their statement into the
 source SQL buffer (dialect-aware), they don't execute it. The context menu
 (x) exposes per-node actions: create database/schema/table, DESCRIBE/SELECT
 generation, import data, drop confirmations, and more.
+
+`/` filters the tree by a fuzzy name match and highlights every hit; `n`/`N`
+walk them (wrapping at either end) and expand the ancestors a match needs to
+be visible. Closing the browser clears that search, so a re-opened tree never
+jumps through nodes it no longer has.
+
+The create dialogs open a form float whose SQL preview follows every edit:
+j/k or <Tab>/<S-Tab> move between fields, <CR>/<Space> edits the focused
+one (a bool flips, a pick list toggles one item per call), `s` executes and
+`y` yanks the generated statement. A list field — CREATE SCHEMA's GRANT
+entries — takes `a` on its own row to add an entry and then shows that
+entry's sub-fields indented underneath, editable like any other field; <CR>
+on the entry's line folds it away, and `d` removes the entry from wherever
+inside it the focus is. The shortcut bar lists what the form accepts, and
+leaving the window closes it (`q` works too).
 
 ==============================================================================
 12. EXPLAIN                                                  *poste-db-explain*
