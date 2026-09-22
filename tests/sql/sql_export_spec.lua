@@ -50,6 +50,13 @@ describe("export format_csv", function()
     local out = export._test.format_csv(data_result({ rows = { { "a\rb" } } }))
     assert.equals('id,name,bio\n"a\rb",,', out)
   end)
+
+  it("encodes a JSON/JSONB cell as its JSON, not as a table address", function()
+    -- A jsonb column reaches Lua as a decoded table; tostring on it is the
+    -- pointer spelling the renderer and the cell yank already avoid.
+    local out = export._test.format_csv(data_result({ rows = { { 1, { tags = { "a", "b" } } } } }))
+    assert.equals('id,name,bio\n1,"{""tags"":[""a"",""b""]}",', out)
+  end)
 end)
 
 describe("export format_tsv", function()
@@ -138,6 +145,11 @@ describe("export sql_escape_val", function()
     assert.equals("42", export._test.sql_escape_val(42))
     assert.equals("TRUE", export._test.sql_escape_val(true))
     assert.equals("FALSE", export._test.sql_escape_val(false))
+  end)
+
+  it("writes a JSON/JSONB cell as a JSON string literal", function()
+    -- tostring would put the table address in the statement
+    assert.equals('\'{"tags":["a","b"]}\'', export._test.sql_escape_val({ tags = { "a", "b" } }))
   end)
 
   it("escapes quotes; control bytes stay raw outside postgres", function()

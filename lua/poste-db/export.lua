@@ -87,6 +87,20 @@ local function str(v)
   return v
 end
 
+--- A cell for the text formats (csv/tsv/md). A JSON/JSONB cell arrives as a
+--- Lua table, and `tostring` on it is a garbage address — the same class the
+--- renderer (cell_to_string) and the cell yank (nav_cell.clipboard_text)
+--- already handle by compact-encoding. Export follows them so a pasted or
+--- re-imported column is the JSON the column holds.
+local function export_val(v)
+  if v == nil or v == vim.NIL then return "" end
+  if type(v) == "table" then
+    local ok, encoded = pcall(vim.json.encode, v)
+    return ok and encoded or vim.inspect(v)
+  end
+  return tostring(v)
+end
+
 --- The result set to export plus the identity the formatters need.
 ---
 --- `info` cannot be read off `results[1]`: the runner puts `table_name` and
@@ -125,11 +139,6 @@ end
 -------------------------------------------------------------------------------
 -- Formatters
 -------------------------------------------------------------------------------
-
-local function export_val(v)
-  if v == nil or v == vim.NIL then return "" end
-  return tostring(v)
-end
 
 local function csv_escape(v)
   local s = export_val(v)
@@ -234,7 +243,17 @@ local function sql_escape_val(v, dialect)
   if v == nil or v == vim.NIL then return "NULL" end
   if type(v) == "number" then return tostring(v) end
   if type(v) == "boolean" then return v and "TRUE" or "FALSE" end
-  local s = tostring(v):gsub("'", "''")
+  local s
+  if type(v) == "table" then
+    -- JSON/JSONB cell: the INSERT must carry the JSON the column holds, not
+    -- `tostring`'s table address. One compact JSON string literal round-trips
+    -- on every dialect this plugin drives.
+    local ok, encoded = pcall(vim.json.encode, v)
+    s = ok and encoded or vim.inspect(v)
+  else
+    s = tostring(v)
+  end
+  s = s:gsub("'", "''")
   if dialect == "postgres" and s:find("[%z\1-\8\11-\12\14-\31]") then
     -- The literal becomes an E'' string, where `\` re-enters escape duty:
     -- backslashes the VALUE carries must double first, or `C:\data\x07`'s
