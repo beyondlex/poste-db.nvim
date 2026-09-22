@@ -193,3 +193,75 @@ describe("forms_advanced dialog geometry", function()
     assert.equals(row + 1, vim.api.nvim_win_get_cursor(win)[1])
   end)
 end)
+
+describe("forms_advanced close on WinLeave", function()
+  local win, buf, maps, picker_shown, ui_select
+
+  local function open()
+    forms.open({
+      title = "Owner",
+      width = WIDTH,
+      dialect = "postgres",
+      sections = { { title = "Owner", fields = {
+        { key = "owner", label = "Owner", kind = "select", value = "a", choices = { "a", "b" } },
+      } } },
+      on_change = function() return { "SELECT 1" } end,
+    })
+    win = vim.api.nvim_get_current_win()
+    buf = vim.api.nvim_win_get_buf(win)
+    maps = {}
+    for _, m in ipairs(vim.api.nvim_buf_get_keymap(buf, "n")) do maps[m.lhs] = m.callback end
+  end
+
+  after_each(function()
+    vim.ui.select = ui_select
+    if win and vim.api.nvim_win_is_valid(win) then vim.api.nvim_win_close(win, true) end
+    win, buf, maps = nil, nil, nil
+  end)
+
+  before_each(function()
+    ui_select, picker_shown = vim.ui.select, false
+  end)
+
+  --- Answer a pick list the way the default UI does it: from its own window, so
+  --- answering one is itself a WinLeave from the form.
+  local function picker(items, _, cb)
+    picker_shown = true
+    vim.cmd("vsplit /tmp/poste-db-picker.txt")
+    local picker_win = vim.api.nvim_get_current_win()
+    cb(items[2])
+    if vim.api.nvim_win_is_valid(picker_win) then vim.api.nvim_win_close(picker_win, true) end
+  end
+
+  local function leave()
+    vim.cmd("vsplit /tmp/poste-db-other.txt")
+    local other = vim.api.nvim_get_current_win()
+    vim.wait(100, function() return not vim.api.nvim_win_is_valid(win) end)
+    if vim.api.nvim_win_is_valid(other) then vim.api.nvim_win_close(other, true) end
+  end
+
+  it("leaving the form closes it", function()
+    open()
+    leave()
+    assert.is_false(vim.api.nvim_win_is_valid(win))
+  end)
+
+  it("a pick list does not close the form while it is up", function()
+    vim.ui.select = picker
+    open()
+    maps["<CR>"]()
+    assert.is_true(picker_shown)
+    assert.is_true(vim.api.nvim_win_is_valid(win), "answering the prompt is not the same as leaving")
+    local text = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
+    assert.is_truthy(text:find("Owner:  b", 1, true), "the pick applied:\n" .. text)
+  end)
+
+  it("still closes on the next leave after a pick list edit", function()
+    vim.ui.select = picker
+    open()
+    maps["<CR>"]()
+    leave()
+    assert.is_false(vim.api.nvim_win_is_valid(win),
+      "the one-shot autocmd spent itself on the picker's focus change")
+  end)
+end)

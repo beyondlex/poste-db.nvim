@@ -632,9 +632,12 @@ function M.open(opts)
   end, km_opts)
   vim.keymap.set("n", "d", delete_list_entry, km_opts)
 
+  -- Not `once`: a `vim.ui.select` picker takes the focus, which fires WinLeave
+  -- while `editing` is deliberately holding the close back. A one-shot
+  -- autocmd spent itself on that leave, so the form stayed open forever after
+  -- the first pick-list edit.
   vim.api.nvim_create_autocmd("WinLeave", {
     buffer = dlg.buf,
-    once = true,
     callback = function()
       if not closed and not editing then
         safe_close()
