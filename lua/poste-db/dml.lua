@@ -50,7 +50,7 @@ local function quote_val(val, dialect, allow_expr, col_type)
   if type(val) == "string" then
     local num = tonumber(val)
     if num and val:match("^%-?%d+%.?%d*$") then
-      if not types.is_numeric((col_type or ""):lower()) then
+      if not types.is_numeric(types.unwrap_modifier((col_type or ""):lower())) then
         -- The column holds text, so the digits are the data. Written bare this
         -- is an integer literal, which postgres rejects for a text column and
         -- the other servers answer by storing something else.

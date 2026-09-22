@@ -189,12 +189,13 @@ end
 
 --- Normalize raw DB type name to ctype for editor type-checking.
 --- Maps database-specific type names (INT4, VARCHAR, etc.) to
---- the normalized forms used in editor.lua's type tables.
+--- the normalized forms used in editor.lua's type tables, after taking any
+--- ClickHouse modifier (`Nullable(...)`, `LowCardinality(...)`) off the name.
 --- @param raw string Raw type name from DB (e.g. "INT4", "VARCHAR", "BOOL")
 --- @return string Normalized type name (e.g. "integer", "varchar", "boolean")
 local function normalize_type(raw)
   if not raw then return "" end
-  local t = raw:lower()
+  local t = types.unwrap_modifier(raw:lower())
   local map = {
     -- PostgreSQL / generic integer
     int4 = "integer", int8 = "bigint", int2 = "smallint",

@@ -337,6 +337,18 @@ describe("the column type decides whether digits are a number", function()
       insert("ctype", "bigint", "2084515900853196878", "postgres"))
   end)
 
+  it("reads the type a ClickHouse modifier wraps", function()
+    -- `Nullable(Int32)` is how introspection names a nullable number column,
+    -- and the modifier says nothing about what the column holds: the digits are
+    -- still the number, bare the way they are for the bare name
+    assert.equals([[INSERT INTO "t" ("code") VALUES (42);]],
+      insert("ctype", "nullable(int32)", "42", "postgres"))
+    assert.equals([[INSERT INTO "t" ("code") VALUES (42);]],
+      insert("type", "Nullable(Int32)", "42", "postgres"), "the import path names it the same way")
+    assert.equals([[INSERT INTO "t" ("code") VALUES ('007');]],
+      insert("ctype", "Nullable(String)", "007", "postgres"), "and a wrapped text column keeps its digits")
+  end)
+
   it("keeps working for a column with no type at all", function()
     -- callers that never had a type to pass (and every spec written before the
     -- type was plumbed through) read as permissive as they did

@@ -91,6 +91,26 @@ describe("import mapping coerce_value", function()
       "suffixed type names are matched on their root word")
     assert.equals(42, mapping.coerce_value("42", "INT4"), "dialect spellings normalize too")
   end)
+
+  it("reads a ClickHouse type through its Nullable wrapper", function()
+    -- the importer gets the declared name as introspection spells it, and
+    -- `Nullable(...)` says only that the value may be missing: the column still
+    -- holds integers, so `007` in it is the number 7 and `1` in a nullable
+    -- boolean is the boolean, not the text
+    assert.equals(42, mapping.coerce_value("42", "Nullable(Int32)"))
+    assert.equals(7, mapping.coerce_value("007", "LowCardinality(Nullable(Int32))"))
+    assert.is_true(mapping.coerce_value("1", "Nullable(Bool)"))
+    assert.equals("007", mapping.coerce_value("007", "Nullable(String)"), "a nullable text column keeps its digits")
+  end)
+
+  it("guards fractions for the integer names ClickHouse spells with widths", function()
+    -- `UInt64` is an integer column and a fraction must not be silently
+    -- rounded on the way in; the guard asks the same root-word question the
+    -- editor and the alignment check ask
+    assert.equals("3.7", mapping.coerce_value("3.7", "UInt64"))
+    assert.equals("3.7", mapping.coerce_value("3.7", "Nullable(BigInt)"), "the guard reaches through the wrapper")
+    assert.equals(3.7, mapping.coerce_value("3.7", "Nullable(Decimal(10, 2))"), "a decimal column takes it")
+  end)
 end)
 
 describe("import mapping build_column_map", function()

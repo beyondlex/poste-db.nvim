@@ -4,6 +4,7 @@
 local editor = require("poste-db.editor")
 local edit_commit = require("poste-db.edit_commit")
 local dml = require("poste-db.dml")
+local format = require("poste-db.format")
 
 ---------------------------------------------------------------------------
 -- UT1: parse_value — various input → value conversions
@@ -479,6 +480,23 @@ describe("validate_value", function()
       assert.is_true(editor.validate_value(42, col("")))
       assert.is_true(editor.validate_value("hello world", col("")))
       assert.is_true(editor.validate_value("3.5", col("")))
+    end)
+
+    it("edits a ClickHouse Nullable(Int32) cell as the integer it wraps", function()
+      -- the wrapped name is what the server actually sends, and it reaches this
+      -- check through the layout's normalization; `Nullable(...)` says only that
+      -- the value may be missing, so the column is still an integer
+      local layout = format.plan_resultset_layout({
+        type = "resultset",
+        total_rows = 1,
+        results = { { columns = { { name = "n", type = "Nullable(Int32)" } }, rows = { { 7 } } } },
+        connection = "",
+        database = "",
+        dialect = "clickhouse",
+      })
+      assert.is_true(editor.validate_value(42, layout.columns[1]))
+      assert.is_false(editor.validate_value(3.5, layout.columns[1]), "an integer column, nullable or not")
+      assert.is_false(editor.validate_value(math.huge, layout.columns[1]))
     end)
   end)
 

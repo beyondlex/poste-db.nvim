@@ -31,7 +31,10 @@ function M.coerce_value(str, col_type)
   local lower = s:lower()
   if lower == "null" or lower == "(null)" then return vim.NIL end
 
-  local ctype = (col_type or ""):lower()
+  -- ClickHouse spells a column's type through a modifier (`Nullable(Int32)`),
+  -- which says nothing about what the column holds, and the checks below read
+  -- the leading word — so take the modifier off first, once, here.
+  local ctype = types.unwrap_modifier((col_type or ""):lower())
   if takes_boolean_literal(ctype) then
     if lower == "true" then return true end
     if lower == "false" then return false end
@@ -48,7 +51,7 @@ function M.coerce_value(str, col_type)
   if num and s:match("^%-?%d+%.?%d*$")
     and types.is_numeric(ctype)
     and math.abs(num) < MAX_EXACT_DOUBLE
-    and not (types.is_integer_name(ctype) and num ~= math.floor(num)) then
+    and not (types.is_integer(ctype) and num ~= math.floor(num)) then
     return num
   end
 

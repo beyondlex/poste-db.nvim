@@ -149,6 +149,63 @@ describe("format bigint precision", function()
   end)
 end)
 
+describe("format ClickHouse type modifiers", function()
+  local function plan(col_type, values)
+    local rows = {}
+    for _, v in ipairs(values) do rows[#rows + 1] = { v } end
+    return format.plan_resultset_layout({
+      type = "resultset",
+      total_rows = #rows,
+      results = { { columns = { { name = "c", type = col_type } }, rows = rows } },
+      connection = "",
+      database = "",
+      dialect = "clickhouse",
+    })
+  end
+
+  it("sees the integer inside Nullable(Int32)", function()
+    -- ClickHouse writes a nullable column's type as `Nullable(Int32)`, and the
+    -- classifier reads the leading word: without the modifier coming off, every
+    -- such column reads as text, and a ClickHouse table of nullable numbers is
+    -- mostly such columns.
+    local layout = plan("Nullable(Int32)", { 7, 42 })
+    assert.equals("int32", layout.columns[1].ctype)
+    assert.is_true(layout.numeric_cols[2])
+  end)
+
+  it("sees the integer inside a wrapped UInt64", function()
+    local layout = plan("Nullable(UInt64)", { "18446744073709551615", 42 })
+    assert.equals("uint64", layout.columns[1].ctype)
+    assert.is_true(layout.numeric_cols[2])
+  end)
+
+  it("unwraps stacked modifiers down to the type they wrap", function()
+    local layout = plan("LowCardinality(Nullable(String))", { "a", "b" })
+    assert.equals("string", layout.columns[1].ctype, "the wrapped name normalizes like the bare one does")
+    assert.is_false(layout.numeric_cols[2])
+  end)
+
+  it("keeps the exemption for non-finite text after unwrapping", function()
+    local layout = plan("Nullable(Float64)", { "Infinity", 1.5 })
+    assert.is_true(layout.numeric_cols[2])
+  end)
+
+  it("does not turn wrapped text into a number", function()
+    -- the unwrap must not be a licence: what comes out is still classified on
+    -- its own merits, so a nullable text column of digits stays text
+    local layout = plan("Nullable(String)", { "007", "42" })
+    assert.is_false(layout.numeric_cols[2])
+  end)
+
+  it("leaves container types alone", function()
+    -- `Array(Int32)` holds a list, not a number: unwrapping a modifier stops
+    -- where the containers begin
+    local layout = plan("Array(Int32)", { "1", "2" })
+    assert.equals("array(int32)", layout.columns[1].ctype)
+    assert.is_false(layout.numeric_cols[2])
+  end)
+end)
+
 describe("format affected rows", function()
   it("keeps the connection line out of the content and in the meta", function()
     local body = vim.json.encode({
