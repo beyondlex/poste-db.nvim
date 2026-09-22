@@ -152,6 +152,45 @@ end
 
 local cell_editors = {}
 
+--- Apply what a prompt answered, for every editor that takes typed text.
+--- `parse_value` reads the NULL spellings, `''`, the `__expr:` prefix and the
+--- number-vs-text decision against the *target column*, and `validate_value`
+--- refuses what that column cannot hold — so a bad cell is reported here instead
+--- of turning into a server error at commit. The datetime "Custom…" branch used
+--- to call `apply_cell_edit` with the prompt's own text, which skipped both
+--- steps: clearing that prompt wrote an empty string into a date column, and a
+--- typed "(NULL)" was stored as the characters `"(NULL)"`.
+local function apply_typed_edit(row_idx, col_idx, col_meta, old_val, input)
+  if input == nil then return end
+  local new_val = cell.parse_value(input, old_val, col_meta)
+  if new_val == nil then return end
+  local row_key = tostring(row_idx) .. ":" .. tostring(col_idx)
+  local ok, err = cell.validate_value(new_val, col_meta)
+  if not ok then
+    local tab = get_dataset().T()
+    if tab then
+      cell.set_cell_error(ensure_edit_state(tab), row_key, err)
+    end
+    vim.notify("Validation error: " .. err, vim.log.levels.ERROR)
+    return
+  end
+  local tab = get_dataset().T()
+  if tab then
+    cell.clear_cell_error(ensure_edit_state(tab), row_key)
+  end
+  apply_cell_edit(row_idx, col_idx, new_val)
+end
+
+--- The picker's "now" candidate, and the text a cleared cell falls back to.
+--- One function because the two lists used to disagree: the candidate list had
+--- a branch for `time` columns and the "Custom…" pre-fill did not, so editing a
+--- `time` cell offered `14:37:17` and then prompted with `2026-09-22 14:37:17`.
+local function datetime_now_text(ctype)
+  if ctype == "date" then return os.date("%Y-%m-%d") end
+  if ctype == "time" then return os.date("%H:%M:%S") end
+  return os.date("%Y-%m-%d %H:%M:%S")
+end
+
 function cell_editors.boolean(row_idx, col_idx, col_meta, old_val)
   local choices = { "(NULL)", "true", "false" }
   vim.ui.select(choices, {
@@ -172,13 +211,12 @@ function cell_editors.boolean(row_idx, col_idx, col_meta, old_val)
 end
 
 function cell_editors.datetime(row_idx, col_idx, col_meta, old_val)
+  local now = datetime_now_text(col_meta.ctype)
   local choices
-  if col_meta.ctype == "date" then
-    choices = { "(NULL)", os.date("%Y-%m-%d") }
-  elseif col_meta.ctype == "time" then
-    choices = { "(NULL)", os.date("%H:%M:%S") }
+  if col_meta.ctype == "date" or col_meta.ctype == "time" then
+    choices = { "(NULL)", now }
   else
-    choices = { "(NULL)", os.date("%Y-%m-%d %H:%M:%S"), "CURRENT_TIMESTAMP" }
+    choices = { "(NULL)", now, "CURRENT_TIMESTAMP" }
   end
   table.insert(choices, "Custom…")
   vim.ui.select(choices, {
@@ -192,12 +230,15 @@ function cell_editors.datetime(row_idx, col_idx, col_meta, old_val)
       return
     end
     if choice == "Custom…" then
+      -- the cell's own text, not the current time: the prompt is for correcting
+      -- what is there, and pre-filling a new value made the digits in front of
+      -- the one being changed invisible
+      local has_value = old_val ~= nil and old_val ~= vim.NIL
       vim.ui.input({
         prompt = (col_meta.name or "value") .. ": ",
-        default = os.date(col_meta.ctype == "date" and "%Y-%m-%d" or "%Y-%m-%d %H:%M:%S"),
+        default = has_value and tostring(old_val) or now,
       }, function(input)
-        if not input then return end
-        apply_cell_edit(row_idx, col_idx, input)
+        apply_typed_edit(row_idx, col_idx, col_meta, old_val, input)
       end)
       return
     end
@@ -222,7 +263,13 @@ function cell_editors.enum(row_idx, col_idx, col_meta, old_val)
     end
   end
   if col_meta.default then
-    table.insert(choices, { value = nil, display = "<default>" })
+    -- `DEFAULT` as an expression, which is what the label promises: the server's
+    -- own value for the column. Lua `nil` looked like that choice but is "no
+    -- value" downstream — the row table lost the slot and the statement said
+    -- `SET col = NULL`, writing NULL into a column that merely has a default.
+    -- Reach is enum-only (`enum_values` is filled for MySQL and postgres), both
+    -- of which accept `= DEFAULT` in UPDATE and `VALUES (DEFAULT)` in INSERT.
+    table.insert(choices, { value = "__expr:DEFAULT", display = "<default>" })
   end
   table.insert(choices, { value = vim.NIL, display = "(NULL)" })
   vim.ui.select(choices, {
@@ -251,27 +298,7 @@ function cell_editors.text(row_idx, col_idx, col_meta, old_val)
     prompt = (col_meta.name or "value") .. ": ",
     default = initial_text,
   }, function(input)
-    if input == nil then return end
-    local new_val = cell.parse_value(input, old_val, col_meta)
-    if new_val == nil then return end
-    local ok, err = cell.validate_value(new_val, col_meta)
-    if not ok then
-      local tab = get_dataset().T()
-      if tab then
-        local es = ensure_edit_state(tab)
-        local row_key = tostring(row_idx) .. ":" .. tostring(col_idx)
-        cell.set_cell_error(es, row_key, err)
-        vim.notify("Validation error: " .. err, vim.log.levels.ERROR)
-      end
-      return
-    end
-    local tab = get_dataset().T()
-    if tab then
-      local es = ensure_edit_state(tab)
-      local row_key = tostring(row_idx) .. ":" .. tostring(col_idx)
-      cell.clear_cell_error(es, row_key)
-    end
-    apply_cell_edit(row_idx, col_idx, new_val)
+    apply_typed_edit(row_idx, col_idx, col_meta, old_val, input)
   end)
 end
 
