@@ -4,6 +4,50 @@
 local sql_comp = require("poste-db.completion")
 local get_items = sql_comp._test.get_items
 
+-- ── 0. waiting on the async context check ───────────────────────────────────
+-- Detecting the SQL context means running the Rust CLI, so every entry point
+-- below answers one event-loop tick *after* it returns, unless that context is
+-- already cached (a cache hit is still synchronous). The specs are written in
+-- the "call, then assert" shape, so these wrappers park until the real
+-- callback fires - and make "the source never answered at all" a named failure
+-- instead of a nil dereference a few lines later.
+
+local raw_get_items = get_items
+local raw_get_completions = sql_comp.get_completions
+local raw_source_complete = sql_comp.source.complete
+
+local function settle(responded, what)
+  assert.is_true(vim.wait(3000, function() return responded.value end, 5),
+    what .. " never called back")
+end
+
+get_items = function(bufnr, line_before, cursor_line, callback, dialect)
+  local responded = { value = false }
+  raw_get_items(bufnr, line_before, cursor_line, function(items)
+    responded.value = true
+    if callback then callback(items) end
+  end, dialect)
+  settle(responded, "get_items")
+end
+
+sql_comp.get_completions = function(self, blink_ctx, callback, ...)
+  local responded = { value = false }
+  raw_get_completions(self, blink_ctx, function(response)
+    responded.value = true
+    if callback then callback(response) end
+  end, ...)
+  settle(responded, "get_completions")
+end
+
+function sql_comp.source:complete(params, callback, ...)
+  local responded = { value = false }
+  raw_source_complete(self, params, function(response)
+    responded.value = true
+    if callback then callback(response) end
+  end, ...)
+  settle(responded, "source:complete")
+end
+
 -- ── 3. get_items integration (no real DB needed) ─────────────────────────────
 -- These tests verify the pipeline works end-to-end with a mocked cache.
 -- We inject columns directly into the module's cache via cache_columns/cache_tables.
@@ -249,7 +293,51 @@ describe("get_completions without a blink ctx", function()
   end)
 end)
 
--- ── 5c. the dialect follows the buffer the completion was triggered in ───────
+-- ── 5c. the context check runs off the caller's tick ─────────────────────────
+-- Detecting the SQL context means spawning the Rust CLI. The pipeline used to
+-- `wait()` on that process inline, so every completion paid the spawn latency
+-- as an editor freeze (measured: ~3.6ms warm, ~50ms for the first one, up to
+-- the CLI's 2s timeout when it hangs), and the wait is outright illegal from a
+-- fast-event context. A cache miss now reports through the process' exit
+-- handler instead.
+--
+-- `raw_get_completions` is the un-patched method: the section 0 wrapper parks
+-- until the callback fires, which would hide exactly what this checks.
+
+describe("get_completions context detection", function()
+  local line = "SELECT * FROM authors WHERE "
+
+  before_each(function()
+    local state = require("poste-db.state")
+    state.context = { connection = "test-conn", database = "blog" }
+    sql_comp.cache_tables({ { name = "authors" } })
+    sql_comp.cache_columns("authors", { { name = "id" }, { name = "username" } })
+    local buf = vim.api.nvim_create_buf(false, true)
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "###", line })
+    vim.api.nvim_buf_set_option(buf, "filetype", "poste_sql")
+    vim.api.nvim_set_current_buf(buf)
+  end)
+
+  it("returns before the CLI has answered", function()
+    -- The buffer was just created, so its context cannot be in the cache and
+    -- this call has to go through the subprocess.
+    local response
+    raw_get_completions(sql_comp.new(), { line = line, cursor = { 2, #line } },
+      function(r) response = r end)
+    assert.is_nil(response, "a cache miss must not block the caller until the CLI exits")
+  end)
+
+  it("still answers, with items, on a later tick", function()
+    local response
+    raw_get_completions(sql_comp.new(), { line = line, cursor = { 2, #line } },
+      function(r) response = r end)
+    assert.is_true(vim.wait(3000, function() return response ~= nil end, 5),
+      "the callback never fired for a cache-miss completion")
+    assert.is_true(#response.items > 0, "expected columns of `authors`")
+  end)
+end)
+
+-- ── 5d. the dialect follows the buffer the completion was triggered in ──────
 -- Resolving the dialect walks the buffer for @connection/@database, so it is
 -- per-completion work: it used to run at four points per trigger, and each
 -- time against whichever window had focus instead of the buffer being

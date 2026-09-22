@@ -111,8 +111,34 @@ end
 -- Rust context detection via async vim.system
 ---------------------------------------------------------------------------
 
+--- Turn the finished `context detect` run into a cached, callback-shaped
+--- context. `result` is what vim.system hands on_exit; a failing or
+--- unparsable result is reported as `callback(nil)` so the caller can fall
+--- back. Runs on a normal event-loop tick, never in a fast-event context.
+local function store_rust_context(result, ckey, callback)
+  if result.code ~= 0 or not result.stdout then callback(nil); return end
+
+  local ok, parsed = pcall(vim.json.decode, result.stdout)
+  if not ok or not parsed or type(parsed) ~= "table" then callback(nil); return end
+
+  debug.set_rust_raw(result.stdout)
+  deep_clean(parsed)
+
+  _ctx_cache[ckey] = parsed
+  table.insert(_ctx_cache_keys, ckey)
+  trim_ctx_cache()
+  if compat.opt("debug") then
+    state.log("INFO", string.format("Rust context: type=%s, prefix='%s', tables=%d",
+      tostring(parsed.ctx_type), tostring(parsed.prefix or ""),
+      parsed.tables and #parsed.tables or 0))
+  end
+  callback(parsed)
+end
+
 --- Detect context via the Rust CLI. Calls callback(rust_ctx) with nil when the
 --- CLI is unavailable or rejects the input, so the caller can fall back.
+--- A cache hit calls back synchronously; a miss calls back from the process'
+--- exit handler, i.e. after this function has already returned.
 --- Uses _ctx_cache to avoid re-running the binary on repeated calls.
 --- `dialect` is resolved once per completion by the caller and reused here for
 --- both the CLI flag and the cache key, so the two can never disagree.
@@ -149,26 +175,15 @@ local function try_rust_context_async(bufnr, line_before, cursor_line, callback,
     table.insert(cmd, "--dialect"); table.insert(cmd, dialect)
   end
 
-  local ok_sys, obj = pcall(vim.system, cmd, { stdin = sql_text, text = true, timeout = 2000 })
-  if not ok_sys then callback(nil); return end
-  local result = obj:wait()
-  if result.code ~= 0 or not result.stdout then callback(nil); return end
-
-  local ok, parsed = pcall(vim.json.decode, result.stdout)
-  if not ok or not parsed or type(parsed) ~= "table" then callback(nil); return end
-
-  debug.set_rust_raw(result.stdout)
-  deep_clean(parsed)
-
-  _ctx_cache[ckey] = parsed
-  table.insert(_ctx_cache_keys, ckey)
-  trim_ctx_cache()
-  if compat.opt("debug") then
-    state.log("INFO", string.format("Rust context: type=%s, prefix='%s', tables=%d",
-      tostring(parsed.ctx_type), tostring(parsed.prefix or ""),
-      parsed.tables and #parsed.tables or 0))
-  end
-  callback(parsed)
+  local ok_sys = pcall(vim.system, cmd, { stdin = sql_text, text = true, timeout = 2000 },
+    function(result)
+      -- on_exit runs in a fast-event context (the process handle's callback),
+      -- where a blocking call such as `vim.wait` is an error instead of a
+      -- park. Deferring lets the whole downstream pipeline, including the
+      -- cache-miss introspection jobs, run as if it were called normally.
+      vim.schedule(function() store_rust_context(result, ckey, callback) end)
+    end)
+  if not ok_sys then callback(nil) end
 end
 
 ---------------------------------------------------------------------------
