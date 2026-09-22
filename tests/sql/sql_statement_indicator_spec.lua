@@ -136,3 +136,62 @@ describe("statement_indicator boundary background", function()
       buf, statement_indicator._test.get_ns(), 0, -1, {}))
   end)
 end)
+
+describe("statement_indicator boundary gutter", function()
+  local config = require("poste-db.config")
+  local buf
+
+  local function marks()
+    return vim.api.nvim_buf_get_extmarks(
+      buf, statement_indicator._test.get_ns(), 0, -1, { details = true })
+  end
+
+  before_each(function()
+    config.config.boundary_style = "gutter"
+    statement_indicator.clear(vim.api.nvim_get_current_buf())
+    buf = vim.api.nvim_create_buf(true, false)
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
+      "SELECT id,",
+      "       name",
+      "FROM users",
+      "WHERE id = 1;",
+    })
+  end)
+
+  after_each(function()
+    config.config.boundary_style = "background"
+    statement_indicator.clear(buf)
+    vim.api.nvim_buf_delete(buf, { force = true })
+  end)
+
+  it("tints the number column instead of the text", function()
+    statement_indicator.update(buf, 1)
+    assert.is_true(vim.wait(500, function() return #marks() > 0 end),
+      "boundary extmarks should appear after update")
+
+    local rows = {}
+    for _, m in ipairs(marks()) do
+      assert.are.equal("PosteDbSqlBoundaryGutter", m[4].number_hl_group)
+      assert.is_nil(m[4].hl_group, "gutter style must not tint the lines")
+      assert.is_nil(m[4].hl_eol, "gutter style must not reach past EOL")
+      rows[#rows + 1] = m[2] + 1
+    end
+    table.sort(rows)
+    assert.same({ 1, 2, 3, 4 }, rows, "one mark per statement row")
+  end)
+
+  it("drops the marks when the cursor leaves the statement", function()
+    statement_indicator.update(buf, 1)
+    assert.is_true(vim.wait(500, function() return #marks() > 0 end))
+    vim.api.nvim_buf_set_lines(buf, 4, 4, false, { "", "SELECT 2;", "" })
+    statement_indicator.update(buf, 6)
+    assert.are.equal(0, #marks())
+  end)
+
+  it("does not paint a single-line statement", function()
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "SELECT 1;" })
+    statement_indicator.update(buf, 1)
+    vim.wait(200)
+    assert.are.equal(0, #marks())
+  end)
+end)

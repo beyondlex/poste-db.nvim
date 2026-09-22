@@ -169,7 +169,8 @@ buffer-local keymaps (names are `keymaps.sql_source` config keys):
     <leader>l      Toggle the execution log viewer
     g?             Show this buffer's keymap help
 
-The statement the cursor is in can be highlighted with `:PosteDbBoundary`.
+The statement the cursor is in can be highlighted with `:PosteDbBoundary`;
+how it is marked is `boundary_style` (|poste-db-boundary-style|).
 
 ==============================================================================
 7. EXECUTING SQL                                            *poste-db-execution*
@@ -401,6 +402,7 @@ All options go to `require("poste-db.init").setup(opts)`; defaults shown:
       debug = false,
       confirm_unfiltered_dml = true, -- gate DELETE/UPDATE without WHERE
       width_mode = "nvim",           -- or "terminal" — see |poste-db-width-mode|
+      boundary_style = "background", -- or "gutter" — see |poste-db-boundary-style|
       db_browser = { split_position = "left", split_width = 40 },
       keymaps = { sql_source = {...}, sql_dataset = {...},
                   sql_table_ops = {...}, sql_db_browser = {...},
@@ -432,6 +434,26 @@ satisfies both:
 Pick whichever artifact bothers you less. The clean fix belongs upstream
 (neovim's width tables) or in a GUI client, where nvim's grid is the only
 truth.
+
+                                                       *poste-db-boundary-style*
+`boundary_style` picks how the statement under the cursor is marked. Both
+styles are switched on and off together by `:PosteDbBoundary`; single-line
+statements are never marked.
+    "background"  default. A full-width `PosteDbSqlBoundary` rectangle
+                  behind every line of the statement.
+    "gutter"      no tinting of the text — only the number column of those
+                  lines is shaded, so the parser's own colours stay readable.
+                  `▏` below marks the shaded cell:
+>
+                      ▏ 1  select
+                      ▏ 2  *
+                      ▏ 3  from
+                      ▏ 4  table where id > 1;
+<
+                  Needs a number column ('number' or 'relativenumber'); with
+                  neither, the style marks nothing. The shade is
+                  `PosteDbSqlBoundaryGutter`, which links to
+                  `PosteDbSqlBoundary` so one |nvim_set_hl()| moves both.
 
 Extras: `icons` (dataset icons), `history_max` (session request history),
 `page_size` (default dataset rows per page), `snippets`
