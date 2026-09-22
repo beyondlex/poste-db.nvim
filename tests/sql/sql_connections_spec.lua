@@ -174,6 +174,31 @@ describe("connections resolve_connection_url", function()
     assert.equals("postgres://alice@pg.example.com:5432/blog", url)
   end)
 
+  -- An IPv6 literal is only legal in a URL authority once it is bracketed
+  -- (RFC 3986 §3.2.2), and the drivers enforce it: `poste introspect` answers
+  -- `error with configuration: empty host` for postgres://::1:5432/db — before
+  -- it dials anything — while the bracketed form reaches the connect step.
+  it("brackets an IPv6 host so the driver can parse the URL", function()
+    package.loaded["poste-db.toml"].parse_file = function()
+      return { primary = { dialect = "postgres", host = "::1", port = 5432, database = "blog" } }
+    end
+    assert.equals("postgres://[::1]:5432/blog", connections.resolve_connection_url("primary"))
+  end)
+
+  it("brackets nothing that is not an IPv6 literal", function()
+    -- already bracketed (the form that worked before), a port left in the host
+    -- field (a config mistake this must not rewrite), plain names, IPv4, and a
+    -- hex-only hostname that has no colon
+    for _, host in ipairs({ "[::1]", "localhost:5432", "db.example.com", "10.0.0.1",
+      "abcdef" }) do
+      package.loaded["poste-db.toml"].parse_file = function()
+        return { primary = { dialect = "postgres", host = host, port = 5432, database = "blog" } }
+      end
+      assert.equals(("postgres://%s:5432/blog"):format(host),
+        connections.resolve_connection_url("primary"), host)
+    end
+  end)
+
   it("builds postgres URL with password", function()
     package.loaded["poste-db.toml"].parse_file = function()
       return { primary = { dialect = "postgres", host = "localhost", port = 5432, database = "blog", user = "alice", password = "secret" } }
@@ -331,6 +356,27 @@ describe("connections resolve_connection_url", function()
       connections.resolve_connection_url("primary")
       assert.same({ name = "primary", cfg = { to = "jump@bastion", port = 2222 },
         host = "db.internal", port = 3306 }, seen)
+    end)
+
+    -- Brackets belong to the URL, not to ssh: a tunneled IPv6 host still has
+    -- to reach tunnel.ensure as written in the file.
+    it("hands tunnel.ensure the bare IPv6 address and brackets only the URL", function()
+      local seen_host
+      package.loaded["poste-db.tunnel"] = {
+        ensure = function(name, cfg, host, port)
+          seen_host = host
+          return 15433
+        end,
+      }
+      package.loaded["poste-db.toml"].parse_file = function()
+        return { primary = {
+          dialect = "postgres", host = "::1", port = 5432,
+          database = "blog", tunnel = "jump@bastion",
+        } }
+      end
+      assert.equals("postgres://127.0.0.1:15433/blog",
+        connections.resolve_connection_url("primary"))
+      assert.equals("::1", seen_host)
     end)
 
     it("propagates tunnel failures", function()

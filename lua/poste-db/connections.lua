@@ -221,6 +221,25 @@ local function percent_encode(s)
   end))
 end
 
+--- Bracket an IPv6 literal so it is legal in a URL authority (RFC 3986
+--- §3.2.2). The drivers enforce it: `postgres://::1:5432/db` is refused as
+--- `error with configuration: empty host` before a socket is opened (measured
+--- with `poste introspect`), so `host = "::1"` in connections.toml was
+--- unusable. Only hex digits plus colons count as an address, so the common
+--- mistake of leaving the port in the host field (`localhost:5432`) is not
+--- rewritten into something else; an already bracketed host passes through,
+--- being the form that worked. Mirror of Rust `sql_connection.rs::url_host`
+--- (same documented pair as to_url / build_conn_url).
+--- @param host string
+--- @return string
+local function url_host(host)
+  if host:sub(1, 1) == "[" then return host end
+  if host:find(":", 1, true) and host:match("^[%x:]+$") then
+    return "[" .. host .. "]"
+  end
+  return host
+end
+
 --- Parsed connections.toml shared by get_connection_config and name_for_url.
 --- mtime-keyed cache; `false` means the file exists but is broken.
 --- @return table|nil
@@ -371,7 +390,9 @@ local function build_conn_url(name, conn, ensure_tunnel)
   elseif conn.user then
     auth = percent_encode(conn.user) .. "@"
   end
-  return scheme .. "://" .. auth .. host .. ":" .. port .. "/" .. percent_encode(db), nil
+  -- url_host only here: the tunnel path above wants the bare address to hand
+  -- to ssh, and format_connection displays what the file says.
+  return scheme .. "://" .. auth .. url_host(host) .. ":" .. port .. "/" .. percent_encode(db), nil
 end
 
 --- Resolve a connection name to a URL by reading connections.toml from cwd.
