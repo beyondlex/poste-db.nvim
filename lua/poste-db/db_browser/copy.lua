@@ -252,50 +252,10 @@ function M.resolve_conflict_names(target, items, on_resolved, on_cancel, opts)
   probe_next(1)
 end
 
-local function copy_data_same_server(source, target, schema, table_name, target_table_name, on_done, on_error)
-  local q = function(n) return quote(n, source.dialect) end
-  local function tbl(name)
-    if schema and source.dialect ~= "sqlite" then
-      return q(schema) .. "." .. q(name)
-    end
-    return q(name)
-  end
-  local insert_sql = "INSERT INTO " .. tbl(target_table_name) .. " SELECT * FROM " .. tbl(table_name) .. ";"
-
-  run_sql_on_conn(target.conn, target.db, insert_sql, function(insert_output)
-    local ok, parsed = pcall(vim.json.decode, insert_output)
-    if not ok or not parsed then
-      on_error("Failed to parse INSERT result for " .. table_name)
-      return
-    end
-    local err = parsed.error
-    if has_value(err) then
-      on_error(tostring(err))
-      return
-    end
-    if not parsed.body then
-      on_error("No body in INSERT result for " .. table_name)
-      return
-    end
-    local ok_body, decoded = pcall(vim.json.decode, parsed.body)
-    if not ok_body or not decoded then
-      on_error("Failed to decode INSERT result for " .. table_name)
-      return
-    end
-    local r_err = check_result_error(decoded)
-    if r_err then
-      on_error(tostring(r_err))
-      return
-    end
-    local r = decoded.results and decoded.results[1]
-    if not r then
-      on_error("No result in INSERT response for " .. table_name)
-      return
-    end
-    on_done(extract_row_count(r), extract_elapsed(r))
-  end, on_error)
-end
-
+--- Inspect one `run_sql_on_conn` envelope: transport error, undecodable body,
+--- a statement that said why it failed, or the aggregate failure flag set with
+--- nothing to show for it. Returns `true, decoded_body` only when all four are
+--- clean, so a caller's success path cannot be reached by a rejected statement.
 local function check_response(output, label, on_error)
   local ok, parsed = pcall(vim.json.decode, output)
   if not ok or not parsed then
@@ -322,7 +282,42 @@ local function check_response(output, label, on_error)
     on_error(tostring(r_err))
     return false
   end
+  -- `status`/`has_error` on the envelope are the binary's own verdict, and they
+  -- are not the same field as a result's text: a driver can flag the statement
+  -- without saying why, and a batch can fail on a later statement than the one
+  -- `check_result_error` inspects. Falling through here would have clone report
+  -- "copied" about a statement the server rejected.
+  if parsed.has_error or parsed.status == "error" or decoded.has_error then
+    on_error("the response reported a failure whose statement carried no message")
+    return false
+  end
   return true, decoded
+end
+
+local function copy_data_same_server(source, target, schema, table_name, target_table_name, on_done, on_error)
+  local q = function(n) return quote(n, source.dialect) end
+  local function tbl(name)
+    if schema and source.dialect ~= "sqlite" then
+      return q(schema) .. "." .. q(name)
+    end
+    return q(name)
+  end
+  local insert_sql = "INSERT INTO " .. tbl(target_table_name) .. " SELECT * FROM " .. tbl(table_name) .. ";"
+
+  run_sql_on_conn(target.conn, target.db, insert_sql, function(insert_output)
+    -- Every other write in this file goes through `check_response`; this one
+    -- used to re-spell the decode and stopped at `error`, so the shapes it did
+    -- not look at — the flag without the text — landed on `on_done` as copied
+    -- rows that were never inserted.
+    local ok, decoded = check_response(insert_output, "INSERT of " .. table_name, on_error)
+    if not ok then return end
+    local r = decoded.results and decoded.results[1]
+    if not r then
+      on_error("No result in INSERT response for " .. table_name)
+      return
+    end
+    on_done(extract_row_count(r), extract_elapsed(r))
+  end, on_error)
 end
 
 local function copy_data_cross_server(source, target, schema, table_name, target_table_name, on_done, on_error)
@@ -717,6 +712,7 @@ end
 M._test = {
   pick_clone_default = pick_clone_default,
   show_paste_progress = show_paste_progress,
+  check_response = check_response,
   MAX_NAME_BUMPS = MAX_NAME_BUMPS,
 }
 

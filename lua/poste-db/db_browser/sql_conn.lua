@@ -79,6 +79,13 @@ function M.decode_first_result(output)
   if r.message ~= nil and r.message ~= vim.NIL and r.message ~= "" then
     return false, tostring(r.message)
   end
+  -- The envelope's own verdict is a separate field from any of the above, so a
+  -- failure can arrive with nothing to read. Reporting it as a result would
+  -- make the caller's "no rows here" branch answer a rejected query with
+  -- "nothing to copy".
+  if parsed.has_error or parsed.status == "error" or decoded.has_error then
+    return false, "the response reported a failure whose statement carried no message"
+  end
   return true, r
 end
 

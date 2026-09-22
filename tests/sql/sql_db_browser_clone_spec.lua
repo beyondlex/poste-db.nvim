@@ -1,7 +1,8 @@
--- Tests for lua/poste-db/db_browser/copy.lua clone helpers.
--- Pure helper tests (no real DB / no UI).
+-- Tests for lua/poste-db/db_browser/copy.lua clone helpers and the envelope
+-- readers they share with catalog.lua. Pure helper tests (no real DB / no UI).
 
 local copy = require("poste-db.db_browser.copy")
+local sql_conn = require("poste-db.db_browser.sql_conn")
 local t = copy._test
 
 describe("db_browser clone pick_clone_default", function()
@@ -87,7 +88,6 @@ describe("db_browser default existence probe", function()
   -- ask about the schema the paste writes into, and `dialect_table_exists_sql`
   -- already supports the argument — only the caller can drop it. The SQL text
   -- is the observable, so the transport is stubbed one level below.
-  local sql_conn = require("poste-db.db_browser.sql_conn")
   local original_run
 
   before_each(function() original_run = sql_conn.run end)
@@ -283,5 +283,96 @@ describe("db_browser copy progress cancel", function()
     assert.is_true(hinted, "pending copy must show the [c] cancel hint")
     if release then release(true, "1", "1ms") end
     close_all_floats()
+  end)
+end)
+
+--- `check_response` is what stands between a rejected statement and clone
+--- reporting "copied": the envelope it inspects is the JSON `exec_run` builds,
+--- whose failure flag and per-statement text are separate fields.
+describe("db_browser copy check_response", function()
+  --- @param resp table an `exec_run` response, body already a JSON string
+  local function envelope(resp) return vim.json.encode(resp) end
+
+  local function body(results, extra)
+    local obj = vim.tbl_extend("force", { type = "affected", results = results }, extra or {})
+    return vim.json.encode(obj)
+  end
+
+  local function run(results, resp_extra, body_extra)
+    local err
+    local ok, decoded = t.check_response(
+      envelope(vim.tbl_extend("force", {
+        status = (resp_extra or {}).has_error and "error" or "ok",
+        body = body(results, body_extra),
+      }, resp_extra or {})), "INSERT", function(message) err = message end)
+    return ok, err, decoded
+  end
+
+  it("accepts a clean statement and hands back the decoded body", function()
+    local ok, err, decoded = run({ { affected_rows = 3 } })
+    assert.is_true(ok)
+    assert.is_nil(err)
+    assert.equals(3, decoded.results[1].affected_rows)
+  end)
+
+  it("surfaces the statement's own error text", function()
+    local ok, err = run({ { error = "column \"b\" is of type integer" } })
+    assert.is_false(ok)
+    assert.equals('column "b" is of type integer', err)
+  end)
+
+  -- The flag without the text: a driver that marks the result failed without
+  -- filling in `error` used to land on the caller's success path, because the
+  -- only thing read was `results[1].error`.
+  it("rejects a failure flag that carries no statement message", function()
+    local ok, err = run({ { affected_rows = 0 } }, { has_error = true })
+    assert.is_false(ok)
+    assert.truthy(err:find("no message", 1, true))
+  end)
+
+  -- A multi-statement envelope flags the aggregate while an earlier result is
+  -- clean; the first result is not the one that failed.
+  it("rejects a batch that failed on a later statement", function()
+    local ok, err = run({ { affected_rows = 1 }, { affected_rows = 0 } }, { has_error = true },
+      { has_error = true })
+    assert.is_false(ok)
+    assert.is_truthy(err)
+  end)
+
+  it("reports an undecodable envelope instead of assuming success", function()
+    local err
+    local ok = t.check_response("not json at all", "DDL", function(message) err = message end)
+    assert.is_false(ok)
+    assert.equals("Failed to parse DDL response", err)
+  end)
+end)
+
+--- The clone wizard's listing reads the same envelope as its writes, through
+--- `sql_conn.decode_first_result`.
+describe("db_browser sql_conn decode_first_result", function()
+  local function envelope(results, resp_extra, body_extra)
+    local body = vim.tbl_extend("force", { type = "resultset", results = results }, body_extra or {})
+    return vim.json.encode(vim.tbl_extend("force", {
+      status = (resp_extra or {}).has_error and "error" or "ok",
+      body = vim.json.encode(body),
+    }, resp_extra or {}))
+  end
+
+  it("returns the first result of a clean response", function()
+    local ok, r = sql_conn.decode_first_result(envelope({ { columns = { { name = "a" } }, rows = { { 1 } } } }))
+    assert.is_true(ok)
+    assert.equals("a", r.columns[1].name)
+  end)
+
+  it("surfaces the statement's own error text", function()
+    local ok, err = sql_conn.decode_first_result(envelope({ { error = "permission denied" } }))
+    assert.is_false(ok)
+    assert.equals("permission denied", err)
+  end)
+
+  it("rejects a failure flag that carries no statement message", function()
+    local ok, err = sql_conn.decode_first_result(envelope({ { columns = {}, rows = {} } }, { has_error = true }))
+    assert.is_false(ok)
+    assert.truthy(err:find("no message", 1, true))
   end)
 end)
