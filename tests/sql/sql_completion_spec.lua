@@ -1251,3 +1251,48 @@ describe("completion mode integration", function()
     end)
   end)
 end)
+
+-- ── 15. get_tables_and_alias ────────────────────────────────────────────────
+-- The one place the FROM/JOIN tables become Lua data. It reads the Rust
+-- context and nothing else, so the two shapes callers can hand it - a context
+-- and the `nil` from a failed context check - are the whole input space.
+
+describe("get_tables_and_alias", function()
+  local ctx = require("poste-db.completion.ctx")
+
+  local function assert_all_empty(rust_ctx)
+    local tables, alias_map, schema_map = ctx.get_tables_and_alias(rust_ctx)
+    assert.same({}, tables)
+    assert.same({}, alias_map)
+    assert.same({}, schema_map)
+  end
+
+  it("maps table names, aliases and schemas out of the context", function()
+    local tables, alias_map, schema_map = ctx.get_tables_and_alias({
+      tables = {
+        { name = "authors", alias = "a", schema = "public" },
+        { name = "posts" },
+      },
+    })
+    assert.same({ "authors", "posts" }, tables)
+    assert.equals("authors", alias_map.a)
+    assert.equals("authors", alias_map.authors, "a table is its own alias")
+    assert.equals("public", schema_map.authors)
+    assert.is_nil(schema_map.posts, "an unqualified table has no schema")
+  end)
+
+  it("skips entries without a name", function()
+    local tables = ctx.get_tables_and_alias({
+      tables = { { name = "" }, { alias = "x" }, { name = "posts" } },
+    })
+    assert.same({ "posts" }, tables)
+  end)
+
+  it("returns three empty containers when there is no context", function()
+    -- The handlers index all three results without guarding, and `nil` is what
+    -- the pipeline passes after a failed context check.
+    assert_all_empty(nil)
+    assert_all_empty({})
+    assert_all_empty({ tables = {} })
+  end)
+end)

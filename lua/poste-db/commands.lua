@@ -245,33 +245,34 @@ function M.setup()
       local line = vim.api.nvim_get_current_line()
       local line_before = line:sub(1, cursor[2])
       local cursor_lnum = cursor[1]
-      -- NB: `A and f(...) or {}` would truncate the multi-value return and
-      -- always leave alias_map nil — resolve through an explicit binding
-      local get_tables = sql_comp._test.get_tables_and_alias
-      local tbls, alias_map = {}, nil
-      if type(get_tables) == "function" then
-        tbls, alias_map = get_tables(buf, cursor_lnum)
-      end
-      local conn = sql_comp._test.conn_key()
       local blink_src = require("poste-db.completion.adapter").get_source_lib()
       local blink_config = require("poste-db.completion.adapter").get_config()
-      local active_providers = blink_src.get_enabled_provider_ids("insert")
+      local active_providers = blink_src and blink_src.get_enabled_provider_ids("insert")
       local per_ft = "(unavailable)"
       if blink_config.sources and blink_config.sources.per_filetype then
         per_ft = vim.inspect(blink_config.sources.per_filetype["poste_sql"])
       end
-      local msg = { "line_before: '" .. line_before .. "'", "conn_key: " .. tostring(conn),
+      -- The tables and aliases the completion sees come out of the Rust
+      -- context, so ask for it the same way the pipeline does. Reporting them
+      -- without that call is what used to make this command claim "tables: {}"
+      -- even in a buffer full of FROM clauses.
+      local msg = { "line_before: '" .. line_before .. "'",
+        "conn_key: " .. tostring(sql_comp._test.conn_key()),
         "cursor_lnum: " .. cursor_lnum, "ft: " .. vim.bo.filetype,
         "active blink providers: " .. vim.inspect(active_providers),
         "static per_filetype[poste_sql]: " .. per_ft,
         "runtime per_filetype_provider_ids: " .. vim.inspect(blink_src and blink_src.per_filetype_provider_ids or {}) }
       local buf_lines = vim.api.nvim_buf_get_lines(buf, 0, cursor_lnum, false)
       for i, l in ipairs(buf_lines) do msg[#msg + 1] = "  " .. i .. ": " .. l end
-      msg[#msg + 1] = "tables: " .. vim.inspect(tbls)
-      msg[#msg + 1] = "alias_map: " .. vim.inspect(alias_map)
-      sql_comp._test.get_items(buf, line_before, cursor_lnum, function(items)
-        msg[#msg + 1] = "items(" .. #items .. "): " .. vim.inspect(vim.list_slice(items, 1, 3))
-        vim.notify(table.concat(msg, "\n"), vim.log.levels.WARN)
+      sql_comp._test.try_rust_context_async(buf, line_before, cursor_lnum, function(rust_ctx)
+        local tbls, alias_map = sql_comp._test.get_tables_and_alias(rust_ctx)
+        msg[#msg + 1] = "rust ctx_type: " .. tostring(rust_ctx and rust_ctx.ctx_type)
+        msg[#msg + 1] = "tables: " .. vim.inspect(tbls)
+        msg[#msg + 1] = "alias_map: " .. vim.inspect(alias_map)
+        sql_comp._test.get_items(buf, line_before, cursor_lnum, function(items)
+          msg[#msg + 1] = "items(" .. #items .. "): " .. vim.inspect(vim.list_slice(items, 1, 3))
+          vim.notify(table.concat(msg, "\n"), vim.log.levels.WARN)
+        end)
       end)
     end, { desc = "Diagnose SQL completion (debug)" })
 

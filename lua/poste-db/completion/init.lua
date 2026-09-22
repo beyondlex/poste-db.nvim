@@ -2,7 +2,7 @@
 ---
 --- Provides completion for blink.cmp and nvim-cmp by:
 --- 1. Calling the Rust CLI for context detection (full ### block)
---- 2. Falling back to Lua heuristic when Rust returns empty/incomplete
+--- 2. Falling back to plain keyword/function items when that fails
 --- 3. Dispatching to the correct completion source (columns/tables/keywords)
 local state = require("poste-db.state")
 local data = require("poste-db.completion.data")
@@ -34,7 +34,7 @@ local function deep_clean(t)
 end
 
 ---------------------------------------------------------------------------
--- Block extraction (shared by persistent client and system fallback)
+-- Block extraction
 ---------------------------------------------------------------------------
 
 --- The `--dialect` the Rust CLI should parse `buf`'s SQL as.

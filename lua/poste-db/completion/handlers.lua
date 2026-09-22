@@ -124,7 +124,7 @@ end
 
 local function handle_dot_column(bufnr, line_before, cursor_line, ctx_data, rust_ctx, callback)
   local col_prefix = typed_prefix(rust_ctx, line_before)
-  local _, alias_map, schema_map = ctx.get_tables_and_alias(bufnr, cursor_line or vim.fn.line("."), rust_ctx)
+  local _, alias_map, schema_map = ctx.get_tables_and_alias(rust_ctx)
   local real_tbl = alias_map[ctx_data] or ctx_data
   local schema = rust_ctx and rust_ctx.ctx_schema or schema_map[real_tbl]
   data.ensure_columns(real_tbl, schema, function()
@@ -207,7 +207,7 @@ local function handle_table(prefix, dialect, callback)
 end
 
 local function handle_column(bufnr, line_before, cursor_line, prefix, dialect, rust_functions, rust_ctx, callback)
-  local from_tbls, alias_map, schema_map = ctx.get_tables_and_alias(bufnr, cursor_line or vim.fn.line("."), rust_ctx)
+  local from_tbls, alias_map, schema_map = ctx.get_tables_and_alias(rust_ctx)
   local real_tbls, seen_real = {}, {}
   for _, t in ipairs(from_tbls) do
     local real = alias_map[t] or t

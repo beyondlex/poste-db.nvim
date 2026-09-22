@@ -94,9 +94,11 @@ end
 -- Tables and alias resolution (Rust-only, no Lua heuristic fallback)
 -----------------------------------------------------------------------------
 
---- Get tables and alias map from Rust context.
---- Returns: (from_tbls, alias_map, schema_map)
-function M.get_tables_and_alias(_, _, rust_ctx)
+--- Tables, aliases and schemas as the Rust context reported them.
+--- Takes no buffer or cursor on purpose: `rust_ctx` is the only source, so a
+--- caller that has not run the context check has nothing to ask about here.
+--- Returns: (from_tbls, alias_map, schema_map), all empty without a context.
+function M.get_tables_and_alias(rust_ctx)
   if rust_ctx and rust_ctx.tables and #rust_ctx.tables > 0 then
     local from_tbls, alias_map, schema_map = {}, {}, {}
     for _, t in ipairs(rust_ctx.tables) do
