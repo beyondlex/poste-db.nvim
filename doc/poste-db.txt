@@ -203,7 +203,7 @@ The result grid (filetype `poste_dataset`) supports:
     a              Ask the AI about this result (or the last error)
     g?             Keymap help
 
-The statusline's `P:page/n` counts the rows the current filter and sort
+The winbar's `P:page/n` counts the rows the current filter and sort
 leave, not the query's raw total, so it cannot name a page `H`/`L` cannot
 reach; with pagination off it reads `All` and a search marks every match on
 screen instead of one page's worth.
