@@ -249,6 +249,62 @@ describe("get_completions without a blink ctx", function()
   end)
 end)
 
+-- ── 5c. the dialect follows the buffer the completion was triggered in ───────
+-- Resolving the dialect walks the buffer for @connection/@database, so it is
+-- per-completion work: it used to run at four points per trigger, and each
+-- time against whichever window had focus instead of the buffer being
+-- completed. It is now resolved once, for the right buffer and line.
+
+describe("get_completions dialect resolution", function()
+  local data_mod, real_resolve, seen_buf, seen_line
+
+  local function sql_buffer(conn)
+    local buf = vim.api.nvim_create_buf(false, true)
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
+      "-- @connection " .. conn, "SELECT * FROM authors WHERE ",
+    })
+    vim.api.nvim_buf_set_option(buf, "filetype", "poste_sql")
+    return buf
+  end
+
+  before_each(function()
+    seen_buf, seen_line = nil, nil
+    data_mod = require("poste-db.completion.data")
+    real_resolve = data_mod.resolve_current_context
+    data_mod.resolve_current_context = function(buf, limit_line)
+      if seen_buf == nil then seen_buf, seen_line = buf, limit_line end
+      return { connection = "alpha", database = "blog" }
+    end
+  end)
+
+  after_each(function()
+    data_mod.resolve_current_context = real_resolve
+  end)
+
+  it("asks about the buffer the completion was triggered in", function()
+    local other = sql_buffer("beta")
+    local target = sql_buffer("alpha")
+    -- Focus stays on `other`; the request is about `target`.
+    vim.api.nvim_set_current_buf(other)
+    vim.api.nvim_win_set_cursor(0, { 2, 28 })
+
+    get_items(target, "SELECT * FROM authors WHERE ", 2, function() end)
+
+    assert.equals(target, seen_buf)
+  end)
+
+  it("asks about the completion's line, not the live cursor", function()
+    local target = sql_buffer("alpha")
+    vim.api.nvim_set_current_buf(target)
+    -- The request is about line 2; the window's cursor is on line 1.
+    vim.api.nvim_win_set_cursor(0, { 1, 0 })
+
+    get_items(target, "SELECT * FROM authors WHERE ", 2, function() end)
+
+    assert.equals(2, seen_line)
+  end)
+end)
+
 -- ── 14. get_keyword_length edge cases ────────────────────────────────────
 describe("get_keyword_length", function()
   local src = sql_comp.new()

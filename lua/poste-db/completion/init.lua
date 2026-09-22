@@ -37,8 +37,13 @@ end
 -- Block extraction (shared by persistent client and system fallback)
 ---------------------------------------------------------------------------
 
-local function get_dialect_flag()
-  local ok_ctx, resolved_ctx = pcall(data.resolve_current_context)
+--- The `--dialect` the Rust CLI should parse `buf`'s SQL as.
+--- Resolution walks buffer directives → connection config, so it is a full
+--- buffer scan: callers resolve it once per completion and pass it along
+--- rather than re-deriving it at every use (see `get_items`).
+local function get_dialect_flag(bufnr, cursor_line)
+  if not cursor_line or cursor_line < 1 then cursor_line = vim.fn.line(".") end
+  local ok_ctx, resolved_ctx = pcall(data.resolve_current_context, bufnr, cursor_line)
   if ok_ctx and resolved_ctx and resolved_ctx.connection then
     local ok_conn, conn_mod = pcall(require, "poste-db.connections")
     if ok_conn then
@@ -85,9 +90,8 @@ local function extract_sql_block(bufnr, line_before, cursor_line)
   return sql_text, offset
 end
 
-local function cache_key(bufnr, cursor_line, line_before)
+local function cache_key(bufnr, cursor_line, line_before, dialect)
   local changedtick = vim.api.nvim_buf_get_var(bufnr, "changedtick")
-  local dialect = get_dialect_flag()
   return string.format("%d|%d|%d|%s|%s", bufnr, changedtick, cursor_line, line_before or "", dialect)
 end
 
@@ -107,9 +111,12 @@ end
 -- Rust context detection via async vim.system
 ---------------------------------------------------------------------------
 
---- Detect context via async vim.system(). Calls callback(rust_ctx).
+--- Detect context via the Rust CLI. Calls callback(rust_ctx) with nil when the
+--- CLI is unavailable or rejects the input, so the caller can fall back.
 --- Uses _ctx_cache to avoid re-running the binary on repeated calls.
-local function try_rust_context_async(bufnr, line_before, cursor_line, callback)
+--- `dialect` is resolved once per completion by the caller and reused here for
+--- both the CLI flag and the cache key, so the two can never disagree.
+local function try_rust_context_async(bufnr, line_before, cursor_line, callback, dialect)
   local ok_ft, ft = pcall(function() return vim.bo[bufnr].filetype end)
   if not ok_ft or (ft ~= "poste_sql" and ft ~= "poste_sqlite") then callback(nil); return end
 
@@ -125,13 +132,15 @@ local function try_rust_context_async(bufnr, line_before, cursor_line, callback)
       offset, char_at_cursor, context:gsub("\n", "\\n"), #line_before))
   end
 
-  local ckey = cache_key(bufnr, cursor_line, line_before)
+  -- The dialect is part of the cache key, so a caller that did not pass one
+  -- still has to resolve it before the lookup.
+  dialect = dialect or get_dialect_flag(bufnr, cursor_line)
+  local ckey = cache_key(bufnr, cursor_line, line_before, dialect)
   if _ctx_cache[ckey] then
     callback(_ctx_cache[ckey])
     return
   end
 
-  local dialect = get_dialect_flag()
   local binary = data.find_binary()
   if not binary then callback(nil); return end
 
@@ -170,7 +179,7 @@ end
 --- Calls callback(ctx_type, ctx_data, rust_ctx) where:
 ---   - ctx_type/ctx_data come from Rust (preferred) or Lua fallback
 ---   - rust_ctx is the raw Rust response (nil if Rust was not used/failed)
-local function detect_context_async(bufnr, line_before, cursor_line, callback)
+local function detect_context_async(bufnr, line_before, cursor_line, callback, dialect)
   if compat.opt("legacy_completion") == true then
     callback("keyword", nil, nil)
     return
@@ -184,12 +193,14 @@ local function detect_context_async(bufnr, line_before, cursor_line, callback)
     else
       callback(nil, nil, nil)
     end
-  end)
+  end, dialect)
 end
 
-local function get_items(bufnr, line_before, cursor_line, callback)
+local function get_items(bufnr, line_before, cursor_line, callback, dialect)
   local prefix = line_before:match("[%w_]*$") or ""
-  local dialect = get_dialect_flag()
+  -- Resolved once: it scans the whole buffer for @connection/@database and
+  -- then reads the connection's dialect, and every stage below needs it.
+  dialect = dialect or get_dialect_flag(bufnr, cursor_line)
 
   debug.begin()
   debug.set("line_before", line_before)
@@ -226,7 +237,7 @@ local function get_items(bufnr, line_before, cursor_line, callback)
       dialect = dialect,
       rust_functions = rust_functions,
     }, ctx_type, ctx_data, rust_ctx, callback)
-  end)
+  end, dialect)
 end
 
 ---------------------------------------------------------------------------
@@ -286,6 +297,9 @@ function M:get_completions(blink_ctx, callback)
     state.log("INFO", string.format("SQL completion triggered: line_before='%s'", line_before))
   end
 
+  local prefix = line_before:match("[%w_]*$") or ""
+  local dialect = get_dialect_flag(bufnr, cursor_line)
+
   get_items(bufnr, line_before, cursor_line, function(items)
     if my_gen ~= completion_gen then return end
     local seen = {}
@@ -297,10 +311,9 @@ function M:get_completions(blink_ctx, callback)
       end
     end
     -- Append snippet items when prefix matches a trigger word
-    local prefix = line_before:match("[%w_]*$") or ""
     if #prefix > 0 then
       local snippets = require("poste-db.snippets")
-      for _, sitem in ipairs(snippets.get_completion_items(prefix, get_dialect_flag())) do
+      for _, sitem in ipairs(snippets.get_completion_items(prefix, dialect)) do
         if not seen[sitem.label] then
           seen[sitem.label] = true
           table.insert(deduped, sitem)
@@ -327,7 +340,7 @@ function M:get_completions(blink_ctx, callback)
     debug.set("blink_incomplete", true)
     debug.flush()
     callback({ is_incomplete_forward = true, is_incomplete_backward = true, items = deduped })
-  end)
+  end, dialect)
 end
 
 function M:resolve(item, callback) callback(item) end

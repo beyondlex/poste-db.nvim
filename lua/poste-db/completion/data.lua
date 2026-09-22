@@ -201,10 +201,14 @@ function M.clear_cache()
   end
 end
 
-function M.resolve_current_context()
+--- Resolve the connection/database the completion request runs against.
+--- `buf`/`limit_line` default to the live window; a deferred caller (the
+--- completion source resolving context for a buffer the user may have left)
+--- has to pass what it was triggered on, not whatever is on screen now.
+function M.resolve_current_context(buf, limit_line)
   local ok, sql_context = pcall(require, "poste-db.context")
   if not ok then return sql_state and sql_state.context end
-  local ctx = sql_context.resolve_full_context(vim.api.nvim_get_current_buf())
+  local ctx = sql_context.resolve_full_context(buf or vim.api.nvim_get_current_buf(), limit_line)
   if not ctx.connection then
     ctx.connection = sql_state and sql_state.context and sql_state.context.connection
   end
@@ -214,8 +218,11 @@ function M.resolve_current_context()
   return ctx
 end
 
-function M.conn_key()
-  local ctx = M.resolve_current_context()
+--- The schema cache key for a context: `<connection>/<database>`.
+--- `ctx` lets a caller that already walked the buffer reuse it — resolving the
+--- context is a full buffer scan, so `conn_key()` on its own is the second one.
+function M.conn_key(ctx)
+  ctx = ctx or M.resolve_current_context()
   if ctx and ctx.connection then
     return ctx.connection .. "/" .. (ctx.database or "")
   end
@@ -338,8 +345,8 @@ end
 ---------------------------------------------------------------------------
 
 function M.ensure_tables(callback)
-  local key = M.conn_key()
   local ctx = M.resolve_current_context()
+  local key = M.conn_key(ctx)
   if not key or not ctx or not ctx.connection then
     callback()
     return
@@ -390,8 +397,8 @@ end
 
 --- Fetch tables for a specific database/schema (e.g. `FROM inventory.`)
 function M.ensure_tables_for_db(db_name, callback)
-  local key = M.conn_key()
   local ctx = M.resolve_current_context()
+  local key = M.conn_key(ctx)
   if not key or not ctx or not ctx.connection then
     callback()
     return
@@ -482,8 +489,8 @@ function M.ensure_columns(tbl, schema, callback)
     callback = schema
     schema = nil
   end
-  local key = M.conn_key()
   local ctx = M.resolve_current_context()
+  local key = M.conn_key(ctx)
   local cache_tbl_key = schema and (schema .. "." .. tbl) or tbl
 
   if compat.opt("debug") then
