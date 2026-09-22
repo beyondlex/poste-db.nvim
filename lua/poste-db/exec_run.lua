@@ -13,6 +13,7 @@ local cli = require("poste-db.cli")
 local state = require("poste-db.state")
 local log = require("poste-db.log")
 local sql_log = require("poste-db.sql_log")
+local verdict = require("poste-db.verdict")
 
 ----------------------------------------------------------------------------
 -- Request journaling
@@ -211,11 +212,28 @@ local function build_response(events, conn, shown_db)
         affected_rows = norm_affected(ev.affected_rows),
         execution_time_ms = tonumber(ev.execution_time_ms) or 0,
       }
-      if ev.error and ev.error ~= "" then res.error = ev.error end
+      -- Text is optional and, over JSON, may arrive as null (`vim.NIL`, which is
+      -- truthy and raises when a consumer concatenates it) or empty. Normalise
+      -- it here so `res.error` is either a non-empty string or absent, and the
+      -- `failed` flag below stays the only verdict.
+      local err_text = verdict.error_text(ev.error)
+      if err_text then res.error = err_text end
       if ev.sql and ev.sql ~= "" then res.sql = ev.sql end
+      -- The event's verdict and its message are two fields, and the message is
+      -- optional: keep the verdict on the result. Without it a consumer reading
+      -- one statement's outcome has only the text to go on, and a failed
+      -- statement that said nothing looks exactly like one that succeeded.
+      -- Named `failed`, not `status`, because the per-statement `status` field
+      -- in `file_exec` and the progress dialogs is a different shape.
+      if ev.status ~= "ok" then res.failed = true end
       table.insert(results, res)
+      -- A rejected statement affected nothing, whatever number sits beside it, so
+      -- it stays out of the sum: the dataset's per-statement rows show `ERROR`
+      -- for it, and a total that counted its rows would contradict them.
+      if ev.status == "ok" and res.affected_rows then
+        total_affected = total_affected + res.affected_rows
+      end
       if ev.status ~= "ok" then failed = failed + 1 end
-      if res.affected_rows then total_affected = total_affected + res.affected_rows end
     elseif ev.type == "summary" then
       total_ms = tonumber(ev.total_time_ms) or 0
       dialect = ev.dialect or dialect
@@ -236,7 +254,7 @@ local function build_response(events, conn, shown_db)
   -- only decides resultset-vs-affected, it must not re-increment `failed`.
   local is_query = false
   for _, r in ipairs(results) do
-    if not r.error
+    if not r.error and not r.failed
       and (r.affected_rows == nil or (r.row_count or 0) > 0 or #(r.columns or {}) > 0
         or is_query_sql(r.sql or "")) then
       is_query = true
@@ -272,13 +290,19 @@ local function build_response(events, conn, shown_db)
 end
 
 --- First in-band statement error of a delivered response, or nil. A SQL failure
---- arrives as a normal `on_response` callback carrying `has_error` plus a per
---- result `error` — the job ran, the statement did not — so a caller that
---- notifies only "failed" throws away the one string that says why.
+--- arrives as a normal `on_response` callback carrying `has_error` plus, as a
+--- rule, a per-result `error` — the job ran, the statement did not — so a caller
+--- that notifies only "failed" throws away the one string that says why. When
+--- even the string is missing the verdict still has to be reported, hence the
+--- fallback from `poste-db.verdict`.
 local function first_error(resp)
   for _, r in ipairs(resp and resp.results or {}) do
-    if r.error and r.error ~= "" then return tostring(r.error) end
+    local failed, text = verdict.classify(r)
+    if failed then return text end
   end
+  -- The envelope verdict on its own: a run can report a rejected statement
+  -- without any result carrying it, and "no message" is not "no failure".
+  if resp and resp.has_error == true then return verdict.UNEXPLAINED_FAILURE end
   return nil
 end
 

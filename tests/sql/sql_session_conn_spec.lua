@@ -124,3 +124,49 @@ describe("session_conn database_from_url", function()
     assert.equals("blog", from_url("mysql://u:p/ss@h:3306/blog"))
   end)
 end)
+
+describe("session_conn build_response", function()
+  local session_conn = require("poste-db.session_conn")
+  local build = session_conn._test.build_response
+  local session = { conn_url = "postgres://h/app", database = "app", dialect = "postgres" }
+
+  it("names a failure whose error field is JSON null", function()
+    -- The session transport is a separate builder from exec_run's, and its
+    -- `event.error` can be null: `SQL error: vim.NIL` reached the user that way.
+    local resp = build({ seq = 1, status = "error", error = vim.NIL, execution_time_ms = 2 }, session)
+    assert.equals("error", resp.status)
+    assert.is_true(resp.has_error)
+    assert.equals("string", type(resp.results[1].error))
+    assert.is_true(resp.results[1].failed)
+    -- A failure with no affected count and no rows must not become a resultset:
+    -- the dataset panel renders that as "(no results)".
+    assert.equals("affected", vim.json.decode(resp.body).type)
+  end)
+
+  it("keeps real text and stamps the verdict next to it", function()
+    local resp = build({ seq = 1, status = "error", error = "deadlock detected",
+      affected_rows = vim.NIL, execution_time_ms = 3 }, session)
+    assert.equals("deadlock detected", resp.results[1].error)
+    assert.is_true(resp.results[1].failed)
+    -- An error is never a resultset, whatever the row fields say.
+    assert.equals("affected", vim.json.decode(resp.body).type)
+  end)
+
+  it("leaves a successful read unflagged and resultset-shaped", function()
+    local resp = build({ seq = 1, status = "ok", row_count = 1, affected_rows = vim.NIL,
+      columns = { { name = "x" } }, rows = { { 1 } }, execution_time_ms = 1 }, session)
+    assert.is_false(resp.has_error)
+    assert.is_nil(resp.results[1].failed)
+    assert.is_nil(resp.results[1].error)
+    local body = vim.json.decode(resp.body)
+    assert.equals("resultset", body.type)
+    assert.equals(1, body.total_rows)
+  end)
+
+  it("reports an INSERT's affected rows without a failure marker", function()
+    local resp = build({ seq = 1, status = "ok", affected_rows = 7, execution_time_ms = 1 }, session)
+    assert.equals(7, resp.results[1].affected_rows)
+    assert.is_nil(resp.results[1].failed)
+    assert.equals("affected", vim.json.decode(resp.body).type)
+  end)
+end)

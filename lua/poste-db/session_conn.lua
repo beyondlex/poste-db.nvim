@@ -10,6 +10,7 @@
 
 local state = require("poste-db.state")
 local const = require("poste-db.constants")
+local verdict = require("poste-db.verdict")
 
 local M = {}
 
@@ -76,7 +77,13 @@ end
 local function build_response(event, session)
   local has_err = event.status ~= "ok"
   local aff = norm_affected(event.affected_rows)
-  local is_query = aff == nil
+  -- A rejected statement is never a resultset, even when it carries neither an
+  -- affected count nor columns: typed as a query it reached the dataset panel as
+  -- "(no results)", which is how a session-routed failure used to look like an
+  -- empty answer instead of the `ERROR: …` line `exec_run` produces for the same
+  -- event. `exec_run` keeps the same rule through `not r.failed` in its own
+  -- classification loop.
+  local is_query = aff == nil and not has_err
   local results = { {
     columns = event.columns or {},
     rows = event.rows or {},
@@ -84,7 +91,16 @@ local function build_response(event, session)
     affected_rows = aff,
     execution_time_ms = tonumber(event.execution_time_ms) or 0,
   } }
-  if has_err then results[1].error = event.error or "unknown error" end
+  if has_err then
+    -- The session names its failures, so the fallback is a real string rather
+    -- than an empty one: `event.error` can still be JSON null (`vim.NIL`, truthy
+    -- in Lua) and would otherwise reach the user as `SQL error: vim.NIL`.
+    results[1].error = verdict.error_text(event.error) or "unknown error"
+    -- Same verdict-not-text marker as `exec_run.build_response` puts on its
+    -- results, so a consumer that reads one statement's outcome sees the same
+    -- shape from either transport.
+    results[1].failed = true
+  end
   if event.sql and event.sql ~= "" then results[1].sql = event.sql end
 
   local body_obj = {

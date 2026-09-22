@@ -125,6 +125,55 @@ describe("exec_run", function()
       assert.equals("ok", resp.status)
       assert.is_nil(vim.json.decode(resp.body).rolled_back)
     end)
+
+    it("keeps the verdict on the result when the event carries no message", function()
+      -- The producer pairs `status = "error"` with text today, but the two are
+      -- separate fields. Without a per-result marker the only thing a consumer
+      -- can read is "no message", which is also what a success looks like — and
+      -- `type = "affected"` is then rendered as "Query OK".
+      local resp = exec_run.build_response({
+        { type = "result", seq = 1, status = "error", sql = "DELETE FROM t",
+          row_count = 0, affected_rows = 0, execution_time_ms = 1 },
+        { type = "summary", total_time_ms = 1, dialect = "mysql",
+          connection = "mysql://x", database = "app" },
+      }, "mysql://x", "app")
+
+      assert.is_true(resp.has_error)
+      local body = vim.json.decode(resp.body)
+      assert.equals("affected", body.type)
+      assert.is_true(body.results[1].failed)
+      assert.is_nil(body.results[1].error)
+    end)
+
+    it("does not read a rejected result as a query when it carries columns", function()
+      local resp = exec_run.build_response({
+        { type = "result", seq = 1, status = "error", sql = "SELECT * FROM missing",
+          row_count = 0, affected_rows = vim.NIL, execution_time_ms = 1,
+          columns = { { name = "x", type = "INTEGER" } }, rows = {} },
+        { type = "summary", total_time_ms = 1, dialect = "postgres",
+          connection = "pg://x", database = "app" },
+      }, "pg://x", "app")
+
+      -- "affected" is the honest shape here: as a resultset it would render as an
+      -- empty table, and the rejection would be invisible.
+      assert.equals("affected", vim.json.decode(resp.body).type)
+      assert.is_true(resp.results[1].failed)
+    end)
+
+    it("drops a null error field instead of storing vim.NIL", function()
+      local resp = exec_run.build_response({
+        { type = "result", seq = 1, status = "error", sql = "SELECT 1",
+          error = vim.NIL, affected_rows = vim.NIL, execution_time_ms = 1 },
+        { type = "summary", total_time_ms = 1, dialect = "sqlite",
+          connection = "sqlite::memory:", database = nil },
+      }, "sqlite::memory:", "")
+
+      -- Callers concatenate the message; `vim.NIL` is truthy userdata, so it had
+      -- to stay out of the field rather than reach a `..`.
+      assert.is_nil(resp.results[1].error)
+      assert.is_true(resp.results[1].failed)
+      assert.is_true(resp.has_error)
+    end)
   end)
 
   describe("detect_use", function()
@@ -289,5 +338,27 @@ describe("exec_run.first_error", function()
   it("is nil for a response with no results at all", function()
     assert.is_nil(exec_run.first_error({}))
     assert.is_nil(exec_run.first_error(nil))
+  end)
+
+  it("reports a flagged statement that carried no text", function()
+    local verdict = require("poste-db.verdict")
+    assert.equals(verdict.UNEXPLAINED_FAILURE,
+      exec_run.first_error({ results = { { row_count = 0 }, { failed = true } } }))
+  end)
+
+  it("reports the envelope verdict when no result carries one", function()
+    -- `or "unknown error"` at the call site used to be the only thing standing
+    -- between a silent rejection and a caller that reported nothing.
+    local verdict = require("poste-db.verdict")
+    assert.equals(verdict.UNEXPLAINED_FAILURE,
+      exec_run.first_error({ has_error = true, results = { { row_count = 0 } } }))
+    assert.equals(verdict.UNEXPLAINED_FAILURE, exec_run.first_error({ has_error = true }))
+  end)
+
+  it("returns a string for a structured error object", function()
+    -- Callers concatenate the result, so a table error had to be rendered here.
+    local text = exec_run.first_error({ results = { { error = { code = 42 } } } })
+    assert.equals("string", type(text))
+    assert.truthy(text:find("42", 1, true))
   end)
 end)
