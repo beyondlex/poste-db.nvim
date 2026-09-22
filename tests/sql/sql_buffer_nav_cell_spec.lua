@@ -78,6 +78,28 @@ describe("buffer_nav_cell", function()
     assert.equals("status", col_name)
   end)
 
+  it("collects column yank values in view order, filtered rows only", function()
+    local values = cell.collect_column_values({
+      data = {
+        results = {
+          {
+            rows = {
+              { "a", "1" },
+              { "b", "2" },
+              { "c", "3" },
+            },
+          },
+        },
+      },
+      -- The view is a sort of rows 3,1 (row 2 filtered away): the pasted
+      -- column must line up with the rows on screen, not with source order.
+      view_indices = { 3, 1 },
+      meta = { type = "resultset" },
+    }, 2)
+
+    assert.same({ "3", "1" }, values)
+  end)
+
   it("builds column yank text", function()
     local text, count, col_name = cell.build_column_yank_text({
       data = {

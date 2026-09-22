@@ -123,8 +123,17 @@ function M.collect_column_values(tab, col)
   local res = data.results[1]
   if not res.rows or #res.rows == 0 then return nil end
 
+  -- Yank the column the way the screen shows it: view order, filtered rows
+  -- only — the same rule `get_resultset_cell` applies to a single cell, so the
+  -- pasted column lines up with the rows on screen. `view_indices` is kept by
+  -- the sort/filter paths and indexes layout.rows, which is `res.rows` itself
+  -- (plan_resultset_layout hands the table through), so the indices read this
+  -- table directly; a tab with no view override is the whole column in source
+  -- order, unchanged.
+  local order = tab.view_indices
   local values = {}
-  for _, row in ipairs(res.rows) do
+  for i = 1, order and #order or #res.rows do
+    local row = order and res.rows[order[i]] or res.rows[i]
     local v = row[col]
     if v == nil or v == vim.NIL then
       values[#values + 1] = "NULL"
