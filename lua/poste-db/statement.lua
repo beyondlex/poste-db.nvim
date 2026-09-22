@@ -410,8 +410,79 @@ end
 -- Table name extraction from SQL
 ---------------------------------------------------------------------------
 
+--- One identifier of a reference, read from `text` starting at `pos`.
+--- @return string|nil name nil when `pos` does not open with a usable name
+--- @return number next the first byte past the name, where a dot continues the
+---         chain and anything else ends the reference
+local function read_identifier(text, pos)
+  local first = text:sub(pos, pos)
+  local close
+  if first == '"' then close = '"'
+  elseif first == "`" then close = "`"
+  elseif first == "[" then close = "]"
+  else
+    -- Unquoted identifiers fold to lower case, which is what the engines make
+    -- of them (postgres and MariaDB certainly; MySQL keeps `MyTable` as it was
+    -- written, and this helper has no dialect to tell the two apart — see the
+    -- review note).
+    -- A bare word ends at the first character that cannot belong to it:
+    -- whitespace, a dot (which continues the chain), or a delimiter the state-
+    -- ment may glue straight onto the name (`users(a,b)`, `users;`). A reference
+    -- that *opens* with one of those — `FROM (SELECT 1) x` — has no name here
+    -- and yields nil, which is right: a subquery has no table to target.
+    -- Everything else stays in the name, including non-ASCII letters.
+    local stop = text:find("[%.%s%(%)%[%]\"',;:]", pos) or #text + 1
+    local name = text:sub(pos, stop - 1)
+    if name == "" then return nil, pos end
+    return name:lower(), stop
+  end
+  -- Quoted: the name ends at its own closing quote, so a space inside it
+  -- ("Order Items") does not cut it short the way `%S+` would. A doubled
+  -- closing char is the escape itself ("a""b", `a``b`, [a]]b]) and belongs to
+  -- the name; the case does too, that being the point of quoting.
+  local i = pos + 1
+  while true do
+    local c = text:find(close, i, true)
+    if not c then return nil, pos end
+    if text:sub(c + 1, c + 1) == close then
+      i = c + 2
+    else
+      return text:sub(pos + 1, c - 1):gsub(close .. close, close), c + 1
+    end
+  end
+end
+
+--- The table a reference points at: the last identifier in its chain, read from
+--- `text` starting at `pos`.
+--- Everything in front of the final dot is a qualifier this helper cannot
+--- resolve — the dataset layout carries the schema separately, and `db.tbl` and
+--- `schema.tbl` are indistinguishable in text — so it is dropped. The dots
+--- *inside* a quoted name are not separators at all: `"staging.v1"` is one
+--- table, and reading it as `staging`.`v1` handed the DML builder the name of a
+--- different object than the one the SELECT read.
+--- @return string|nil nil when the chain does not end in a usable name, or when
+---         a comma gives it a sibling table
+local function last_part(text, pos)
+  local name, next_pos = read_identifier(text, pos)
+  if not name then return nil end
+  while text:sub(next_pos, next_pos) == "." do
+    name, next_pos = read_identifier(text, next_pos + 1)
+    if not name then return nil end
+  end
+  -- A comma after the reference (any amount of space in between) is `FROM a, b`
+  -- — a second table, spelled without the JOIN keyword whose count the caller
+  -- above looks at. Same ambiguity as a two-JOIN query, so the same answer:
+  -- nil, and the caller falls back to "result n" rather than targeting whichever
+  -- table comes first.
+  local k = next_pos
+  while text:sub(k, k):match("%s") do k = k + 1 end
+  if text:sub(k, k) == "," then return nil end
+  return name
+end
+
 --- Extract primary table name from a SQL statement.
---- Returns nil for JOINs with 2+ tables (use "result n" instead).
+--- Returns nil when the statement does not name one table unambiguously: 2+
+--- JOINs, or a `FROM a, b` list (use "result n" instead).
 function M.extract_table_name(sql)
   if not sql or sql == "" then return nil end
   -- Strip -- line comments and /* */ block comments
@@ -437,22 +508,19 @@ function M.extract_table_name(sql)
     idx = pos + 4
   end
   if join_count >= 2 then return nil end
-  local patterns = { "FROM%s+(%S+)", "UPDATE%s+(%S+)", "INTO%s+(%S+)", "JOIN%s+(%S+)" }
+  -- `()` marks where the reference starts and `%S+` merely insists something
+  -- follows the keyword: the name is read out of `clean` from that offset, not
+  -- out of the match. `upper` has thrown the identifier's case away on purpose,
+  -- and the two strings share byte offsets because string.upper only ever maps
+  -- ASCII. A capture could not carry the text either way — LuaJIT's `find`
+  -- hands back captured *strings*, not positions, and `%S+` cuts a quoted name
+  -- at its first space anyway.
+  local patterns = { "FROM%s+()%S+", "UPDATE%s+()%S+", "INTO%s+()%S+", "JOIN%s+()%S+" }
   for _, pat in ipairs(patterns) do
-    local tname = upper:match(pat)
-    if tname then
-      tname = tname:gsub("^[`\"'\\[]+", ""):gsub("[`\"'\\]]+$", "")
-      tname = tname:gsub("[%p%s]+$", "")
-      local dot = tname:find("%.")
-      if dot then
-        tname = tname:sub(dot + 1)
-        -- mssql bracketed qualified name: the first strip removed only the
-        -- leading `[`, so the second part still opens with `].[` (the first
-        -- part's closing `]` has no dot before it) — `[DBO].[USERS]` read
-        -- `[USERS` here. Strip quote chars again after the split.
-        tname = tname:gsub("^[`\"'\\[]+", ""):gsub("[`\"'\\]]+$", "")
-      end
-      if tname ~= "" then return tname:lower() end
+    local _, _, tok_start = upper:find(pat)
+    if tok_start then
+      local name = last_part(clean, tok_start)
+      if name and name ~= "" then return name end
     end
   end
   return nil
