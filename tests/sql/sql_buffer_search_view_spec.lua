@@ -138,4 +138,24 @@ describe("buffer_search view changes and search state", function()
     assert.equals(0, #tab.search_matches)
     assert.equals(0, tab.search_total_matches)
   end)
+
+  it("n and N walk the match list and wrap at both ends", function()
+    -- the arithmetic lives in next/prev_search_match and had no test: `n` steps
+    -- forward from the current index, `N` backward, and both wrap. The walk
+    -- starts from a state the module itself produced, so the offset is pinned
+    -- against a real `search_idx` rather than a hand-set one
+    tab = new_tab("a")
+    search.recompute_after_view_change()
+    assert.equals(2, tab.search_total_matches, "apple and banana carry an a")
+    assert.equals(1, tab.search_idx, "the recompute jumped to the first match")
+
+    search.next_search_match()
+    assert.equals(2, tab.search_idx)
+    search.next_search_match()
+    assert.equals(1, tab.search_idx, "n past the last match wraps to the first")
+    search.prev_search_match()
+    assert.equals(2, tab.search_idx, "N before the first wraps to the last")
+    search.prev_search_match()
+    assert.equals(1, tab.search_idx)
+  end)
 end)
