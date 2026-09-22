@@ -232,6 +232,35 @@ describe("validate_value", function()
       assert.is_not_nil(err)
     end)
 
+    it("rejects float for the whole integer family", function()
+      -- the guard used to compare the ctype against the single spelling
+      -- "integer", so an int8 column (normalized to `bigint`) accepted 3.5 and
+      -- the server had to reject the statement instead
+      for _, ctype in ipairs({ "int", "bigint", "smallint", "serial", "bigserial" }) do
+        local ok, err = editor.validate_value(3.5, col(ctype))
+        assert.is_false(ok, "a fraction belongs in no integer column, not in " .. ctype)
+        assert.is_not_nil(err)
+      end
+    end)
+
+    it("accepts a float with no fractional part for an integer column", function()
+      -- LuaJIT spells 42.0 as "42": the check reads the value, not its Lua type
+      assert.is_true(editor.validate_value(42.0, col("bigint")))
+    end)
+
+    it("rejects infinity and NaN for an integer column", function()
+      -- `tostring(math.huge)` is "inf", which carries no decimal point, so the
+      -- integer guard missed it and the commit went out as `SET seq = 'Infinity'`
+      for _, ctype in ipairs({ "integer", "bigint", "smallint" }) do
+        for _, val in ipairs({ math.huge, -math.huge }) do
+          local ok, err = editor.validate_value(val, col(ctype))
+          assert.is_false(ok, ctype .. " has no infinity")
+          assert.is_not_nil(err)
+        end
+        assert.is_false(editor.validate_value(0 / 0, col(ctype)), ctype .. " has no NaN")
+      end
+    end)
+
     it("rejects string for integer", function()
       local ok, err = editor.validate_value("abc", col("integer"))
       assert.is_false(ok)
@@ -269,6 +298,17 @@ describe("validate_value", function()
       local ok, err = editor.validate_value("abc", col("numeric"))
       assert.is_false(ok)
       assert.is_not_nil(err)
+    end)
+
+    it("accepts infinity and NaN for the floating families", function()
+      -- round 24's contract, seen from the editor: an infinite float8 cell
+      -- arrives as the text "Infinity", LuaJIT reads that as a number, and the
+      -- commit writes it back as a literal the server parses
+      for _, ctype in ipairs({ "float", "double", "real", "numeric", "decimal" }) do
+        assert.is_true(editor.validate_value(math.huge, col(ctype)), ctype .. " holds infinity")
+        assert.is_true(editor.validate_value(-math.huge, col(ctype)), ctype .. " holds -infinity")
+        assert.is_true(editor.validate_value(0 / 0, col(ctype)), ctype .. " holds NaN")
+      end
     end)
   end)
 

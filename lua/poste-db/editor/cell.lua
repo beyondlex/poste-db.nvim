@@ -1,6 +1,7 @@
 --- Dataset cell editor — pure functions for value conversion, validation,
 --- edit state tracking. No vim.ui calls (those are in nav.lua).
 
+local ident = require("poste-db.ident")
 local types = require("poste-db.types")
 
 local M = {}
@@ -195,8 +196,18 @@ function M.validate_value(value, col_meta)
       return false, "Cannot assign number to " .. (col_meta.ctype or "unknown") .. " column"
     end
     local val_str = tostring(value)
-    if ctype == "integer" and val_str:match("%.") then
-      return false, "Cannot assign decimal to integer column"
+    if is_type(ctype, "integer") then
+      -- Two ways a double says it is not an integer, and the old guard read
+      -- only the first: a point in its text, and the non-finite spellings
+      -- (`tostring(math.huge)` is "inf", point-free, so an integer column
+      -- accepted it and the commit became `SET seq = 'Infinity'`).
+      if val_str:match("%.") then
+        return false, "Cannot assign decimal to " .. (col_meta.ctype or "unknown") .. " column"
+      end
+      if ident.is_non_finite(value) then
+        return false, "Cannot assign " .. val_str .. " to " .. (col_meta.ctype or "unknown") .. " column"
+      end
+      return true
     end
     return true
   end
