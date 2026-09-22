@@ -48,6 +48,43 @@ function sql_comp.source:complete(params, callback, ...)
   settle(responded, "source:complete")
 end
 
+-- ── 2b. is the family binary actually usable? ────────────────────────────────
+-- tests/minimal_init.lua always resolves *a* binary: the dev build from
+-- ../poste.nvim when it exists, otherwise an executable comment-only dummy
+-- (which keeps the vendored installer's ensure() hermetic). Because
+-- find_poste_binary() only checks readable+executable, `find_binary() ~= nil`
+-- is true in both cases — so presence is not a usable predicate, and against
+-- the dummy the Rust-dependent tests below fail on an empty JSON decode that
+-- reads like a plugin regression when the real cause is an unbuilt sibling
+-- repo. One probe of `context detect` tells the two cases apart: a working
+-- binary answers with parseable JSON naming a context, a dummy answers nothing.
+local function rust_context_answers()
+  local binary = require("poste-db.completion.data").find_binary()
+  if not binary then return false end
+  -- Deliberately weak: "it answers with a context" is the predicate, not
+  -- "it answers correctly for this input" — a real binary that regressed would
+  -- have to keep failing the tests below, not silently skip them.
+  local out = vim.fn.system(binary .. " context detect 14", "SELECT * FROM ")
+  if vim.v.shell_error ~= 0 then return false end
+  local ok, parsed = pcall(vim.json.decode, out)
+  return ok and type(parsed) == "table" and type(parsed.ctx_type) == "string"
+end
+
+local rust_ok = rust_context_answers()
+
+--- An `it` whose assertions only hold when the Rust context detector answers.
+--- Same signature as `it`, so the skipped case keeps its name in the report.
+local function it_needs_rust(name, fn)
+  if rust_ok then
+    it(name, fn)
+    return
+  end
+  it(name, function()
+    print(("SKIP: %s — no usable poste binary (build ../poste.nvim, or set $POSTE_BINARY)"):format(name))
+    assert.is_true(true)
+  end)
+end
+
 -- ── 3. get_items integration (no real DB needed) ─────────────────────────────
 -- These tests verify the pipeline works end-to-end with a mocked cache.
 -- We inject columns directly into the module's cache via cache_columns/cache_tables.
@@ -75,7 +112,7 @@ describe("get_items with seeded cache", function()
     })
   end)
 
-  it("WHERE<space> returns authors columns", function()
+  it_needs_rust("WHERE<space> returns authors columns", function()
     local buf = make_buf({
       "###",
       "SELECT * FROM authors WHERE ",
@@ -98,7 +135,7 @@ describe("get_items with seeded cache", function()
     assert.is_true(labels["email"],    "missing column: email")
   end)
 
-  it("WHERE us filters to prefix", function()
+  it_needs_rust("WHERE us filters to prefix", function()
     local buf = make_buf({
       "###",
       "SELECT * FROM authors WHERE us",
@@ -180,7 +217,7 @@ describe("get_completions line_before", function()
     vim.api.nvim_win_set_cursor(win, { 1, #("SELECT * FROM authors WHERE ") })
   end)
 
-  it("returns columns when cursor col equals line length (after space)", function()
+  it_needs_rust("returns columns when cursor col equals line length (after space)", function()
     local line = "SELECT * FROM authors WHERE "
     local items = nil
     sql_comp.new():get_completions(
@@ -268,7 +305,7 @@ describe("get_completions without a blink ctx", function()
     vim.api.nvim_win_set_cursor(0, { 2, #line - 2 })
   end)
 
-  it("matches the blink branch when the cursor sits mid-word", function()
+  it_needs_rust("matches the blink branch when the cursor sits mid-word", function()
     local via_ctx, via_cursor
     sql_comp.new():get_completions({ line = line, cursor = { 2, #line - 2 } },
       function(r) via_ctx = r end)
@@ -318,7 +355,7 @@ describe("get_completions context detection", function()
     vim.api.nvim_set_current_buf(buf)
   end)
 
-  it("returns before the CLI has answered", function()
+  it_needs_rust("returns before the CLI has answered", function()
     -- The buffer was just created, so its context cannot be in the cache and
     -- this call has to go through the subprocess.
     local response
@@ -450,7 +487,7 @@ describe("get_items dot_column resolves alias", function()
     })
   end)
 
-  it("p. after JOIN posts p returns posts columns", function()
+  it_needs_rust("p. after JOIN posts p returns posts columns", function()
     local buf = make_buf({ "###", "SELECT * FROM authors s LEFT JOIN posts p ON p." })
     local items = nil
     get_items(buf, "SELECT * FROM authors s LEFT JOIN posts p ON p.", 2, function(r) items = r end)
@@ -462,7 +499,7 @@ describe("get_items dot_column resolves alias", function()
     assert.is_true(labels["author_id"])
   end)
 
-  it("p.ti prefix filters correctly", function()
+  it_needs_rust("p.ti prefix filters correctly", function()
     local buf = make_buf({ "###", "SELECT * FROM authors s LEFT JOIN posts p ON p.ti" })
     local items = nil
     get_items(buf, "SELECT * FROM authors s LEFT JOIN posts p ON p.ti", 2, function(r) items = r end)
@@ -473,7 +510,7 @@ describe("get_items dot_column resolves alias", function()
     assert.is_nil(labels["id"])
   end)
 
-  it("a. resolves alias from statement on a later line after other SQL", function()
+  it_needs_rust("a. resolves alias from statement on a later line after other SQL", function()
     local buf = make_buf({
       "###",
       "select * from posts;",
@@ -505,7 +542,7 @@ describe("get_items dot_column resolves alias", function()
     return labels
   end
 
-  it("a quoted qualifier keeps its prefix filter", function()
+  it_needs_rust("a quoted qualifier keeps its prefix filter", function()
     seed_posts_with_two_t_columns()
     local buf = make_buf({ "###", 'SELECT * FROM posts "p" WHERE "p"."ti' })
     local items = nil
@@ -517,7 +554,7 @@ describe("get_items dot_column resolves alias", function()
     assert.is_nil(labels["id"], "id must not match a 'ti' prefix")
   end)
 
-  it("a cursor mid-line still reads the word it is inside", function()
+  it_needs_rust("a cursor mid-line still reads the word it is inside", function()
     seed_posts_with_two_t_columns()
     -- The buffer line continues past the cursor, so line_before is only a
     -- prefix of it: the qualifier has to come from the word under the cursor,
@@ -662,7 +699,7 @@ describe("get_items insert_column", function()
     })
   end)
 
-  it("returns quick-insert all-columns item first", function()
+  it_needs_rust("returns quick-insert all-columns item first", function()
     local buf = make_buf({ "###", "INSERT INTO authors (" })
     local items = nil
     get_items(buf, "INSERT INTO authors (", 2, function(r) items = r end)
@@ -671,7 +708,7 @@ describe("get_items insert_column", function()
     assert.equals("Insert all columns", items[1].documentation)
   end)
 
-  it("returns quick-insert no-id item second", function()
+  it_needs_rust("returns quick-insert no-id item second", function()
     local buf = make_buf({ "###", "INSERT INTO authors (" })
     local items = nil
     get_items(buf, "INSERT INTO authors (", 2, function(r) items = r end)
@@ -680,7 +717,7 @@ describe("get_items insert_column", function()
     assert.equals("All columns except id", items[2].documentation)
   end)
 
-  it("returns individual columns after quick-insert items", function()
+  it_needs_rust("returns individual columns after quick-insert items", function()
     local buf = make_buf({ "###", "INSERT INTO authors (" })
     local items = nil
     get_items(buf, "INSERT INTO authors (", 2, function(r) items = r end)
@@ -693,7 +730,7 @@ describe("get_items insert_column", function()
     assert.equals(6, #items)
   end)
 
-  it("filters out already-listed columns from individual items", function()
+  it_needs_rust("filters out already-listed columns from individual items", function()
     local buf = make_buf({ "###", "INSERT INTO authors (id, email, " })
     local items = nil
     get_items(buf, "INSERT INTO authors (id, email, ", 2, function(r) items = r end)
@@ -711,7 +748,7 @@ describe("get_items insert_column", function()
     assert.equals(4, #items)  -- 2 quick-insert + 2 remaining columns
   end)
 
-  it("quick-insert items always show even with prefix", function()
+  it_needs_rust("quick-insert items always show even with prefix", function()
     local buf = make_buf({ "###", "INSERT INTO authors (us" })
     local items = nil
     get_items(buf, "INSERT INTO authors (us", 2, function(r) items = r end)
@@ -724,7 +761,7 @@ describe("get_items insert_column", function()
     assert.equals(3, #items)
   end)
 
-  it("no-id quick-insert hidden when table has no id column", function()
+  it_needs_rust("no-id quick-insert hidden when table has no id column", function()
     local state = require("poste-db.state")
     state.context = { connection = "test-conn", database = "blog" }
     sql_comp.cache_columns("tags", {
@@ -761,7 +798,7 @@ describe("get_items table context", function()
     cache["test-conn/__databases__"] = { "blog" }
   end)
 
-  it("FROM<space> returns cached tables", function()
+  it_needs_rust("FROM<space> returns cached tables", function()
     local buf = make_buf({ "###", "SELECT * FROM " })
     local items = nil
     get_items(buf, "SELECT * FROM ", 2, function(r) items = r end)
@@ -772,7 +809,7 @@ describe("get_items table context", function()
     assert.is_true(labels["posts"])
   end)
 
-  it("FROM au filters to matching table", function()
+  it_needs_rust("FROM au filters to matching table", function()
     local buf = make_buf({ "###", "SELECT * FROM au" })
     local items = nil
     get_items(buf, "SELECT * FROM au", 2, function(r) items = r end)
@@ -980,12 +1017,9 @@ describe("completion mode integration", function()
 
   -- Mode: "rust" (Rust strict) — Rust path only, no Lua fallback
   describe("legacy_completion = 'rust' (Rust strict)", function()
-    local data_mod = require("poste-db.completion.data")
-    local has_binary = data_mod.find_binary() ~= nil
-
     local function skip_or_run(assert_fn)
-      if not has_binary then
-        print("SKIP: Rust binary not found for strict mode tests")
+      if not rust_ok then
+        print("SKIP: no usable poste binary for strict mode tests")
         assert.is_true(true)
         return
       end
@@ -1022,13 +1056,11 @@ describe("completion mode integration", function()
 
   -- Conditional: Rust binary integration tests
   describe("Rust binary integration", function()
-    local data_mod = require("poste-db.completion.data")
-    local binary = data_mod.find_binary()
-    local has_binary = binary ~= nil
+    local binary = require("poste-db.completion.data").find_binary()
 
     local function skip_or_run(assert_fn)
-      if not has_binary then
-        print("SKIP: Rust binary not found, build with 'cargo build -p poste-cli' first")
+      if not rust_ok then
+        print("SKIP: no usable poste binary, build one with 'cargo build -p poste-cli' first")
         assert.is_true(true)
         return
       end
