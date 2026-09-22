@@ -242,4 +242,34 @@ describe("forms_advanced entry editing", function()
     press("d")
     assert.equals(0, #seen[#seen], "the preview saw the list empty out")
   end)
+
+  -- The first `a` (in before_each) lands the cursor on the entry it created, one
+  -- line below the list's own row. `a` used to act only on that row, so the
+  -- second press did nothing at all and gave no sign it had not.
+  it("`a` again from inside the entry adds a second entry", function()
+    press("a")
+    local text = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
+    assert.is_truthy(text:find("entry 2", 1, true), "the second `a` was a silent no-op:\n" .. text)
+    assert.equals(2, #seen[#seen], "the preview saw both entries")
+  end)
+
+  it("`a` puts the cursor on the entry it added", function()
+    press("a")
+    local row = marked_row()
+    assert.is_truthy(line_at(row):find("entry 2", 1, true),
+      "the new entry should be the focused line, got: " .. line_at(row))
+  end)
+
+  it("`d` removes the entry under the cursor, not the first one", function()
+    -- Names the first entry, adds a second from a sub-field row (the third
+    -- place `a` has to work, and the one its `list_field` lookup is for), then
+    -- deletes from the entry the cursor is on.
+    vim.ui.input = function(_, cb) cb("app") end
+    focus("^%s+Grantee:")
+    press("<CR>")
+    press("a")
+    press("d")
+    assert.equals(1, #seen[#seen], "one of the two entries is left")
+    assert.equals("app", seen[#seen][1].grantee, "the named entry survived, the new one went")
+  end)
 end)

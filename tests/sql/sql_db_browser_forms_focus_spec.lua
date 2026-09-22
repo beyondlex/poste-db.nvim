@@ -113,6 +113,34 @@ describe("forms_advanced shortcut bar", function()
     assert.equals(0, vim.tbl_count(keys), "some key was never highlighted")
     assert.equals(0, vim.tbl_count(labels), "some label was never highlighted")
   end)
+
+  it("advertises the list keys only for a form that renders a list", function()
+    local with_list = { { title = "Grants", fields = {
+      { key = "grants", label = "Grants", kind = "list", value = {},
+        sub_fields = { { key = "who", label = "Who", kind = "text", value = "" } } },
+    } } }
+    local lines = t.render(t.build_rows(with_list, "postgres"), 78, {})
+    local text = table.concat(lines, "\n")
+    for _, hint in ipairs({ "[a add item]", "[d del item]" }) do
+      assert.is_truthy(text:find(hint, 1, true), "a form with a list lost the " .. hint .. " hint")
+    end
+    for _, line in ipairs(lines) do
+      -- strwidth, not strdisplaywidth: that one measures the line in the current
+      -- window, and plenary runs specs in a child nvim started without `-u`, so
+      -- the developer's own config is live there — its 'number' column narrows
+      -- the wrap width under this bar and 'breakindent' then re-counts the
+      -- leading blanks for the continuation row (79 for a 77-wide line). That
+      -- config cannot be redirected out of the harness: 124 specs need the
+      -- tree-sitter SQL parser it installs. The bar itself is fixed ASCII, so
+      -- its cell width is what the float must hold.
+      assert.is_true(vim.fn.strwidth(line) <= 78,
+        ("the bar overflowed the float (%d cells): %s"):format(vim.fn.strwidth(line), line))
+    end
+
+    local plain = t.render(t.build_rows(sections(), "postgres"), 78, {})
+    assert.is_nil(table.concat(plain, "\n"):find("add item", 1, true),
+      "a form with no list advertised a key that does nothing there")
+  end)
 end)
 
 describe("forms_advanced dialog geometry", function()

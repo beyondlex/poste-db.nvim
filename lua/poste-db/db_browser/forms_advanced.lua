@@ -167,6 +167,16 @@ local FOOTER = {
   { key = "Space", label = "toggle" },
 }
 
+--- Shown only by a form that actually renders a `list` field (a column list, an
+--- index list): `d` has no other hint on screen at all, and on a form without a
+--- list the two would advertise dead keys. Both were bound but never shown,
+--- which is how the `list` kind stayed undiscoverable — the entry rows it paints
+--- are the ones the generated SQL is built from.
+local LIST_FOOTER = {
+  { key = "a", label = "add item" },
+  { key = "d", label = "del item" },
+}
+
 --- The shortcut bar, wrapped to the dialog width.
 --- layout.keymaps emits a single unbroken line: at the default 80-column form
 --- its 77 columns leave one to spare, and any narrower float simply cuts the
@@ -174,8 +184,16 @@ local FOOTER = {
 --- holds as many entries as fit, so the bar wraps instead of truncating. Entries
 --- are ASCII, so one byte width serves both the fit test and the columns.
 ---@param width number
+---@param has_list? boolean advertise the list-entry keys, for a form that has one
 ---@return { lines: string[], highlights: table[] }
-local function footer_lines(width)
+local function footer_lines(width, has_list)
+  -- The common case is FOOTER itself: the copy only happens for a form with a
+  -- list field, whose bar carries two more hints and wraps if they do not fit.
+  local bar = FOOTER
+  if has_list then
+    bar = vim.list_extend({}, FOOTER)
+    for _, e in ipairs(LIST_FOOTER) do table.insert(bar, e) end
+  end
   local indent = "  "
   local sep = "  "
   local lines, highlights = {}, {}
@@ -197,7 +215,7 @@ local function footer_lines(width)
   end
 
   local used = #indent
-  for _, e in ipairs(FOOTER) do
+  for _, e in ipairs(bar) do
     local w = #("[" .. e.key .. " " .. e.label .. "]")
     -- The first entry of a line is never dropped, even in a form too narrow for
     -- it: an empty line would hide the shortcut entirely.
@@ -217,6 +235,17 @@ end
 --- indented four columns), so the nesting reads the same at a glance.
 local NESTED_INDENT = "      "
 local function row_indent(row) return row.nested and NESTED_INDENT or "  " end
+
+--- Whether the rendered rows contain a `list` field, which is what decides if the
+--- `a`/`d` hints belong in the bar. Rows, not the section spec: `build_rows`
+--- drops the fields of a collapsed section, so a list nobody can reach is not
+--- advertised either.
+local function has_list_field(rows)
+  for _, r in ipairs(rows) do
+    if r.type == "field" and r.field and r.field.kind == "list" then return true end
+  end
+  return false
+end
 
 --- @return lines, highlights, row_line  row_line[row index] = buffer line (1-based)
 local function render(rows, width, sql_lines)
@@ -288,7 +317,7 @@ local function render(rows, width, sql_lines)
   table.insert(lines, "")
   table.insert(lines, "")
   li = li + 2
-  append(footer_lines(width))
+  append(footer_lines(width, has_list_field(rows)))
 
   return lines, highlights, row_line
 end
@@ -426,6 +455,27 @@ function M.open(opts)
     refresh()
   end
 
+  --- Append a blank entry to a `list` field and put the cursor on it. Its own
+  --- function because two keys reach it: `<CR>` on the list's own row, and `a`
+  --- from anywhere inside that list (see the `a` keymap below).
+  local function add_list_entry(f)
+    if not f.sub_fields then return end
+    local entry = new_list_entry(f.sub_fields)
+    if not f.value then f.value = {} end
+    table.insert(f.value, entry)
+    rows, focusable = build_rows(sections, dialect)
+    -- Land on the new entry rather than at the end of the form: it opens
+    -- expanded because its default values are what the user came to change.
+    focus_idx = #focusable
+    for fi, ri in ipairs(focusable) do
+      if rows[ri].entry == entry then
+        focus_idx = fi
+        break
+      end
+    end
+    refresh()
+  end
+
   local function edit_current()
     local row = get_current_focus_row()
     if not row then return end
@@ -481,21 +531,7 @@ function M.open(opts)
     end
 
     if f.kind == "list" then
-      if not f.sub_fields then return end
-      local entry = new_list_entry(f.sub_fields)
-      if not f.value then f.value = {} end
-      table.insert(f.value, entry)
-      rows, focusable = build_rows(sections, dialect)
-      -- Land on the new entry rather than at the end of the form: it opens
-      -- expanded because its default values are what the user came to change.
-      focus_idx = #focusable
-      for fi, ri in ipairs(focusable) do
-        if rows[ri].entry == entry then
-          focus_idx = fi
-          break
-        end
-      end
-      refresh()
+      add_list_entry(f)
       return
     end
 
@@ -626,8 +662,14 @@ function M.open(opts)
   vim.keymap.set("n", "<Esc>", safe_close, km_opts)
   vim.keymap.set("n", "a", function()
     local row = get_current_focus_row()
-    if row and row.type == "field" and row.field and row.field.kind == "list" then
-      edit_current()
+    if not row then return end
+    -- Anywhere inside a list counts, mirroring `d`: an entry row's `field` and a
+    -- nested sub-field row's `list_field` are the list itself. Requiring the
+    -- cursor to be on the list's own row made the second `a` a silent no-op —
+    -- the first one lands the cursor on the new entry, one line below.
+    local field = row.list_field or row.field
+    if field and field.kind == "list" then
+      add_list_entry(field)
     end
   end, km_opts)
   vim.keymap.set("n", "d", delete_list_entry, km_opts)
