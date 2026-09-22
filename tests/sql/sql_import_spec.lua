@@ -71,6 +71,16 @@ describe("CSV parsing", function()
     assert.equals(2, #result.rows)
     assert.same({ "Alice", "30" }, result.rows[1])
   end)
+
+  it("keeps a CRLF inside a quoted field as the cell's data", function()
+    -- RFC 4180: a quoted CRLF is part of the field. csv_escape quotes it on
+    -- export precisely so it survives; the blanket \r\n rewrite the parser
+    -- used to run changed that value to a bare \n on re-import.
+    local csv = 'name,bio\n"Alice","line1\r\nline2"\n'
+    local result = import._parse_csv_for_test(csv)
+    assert.equals(1, #result.rows)
+    assert.same({ "Alice", "line1\r\nline2" }, result.rows[1])
+  end)
 end)
 
 describe("TSV parsing", function()

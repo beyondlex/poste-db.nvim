@@ -1,16 +1,26 @@
 local M = {}
 
-local function normalize_text(text)
+local function strip_bom(text)
   if text:sub(1, 3) == "\239\187\191" then
-    text = text:sub(4)
+    return text:sub(4)
   end
+  return text
+end
+
+local function normalize_text(text)
+  text = strip_bom(text)
   text = text:gsub("\r\n", "\n")
   text = text:gsub("\r", "\n")
   return text
 end
 
 function M.parse_csv(text)
-  text = normalize_text(text)
+  -- No blanket CRLF rewrite here: a CRLF INSIDE a quoted field is the cell's
+  -- data (RFC 4180), and normalizing it away changed the value the exporter
+  -- had quoted — csv_escape quotes an embedded \r\n precisely so it survives
+  -- the round trip. Line endings are decided by the scanner below, which can
+  -- see whether it is inside quotes.
+  text = strip_bom(text)
   local parsed_rows = {}
   local i = 1
   local len = #text
@@ -43,7 +53,12 @@ function M.parse_csv(text)
         table.insert(row, table.concat(val_chars))
         val_chars = {}
         i = i + 1
-      elseif ch == "\n" or ch == "\r" then
+      elseif ch == "\r" then
+        -- CRLF (the usual Windows row end) and a lone CR both end the row
+        -- outside quotes; inside quotes the branch above keeps the bytes.
+        if text:sub(i + 1, i + 1) == "\n" then i = i + 2 else i = i + 1 end
+        break
+      elseif ch == "\n" then
         i = i + 1
         break
       else
