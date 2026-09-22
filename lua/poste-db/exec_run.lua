@@ -271,10 +271,10 @@ local function build_response(events, conn, shown_db)
   }
 end
 
---- First in-band statement error of a delivered response, or nil. `exec-file`
---- reports SQL failures as a *successful* response (`has_error` plus a per
---- result `error`), so a caller that notifies only "failed" throws away the
---- one string that says why.
+--- First in-band statement error of a delivered response, or nil. A SQL failure
+--- arrives as a normal `on_response` callback carrying `has_error` plus a per
+--- result `error` — the job ran, the statement did not — so a caller that
+--- notifies only "failed" throws away the one string that says why.
 local function first_error(resp)
   for _, r in ipairs(resp and resp.results or {}) do
     if r.error and r.error ~= "" then return tostring(r.error) end
