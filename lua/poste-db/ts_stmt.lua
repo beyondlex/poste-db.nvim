@@ -46,6 +46,16 @@ local function is_top_digit_fragment(node, buf)
   return prev ~= nil and node_text(prev, buf):lower() == "top"
 end
 
+--- True for the `, <count>` ERROR tree-sitter-sql strands after
+--- `LIMIT <offset>, <count>` (MySQL/SQLite/ClickHouse pagination): the
+--- grammar only knows `LIMIT n [OFFSET m]` and closes the statement right
+--- after `LIMIT <offset>`. Anchored, so a fragment that swallowed a
+--- following statement (no `;` before it) is not matched.
+local function is_limit_comma_fragment(node, buf)
+  local text = node_text(node, buf)
+  return text:match("^%s*,%s*%d+%s*;?%s*$") ~= nil
+end
+
 --- True when a trailing-`WITH` ERROR is the ClickHouse WITH TOTALS modifier:
 --- the grammar leaves `<expr> WITH` as an ERROR and TOTALS survives as a
 --- stray field sibling. A truncated `x WITH` (no TOTALS sibling) is a real
@@ -105,7 +115,11 @@ local function get_top_level_stmts(root, buf)
         end
       end
     elseif t == "ERROR" then
-      stmts[#stmts + 1] = child
+      -- A trailing LIMIT comma fragment (`, 10`) belongs to the statement
+      -- before it; keeping it would register its line as another statement.
+      if #stmts == 0 or not is_limit_comma_fragment(child, buf) then
+        stmts[#stmts + 1] = child
+      end
     end
   end
   return stmts
@@ -131,9 +145,19 @@ local function build_span_list(buf)
   local spans = {}
   for child in root:iter_children() do
     local t = child:type()
-    if t == "statement" or t == "transaction" or t == "ERROR" then
+    if t == "statement" or t == "transaction" then
       -- store 0-based rows (TS coordinates); find_stmt_span converts at return
       spans[#spans + 1] = { child:start(), child:end_() }
+    elseif t == "ERROR" then
+      local prev = spans[#spans]
+      if prev and is_limit_comma_fragment(child, buf) then
+        -- `LIMIT 1, 10` strands `, 10` as a top-level ERROR sibling: the
+        -- fragment is the tail of the statement it trails, so fold it in
+        -- instead of reporting a phantom statement of its own.
+        if child:end_() > prev[2] then prev[2] = child:end_() end
+      else
+        spans[#spans + 1] = { child:start(), child:end_() }
+      end
     end
   end
   return #spans > 0 and spans or nil
@@ -366,6 +390,15 @@ function M.find_error_nodes(buf, dialect)
   -- is_top_digit_fragment). Dialect-gated: a standalone digit ERROR can be
   -- a real error elsewhere (e.g. MySQL digit-leading table fragments).
   if dialect == "mssql" and upper:match("^%d+$") and is_top_digit_fragment(node, buf) then
+    goto continue
+  end
+
+  -- Filter MySQL/SQLite/ClickHouse `LIMIT <offset>, <count>` pagination:
+  -- the grammar closes the statement at `LIMIT <offset>` and strands a
+  -- top-level ERROR sibling `, <count>`. PostgreSQL/MSSQL reject the comma
+  -- form — keep the error there (and when the dialect is unknown).
+  if (dialect == "mysql" or dialect == "mariadb" or dialect == "sqlite" or dialect == "clickhouse")
+    and is_limit_comma_fragment(node, buf) then
     goto continue
   end
 

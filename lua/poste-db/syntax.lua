@@ -326,6 +326,9 @@ function M.highlight_known_error_constructs(buf, dialect)
       if not known and lower:match("^%s*;") then known = true end
       -- leading-dot fragments (mssql `SELECT TOP (N) alias.column` artifact)
       if not known and lower:match("^%.[%w_]") then known = true end
+      -- MySQL/SQLite/ClickHouse `LIMIT 1, 10` pagination: the grammar
+      -- strands `, 10` as an ERROR sibling after `limit 1`
+      if not known and lower:match("^%s*,%s*%d+%s*;?%s*$") then known = true end
       -- mssql OFFSET-FETCH pagination / FOR JSON-XML tails and the plain
       -- ARRAY JOIN strand (`JOIN <array> ...` after ARRAY became an alias)
       if not known and (lower:match("offset%s*%d+%s*rows")

@@ -64,6 +64,21 @@ describe("find_stmt_span", function()
     assert.same({ 1, 3 }, span)
   end)
 
+  it("folds the LIMIT comma fragment into the statement span", function()
+    -- `LIMIT 1, 10` parses as `LIMIT 1` + a top-level ERROR sibling `, 10`.
+    -- The fragment is the same statement; the span must cover both, or
+    -- running the current statement from the LIMIT line sends `, 10;`.
+    local buf = make_buf({ "SELECT id, name", "FROM users", "LIMIT 1, 10;" })
+    assert.same({ 1, 3 }, ts_stmt.find_stmt_span(buf, 1))
+    assert.same({ 1, 3 }, ts_stmt.find_stmt_span(buf, 3))
+  end)
+
+  it("folds a multi-line LIMIT comma fragment into the statement span", function()
+    local buf = make_buf({ "SELECT id, name", "FROM users", "LIMIT 1,", "  10;" })
+    assert.same({ 1, 4 }, ts_stmt.find_stmt_span(buf, 1))
+    assert.same({ 1, 4 }, ts_stmt.find_stmt_span(buf, 4))
+  end)
+
   it("handles CTE (WITH clause)", function()
     local buf = make_buf({ "WITH cte AS (SELECT 1) SELECT * FROM cte;", "SELECT 2;" })
     local span = ts_stmt.find_stmt_span(buf, 1)
@@ -123,6 +138,18 @@ describe("find_all_stmt_lines", function()
     local buf = make_buf({ "SELECT *", "FROM users;", "SELECT count(*)", "FROM orders;" })
     local lines = ts_stmt.find_all_stmt_lines(buf, 1, 4)
     assert.same({ 1, 3 }, lines)
+  end)
+
+  it("does not split a statement at the LIMIT comma fragment", function()
+    -- The `, 10` ERROR sibling must not register as its own statement
+    -- (buffer-wide run would execute `, 10;` as a separate chunk).
+    local buf = make_buf({ "SELECT id, name", "FROM users", "LIMIT 1, 10;", "SELECT 2;" })
+    assert.same({ 1, 4 }, ts_stmt.find_all_stmt_lines(buf, 1, 4))
+  end)
+
+  it("does not duplicate the start line for a same-line LIMIT comma fragment", function()
+    local buf = make_buf({ "SELECT id, name FROM users LIMIT 1, 10;", "SELECT 2;" })
+    assert.same({ 1, 2 }, ts_stmt.find_all_stmt_lines(buf, 1, 2))
   end)
 
   it("works within a sub-range", function()
@@ -440,6 +467,55 @@ describe("find_error_nodes", function()
     local buf = make_buf({ "SELECT id FROM dbo.orders o ORDER BY id", "FETCH FIRST 5 ROWS ONLY;" })
     local errors = ts_stmt.find_error_nodes(buf, "mssql")
     assert.same({}, errors, "FETCH FIRST 5 ROWS ONLY is valid T-SQL")
+  end)
+
+  it("suppresses MySQL LIMIT offset,count pagination", function()
+    -- `LIMIT 1, 10` parses as `limit 1` + a top-level ERROR sibling `, 10`:
+    -- tree-sitter-sql only knows `LIMIT n [OFFSET m]`.
+    local buf = make_buf({ "SELECT id, name FROM users LIMIT 1, 10;" })
+    local errors = ts_stmt.find_error_nodes(buf, "mysql")
+    assert.same({}, errors, "LIMIT 1, 10 is valid MySQL pagination")
+  end)
+
+  it("suppresses LIMIT offset,count pagination for sqlite", function()
+    -- SQLite spells it `LIMIT expr, expr` ≡ `LIMIT expr OFFSET expr`.
+    local buf = make_buf({ "SELECT id, name FROM users LIMIT 1, 10;" })
+    local errors = ts_stmt.find_error_nodes(buf, "sqlite")
+    assert.same({}, errors, "LIMIT 1, 10 is valid SQLite pagination")
+  end)
+
+  it("suppresses LIMIT offset,count pagination for clickhouse", function()
+    local buf = make_buf({ "SELECT id, name FROM users LIMIT 1, 10;" })
+    local errors = ts_stmt.find_error_nodes(buf, "clickhouse")
+    assert.same({}, errors, "LIMIT 1, 10 is valid ClickHouse pagination")
+  end)
+
+  it("suppresses a multi-line LIMIT comma fragment for mariadb", function()
+    -- `LIMIT 1,\n  10` strands the ERROR across rows (`,\n  10`).
+    local buf = make_buf({ "SELECT id, name", "FROM users", "LIMIT 1,", "  10;" })
+    local errors = ts_stmt.find_error_nodes(buf, "mariadb")
+    assert.same({}, errors, "the comma-count fragment is the same pagination clause")
+  end)
+
+  it("keeps LIMIT offset,count flagged for postgres", function()
+    -- PostgreSQL rejects the comma form; the diagnostic is real there.
+    local buf = make_buf({ "SELECT id, name FROM users LIMIT 1, 10;" })
+    local errors = ts_stmt.find_error_nodes(buf, "postgres")
+    assert.is_true(#errors > 0, "LIMIT offset,count is invalid postgres syntax")
+  end)
+
+  it("keeps LIMIT offset,count flagged when dialect is unknown", function()
+    local buf = make_buf({ "SELECT id, name FROM users LIMIT 1, 10;" })
+    local errors = ts_stmt.find_error_nodes(buf)
+    assert.is_true(#errors > 0, "unknown dialect must stay conservative")
+  end)
+
+  it("keeps a LIMIT comma fragment that swallows a following statement", function()
+    -- Without a `;`, the ERROR absorbs the next statement (`, 10 SELECT 2`):
+    -- no longer a pure offset,count fragment, so stay conservative.
+    local buf = make_buf({ "SELECT id, name FROM users LIMIT 1, 10", "SELECT 2;" })
+    local errors = ts_stmt.find_error_nodes(buf, "mysql")
+    assert.is_true(#errors > 0, "a fragment that swallowed the next statement must stay flagged")
   end)
 
   it("suppresses MSSQL FOR JSON result suffix", function()
@@ -879,6 +955,14 @@ describe("known-error-construct re-highlight (syntax.highlight_known_error_const
     local kinds = construct_marks(buf)
     assert.is_true(vim.tbl_contains(kinds, "Normal"))
     assert.is_true(vim.tbl_contains(kinds, "Statement"), "OFFSET/FETCH/ROWS keywords must be highlighted")
+  end)
+
+  it("recolors the LIMIT comma pagination fragment", function()
+    local buf = make_buf({ "SELECT id, name FROM users LIMIT 1, 10;" })
+    syntax.highlight_known_error_constructs(buf)
+    local kinds = construct_marks(buf)
+    assert.is_true(vim.tbl_contains(kinds, "Normal"), "the , 10 fragment must not stay @error red")
+    assert.is_true(vim.tbl_contains(kinds, "Number"), "the count literal must render as a number")
   end)
 end)
 
