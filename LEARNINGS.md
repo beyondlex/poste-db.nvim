@@ -270,5 +270,27 @@ Mc 记 1 格）；光标/高亮触发的**局部重绘**按 nvim 自己的网格
 
 ---
 
-*Latest: 2026-09-14 Plenary harness after_each 作用域 + 目录模式静默丢 spec。
+## 树的顶层 ERROR 兄弟节点同时劈开语句边界，不只污染诊断（2026-09-23）
+
+**发生了什么**：`LIMIT 1, 10`（MySQL/SQLite/ClickHouse 的 `LIMIT offset,count`
+分页）在 tree-sitter-sql 里解析成 `limit 1` 语句 + **顶层** ERROR 兄弟节点
+`, 10`。按 #11 的套路只给 `find_error_nodes` 加了 dialect 过滤、给
+`syntax.lua` 加了去红 matcher——但顶层 ERROR 兄弟节点同时被当"语句"读：
+`ts_stmt.lua` 的 `find_stmt_span` 二分取"最后一个起点 ≤ 行的 span"，多行
+写法下光标停在 LIMIT 行会把 `, 10;` 当当前语句提取执行；
+`find_all_stmt_lines` 把它当独立语句起点，单行写法下还产生重复起始行。
+诊断层修完，执行层还在坏。多数已知误报（INTERVAL、digit 前缀、WITHIN
+GROUP）是**嵌套** ERROR，只有顶层兄弟才劈 span，所以这坑此前没暴露——
+`; USE` 级联、ClickHouse ALTER DELETE 的谓词也是顶层兄弟，同样受影响。
+
+**约束**：加"顶层 ERROR 兄弟"类过滤器时，同一形状判定要在三个消费点对齐：
+`find_error_nodes`（诊断，dialect-gated）、`build_span_list`（当前语句
+span，合并进前一个 span 而非跳过）、`get_top_level_stmts`（语句起始行，
+跳过）。探针除了 dump ERROR 的 text 还要 dump 顶层 children，先分清 ERROR
+是嵌套还是兄弟；带 `;` 与不带 `;` 各探一次——无 `;` 时 ERROR 会吞掉下一条
+语句（`, 10 SELECT 2`），锚定匹配让它保持报错。
+
+---
+
+*Latest: 2026-09-23 顶层 ERROR 兄弟节点劈语句边界（LIMIT offset,count）。
 新增条目时保持同一格式：发生了什么（带 file:line）→ 约束（可执行的检查动作）。*
