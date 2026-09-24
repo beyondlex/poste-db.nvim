@@ -70,14 +70,35 @@ function M.word_wrap(text, max_width)
   return word_wrap(text, max_width)
 end
 
---- Keep the last `count` characters of `s` (char-safe tail for truncation).
----@param s string
----@param nchars number vim.fn.strchars(s)
----@param count number
----@return string
-local function str_keep_tail(s, nchars, count)
-  if count <= 0 then return "" end
-  return vim.fn.strcharpart(s, math.max(0, nchars - count), count)
+--- Longest character prefix of `s` whose DISPLAY width fits `max_width`
+--- (CJK chars count 2). The truncate paths must budget in display columns:
+--- a char-counted cut overflowed the container for any text wider than
+--- char-per-column.
+local function dw_prefix(s, max_width)
+  local nchars = vim.fn.strchars(s)
+  local width = 0
+  for i = 0, nchars - 1 do
+    local cw = vim.fn.strdisplaywidth(vim.fn.strcharpart(s, i, 1))
+    if width + cw > max_width then
+      return vim.fn.strcharpart(s, 0, i)
+    end
+    width = width + cw
+  end
+  return s
+end
+
+--- Longest character suffix of `s` whose DISPLAY width fits `max_width`.
+local function dw_suffix(s, max_width)
+  local nchars = vim.fn.strchars(s)
+  local width = 0
+  local start = nchars
+  for i = nchars - 1, 0, -1 do
+    local cw = vim.fn.strdisplaywidth(vim.fn.strcharpart(s, i, 1))
+    if width + cw > max_width then break end
+    width = width + cw
+    start = i
+  end
+  return vim.fn.strcharpart(s, start)
 end
 
 --- Pad text to a given display width (handles CJK via strdisplaywidth).
@@ -122,20 +143,19 @@ function M.dynamic_line(opts)
   local dw = vim.fn.strdisplaywidth(s)
   if dw > content_width then
     local el_dw = vim.fn.strdisplaywidth(ellipsis)
-    -- strcharpart offsets are CHAR indices, not byte indices — deriving them
-    -- from #s split multi-byte characters in half
-    local nchars = vim.fn.strchars(s)
+    -- truncation budgets are DISPLAY widths (dw_prefix/dw_suffix), so a
+    -- CJK-heavy string can no longer overflow the container
     local avail = math.max(0, content_width - el_dw)
     if truncate_at == "left" then
-      local keep = str_keep_tail(s, nchars, avail)
+      local keep = dw_suffix(s, avail)
       return string.rep(" ", pad_left) .. ellipsis .. keep .. string.rep(" ", pad_right)
     elseif truncate_at == "mid" then
-      local half = math.floor(avail / 2)
-      local left_part = vim.fn.strcharpart(s, 0, half)
-      local right_part = str_keep_tail(s, nchars, avail - half)
+      local left_budget = math.floor(avail / 2)
+      local left_part = dw_prefix(s, left_budget)
+      local right_part = dw_suffix(s, avail - left_budget)
       return string.rep(" ", pad_left) .. left_part .. ellipsis .. right_part .. string.rep(" ", pad_right)
     else
-      local truncated = vim.fn.strcharpart(s, 0, avail)
+      local truncated = dw_prefix(s, avail)
       return string.rep(" ", pad_left) .. truncated .. ellipsis .. string.rep(" ", pad_right)
     end
   end
