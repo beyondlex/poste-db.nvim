@@ -190,7 +190,7 @@ function M.parse(content)
       if trimmed:sub(1, 2) == "[[" then
         return nil, "Array-of-tables headers ([[name]]) are not supported"
       end
-      local close, name
+      local name
       local q = trimmed:sub(2, 2)
       if q == '"' or q == "'" then
         -- A quoted header name is ONE literal name: it may contain `]` or a
@@ -200,11 +200,10 @@ function M.parse(content)
         if not close_q or trim(trimmed:sub(close_q + 1, -2)) ~= "" then
           return nil, "Invalid table header: " .. line
         end
-        close = close_q + 1
         name = q == '"' and unescape_basic(trimmed:sub(3, close_q - 1))
           or trimmed:sub(3, close_q - 1)
       else
-        close = trimmed:find("]", 2)
+        local close = trimmed:find("]", 2)
         if not close then
           return nil, "Invalid table header: " .. line
         end
