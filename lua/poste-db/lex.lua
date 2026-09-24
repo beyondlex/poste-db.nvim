@@ -1,5 +1,33 @@
 local M = {}
 
+--- Byte index of the first significant char at or after `from`, skipping
+--- whitespace and (line-local, non-nesting) `/* … */` block comments. A `/*`
+--- inside a quoted region is data, and an unterminated comment skips to the
+--- end. Used before matching a keyword so `USE /* default */ mydb` sees the
+--- keyword where a comment actually starts, not inside one.
+local function skip_ws_and_block_comments(s, from)
+  local i, in_string, string_char = from, false, nil
+  while i <= #s do
+    local ch = s:sub(i, i)
+    if in_string then
+      if ch == string_char then in_string = false end
+      i = i + 1
+    elseif ch == "'" or ch == '"' or ch == "`" then
+      in_string, string_char = true, ch
+      i = i + 1
+    elseif ch == "/" and s:sub(i + 1, i + 1) == "*" then
+      local close = s:find("*/", i + 2, true)
+      if not close then return #s + 1 end
+      i = close + 2
+    elseif ch:match("^%s$") then
+      i = i + 1
+    else
+      return i
+    end
+  end
+  return i
+end
+
 function M.is_comment_or_string(line, pos)
   local i = 1
   local region_start = nil
@@ -48,16 +76,77 @@ function M.is_comment_or_string(line, pos)
   return false
 end
 
+--- Extract the database name from a `USE <name>` line, or nil.
+--- Handles: case-insensitive USE, a trailing `;`, quoted names (including
+--- spaces inside quotes), and leading block comments (`USE /* d */ mydb`
+--- used to return the comment as the name). A `--` line comment after the
+--- name is naturally excluded because the bare-name scan stops at
+--- whitespace. A USE inside a multi-line block comment is the caller's
+--- concern — pair this with `block_comment_depth_after` when scanning a
+--- buffer line by line.
 function M.find_use_database(line)
   if not line then return nil end
   local trimmed = line:match("^%s*(.-)%s*$") or ""
   if trimmed == "" then return nil end
-  local _, match_end, name = trimmed:find("^[Uu][Ss][Ee]%s+(%S+)")
-  if not match_end then return nil end
+  local start = skip_ws_and_block_comments(trimmed, 1)
+  local kw_start, kw_end = trimmed:find("^[Uu][Ss][Ee]", start)
+  if not kw_start then return nil end
+  -- USE must be its own word: `USER` … must not match
+  local after = trimmed:sub(kw_end + 1)
+  if after ~= "" and after:match("^[%s_/]") == nil then return nil end
+  local name_pos = skip_ws_and_block_comments(trimmed, kw_end + 1)
+  if name_pos > #trimmed then return nil end
+  local quote = trimmed:sub(name_pos, name_pos)
+  if quote == '"' or quote == "'" or quote == "`" then
+    local close = trimmed:find(quote, name_pos + 1, true)
+    if not close then return nil end
+    local name = trimmed:sub(name_pos + 1, close - 1)
+    if name == "" then return nil end
+    return name
+  end
+  -- bare name: up to whitespace or `;` (`USE db;-- c` used to return `db;--`)
+  local name = trimmed:match("^[^%s;]+", name_pos) or ""
   name = name:gsub(";$", "")
-  name = name:gsub("^['\"`]", ""):gsub("['\"`]$", "")
-  if M.is_comment_or_string(trimmed, 1) then return nil end
+  if name == "" then return nil end
   return name
+end
+
+--- Block-comment depth at end-of-line, given the depth at line start, so a
+--- scanner walking a buffer line by line can know whether a line sits inside
+--- a `/* … */` region that opened on an earlier line (a bare `USE foo` inside
+--- one must not switch the database). Strings and `--` line comments are
+--- respected, so markers inside them don't count; depth saturates at 0
+--- because a stray `*/` must not go negative.
+function M.block_comment_depth_after(line, depth)
+  depth = depth or 0
+  local i, in_string, string_char = 1, false, nil
+  while i <= #line do
+    local ch = line:sub(i, i)
+    if in_string then
+      if ch == "\\" and string_char ~= "`" then
+        i = i + 2 -- backslash escape in '-strings (backticks take `\` literally)
+      elseif ch == string_char then
+        in_string = false
+        i = i + 1
+      else
+        i = i + 1
+      end
+    elseif ch == "'" or ch == '"' or ch == "`" then
+      in_string, string_char = true, ch
+      i = i + 1
+    elseif ch == "-" and line:sub(i + 1, i + 1) == "-" then
+      break -- line comment: nothing later on the line counts
+    elseif ch == "/" and line:sub(i + 1, i + 1) == "*" then
+      depth = depth + 1
+      i = i + 2
+    elseif ch == "*" and line:sub(i + 1, i + 1) == "/" then
+      depth = math.max(0, depth - 1)
+      i = i + 2
+    else
+      i = i + 1
+    end
+  end
+  return depth
 end
 
 function M.find_block_for_line(lines, cursor_line)
