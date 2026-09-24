@@ -15,6 +15,9 @@ local M = {}
 --- Scans file header for @connection/@database directives, then scans
 --- the cursor's ### block for USE statements and block-level overrides.
 --- The last USE statement before the cursor wins (JetBrains behavior).
+--- Directives (`-- @…`) and USE lines inside a `/* … */` region are ignored:
+--- the region may have opened lines above, so both phases carry the
+--- block-comment depth down line by line (`lex.block_comment_depth_after`).
 --- @param buf number Buffer handle (default: current buffer)
 --- @return table context { connection = string|nil, database = string|nil }
 function M.resolve_context(buf, limit_line)
@@ -25,26 +28,34 @@ function M.resolve_context(buf, limit_line)
   local connection = nil
   local database = nil
   local all_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+  local header_depth = 0
   for i, line in ipairs(all_lines) do
     if const.is_section_marker(line) then break end
-    local conn_match = const.match_directive(line, const.DIRECTIVE_CONNECTION)
-    if conn_match then connection = vim.trim(conn_match) end
-    local db_match = const.match_directive(line, const.DIRECTIVE_DATABASE)
-    if db_match then database = vim.trim(db_match) end
+    if header_depth == 0 then
+      local conn_match = const.match_directive(line, const.DIRECTIVE_CONNECTION)
+      if conn_match then connection = vim.trim(conn_match) end
+      local db_match = const.match_directive(line, const.DIRECTIVE_DATABASE)
+      if db_match then database = vim.trim(db_match) end
+    end
+    header_depth = lex.block_comment_depth_after(line, header_depth)
   end
 
   -- Phase 2: Scan cursor's ### block for USE statements and block-level overrides
   local block_start = lex.find_block_for_line(all_lines, cursor_line)
   local block_lines = vim.api.nvim_buf_get_lines(buf, block_start - 1, cursor_line, false)
 
+  local block_depth = 0
   for i, line in ipairs(block_lines) do
-    local conn_match = const.match_directive(line, const.DIRECTIVE_CONNECTION)
-    if conn_match then connection = vim.trim(conn_match) end
-    local db_match = const.match_directive(line, const.DIRECTIVE_DATABASE)
-    if db_match then database = vim.trim(db_match) end
+    if block_depth == 0 then
+      local conn_match = const.match_directive(line, const.DIRECTIVE_CONNECTION)
+      if conn_match then connection = vim.trim(conn_match) end
+      local db_match = const.match_directive(line, const.DIRECTIVE_DATABASE)
+      if db_match then database = vim.trim(db_match) end
 
-    local use_db = lex.find_use_database(line)
-    if use_db then database = use_db end
+      local use_db = lex.find_use_database(line)
+      if use_db then database = use_db end
+    end
+    block_depth = lex.block_comment_depth_after(line, block_depth)
   end
 
   return { connection = connection, database = database }

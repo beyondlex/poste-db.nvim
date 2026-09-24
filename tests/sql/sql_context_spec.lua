@@ -77,6 +77,43 @@ describe("context resolve_context", function()
     local ctx = context.resolve_context(buf, 4)
     assert.equals("blog", ctx.connection)
   end)
+
+  -- A commented-out `USE` still switched the database: the scanner read each
+  -- line in isolation and block comments are invisible to it. Sending the
+  -- statement under the cursor to that database is the wrong-answer class.
+  it("ignores a USE inside a multi-line block comment", function()
+    local buf = make_buf({
+      "use blog",
+      "/*",
+      "use analytics",
+      "*/",
+      "select 1",
+    })
+    local ctx = context.resolve_context(buf, 5)
+    assert.equals("blog", ctx.database)
+  end)
+
+  it("ignores a block-commented directive in the header", function()
+    local buf = make_buf({ "/*", "-- @connection analytics", "*/", "select 1" })
+    local ctx = context.resolve_context(buf, 4)
+    assert.is_nil(ctx.connection)
+  end)
+
+  it("resumes reading after a block comment closes", function()
+    local buf = make_buf({
+      "/* hidden */",
+      "use blog",
+      "select 1",
+    })
+    local ctx = context.resolve_context(buf, 3)
+    assert.equals("blog", ctx.database)
+  end)
+
+  it("still reads directives inside line comments", function()
+    local buf = make_buf({ "-- @connection analytics", "select 1" })
+    local ctx = context.resolve_context(buf, 2)
+    assert.equals("analytics", ctx.connection)
+  end)
 end)
 
 describe("context get_status_text", function()
