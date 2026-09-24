@@ -121,6 +121,60 @@ database = "inventory"
     assert.equals("mysql", res["mysql-dev"].dialect)
     assert.equals("inventory", res["mysql-dev"].database)
   end)
+
+  -- Round 39 recorded the shape: a quoted key carrying a dot is legal TOML
+  -- (ONE name), but the dotted-key check looked at the raw key text and
+  -- rejected it. The fix belongs here (the vendor source) before the
+  -- poste-redis copy re-syncs.
+  it("accepts a fully-quoted key that contains a dot", function()
+    local res, err = toml.parse('"my.key" = "v"')
+    assert.is_nil(err)
+    assert.equals("v", res["my.key"])
+  end)
+
+  it("accepts a single-quoted key that contains a dot", function()
+    local res, err = toml.parse("'my.key' = 'v'")
+    assert.is_nil(err)
+    assert.equals("v", res["my.key"])
+  end)
+
+  it("unquotes escape sequences in a double-quoted key", function()
+    local res, err = toml.parse('"a\\"b" = 1')
+    assert.is_nil(err)
+    assert.equals(1, res['a"b'])
+  end)
+
+  it("still rejects unquoted dotted keys", function()
+    local _, err = toml.parse("a.b = 1")
+    assert.matches("Dotted keys", err)
+  end)
+
+  it("still rejects a quoted dotted key like \"a\".\"b\" (that IS a dotted key)", function()
+    local _, err = toml.parse('"a"."b" = 1')
+    assert.matches("Dotted keys", err)
+  end)
+
+  it("reads a quoted header name as one section", function()
+    -- The old first-`]` scan stored `["my conn"]` as a section literally
+    -- named `"my conn"` (quotes included), and `["a]b"]` was cut at the `]`
+    -- inside the quotes.
+    local res, err = toml.parse('["my conn"]\nport = 5432')
+    assert.is_nil(err)
+    assert.equals(5432, res["my conn"].port)
+    local res2, err2 = toml.parse('["a]b"]\nport = 1')
+    assert.is_nil(err2)
+    assert.equals(1, res2["a]b"].port)
+  end)
+
+  it("rejects a quoted header with trailing text before the bracket", function()
+    local _, err = toml.parse('["a" x]')
+    assert.matches("Invalid table header", err)
+  end)
+
+  it("rejects an unterminated quoted header", function()
+    local _, err = toml.parse('["a]')
+    assert.matches("Invalid table header", err)
+  end)
 end)
 
 describe("toml inline containers", function()

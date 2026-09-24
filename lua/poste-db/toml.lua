@@ -1,12 +1,14 @@
 --- Minimal pure-Lua TOML parser.
---- Supports: [section] headers, key = "string" / 'string' / 123 / true|false,
---- inline arrays `[…]` and inline tables `{…}` (the shapes connections.toml
---- uses for `tunnel = { … }`), # comments, inline comments (outside strings),
---- basic escape sequences.
+--- Supports: [section] headers (quoted header names too), key = "string" /
+--- 'string' / 123 / true|false, inline arrays `[…]` and inline tables `{…}`
+--- (the shapes connections.toml uses for `tunnel = { … }`), # comments,
+--- inline comments (outside strings), basic escape sequences.
 --- Deliberately unsupported: [[array-of-tables]], dotted keys and multi-line
 --- values — the first two error out rather than producing a bogus key, the
---- last is rare in a config file. Unquoted values (dates, bare words) come
---- back as strings.
+--- last is rare in a config file. A fully-quoted key is ONE name and may
+--- carry dots (`"my.key" = …` is legal TOML; it used to die as a dotted
+--- key); an unquoted dotted key still errors. Unquoted values (dates, bare
+--- words) come back as strings.
 --- Returns { [section] = { key = value, ... }, ... }
 local M = {}
 
@@ -188,11 +190,26 @@ function M.parse(content)
       if trimmed:sub(1, 2) == "[[" then
         return nil, "Array-of-tables headers ([[name]]) are not supported"
       end
-      local close = trimmed:find("]", 2)
-      if not close then
-        return nil, "Invalid table header: " .. line
+      local close, name
+      local q = trimmed:sub(2, 2)
+      if q == '"' or q == "'" then
+        -- A quoted header name is ONE literal name: it may contain `]` or a
+        -- dot, which the first-`]` scan used to cut in half (and left the
+        -- quote characters in the stored section name).
+        local close_q = trimmed:find(q, 3, true)
+        if not close_q or trim(trimmed:sub(close_q + 1, -2)) ~= "" then
+          return nil, "Invalid table header: " .. line
+        end
+        close = close_q + 1
+        name = q == '"' and unescape_basic(trimmed:sub(3, close_q - 1))
+          or trimmed:sub(3, close_q - 1)
+      else
+        close = trimmed:find("]", 2)
+        if not close then
+          return nil, "Invalid table header: " .. line
+        end
+        name = trim(trimmed:sub(2, close - 1))
       end
-      local name = trim(trimmed:sub(2, close - 1))
       if name == "" then
         return nil, "Empty table header"
       end
@@ -212,8 +229,38 @@ function M.parse(content)
       if key == "" then
         return nil, "Empty key in line"
       end
+      -- A fully-quoted key unquotes to ONE name whose dots are its own:
+      -- `"my.key" = …` is legal TOML (it used to die as a dotted key).
+      -- Anything else — bare keys, and quoted fragments like `"a"."b"` —
+      -- keeps the documented dotted-key rejection.
+      local single_quoted_name = false
+      local q = key:sub(1, 1)
+      if (q == '"' or q == "'") and #key >= 2 then
+        local close_q
+        if q == "'" then
+          close_q = key:find("'", 2, true)
+        else
+          -- a basic string may carry escaped quotes: "a\"b" ends at the LAST one
+          local i = 2
+          while i <= #key do
+            local c = key:sub(i, i)
+            if c == "\\" then
+              i = i + 2
+            elseif c == '"' then
+              break
+            else
+              i = i + 1
+            end
+          end
+          close_q = i <= #key and i or nil
+        end
+        if close_q == #key then
+          key = q == '"' and unescape_basic(key:sub(2, -2)) or key:sub(2, -2)
+          single_quoted_name = true
+        end
+      end
       -- never echo the line here: values can be passwords
-      if key:find(".", 1, true) then
+      if not single_quoted_name and key:find(".", 1, true) then
         return nil, "Dotted keys (a.b = …) are not supported: " .. key
       end
       section[key] = val
