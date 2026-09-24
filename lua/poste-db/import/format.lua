@@ -47,8 +47,19 @@ function M.parse_csv(text)
           i = i + 1
         end
       elseif ch == '"' then
-        in_quoted = true
-        i = i + 1
+        -- A quote only opens a quoted region at the START of a field (the
+        -- RFC-4180 / python-csv reading). A stray quote mid-field — an
+        -- unescaped inch mark like `3" pipe` — used to flip the scanner into
+        -- quoted mode, swallowing the following commas and newlines into one
+        -- giant cell until the whole import failed with a bogus column count
+        -- (or silently mis-aligned when the file happened to stay rectangular).
+        if #val_chars == 0 then
+          in_quoted = true
+          i = i + 1
+        else
+          table.insert(val_chars, ch)
+          i = i + 1
+        end
       elseif ch == "," then
         table.insert(row, table.concat(val_chars))
         val_chars = {}
