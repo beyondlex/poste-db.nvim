@@ -76,7 +76,11 @@ describe("lex.is_comment_or_string", function()
     assert.is_true(lex.is_comment_or_string("SELECT 1 -- hi", 12))
     assert.is_true(lex.is_comment_or_string("SELECT 'a b'", 9))
     assert.is_true(lex.is_comment_or_string("SELECT `a b`", 9))
-    assert.is_false(lex.is_comment_or_string("SELECT 'a b'", 8))
+    -- the quote characters themselves belong to the literal: the region spans
+    -- [opener .. closer] inclusive
+    assert.is_true(lex.is_comment_or_string("SELECT 'a b'", 8))
+    assert.is_true(lex.is_comment_or_string("SELECT 'a b'", 12))
+    assert.is_false(lex.is_comment_or_string("SELECT 'a b'", 13))
   end)
 
   it("handles quote escaping inside strings", function()
@@ -116,7 +120,9 @@ describe("lex.block_comment_depth_after", function()
 
   it("ignores markers inside strings and line comments", function()
     assert.equals(0, lex.block_comment_depth_after("SELECT '/* not a comment */'", 0))
-    assert.equals(1, lex.block_comment_depth_after("SELECT 1 -- /* unterminated", 0))
+    -- a `--` comments out the rest of the line, so a `/*` after it is data
+    -- and must NOT leak depth into the following lines
+    assert.equals(0, lex.block_comment_depth_after("SELECT 1 -- /* unterminated", 0))
     assert.equals(0, lex.block_comment_depth_after("SELECT `x/*y`", 0))
   end)
 
@@ -133,8 +139,9 @@ end)
 describe("lex.find_block_for_line", function()
   it("starts after the nearest ### marker above the cursor", function()
     local lines = { "### first", "SELECT 1;", "### second", "SELECT 2;" }
-    assert.equals(3, lex.find_block_for_line(lines, 4))
-    assert.equals(1, lex.find_block_for_line(lines, 2))
+    -- the block CONTAINING the cursor starts at the line after its marker
+    assert.equals(4, lex.find_block_for_line(lines, 4))
+    assert.equals(2, lex.find_block_for_line(lines, 2))
   end)
 
   it("starts at 1 when no marker exists above", function()

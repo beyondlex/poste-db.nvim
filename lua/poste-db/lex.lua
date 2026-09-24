@@ -1,21 +1,17 @@
 local M = {}
 
 --- Byte index of the first significant char at or after `from`, skipping
---- whitespace and (line-local, non-nesting) `/* … */` block comments. A `/*`
---- inside a quoted region is data, and an unterminated comment skips to the
---- end. Used before matching a keyword so `USE /* default */ mydb` sees the
---- keyword where a comment actually starts, not inside one.
+--- whitespace and (line-local, non-nesting) `/* … */` block comments. Quotes
+--- are SIGNIFICANT here, not region-skips: the caller may be about to read a
+--- quoted name (`USE "my db"`), and a quote inside a comment is consumed by
+--- the comment branch anyway. An unterminated comment skips to the end. Used
+--- before matching a keyword so `USE /* default */ mydb` sees the keyword
+--- where a comment actually starts, not inside one.
 local function skip_ws_and_block_comments(s, from)
-  local i, in_string, string_char = from, false, nil
+  local i = from
   while i <= #s do
     local ch = s:sub(i, i)
-    if in_string then
-      if ch == string_char then in_string = false end
-      i = i + 1
-    elseif ch == "'" or ch == '"' or ch == "`" then
-      in_string, string_char = true, ch
-      i = i + 1
-    elseif ch == "/" and s:sub(i + 1, i + 1) == "*" then
+    if ch == "/" and s:sub(i + 1, i + 1) == "*" then
       local close = s:find("*/", i + 2, true)
       if not close then return #s + 1 end
       i = close + 2
