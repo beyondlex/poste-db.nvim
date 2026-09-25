@@ -11,16 +11,44 @@ local function dbg(msg)
   end
 end
 
-function M.clear()
-  local ok, bufnr = pcall(vim.api.nvim_get_current_buf)
-  if ok then
-    pcall(vim.api.nvim_buf_clear_namespace, bufnr, ns, 0, -1)
+--- One line with its `-- comment` tail removed. The strip is quote-aware:
+--- `--` inside a string literal is DATA (`VALUES ('a--b')`), and a blind
+--- gsub cut it, left the quote unterminated, broke the value counting and
+--- pointed the hint at the wrong column.
+local function strip_comment(line)
+  local in_quote = nil
+  for i = 1, #line do
+    local ch = line:sub(i, i)
+    if in_quote then
+      if ch == in_quote then in_quote = nil end  -- '' closes: two toggles
+    elseif ch == "'" or ch == '"' then
+      in_quote = ch
+    elseif ch == "-" and line:sub(i + 1, i + 1) == "-" then
+      return line:sub(1, i - 1)
+    end
   end
+  return line
 end
 
-function M.update()
-  local ok, bufnr = pcall(vim.api.nvim_get_current_buf)
-  if not ok then return end
+--- Clear the hint extmarks; defaults to the current buffer (InsertLeave).
+--- @param bufnr number|nil
+function M.clear(bufnr)
+  if not bufnr then
+    local ok, cur = pcall(vim.api.nvim_get_current_buf)
+    if not ok then return end
+    bufnr = cur
+  end
+  pcall(vim.api.nvim_buf_clear_namespace, bufnr, ns, 0, -1)
+end
+
+--- Recompute the hint; defaults to the current buffer + window.
+--- @param bufnr number|nil
+function M.update(bufnr)
+  if not bufnr then
+    local ok, cur = pcall(vim.api.nvim_get_current_buf)
+    if not ok then return end
+    bufnr = cur
+  end
   pcall(vim.api.nvim_buf_clear_namespace, bufnr, ns, 0, -1)
   dbg("update called, bufnr=" .. bufnr)
 
@@ -39,15 +67,13 @@ function M.update()
 
   local text_segments = {}
   for i = block_start, #lines do
-    local clean = (lines[i] or ""):gsub("%-%-.*", "")
-    text_segments[#text_segments + 1] = clean
+    text_segments[#text_segments + 1] = strip_comment(lines[i] or "")
   end
   local full_text = table.concat(text_segments, "\n")
 
   local text_offset = 0
   for i = block_start, cursor_row - 1 do
-    local clean = (lines[i] or ""):gsub("%-%-.*", "")
-    text_offset = text_offset + #clean + 1
+    text_offset = text_offset + #strip_comment(lines[i] or "") + 1
   end
   text_offset = text_offset + cursor_col
   dbg("full_text: " .. full_text:sub(1, 200):gsub("\n", "\\n"))
@@ -106,7 +132,10 @@ function M.update()
   end
 
   if text_offset < v_paren then dbg("cursor before VALUES paren"); return end
-  if v_close and text_offset > v_close then dbg("cursor after VALUES paren close"); return end
+  -- text_offset is a 0-based offset while v_close is a 1-based index: the
+  -- cursor sitting ON the closing paren (offset == v_close) is already past
+  -- it — the old `>` let the hint linger on the `;` after the statement
+  if v_close and text_offset >= v_close then dbg("cursor after VALUES paren close"); return end
   dbg("cursor inside VALUES parens")
 
   local vals_prefix = full_text:sub(v_paren + 1, text_offset)
@@ -134,15 +163,20 @@ function M.update()
   local target_col = cols[target_idx]
   dbg("target: col#" .. target_idx .. " = " .. target_col)
 
+  -- Map a 1-based full_text offset to (0-based row, 0-based col) in the
+  -- buffer. Consistently 0-based: the old mix (line 1 came back 1-based,
+  -- later lines 0-based) shifted the highlight one byte left whenever the
+  -- column list did not start on the statement's first line. An offset
+  -- pointing at the joining newline maps one past the end of the line
+  -- before it, which the search below sees as an empty segment and skips.
   local function to_buf_pos(byte_off)
-    local acc = 0
+    local consumed = 0  -- full_text chars used by earlier lines, newline included
     for i = block_start, #lines do
-      local clean = (lines[i] or ""):gsub("%-%-.*", "")
-      local line_len = #clean
-      if byte_off <= acc + line_len then
-        return i - 1, byte_off - acc
+      local line_len = #strip_comment(lines[i] or "")
+      if byte_off <= consumed + line_len + 1 then
+        return i - 1, byte_off - consumed - 1
       end
-      acc = acc + line_len + 1
+      consumed = consumed + line_len + 1
     end
     return nil, nil
   end
@@ -154,8 +188,11 @@ function M.update()
 
   for row = start_row, end_row or start_row do
     local line_text = lines[row + 1] or ""
+    -- search_from/search_to are 1-based sub() bounds: start_col is the
+    -- 0-based col right after the opening paren, end_col the 0-based col
+    -- of the closing paren (exclusive)
     local search_from, search_to
-    if row == start_row then search_from = start_col else search_from = 1 end
+    if row == start_row then search_from = start_col + 1 else search_from = 1 end
     if end_row and row == end_row then search_to = end_col else search_to = #line_text end
 
     local segment = line_text:sub(search_from, search_to)
@@ -181,7 +218,6 @@ function M.update()
 end
 
 function M.setup()
-  local group = vim.api.nvim_create_augroup("poste_insert_hint", { clear = true })
   local function debounced_update()
     if _debounce_timer then
       _debounce_timer:stop()
@@ -192,20 +228,33 @@ function M.setup()
       M.update()
     end, DEBOUNCE_MS)
   end
-  vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
-    group = group,
-    pattern = { "*.sql", "*.sqlite" },
-    callback = debounced_update,
-  })
-  vim.api.nvim_create_autocmd({ "CursorHold", "CursorHoldI" }, {
-    group = group,
-    pattern = { "*.sql", "*.sqlite" },
-    callback = M.update,
-  })
-  vim.api.nvim_create_autocmd("InsertLeave", {
-    group = group,
-    pattern = { "*.sql", "*.sqlite" },
-    callback = M.clear,
+  -- Attach the cursor hooks per BUFFER through FileType, matching the
+  -- family convention (au FileType poste_sql). The old `*.sql` filename
+  -- patterns missed every buffer without a .sql name — an unnamed scratch
+  -- buffer or a renamed file got no hints at all.
+  local attach_group = vim.api.nvim_create_augroup("poste_insert_hint_attach", { clear = true })
+  vim.api.nvim_create_autocmd("FileType", {
+    group = attach_group,
+    pattern = { "poste_sql", "poste_sqlite" },
+    callback = function(args)
+      local bufnr = args.buf
+      local group = vim.api.nvim_create_augroup("poste_insert_hint_" .. bufnr, { clear = true })
+      vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
+        group = group,
+        buffer = bufnr,
+        callback = debounced_update,
+      })
+      vim.api.nvim_create_autocmd({ "CursorHold", "CursorHoldI" }, {
+        group = group,
+        buffer = bufnr,
+        callback = function() M.update(bufnr) end,
+      })
+      vim.api.nvim_create_autocmd("InsertLeave", {
+        group = group,
+        buffer = bufnr,
+        callback = function() M.clear(bufnr) end,
+      })
+    end,
   })
 end
 
