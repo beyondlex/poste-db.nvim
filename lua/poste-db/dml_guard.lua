@@ -12,6 +12,8 @@
 --- small plain-table node shape ({ type, children }) so it is unit-testable
 --- without a parser; TSNode subtrees are converted at the parse boundary.
 
+local util = require("poste-db.util")
+
 local M = {}
 
 local ns = vim.api.nvim_create_namespace("poste_db_missing_where")
@@ -165,7 +167,7 @@ end
 function M.snippet(text, max)
   max = max or 64
   local s = (text or ""):gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
-  if #s > max then s = s:sub(1, max - 3) .. "..." end
+  s = util.ellipsize(s, max)
   return s
 end
 

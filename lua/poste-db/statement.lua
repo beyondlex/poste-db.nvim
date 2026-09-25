@@ -4,6 +4,7 @@
 --- Extracted from sql/init.lua to reduce module size and improve testability.
 
 local cli = require("poste-db.cli")
+local util = require("poste-db.util")
 local log = require("poste-db.log")
 local ts_stmt = require("poste-db.ts_stmt")
 local const = require("poste-db.constants")
@@ -569,9 +570,7 @@ function M.extract_label(buf_lines, stmt_start)
         -- plain comment: nearest one wins
         local text = trimmed:match("^%-%-%s*(.-)%s*$") or ""
         if text == "" then return nil end
-        if #text > LABEL_MAX_CHARS then
-          text = text:sub(1, LABEL_MAX_CHARS) .. "…"
-        end
+        text = util.ellipsize(text, LABEL_MAX_CHARS)
         return text
       end
     elseif trimmed:match("^###") then

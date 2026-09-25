@@ -1,4 +1,5 @@
 local state = require("poste-db.state")
+local util = require("poste-db.util")
 local dialog = require("poste-db.dialog")
 local layout = require("poste-db.layout")
 local connections = require("poste-db.connections")
@@ -49,10 +50,7 @@ end
 local function fmt_sql(sql, max_len)
   local s = sql:gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
   max_len = max_len or 50
-  if #s > max_len then
-    s = s:sub(1, max_len - 3) .. "..."
-  end
-  return s
+  return util.ellipsize(s, max_len)
 end
 
 local function classify_stmt(sql)

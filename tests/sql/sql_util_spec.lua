@@ -37,3 +37,35 @@ describe("util utf8 helpers", function()
     assert.equals(string.rep("\u{6570}", 3), util.utf8_safe_cut(s, 10))
   end)
 end)
+
+describe("util ellipsize", function()
+  it("leaves strings that fit untouched", function()
+    assert.equals("SELECT 1", util.ellipsize("SELECT 1", 20))
+    assert.equals("数数数", util.ellipsize("数数数", 6))  -- exactly 6 cells
+  end)
+
+  it("cuts in display cells, never mid-glyph, and appends ...", function()
+    -- each 数 is 3 bytes but 2 cells; budget 8 minus the ... reserve leaves
+    -- 5 cells = two glyphs, and the old byte-based cut landed mid-glyph
+    local out = util.ellipsize("数数数数数", 8)
+    assert.equals("数数...", out)
+    assert.equals(7, vim.fn.strdisplaywidth(out))  -- 4 cells + 3 dots
+  end)
+
+  it("budgets display cells, so the result fits the screen budget", function()
+    -- 10 CJK chars = 30 bytes but 20 cells: a byte-length check called for
+    -- a cut (and split a glyph); a cell budget of 20 fits without one
+    local ten_cjk = string.rep("\u{6570}", 10)
+    assert.equals(ten_cjk, util.ellipsize(ten_cjk, 20))
+    -- and a 10-cell budget produces a valid, on-budget string
+    local out = util.ellipsize(ten_cjk, 10)
+    assert.equals("数数数...", out)
+    assert.is_true(vim.fn.strdisplaywidth(out) <= 10)
+  end)
+
+  it("tolerates nil and tiny budgets", function()
+    assert.equals("", util.ellipsize(nil, 10))
+    assert.equals("a", util.ellipsize("abcdef", 1))
+    assert.equals("ab", util.ellipsize("abcdef", 2))
+  end)
+end)

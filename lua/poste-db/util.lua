@@ -26,6 +26,20 @@ function M.truncate_displaywidth(s, max_dw)
   return width.truncate(s, max_dw)
 end
 
+--- Fit `s` into `max` display cells, appending "..." when it had to cut.
+--- Never splits a UTF-8 character and counts CJK at their real width, so a
+--- label or confirm snippet with non-ASCII text stays inside its budget on
+--- screen instead of overflowing (byte length) or splitting mid-glyph.
+--- @param s string|nil
+--- @param max number
+--- @return string
+function M.ellipsize(s, max)
+  s = s or ""
+  if width.display_width(s) <= max then return s end
+  if max <= 3 then return width.truncate(s, max) end
+  return width.truncate(s, max - 3) .. "..."
+end
+
 --- Truncate at a BYTE budget without splitting a UTF-8 character: the cut
 --- point backs up over continuation bytes. (No ellipsis appended.) A plain
 --- `sub` cut emitted invalid UTF-8 whenever the budget landed inside a CJK
