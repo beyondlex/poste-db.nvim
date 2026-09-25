@@ -27,7 +27,13 @@ local config_stub = {
 
 package.loaded["poste-db.state"] = poste_state_stub
 package.loaded["poste-db.config"] = config_stub
-package.loaded["poste-db.util"] = {}
+-- dml_guard (a transitive dep of the runner) calls util.ellipsize in its
+-- confirm path, so the isolation stub must forward the real helper — an
+-- empty table turned every DML-guard rejection into "attempt to call field
+-- 'ellipsize' (a nil value)".
+package.loaded["poste-db.util"] = {
+  ellipsize = (saved_util or require("poste-db.util")).ellipsize,
+}
 package.loaded["poste-db.indicators"] = { clear_all = function() end, set_indicator = function() end }
 package.loaded["poste-db.statement"] = {
   extract_stmt_at_cursor = function() end,

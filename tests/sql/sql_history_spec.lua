@@ -48,9 +48,11 @@ describe("statement extract_label", function()
     local long = string.rep("x", 60)
     local buf = { "-- " .. long, "SELECT 1;" }
     local label = statement.extract_label(buf, 2)
-    -- 40 chars + UTF-8 ellipsis (3 bytes)
-    assert.equals(43, #label)
-    assert.equals("…", label:sub(-3))
+    -- 37 cells + ASCII "..." via util.ellipsize (the old hand-rolled cut
+    -- appended a 3-byte UTF-8 … and split glyphs on CJK labels)
+    assert.equals(40, #label)
+    assert.equals("...", label:sub(-3))
+    assert.equals(37, #label:sub(1, -4))
   end)
 
   it("handles indented comments", function()
