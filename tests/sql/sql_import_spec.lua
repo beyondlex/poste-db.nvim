@@ -145,10 +145,14 @@ describe("JSON parsing", function()
     assert.equals(vim.NIL, result.rows[1][email_idx])
   end)
 
-  it("returns error for non-array JSON", function()
+  it("imports a bare object as one row (it IS the data, not an error)", function()
+    -- was "returns error for non-array JSON": a pasted API response
+    -- `{"key":"val"}` now imports exactly like `[{"key":"val"}]`
     local result, err = import._parse_json_for_test('{"key":"val"}')
-    assert.is_nil(result)
-    assert.is_not_nil(err)
+    assert.is_nil(err)
+    assert.same({ "key" }, result.columns)
+    assert.equals(1, #result.rows)
+    assert.equals("val", result.rows[1][1])
   end)
 
   it("serializes nested objects and arrays as JSON text, not pointer strings", function()
