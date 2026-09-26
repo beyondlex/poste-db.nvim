@@ -153,6 +153,13 @@ parse_value = function(v)
   if v == "false" then return false end
   local n = tonumber(v)
   if n then return n end
+  -- Fail closed on multi-line strings: the single-line path below strips the
+  -- outer quotes of `"""x"""` into the garbage value `""x""`, and a password
+  -- or host written that way would silently misbehave. Erroring names the
+  -- real problem instead.
+  if v:sub(1, 3) == '"""' or v:sub(1, 3) == "'''" then
+    return nil, "Multi-line strings are not supported"
+  end
   -- NB: the error must not quote the value — connections.toml values are
   -- frequently secrets, and the message goes to the log file.
   if v:sub(1, 1) == '"' then
@@ -208,6 +215,15 @@ function M.parse(content)
           return nil, "Invalid table header: " .. line
         end
         name = trim(trimmed:sub(2, close - 1))
+        -- Anything after the closing bracket must be empty or a comment:
+        -- `[a] [b]` used to register section `a` and silently drop the `[b]`
+        -- the rest of the file keys into, so every following key landed in
+        -- the wrong connection. The quoted-name path below already errors
+        -- on a non-empty tail.
+        local rest = trim(trimmed:sub(close + 1))
+        if rest ~= "" and rest:sub(1, 1) ~= "#" then
+          return nil, "Invalid table header: " .. line
+        end
       end
       if name == "" then
         return nil, "Empty table header"
