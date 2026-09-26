@@ -90,6 +90,16 @@ function M.parse_csv(text)
   end
 
   local header = parsed_rows[1]
+  -- Two columns spelled the same are ambiguous input: the column map would
+  -- point both file columns at one table column and whichever came last
+  -- would silently win. Fail and say which name is doubled.
+  local seen = {}
+  for _, name in ipairs(header) do
+    if seen[name] then
+      return nil, ("Duplicate column '%s' in header"):format(name)
+    end
+    seen[name] = true
+  end
   local num_cols = #header
   local data_rows = {}
   for ri = 2, #parsed_rows do
@@ -122,6 +132,15 @@ function M.parse_tsv(text)
   end
 
   local header = rows[1]
+  -- same ambiguity as the CSV path: a doubled name would silently let the
+  -- right-hand column win the mapping
+  local seen = {}
+  for _, name in ipairs(header) do
+    if seen[name] then
+      return nil, ("Duplicate column '%s' in header"):format(name)
+    end
+    seen[name] = true
+  end
   local num_cols = #header
   local data_rows = {}
   for i = 2, #rows do
@@ -142,7 +161,14 @@ function M.parse_json(text)
     return nil, "Invalid JSON: " .. tostring(ok)
   end
   if #data == 0 then
-    return nil, "JSON array is empty"
+    -- A single object — the shape a pasted API response has — is one row:
+    -- `{"a": 1}` imports exactly like `[{"a": 1}]`. Only a decoded value
+    -- with no keys at all stays an error.
+    if next(data) ~= nil then
+      data = { data }
+    else
+      return nil, "JSON array is empty"
+    end
   end
 
   local seen = {}

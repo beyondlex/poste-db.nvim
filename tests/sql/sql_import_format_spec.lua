@@ -66,6 +66,13 @@ describe("import.format.parse_csv", function()
     assert.is_nil(res)
     assert.matches("No data rows", err)
   end)
+
+  it("rejects a duplicated header name instead of letting the last one win", function()
+    -- the column map used to point both file columns at one table column
+    -- and whichever came later silently overwrote the other
+    local _, err = fmt.parse_csv("a,a\n1,2")
+    assert.matches("Duplicate column 'a' in header", err)
+  end)
 end)
 
 describe("import.format.parse_tsv", function()
@@ -86,6 +93,11 @@ describe("import.format.parse_tsv", function()
     local _, err = fmt.parse_tsv("a\tb\n1\t2\t3")
     assert.matches("Row 2: expected 2 columns, got 3", err)
   end)
+
+  it("rejects a duplicated header name", function()
+    local _, err = fmt.parse_tsv("a\ta\n1\t2")
+    assert.matches("Duplicate column 'a' in header", err)
+  end)
 end)
 
 describe("import.format.parse_json", function()
@@ -102,10 +114,20 @@ describe("import.format.parse_json", function()
     assert.equals('{"x":1}', res.rows[1][1])
   end)
 
-  it("errors on an empty array, a scalar array and a bare object", function()
+  it("errors on an empty array and a scalar array", function()
     assert.matches("empty", select(2, fmt.parse_json("[]")))
     assert.matches("objects", select(2, fmt.parse_json("[1,2]")))
-    assert.is_nil(select(1, fmt.parse_json('{"a":1}')))
+  end)
+
+  it("imports a bare object as one row (pasted API response)", function()
+    local res, err = fmt.parse_json('{"a":1,"b":"x"}')
+    assert.is_nil(err)
+    assert.same({ "a", "b" }, res.columns)
+    assert.same({ "1", "x" }, res.rows[1])
+  end)
+
+  it("still errors on a completely empty object", function()
+    assert.matches("empty", select(2, fmt.parse_json("{}")))
   end)
 end)
 
