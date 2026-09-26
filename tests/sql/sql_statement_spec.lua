@@ -195,6 +195,32 @@ describe("statement extract_table_name", function()
   it("strips block comments", function()
     assert.equals("users", statement.extract_table_name("select * from users /* block */"))
   end)
+
+  it("ignores a keyword inside a literal that follows an escaped-quote literal", function()
+    -- The old `'([^']|'')*'` blanker stopped its match at the *next*
+    -- literal's opening quote once a '' escape had passed, leaving
+    -- "note from bob" visible for the keyword scan -> "bob".
+    assert.equals("users",
+      statement.extract_table_name("SELECT 'it''s', 'note from bob' FROM users;"))
+  end)
+
+  it("a fake 'from' inside an UPDATE literal cannot outrank the UPDATE target", function()
+    -- The keyword scan tries FROM first; the half-blanked literal supplied
+    -- one, and the table became "2024".
+    assert.equals("t",
+      statement.extract_table_name("update t set a = 'it''s a note from 2024', b = 'x' where id = 1"))
+  end)
+
+  it("keeps comma-separated literals out of the way", function()
+    assert.equals("users", statement.extract_table_name("SELECT 'a','b' FROM users;"))
+    assert.equals("logs", statement.extract_table_name("insert into logs(a) values ('it''s'), ('b')"))
+  end)
+
+  it("an unterminated literal blanks the rest instead of leaking keywords", function()
+    -- no closing quote anywhere: everything after the opener is string data
+    -- as far as the keyword scan is concerned
+    assert.equals("users", statement.extract_table_name("select * from users where note = 'it''s from bob"))
+  end)
 end)
 
 describe("statement get_stmt_sql", function()

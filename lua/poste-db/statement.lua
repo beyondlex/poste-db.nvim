@@ -481,6 +481,38 @@ local function last_part(text, pos)
   return name
 end
 
+--- Replace every single-quoted literal (and anything left after an
+--- unterminated one) with spaces, byte-for-byte length-preserving so
+--- callers can keep using offsets into the original text. `''` inside a
+--- literal is one quote of data, not the closing quote.
+local function blank_single_quoted(sql)
+  local out, i, n = {}, 1, #sql
+  while i <= n do
+    local q = sql:find("'", i, true)
+    if not q then
+      out[#out + 1] = sql:sub(i)
+      break
+    end
+    out[#out + 1] = sql:sub(i, q - 1)
+    local j = q + 1
+    while true do
+      local q2 = sql:find("'", j, true)
+      if not q2 then
+        j = n + 1 -- unterminated literal: blank through the end
+        break
+      elseif sql:sub(q2 + 1, q2 + 1) == "'" then
+        j = q2 + 2
+      else
+        j = q2 + 1 -- past the closing quote
+        break
+      end
+    end
+    out[#out + 1] = string.rep(" ", j - q)
+    i = j
+  end
+  return table.concat(out)
+end
+
 --- Extract primary table name from a SQL statement.
 --- Returns nil when the statement does not name one table unambiguously: 2+
 --- JOINs, or a `FROM a, b` list (use "result n" instead).
@@ -488,11 +520,19 @@ function M.extract_table_name(sql)
   if not sql or sql == "" then return nil end
   -- Strip -- line comments and /* */ block comments
   local clean = sql:gsub("%-%-[^\n]*", ""):gsub("/%*.-%*/", "")
-  -- Blank single-quoted literals (length-preserving) so a "join" inside a
-  -- string no longer inflates the JOIN count (09-12 carry). Double-quoted
-  -- regions stay intact: they can be identifiers feeding the captures below,
-  -- and `''` inside a literal is the SQL escape form.
-  clean = clean:gsub("'([^']|'')*'", function(lit) return string.rep(" ", #lit) end)
+  -- Blank single-quoted literals (length-preserving — `clean` and `upper`
+  -- below must share byte offsets) so a "join" inside a string no longer
+  -- inflates the JOIN count (09-12 carry). Double-quoted regions stay
+  -- intact: they can be identifiers feeding the captures below, and `''`
+  -- inside a literal is the SQL escape form. A scanner, not a pattern:
+  -- `'([^']|'')*'` closes each match at the first quote the greedy `[^']`
+  -- cannot pass, and once a `''` escape has been consumed that is the
+  -- *next* literal's opening quote — `'it''s', 'x'` matched as
+  -- `'it''s', '` and left `x'` visible, so `SELECT 'it''s', 'note from
+  -- bob' FROM users` extracted "bob" and `update t set a = 'it''s a note
+  -- from 2024', …` extracted "2024". The scanner ends each literal at its
+  -- own unpaired quote instead.
+  clean = blank_single_quoted(clean)
   local upper = clean:upper()
   local join_count = 0
   local idx = 1
