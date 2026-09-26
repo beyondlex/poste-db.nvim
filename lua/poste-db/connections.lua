@@ -476,6 +476,11 @@ function M.list_connections(callback)
     table.insert(list, { name = name, dialect = conn.dialect, host = conn.host, port = conn.port, database = conn.database, path = conn.path })
     ::continue::
   end
+  -- Sorted by name: pairs() walks the toml table in hash order, which flips
+  -- as the file is edited — the picker (and every other consumer) would
+  -- show a different order per call. poste-redis sorts its picker rows on
+  -- the same reasoning.
+  table.sort(list, function(a, b) return (a.name or "") < (b.name or "") end)
   vim.schedule(function() callback(list) end)
 end
 

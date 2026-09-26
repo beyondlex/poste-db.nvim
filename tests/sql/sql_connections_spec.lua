@@ -555,6 +555,25 @@ describe("connections list_connections", function()
     assert.equals(1, #captured)
     assert.equals("primary", captured[1].name)
   end)
+
+  it("sorts the list by name regardless of toml table order", function()
+    -- pairs() walks the parsed table in hash order, which flips as the file
+    -- is edited; the picker would show a different order per call
+    local config_path = tmpdir .. "/connections.toml"
+    util_stub.find_file_upwards = function() return config_path end
+    package.loaded["poste-db.toml"].parse_file = function()
+      return {
+        zeta = { dialect = "postgres", host = "h" },
+        alpha = { dialect = "mysql", host = "h" },
+        mid = { dialect = "sqlite", path = "/tmp/x.db" },
+      }
+    end
+    local captured
+    connections.list_connections(function(list) captured = list end)
+    vim.wait(100, function() return captured ~= nil end)
+    assert.same({ "alpha", "mid", "zeta" },
+      { captured[1].name, captured[2].name, captured[3].name })
+  end)
 end)
 
 describe("connections env var resolution", function()
