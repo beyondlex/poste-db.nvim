@@ -191,11 +191,27 @@ end
 local function format_json(data_result)
   local cols = data_result.columns or {}
   local rows = data_result.rows or {}
+  -- Duplicate result columns (`SELECT a.id, b.id FROM a JOIN b`) cannot be
+  -- separate JSON object keys. The old last-write-wins silently dropped every
+  -- earlier twin's values; suffixing keeps them (`id`, `id_2`). A result that
+  -- already carries an explicit `id_2` can still collide with the synthesized
+  -- name — accepted, the same trade most exporters make.
+  local seen, keys = {}, {}
+  for _, col in ipairs(cols) do
+    local key = tostring(col.name)
+    if seen[key] then
+      seen[key] = seen[key] + 1
+      key = key .. "_" .. seen[key]
+    else
+      seen[key] = 1
+    end
+    keys[#keys + 1] = key
+  end
   local objects = {}
   for _, row in ipairs(rows) do
     local obj = {}
-    for i, col in ipairs(cols) do
-      obj[col.name] = row[i]
+    for i, key in ipairs(keys) do
+      obj[key] = row[i]
     end
     table.insert(objects, obj)
   end

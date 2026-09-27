@@ -80,6 +80,17 @@ describe("export format_json", function()
       { id = 2, name = 'Bob "the" builder' },
     }, parsed)
   end)
+
+  it("keeps duplicate result columns as suffixed keys instead of dropping them", function()
+    -- Regression: `SELECT a.id, b.id FROM a JOIN b` used to export as
+    -- [{"id":2}] — one JSON key slot, last write won, the first column's
+    -- values silently gone. CSV and the SQL exporter keep both columns.
+    local out = export._test.format_json({
+      columns = { { name = "id" }, { name = "id" } },
+      rows = { { 1, 2 } },
+    })
+    assert.same({ { id = 1, id_2 = 2 } }, vim.json.decode(out))
+  end)
 end)
 
 describe("export format_markdown", function()
