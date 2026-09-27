@@ -381,11 +381,15 @@ local function run_sql(sql, opts)
   local tmpfile = write_temp_file(sql)
   local cmd = vim.list_extend({ binary }, build_cmd(tmpfile, opts))
   local ok_sys, result_obj = pcall(vim.system, cmd, { timeout = 30000 })
-  pcall(vim.fn.delete, tmpfile)
   if not ok_sys then
+    -- Nothing was spawned, so no child can still want the file.
+    pcall(vim.fn.delete, tmpfile)
     sql_log.fail(base, "failed to start exec-file", vim.uv.now() - t0)
     return nil
   end
+  -- The temp file is exec-file's only input; it must outlive the child.
+  -- Unlinking between spawn and wait() races the child's first open() and
+  -- fails the run with "file not found" — delete only after wait() returns.
   local result = result_obj:wait()
   pcall(vim.fn.delete, tmpfile)
   if result.code ~= 0 then

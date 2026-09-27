@@ -323,6 +323,75 @@ describe("exec_run", function()
       end
     end)
   end)
+
+  describe("run_sql temp-file lifecycle", function()
+    local saved_binary, made
+
+    before_each(function()
+      saved_binary = vim.g.poste_binary
+      local dir = vim.fn.tempname() .. ".d"
+      vim.fn.mkdir(dir, "p")
+      local fake = dir .. "/poste"
+      vim.fn.writefile({ "#!/bin/sh" }, fake)
+      vim.fn.setfperm(fake, "rwxr-xr-x")
+      vim.g.poste_binary = fake
+      made = { dir }
+    end)
+
+    after_each(function()
+      if saved_binary == nil then
+        vim.cmd("unlet! g:poste_binary")
+      else
+        vim.g.poste_binary = saved_binary
+      end
+      for _, p in ipairs(made) do vim.fn.delete(p, "rf") end
+    end)
+
+    it("the temp file is still present when the child reads it", function()
+      -- Regression: the temp file used to be deleted right after vim.system
+      -- spawned the child and before wait() returned. The file is exec-file's
+      -- only input, so unlinking it in that window raced the child's first
+      -- open() and could fail the run with "file not found".
+      local observed = {}
+      local orig_system = vim.system
+      vim.system = function(cmd, _opts)
+        local tmpfile = vim.iter(cmd):find(function(a) return a:match("%.sql$") end)
+        observed.at_spawn = vim.fn.filereadable(tmpfile) == 1
+        return {
+          wait = function()
+            observed.at_wait = vim.fn.filereadable(tmpfile) == 1
+            return {
+              code = 0,
+              stdout = vim.json.encode({ type = "summary", total_time_ms = 1 }),
+              stderr = "",
+            }
+          end,
+        }
+      end
+      local ok, resp = pcall(exec_run.run_sql, "SELECT 1;", { log = false })
+      vim.system = orig_system
+      assert.is_true(ok)
+      assert.truthy(resp)
+      assert.is_true(observed.at_spawn)
+      assert.is_true(observed.at_wait, "temp file must outlive the child")
+    end)
+
+    it("removes the temp file after a failed spawn", function()
+      -- vim.system raising means nothing was spawned; the file must not leak.
+      local leaked = nil
+      local orig_system = vim.system
+      vim.system = function(cmd, _opts)
+        leaked = vim.iter(cmd):find(function(a) return a:match("%.sql$") end)
+        error("spawn failed")
+      end
+      local ok, resp = pcall(exec_run.run_sql, "SELECT 1;", { log = false })
+      vim.system = orig_system
+      assert.is_true(ok)
+      assert.is_nil(resp)
+      assert.truthy(leaked)
+      assert.equals(0, vim.fn.filereadable(leaked), "temp file must be cleaned up")
+    end)
+  end)
 end)
 
 describe("exec_run.first_error", function()
