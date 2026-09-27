@@ -72,6 +72,13 @@ function M.run(args, opts)
     end,
     on_exit = function(code)
       if state.cancelled then return end
+      -- cli.run_async synthesizes a synchronous on_exit(-1) when the binary is
+      -- missing, before any job exists (state.job_id is only set after a
+      -- successful start). Swallow that one: the failed-start branch below
+      -- reports the failure, and a caller must not get on_exit(-1) *and*
+      -- on_error for the same run — the introspect caller journaled twice and
+      -- notified twice off exactly this pair.
+      if state.job_id == nil then return end
       cleanup()
       if opts.on_exit then opts.on_exit(code) end
     end,
