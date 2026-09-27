@@ -461,7 +461,14 @@ function M.load_connections(callback, search_dir)
       local toml = require("poste-db.toml")
       local parsed, err = toml.parse_file(config_path)
       if parsed then
-        for name, conn in pairs(parsed) do
+        -- Sort names before building nodes: pairs() order flips as the toml is
+        -- edited, which made the browser's top level reshuffle between opens
+        -- (the same churn the picker's list_connections already fixes).
+        local names = {}
+        for name in pairs(parsed) do names[#names + 1] = name end
+        table.sort(names)
+        for _, name in ipairs(names) do
+          local conn = parsed[name]
           -- Skip dialects poste-db does not support (satellite sections from a
           -- shared connections.toml, e.g. redis)
           if not const.is_sql_dialect(conn.dialect) then goto continue end
