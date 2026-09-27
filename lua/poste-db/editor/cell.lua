@@ -392,15 +392,18 @@ end
 -- JSON formatting helpers
 ---------------------------------------------------------------------------
 
---- Format a Lua table as pretty-printed JSON for editing.
+--- Format a Lua table as JSON for editing.
 --- @param val table JSON value
 --- @return string
 function M.format_json_input(val)
   if type(val) == "string" then return val end
   local ok, str = pcall(vim.json.encode, val)
   if ok then
-    local no_esc = str:gsub('\\"', '"')
-    return no_esc
+    -- Plain encode, escapes intact: this used to gsub('\\"', '"') the output,
+    -- which read prettier but turned every string VALUE containing a quote
+    -- (`{"note":"he said "hi""}`) into invalid JSON — the editor's default
+    -- text no longer re-parsed, so even a no-op edit of such a cell failed.
+    return str
   end
   return tostring(val)
 end

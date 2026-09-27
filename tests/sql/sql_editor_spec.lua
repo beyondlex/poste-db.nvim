@@ -1036,6 +1036,17 @@ describe("JSON format", function()
     assert.is_truthy(result:match("1"))
   end)
 
+  it("format_json_input keeps quote escapes, so the text re-parses", function()
+    -- Regression: the encoder output used to have its `\"` escapes stripped,
+    -- which broke the round-trip for any JSON/JSONB value carrying a quote —
+    -- the cell editor seeded the input prompt with invalid JSON and even a
+    -- no-op edit of such a cell failed to save.
+    local input = { note = 'he said "hi" -- ok' }
+    local shown = editor.format_json_input(input)
+    assert.equals('{"note":"he said \\"hi\\" -- ok"}', shown)
+    assert.same(input, editor.parse_json_input(shown))
+  end)
+
   it("format_json_input returns string as-is", function()
     local result = editor.format_json_input('{"a":1}')
     assert.equals('{"a":1}', result)
