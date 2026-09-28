@@ -392,6 +392,107 @@ describe("exec_run", function()
       assert.equals(0, vim.fn.filereadable(leaked), "temp file must be cleaned up")
     end)
   end)
+
+  describe("run_async failed-start delivery", function()
+    -- A run that never started must report through on_error exactly once and
+    -- return 1 ("handled inline"). The old shape delivered the binary-missing
+    -- failure from run_async AND left a nil return that every caller turned
+    -- into a second failure report — and a jobstart -1 (binary present, spawn
+    -- refused) fired no callback at all, so callers without the id check
+    -- (import/execute) waited forever.
+    local saved_cli = package.loaded["poste-db.cli"]
+    local saved_state = package.loaded["poste-db.state"]
+
+    after_each(function()
+      package.loaded["poste-db.cli"] = saved_cli
+      package.loaded["poste-db.state"] = saved_state
+      -- The next require re-resolves exec_run against the real modules.
+      package.loaded["poste-db.exec_run"] = nil
+    end)
+
+    --- Load a fresh exec_run wired to stubbed state/cli.
+    --- binary: string|nil  what find_poste_binary reports
+    --- cli_run: function(cmd, cbs) -> job_id  stands in for cli.run_async
+    local function load_exec_run(binary, cli_run)
+      package.loaded["poste-db.state"] = { find_poste_binary = function() return binary end }
+      package.loaded["poste-db.cli"] = { run_async = function(cmd, cbs) return cli_run(cmd, cbs) end }
+      package.loaded["poste-db.exec_run"] = nil
+      return require("poste-db.exec_run")
+    end
+
+    it("delivers on_error exactly once when the binary is missing and returns 1", function()
+      local er = load_exec_run(nil, function()
+        error("cli.run_async must not be reached without a binary")
+      end)
+      local errors, responses = {}, {}
+      local ret = er.run_async("SELECT 1;", { log = false }, {
+        on_response = function(resp) responses[#responses + 1] = resp end,
+        on_error = function(msg) errors[#errors + 1] = msg end,
+      })
+      assert.equals(1, #errors, "one failure, one delivery")
+      assert.equals("Poste binary not found", errors[1])
+      assert.equals(0, #responses)
+      assert.equals(1, ret, "handled inline — callers must not add a second report")
+    end)
+
+    it("delivers on_error exactly once when jobstart refuses the spawn", function()
+      -- The real -1 shape: cli.run_async returns without firing any callback.
+      local er = load_exec_run("/fake/poste", function() return -1 end)
+      local errors = {}
+      local ret = er.run_async("SELECT 1;", { log = false }, {
+        on_error = function(msg) errors[#errors + 1] = msg end,
+      })
+      assert.equals(1, #errors)
+      assert.truthy(errors[1]:find("Failed to start", 1, true))
+      assert.equals(1, ret)
+    end)
+
+    it("swallows the failed start's synthesized exit (single delivery)", function()
+      -- cli.run_async's missing-binary branch calls on_exit(-1) synchronously;
+      -- its scheduled delivery must not add a second report.
+      local er = load_exec_run("/fake/poste", function(_cmd, cbs)
+        cbs.on_exit(-1)
+        return nil
+      end)
+      local errors = {}
+      local ret = er.run_async("SELECT 1;", { log = false }, {
+        on_error = function(msg) errors[#errors + 1] = msg end,
+      })
+      assert.equals(1, #errors, "the failed-start branch delivered synchronously")
+      assert.equals("Failed to start poste job", errors[1])
+      assert.equals(1, ret)
+      -- Pump the loop: the synthesized exit's scheduled body must stay quiet.
+      vim.wait(100, function() return false end)
+      assert.equals(1, #errors)
+    end)
+
+    it("still delivers a summary response and stays quiet on a clean exit", function()
+      local tmpfile
+      local er = load_exec_run("/fake/poste", function(cmd, cbs)
+        tmpfile = cmd[2] -- exec-file's input file is the second argument
+        -- Replay the job's side synchronously; the module's deliveries ride
+        -- vim.schedule, pumped by the wait below.
+        cbs.on_stdout({
+          '{"type":"result","seq":1,"total":1,"status":"ok","sql":"SELECT 1","row_count":1,"affected_rows":null}',
+          '{"type":"summary","total_time_ms":2,"dialect":"sqlite"}',
+          "",
+        })
+        cbs.on_exit(0)
+        return 42
+      end)
+      local errors, responses = {}, {}
+      local ret = er.run_async("SELECT 1;", { log = false }, {
+        on_response = function(resp) responses[#responses + 1] = resp end,
+        on_error = function(msg) errors[#errors + 1] = msg end,
+      })
+      vim.wait(200, function() return #responses > 0 end)
+      assert.equals(42, ret, "a real job returns its job id")
+      assert.equals(1, #responses)
+      assert.equals(0, #errors)
+      assert.truthy(tmpfile)
+      assert.equals(0, vim.fn.filereadable(tmpfile), "temp file cleaned up after delivery")
+    end)
+  end)
 end)
 
 describe("exec_run.first_error", function()

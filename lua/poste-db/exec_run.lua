@@ -420,6 +420,14 @@ end
 ---   - on_progress: function(seq, total)|nil
 ---   - on_error: function(message, stderr)|nil   called when the process itself fails
 --- Logging opts (see journal_base): log=false opts out; log_source/log_extra tag.
+---
+--- Delivery contract: every run reports its outcome exactly once through the
+--- callbacks — a SQL failure as `on_response` (has_error), a transport failure
+--- as `on_error`. A run that never started (binary missing, jobstart refused
+--- the spawn) delivers `on_error` here and returns 1, so a caller must not add
+--- its own failure report off the return value; the return is the job id
+--- (>0) when a real job runs, 1 when the run was handled inline (a lone USE,
+--- or a failed start).
 local function run_async(sql, opts, callbacks)
   opts = opts or {}
   callbacks = callbacks or {}
@@ -469,7 +477,7 @@ local function run_async(sql, opts, callbacks)
   local binary = state.find_poste_binary()
   if not binary then
     if on_error then on_error("Poste binary not found", "") end
-    return nil
+    return 1
   end
 
   local tmpfile = write_temp_file(sql)
@@ -482,6 +490,10 @@ local function run_async(sql, opts, callbacks)
   local summary_seen = false
 
   local job_id
+  -- Set when the spawn is known to have failed; the exit callback a failed
+  -- start may have synthesized (cli.run_async calls it synchronously, its
+  -- delivery lands later via vim.schedule) must not report the same run twice.
+  local start_failed = false
 
   local function flush_and_deliver()
     local resp = build_response(events, opts.conn_url, opts.database)
@@ -514,6 +526,7 @@ local function run_async(sql, opts, callbacks)
     on_exit = function(code)
       vim.schedule(function()
         pcall(vim.fn.delete, tmpfile)
+        if start_failed then return end
         if not summary_seen and on_error then
           local text = table.concat(stderr_buf, "\n")
           on_error(text ~= "" and text or ("exit code " .. code), text)
@@ -522,10 +535,17 @@ local function run_async(sql, opts, callbacks)
     end,
   })
 
-  -- The temp file is deleted by the on_stdout/on_exit paths above; when the
-  -- job never started there is no callback to do it, so clean up here.
+  -- A run that never started reports through on_error exactly once, here —
+  -- whatever the seam (jobstart's -1 fires no callbacks at all, so a caller
+  -- keyed on callbacks alone would wait forever; and a caller keyed on the
+  -- return value would add a second report to the binary-missing delivery).
+  -- Returning 1 (not nil) tells callers "handled inline" so their own
+  -- `job_id <= 0` armor stays dormant.
   if not job_id or job_id <= 0 then
+    start_failed = true
     pcall(vim.fn.delete, tmpfile)
+    if on_error then on_error("Failed to start poste job", "") end
+    return 1
   end
 
   return job_id
