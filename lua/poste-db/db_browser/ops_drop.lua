@@ -223,7 +223,8 @@ local function start_batch_drop(items, conn_label, search_dir, context)
     local done = completed + failed
     local pct = total > 0 and math.floor(done / total * 100) or 0
     local bar_len = 20
-    local filled = math.floor(done / total * bar_len)
+    -- Same guard as pct: an empty items list would feed string.rep a NaN.
+    local filled = total > 0 and math.floor(done / total * bar_len) or 0
     local bar = string.rep("█", filled) .. string.rep("░", bar_len - filled)
     table.insert(lines, "  Connection: " .. conn_label)
     table.insert(lines, "")
@@ -283,15 +284,16 @@ local function start_batch_drop(items, conn_label, search_dir, context)
       "  Succeeded: " .. completed .. "  |  Failed: " .. failed,
       "",
     }
-    for label, err in pairs(errors) do
+    -- Sorted: pairs() order reshuffles between runs; the summary reads in a
+    -- stable order.
+    local names = {}
+    for label in pairs(errors) do table.insert(names, label) end
+    table.sort(names)
+    for _, label in ipairs(names) do
       summary_lines[#summary_lines + 1] = "  ✘ " .. label
-      local clean = err:gsub("\n", " "):gsub("\r", "")
-      local line_len = 50
-      local pos = 1
-      while pos <= #clean do
-        local chunk = clean:sub(pos, pos + line_len - 1)
+      local clean = tostring(errors[label] or ""):gsub("\n", " "):gsub("\r", "")
+      for _, chunk in ipairs(util.wrap_utf8(clean, 50)) do
         summary_lines[#summary_lines + 1] = "      " .. chunk
-        pos = pos + line_len
       end
     end
     local height = math.min(math.max(6, 4 + #summary_lines), 24)

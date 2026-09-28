@@ -1,5 +1,6 @@
 
 local sql_state = require("poste-db.state")
+local core_util = require("poste-db.util")
 
 local M = {}
 
@@ -64,6 +65,27 @@ function M.format_bytes(bytes)
   if bytes >= 1048576 then return string.format("%.2f MB", bytes / 1048576) end
   if bytes >= 1024 then return string.format("%.2f kB", bytes / 1024) end
   return bytes .. " B"
+end
+
+--- Split `text` into chunks of at most `chunk_bytes` bytes without splitting
+--- a UTF-8 character (the cut backs up over continuation bytes). Server error
+--- text is user- and data-supplied and routinely CJK; the byte-chunk loops it
+--- replaced split glyphs and put U+FFFD replacement characters into the copy/
+--- drop summary dialogs. Empty text wraps to no chunks, like the byte loop.
+function M.wrap_utf8(text, chunk_bytes)
+  local chunks = {}
+  local pos = 1
+  while pos <= #text do
+    local chunk = core_util.utf8_safe_cut(text:sub(pos), chunk_bytes)
+    if chunk == "" then
+      -- A budget smaller than one character: keep that character whole
+      -- rather than loop forever on an empty cut.
+      chunk = text:sub(pos, pos + core_util.utf8_char_bytes(text:byte(pos)) - 1)
+    end
+    chunks[#chunks + 1] = chunk
+    pos = pos + #chunk
+  end
+  return chunks
 end
 
 --- Invalidate `target_node` up to its `node_type` ancestor, then reload that

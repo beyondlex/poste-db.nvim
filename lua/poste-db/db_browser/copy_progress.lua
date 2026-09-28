@@ -140,15 +140,18 @@ function M.show_summary_dialog(completed, failed, errors)
     "",
   }
   if failed > 0 then
-    for name, err in pairs(errors) do
+    -- Sorted: pairs() order reshuffles between runs, and the summary should
+    -- read in a stable order (same class as the connection pickers).
+    local names = {}
+    for name in pairs(errors) do table.insert(names, name) end
+    table.sort(names)
+    for _, name in ipairs(names) do
       table.insert(lines, "  ✘ " .. name)
-      local clean = err:gsub("\n", " "):gsub("\r", "")
-      local line_len = 50
-      local pos = 1
-      while pos <= #clean do
-        local chunk = clean:sub(pos, pos + line_len - 1)
+      -- tostring: the callback contract says a string, but the err argument
+      -- travels through several modules before it lands here.
+      local clean = tostring(errors[name] or ""):gsub("\n", " "):gsub("\r", "")
+      for _, chunk in ipairs(db_util.wrap_utf8(clean, 50)) do
         table.insert(lines, "      " .. chunk)
-        pos = pos + line_len
       end
     end
   end
@@ -230,7 +233,9 @@ function M.show_paste_progress(source, target, jobs, on_close)
     local done = completed + failed
     local pct = total > 0 and math.floor(done / total * 100) or 0
     local bar_len = 20
-    local filled = math.floor(done / total * bar_len)
+    -- Same guard as pct: with no jobs at all, done/total is 0/0 and
+    -- string.rep would receive NaN.
+    local filled = total > 0 and math.floor(done / total * bar_len) or 0
     local bar = string.rep("█", filled) .. string.rep("░", bar_len - filled)
     table.insert(lines, "  Source: " .. source.conn .. "." .. tostring(source.db or "(conn)"))
     table.insert(lines, "  Target: " .. target.conn .. "." .. tostring(target.db or "(conn)"))
