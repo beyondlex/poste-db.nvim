@@ -179,6 +179,57 @@ describe("executor session routing", function()
     assert.is_true(exec_run_called)
   end)
 
+  describe("empty-sql guard", function()
+    -- The session transport answers nothing for a blank request (the binary's
+    -- parse_request classifies empty/whitespace sql as Blank and skips it —
+    -- no wire event), so the request used to sit in session.pending forever
+    -- while the caller waited. Both transports now get the same immediate
+    -- on_error instead.
+    local function run_empty(sql)
+      local executor = fresh_executor()
+      local session_called, exec_called, errors = false, false, {}
+      package.loaded["poste-db.session_conn"].execute = function()
+        session_called = true
+        return "dispatched"
+      end
+      package.loaded["poste-db.exec_run"].run_async = function()
+        exec_called = true
+        return 1
+      end
+      executor.execute({
+        sql = sql,
+        conn_url = "sqlite::memory:",
+        prefer_session = true,
+        on_error = function(msg) errors[#errors + 1] = msg end,
+      })
+      return session_called, exec_called, errors
+    end
+
+    it("refuses an empty string without dispatching anywhere", function()
+      local session_called, exec_called, errors = run_empty("")
+      assert.is_false(session_called)
+      assert.is_false(exec_called)
+      assert.equals(1, #errors)
+      assert.equals("Empty SQL statement", errors[1])
+    end)
+
+    it("refuses a whitespace-only statement the same way", function()
+      -- The binary trims before its Blank check, so "  \n\t " is blank there
+      -- too; the guard must not let one through to the session.
+      local session_called, exec_called, errors = run_empty("  \n\t ")
+      assert.is_false(session_called)
+      assert.is_false(exec_called)
+      assert.equals(1, #errors)
+    end)
+
+    it("refuses a nil statement", function()
+      local session_called, exec_called, errors = run_empty(nil)
+      assert.is_false(session_called)
+      assert.is_false(exec_called)
+      assert.equals(1, #errors)
+    end)
+  end)
+
   after_each(function()
     package.loaded["poste-db.session_conn"] = saved_session_conn
     package.loaded["poste-db.exec_run"] = saved_exec_run

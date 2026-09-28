@@ -74,6 +74,16 @@ function M.execute(opts)
     end
   end
 
+  -- The session transport answers nothing for a blank request: the binary's
+  -- parse_request classifies empty/whitespace-only sql as Blank and skips it
+  -- without a wire event, so the request stays in session.pending forever.
+  -- exec-file, by contrast, answers "No SQL statements found". Refusing here
+  -- gives both transports the same, immediate verdict.
+  if not sql or sql:match("^%s*$") then
+    if on_error then on_error("Empty SQL statement", nil) end
+    return
+  end
+
   if prefer_session and conn_url then
     log.info_fmt("SQL run via session: conn=%s db=%s", tostring(conn_url), tostring(database))
     log.debug("SQL via session: " .. (sql and sql:sub(1, 200):gsub("\n", "\\n") or "nil"))
