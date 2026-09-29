@@ -281,6 +281,38 @@ describe("format credential display", function()
   end)
 end)
 
+describe("format_error non-string error shapes", function()
+  -- The seam sits below verdict.error_text, whose structured-error branch
+  -- (vim.inspect) guards one caller — but handle_error forwards its raw
+  -- message here too, and a non-string there used to raise inside wrap_text
+  -- (`#text` on a number, `text .. "\n"` on a table). Same family the
+  -- db_browser summaries fixed: a non-string error must render, not raise.
+  it("renders a table error as inspect text, not a crash", function()
+    local lines = sql_format._test.format_error({ code = "42601" }, "conn")
+    local text = table.concat(lines, "\n")
+    assert.truthy(text:find("42601", 1, true))
+    assert.truthy(text:find("SQL Error", 1, true))
+  end)
+
+  it("renders a number error without raising on the length probe", function()
+    local lines = sql_format._test.format_error(42601, "conn")
+    assert.truthy(table.concat(lines, "\n"):find("42601", 1, true))
+  end)
+
+  it("renders nil and vim.NIL as an empty message, not a crash", function()
+    for _, shape in ipairs({ nil, vim.NIL }) do
+      local lines = sql_format._test.format_error(shape, "conn")
+      assert.truthy(table.concat(lines, "\n"):find("SQL Error", 1, true))
+    end
+  end)
+
+  it("still redacts the DSN inside a structured error's inspect text", function()
+    local lines = sql_format._test.format_error(
+      { detail = "postgres://u:pw@h:5432/db" }, "conn")
+    assert.is_nil(table.concat(lines, "\n"):find(":pw@", 1, true))
+  end)
+end)
+
 describe("format wrap_line (translated-SQL footnote rows)", function()
   it("keeps the leading indent so the ⚡ row aligns with its continuations", function()
     -- gmatch("%S+") dropped the indent, so the marker row lost the two

@@ -918,6 +918,17 @@ end
 --- @param connection string Connection info
 --- @return string[] lines
 function M.format_error(err, connection)
+  -- Errors arrive from several seams: the binary's `error` field passes
+  -- through verdict.error_text (structured → vim.inspect), but
+  -- response.handle_error forwards its raw message here too. Normalize before
+  -- wrap_text — `#text` raises on a number and `text .. "\n"` on a table, so a
+  -- non-string error used to crash the panel instead of rendering (the same
+  -- non-string-error family the db_browser summaries fixed).
+  if err == nil or err == vim.NIL then
+    err = ""
+  elseif type(err) ~= "string" then
+    err = vim.inspect(err)
+  end
   -- A driver error can echo the DSN it failed on, so the message is redacted
   -- too — the panel is user-visible and the journal already is.
   local wrapped = wrap_text(log.redact_url(err), 78)
