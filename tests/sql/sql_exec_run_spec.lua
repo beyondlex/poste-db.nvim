@@ -420,6 +420,26 @@ describe("exec_run", function()
       return require("poste-db.exec_run")
     end
 
+    it("names the no-summary exit instead of a bare 'exit code 0'", function()
+      -- A run whose every event failed to decode ends with exit 0 and no
+      -- summary — an error message that reads "exit code 0" reports a success
+      -- code as the failure. Say why the run counts as failed instead.
+      local er = load_exec_run("/fake/poste", function(_cmd, cbs)
+        cbs.on_stdout(nil, {})
+        cbs.on_exit(0)
+        return 7
+      end)
+      local errors = {}
+      er.run_async("SELECT 1;", { log = false }, {
+        on_error = function(msg) errors[#errors + 1] = msg end,
+      })
+      vim.wait(100, function() return #errors > 0 end)
+
+      assert.equals(1, #errors)
+      assert.truthy(errors[1]:find("no summary event", 1, true))
+      assert.truthy(errors[1]:find("exit code 0", 1, true))
+    end)
+
     it("delivers on_error exactly once when the binary is missing and returns 1", function()
       local er = load_exec_run(nil, function()
         error("cli.run_async must not be reached without a binary")

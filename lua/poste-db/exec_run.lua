@@ -529,7 +529,9 @@ local function run_async(sql, opts, callbacks)
         if start_failed then return end
         if not summary_seen and on_error then
           local text = table.concat(stderr_buf, "\n")
-          on_error(text ~= "" and text or ("exit code " .. code), text)
+          -- "exit code 0" as an error message reads like a success — say why
+          -- the run counts as failed (same wording as file_exec's journal).
+          on_error(text ~= "" and text or ("exec-file exit code " .. code .. " (no summary event)"), text)
         end
       end)
     end,
