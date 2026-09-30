@@ -495,12 +495,13 @@ function M.ensure_columns(tbl, schema, callback)
 
   if compat.opt("debug") then
     vim.notify(string.format("DEBUG: ensure_columns(%s, %s) key=%s, conn=%s",
-      tbl, tostring(schema), tostring(key), tostring(ctx and ctx.connection)), vim.log.levels.INFO)
+      tbl, tostring(schema), tostring(key), tostring(ctx and ctx.connection)), vim.log.levels.INFO, { title = "PosteDb" })
   end
 
   if not key or not ctx or not ctx.connection then
     if compat.opt("debug") then
-      vim.notify("DEBUG: ensure_columns - NO CONNECTION, returning", vim.log.levels.ERROR)
+      -- a debug trace, not a failure — ERROR would page every notify UI
+      vim.notify("DEBUG: ensure_columns - NO CONNECTION, returning", vim.log.levels.INFO, { title = "PosteDb" })
     end
     callback()
     return
@@ -509,7 +510,7 @@ function M.ensure_columns(tbl, schema, callback)
   if cache[key] and cache[key].columns[cache_tbl_key] then
     if compat.opt("debug") then
       vim.notify(string.format("DEBUG: cache hit for %s, %d columns",
-        cache_tbl_key, #cache[key].columns[cache_tbl_key]), vim.log.levels.INFO)
+        cache_tbl_key, #cache[key].columns[cache_tbl_key]), vim.log.levels.INFO, { title = "PosteDb" })
     end
     callback()
     return
@@ -519,14 +520,14 @@ function M.ensure_columns(tbl, schema, callback)
 
   if fetching[fkey] then
     if compat.opt("debug") then
-      vim.notify(string.format("DEBUG: already fetching %s, queuing callback", cache_tbl_key), vim.log.levels.WARN)
+      vim.notify(string.format("DEBUG: already fetching %s, queuing callback", cache_tbl_key), vim.log.levels.WARN, { title = "PosteDb" })
     end
     queue_cb(fkey, callback)
     return
   end
 
   if compat.opt("debug") then
-    vim.notify(string.format("DEBUG: starting fetch for %s", cache_tbl_key), vim.log.levels.WARN)
+    vim.notify(string.format("DEBUG: starting fetch for %s", cache_tbl_key), vim.log.levels.WARN, { title = "PosteDb" })
   end
 
   fetching[fkey] = true
@@ -534,7 +535,7 @@ function M.ensure_columns(tbl, schema, callback)
 
   local binary, url = resolve_fetch_target(fkey, ctx.connection, nil)
   if not binary then
-    if compat.opt("debug") then vim.notify("DEBUG: binary not found!", vim.log.levels.ERROR) end
+    if compat.opt("debug") then vim.notify("DEBUG: binary not found!", vim.log.levels.ERROR, { title = "PosteDb" }) end
     return
   end
 
