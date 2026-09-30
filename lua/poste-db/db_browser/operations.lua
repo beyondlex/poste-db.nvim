@@ -78,7 +78,7 @@ function M.show_ddl(node, context)
   local connections = require("poste-db.connections")
   local url, url_err = connections.resolve_connection_url(conn)
   if not url then
-    vim.notify("DDL: " .. (url_err or "unknown error"), vim.log.levels.ERROR)
+    vim.notify("DDL: " .. (url_err or "unknown error"), vim.log.levels.ERROR, { title = "PosteDb" })
     return
   end
 
@@ -160,7 +160,10 @@ function M.show_ddl(node, context)
         local reason = table.concat(stderr_buf, "\n")
         if reason == "" then reason = "exit " .. tostring(code) end
         vim.schedule(function()
-          vim.notify("DDL fetch failed: " .. reason, vim.log.levels.ERROR)
+          -- flash WARN like actions.lua's table-info fetch failure — same
+          -- class of browser fetch, same non-blocking channel (the journal
+          -- keeps the reason either way).
+          notify.warn("DDL fetch failed: " .. reason)
         end)
         journal_once("error", reason)
       end
