@@ -101,3 +101,30 @@ describe("dataset default page size", function()
     assert.equals(1, D.default_page_size)
   end)
 end)
+
+describe("dataset hostile inputs", function()
+  before_each(function()
+    D.tabs = {}
+    D.active_tab_idx = 0
+    D.set_page_size(50)
+  end)
+
+  it("format_wallclock survives a non-numeric timestamp", function()
+    -- os.date raises on a string; the history render must not be killable
+    -- by one malformed ts (same rule as poste-redis history.build)
+    local out = D.format_wallclock("not-a-number", nil)
+    assert.is_string(out)
+    assert.matches("%d%d:%d%d:%d%d%.%d%d%d", out)
+    assert.is_string(D.format_wallclock(nil, "x"))
+  end)
+
+  it("apply_page_bounds degrades to one page when page_size is missing", function()
+    -- alloc_tab always sets page_size; a hand-built tab must not crash the
+    -- render path that only wants sane bounds
+    local tab = { page = 9 }
+    local pages = D.apply_page_bounds(tab, nil)
+    assert.equals(1, pages)
+    assert.equals(1, tab.num_pages)
+    assert.equals(1, tab.page, "page clamps into the recomputed range")
+  end)
+end)

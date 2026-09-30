@@ -30,6 +30,10 @@ local TYPES = {
 }
 
 local function is_type(ctype, category)
+  -- Non-string (nil from broken metadata, a number from a weird driver)
+  -- classifies as false — the same answer is_json_column's guard gives —
+  -- instead of crashing the caller that asked "is this editable?"
+  if type(ctype) ~= "string" then return false end
   return TYPES[category] and TYPES[category][ctype:lower()] == true
 end
 

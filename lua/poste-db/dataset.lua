@@ -164,8 +164,10 @@ end
 --- @param nsec number nanoseconds within the second
 --- @return string
 function M.format_wallclock(sec, nsec)
-  local t = os.date("*t", sec)
-  local ms = math.floor((nsec or 0) / 1000000)
+  -- tonumber gate: os.date raises on a non-number sec, and the history
+  -- render must not be killable by one malformed timestamp
+  local t = os.date("*t", tonumber(sec) or os.time())
+  local ms = math.floor((tonumber(nsec) or 0) / 1000000)
   return string.format("%02d:%02d:%02d.%03d", t.hour, t.min, t.sec, ms)
 end
 
@@ -252,7 +254,9 @@ end
 --- page count without the buffer ever changing.
 --- @return integer num_pages
 function M.apply_page_bounds(tab, total_rows)
-  local pages = math.max(1, math.ceil((total_rows or 0) / tab.page_size))
+  -- `or 1`: alloc_tab always sets page_size, but a hand-built tab (tests,
+  -- a future caller) must degrade to single-page math, not crash the render
+  local pages = math.max(1, math.ceil((total_rows or 0) / (tab.page_size or 1)))
   tab.num_pages = pages
   tab.page = math.min(math.max(tab.page or 1, 1), pages)
   return pages

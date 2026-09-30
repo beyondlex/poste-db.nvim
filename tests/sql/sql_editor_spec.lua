@@ -1136,6 +1136,18 @@ describe("edit guards", function()
     assert.is_false(editor.is_numeric_type("boolean"))
   end)
 
+  it("type classifiers answer false on a non-string ctype", function()
+    -- nil from broken metadata / a number from a weird driver must classify
+    -- as "not this category" (the is_json_column guard's answer), not crash
+    for _, f in ipairs({ editor.is_numeric_type, editor.is_integer_type,
+                         editor.is_boolean_type, editor.is_date_type,
+                         editor.is_uuid_type, editor.is_text_type }) do
+      assert.is_false(f(nil))
+      assert.is_false(f(42))
+      assert.is_false(f({}))
+    end
+  end)
+
   it("is_date_type detects date types", function()
     assert.is_true(editor.is_date_type("date"))
     assert.is_true(editor.is_date_type("timestamp"))
@@ -1146,8 +1158,7 @@ describe("edit guards", function()
 
   it("is_uuid_type detects uuid", function()
     assert.is_true(editor.is_uuid_type("uuid"))
-    assert.is_false(editor.is_uuid_type("text"))
-  end)
+    assert.is_false(editor.is_uuid_type("text"))  end)
 
   it("count_pending_changes returns correct counts", function()
     local es = editor.create_edit_state()
