@@ -383,3 +383,42 @@ describe("log viewer _open_in_sql_buffer", function()
     end
   end)
 end)
+
+describe("log viewer clear_logs", function()
+  local notified = {}
+  local real_open, real_notify
+
+  before_each(function()
+    notified = {}
+    real_open = io.open
+    real_notify = vim.notify
+    vim.notify = function(msg, level) notified[#notified + 1] = { msg = msg, level = level } end
+  end)
+
+  after_each(function()
+    -- luacheck: ignore 122 (stubbing io.open is the point of the test)
+    io.open = real_open
+    vim.notify = real_notify
+  end)
+
+  it("reports the clear when the file truncate opened", function()
+    log.clear_logs()
+
+    assert.equals(1, #notified)
+    assert.equals("SQL log cleared", notified[1].msg)
+    assert.equals(vim.log.levels.INFO, notified[1].level)
+  end)
+
+  it("does not claim success when the log file cannot be written", function()
+    -- The in-memory view is always cleared, but the old code reported
+    -- "SQL log cleared" even when the truncate never opened the file —
+    -- the on-disk log survived while the user believed it gone.
+    -- luacheck: ignore 122 (stubbing io.open is the point of the test)
+    io.open = function() return nil end
+    log.clear_logs()
+
+    assert.equals(1, #notified)
+    assert.equals(vim.log.levels.WARN, notified[1].level)
+    assert.truthy(notified[1].msg:find("could not be written", 1, true))
+  end)
+end)

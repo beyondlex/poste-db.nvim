@@ -657,7 +657,7 @@ function M.re_run()
   if not idx then return end
   local entry = entries[idx]
   if not entry.sql or entry.sql == "" then
-    vim.notify("No SQL to re-run", vim.log.levels.WARN)
+    vim.notify("No SQL to re-run", vim.log.levels.WARN, { title = "PosteDb" })
     return
   end
   local lines = rerun_lines(entry)
@@ -671,7 +671,7 @@ function M.yank_sql()
   if not idx then return end
   local entry = entries[idx]
   if not entry.sql or entry.sql == "" then
-    vim.notify("No SQL to yank", vim.log.levels.WARN)
+    vim.notify("No SQL to yank", vim.log.levels.WARN, { title = "PosteDb" })
     return
   end
   vim.fn.setreg('"', entry.sql)
@@ -702,6 +702,7 @@ function M.clear_logs()
     vim.fn.mkdir(dir, "p")
   end
   local f = io.open(path, "w")
+  local truncated = f ~= nil
   if f then
     f:write("")
     f:close()
@@ -710,7 +711,14 @@ function M.clear_logs()
   expanded = {}
   filter_text = ""
   render()
-  vim.notify("SQL log cleared", vim.log.levels.INFO)
+  -- The in-memory view is always cleared; only claim the file itself is
+  -- gone when the truncate actually opened for writing.
+  if truncated then
+    vim.notify("SQL log cleared", vim.log.levels.INFO, { title = "PosteDb" })
+  else
+    vim.notify("Cleared the in-memory log, but " .. path .. " could not be written",
+      vim.log.levels.WARN, { title = "PosteDb" })
+  end
 end
 
 function M.toggle()
