@@ -27,17 +27,17 @@ function M.handle_connection_directive(buf, conn_name)
   local search_dir = M.build_connection_search_dir(buf)
   local config_path = connections.find_connections_toml(search_dir)
   if not config_path then
-    vim.notify("connections.toml not found", vim.log.levels.WARN)
+    vim.notify("connections.toml not found", vim.log.levels.WARN, { title = "PosteDb" })
     return true
   end
   local config_lines = vim.fn.readfile(config_path)
   if not config_lines then
-    vim.notify("Cannot read connections.toml", vim.log.levels.WARN)
+    vim.notify("Cannot read connections.toml", vim.log.levels.WARN, { title = "PosteDb" })
     return true
   end
   local target_line = M.find_connection_target_line(config_lines, conn_name)
   if not target_line then
-    vim.notify("Connection '" .. conn_name .. "' not found in connections.toml", vim.log.levels.WARN)
+    vim.notify("Connection '" .. conn_name .. "' not found in connections.toml", vim.log.levels.WARN, { title = "PosteDb" })
     return true
   end
   vim.cmd("normal! m'")
@@ -50,7 +50,7 @@ function M.handle_database_directive(buf, line_num, db_name)
   local ctx = require("poste-db.context")
   local full_ctx = ctx.resolve_full_context(buf, line_num)
   if not full_ctx.connection then
-    vim.notify("No connection context for database '" .. db_name .. "'. Add -- @connection <name> to the file.", vim.log.levels.WARN)
+    vim.notify("No connection context for database '" .. db_name .. "'. Add -- @connection <name> to the file.", vim.log.levels.WARN, { title = "PosteDb" })
     return true
   end
   vim.cmd("normal! m'")

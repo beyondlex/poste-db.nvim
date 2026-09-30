@@ -159,7 +159,7 @@ function M.resolve_conflict_names(target, items, on_resolved, on_cancel, opts)
       -- taken name in `app` looked free (CREATE then fails) and a taken name
       -- in `public` bumped a free `app` table to a pointless `_copy`.
       check_table_exists(t.conn, t.db, t.dialect, name, cb, function(err)
-        vim.schedule(function() vim.notify("Copy: " .. tostring(err), vim.log.levels.ERROR) end)
+        vim.schedule(function() vim.notify("Copy: " .. tostring(err), vim.log.levels.ERROR, { title = "PosteDb" }) end)
         cb(true) -- fail closed: pretend it exists rather than clobber it
       end, schema)
     end
@@ -475,7 +475,7 @@ function M.paste_objects(source, target, items, triggers, routines, opts)
   if source.dialect ~= target.dialect then
     vim.notify(string.format(
       "Cannot paste: dialect mismatch (%s → %s). Both must be the same dialect.",
-      source.dialect, target.dialect), vim.log.levels.ERROR)
+      source.dialect, target.dialect), vim.log.levels.ERROR, { title = "PosteDb" })
     return
   end
   if #items == 0 and #triggers == 0 and #routines == 0 then
@@ -646,12 +646,12 @@ function M.clone_database(source, target, opts)
   opts = opts or {}
 
   if not source.db then
-    vim.notify("Cannot clone: no source database name.", vim.log.levels.ERROR)
+    vim.notify("Cannot clone: no source database name.", vim.log.levels.ERROR, { title = "PosteDb" })
     return
   end
   if source.dialect ~= target.dialect then
     vim.notify(string.format("Cannot clone: dialect mismatch (%s → %s).",
-      source.dialect, target.dialect), vim.log.levels.ERROR)
+      source.dialect, target.dialect), vim.log.levels.ERROR, { title = "PosteDb" })
     return
   end
 
@@ -681,11 +681,11 @@ function M.clone_database(source, target, opts)
             conn = target.conn, db = chosen, dialect = target.dialect,
           }, objects, triggers, routines, { on_complete = opts.on_complete })
         end, function(err)
-          vim.notify("Failed to enumerate objects for clone: " .. tostring(err), vim.log.levels.ERROR)
+          vim.notify("Failed to enumerate objects for clone: " .. tostring(err), vim.log.levels.ERROR, { title = "PosteDb" })
         end)
       end, function(err)
         vim.schedule(function()
-          vim.notify("Clone failed to create database: " .. tostring(err), vim.log.levels.ERROR)
+          vim.notify("Clone failed to create database: " .. tostring(err), vim.log.levels.ERROR, { title = "PosteDb" })
         end)
       end)
     end)

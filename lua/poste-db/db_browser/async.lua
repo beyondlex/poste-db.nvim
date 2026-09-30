@@ -41,7 +41,7 @@ function M.run_introspect(conn_name, introspect_type, schema, table_name, databa
   local url, err = connections.resolve_connection_url(conn_name)
   if not url then
     vim.schedule(function()
-      vim.notify("Introspect failed: " .. (err or "unknown error"), vim.log.levels.ERROR)
+      vim.notify("Introspect failed: " .. (err or "unknown error"), vim.log.levels.ERROR, { title = "PosteDb" })
       callback(nil)
     end)
     sql_log.record({
@@ -115,8 +115,7 @@ function M.run_introspect(conn_name, introspect_type, schema, table_name, databa
       if code ~= 0 then
         vim.schedule(function()
           local err_text = table.concat(stderr_buf, "\n")
-          vim.notify("Introspect failed: " .. (err_text ~= "" and err_text or "exit " .. code),
-            vim.log.levels.ERROR)
+          vim.notify("Introspect failed: " .. (err_text ~= "" and err_text or "exit " .. code), vim.log.levels.ERROR, { title = "PosteDb" })
         end)
         parsed_result = nil
       end
@@ -132,7 +131,7 @@ function M.run_introspect(conn_name, introspect_type, schema, table_name, databa
     on_error = function(msg)
       journal("error", msg)
       vim.schedule(function()
-        vim.notify("Introspect error: " .. msg, vim.log.levels.ERROR)
+        vim.notify("Introspect error: " .. msg, vim.log.levels.ERROR, { title = "PosteDb" })
         callback(nil)
       end)
     end,

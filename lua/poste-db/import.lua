@@ -36,12 +36,12 @@ local function fetch_columns_async(node, context, callback)
     if buf_name ~= "" then dir = vim.fn.fnamemodify(buf_name, ":p:h") end
   end
 
-  vim.notify("Loading column info for " .. node.name .. "...", vim.log.levels.INFO)
+  vim.notify("Loading column info for " .. node.name .. "...", vim.log.levels.INFO, { title = "PosteDb" })
 
   async.run_introspect(conn, "columns", node.meta and node.meta.schema, node.name,
     node.meta and node.meta.database, function(result)
     if not result or not result.items then
-      vim.notify("Failed to load column info for " .. node.name, vim.log.levels.ERROR)
+      vim.notify("Failed to load column info for " .. node.name, vim.log.levels.ERROR, { title = "PosteDb" })
       callback(nil)
       return
     end
@@ -147,7 +147,7 @@ end
 local function process_import(content, filepath, table_info, table_cols)
   local format = fmt.detect_format(content, filepath)
   if not format then
-    vim.notify("Could not detect data format (supported: CSV, TSV, JSON)", vim.log.levels.ERROR)
+    vim.notify("Could not detect data format (supported: CSV, TSV, JSON)", vim.log.levels.ERROR, { title = "PosteDb" })
     return
   end
 
@@ -163,13 +163,12 @@ local function process_import(content, filepath, table_info, table_cols)
   end
 
   if not parsed then
-    vim.notify(string.format("Parse error (%s): %s", source_label, err or "unknown"),
-      vim.log.levels.ERROR)
+    vim.notify(string.format("Parse error (%s): %s", source_label, err or "unknown"), vim.log.levels.ERROR, { title = "PosteDb" })
     return
   end
 
   if #parsed.rows == 0 then
-    vim.notify("No data rows found in " .. source_label, vim.log.levels.WARN)
+    vim.notify("No data rows found in " .. source_label, vim.log.levels.WARN, { title = "PosteDb" })
     return
   end
 
@@ -177,8 +176,7 @@ local function process_import(content, filepath, table_info, table_cols)
 
   if #col_map == 0 then
     vim.notify("No columns matched between import data and table " .. table_info.name
-      .. " (import columns: " .. table.concat(parsed.columns, ", ") .. ")",
-      vim.log.levels.ERROR)
+      .. " (import columns: " .. table.concat(parsed.columns, ", ") .. ")", vim.log.levels.ERROR, { title = "PosteDb" })
     return
   end
 
@@ -193,8 +191,7 @@ local function process_import(content, filepath, table_info, table_cols)
     end
     vim.notify("Import blocked: file has columns not in table " .. table_info.name
       .. ": " .. table.concat(unmatched_import, ", ")
-      .. " (matched: " .. table.concat(matched, ", ") .. ")",
-      vim.log.levels.ERROR)
+      .. " (matched: " .. table.concat(matched, ", ") .. ")", vim.log.levels.ERROR, { title = "PosteDb" })
     return
   end
 
@@ -203,7 +200,7 @@ local function process_import(content, filepath, table_info, table_cols)
   preview.show_preview(table_info, #parsed.rows, #valid_rows, bad_rows,
     col_map, unmatched_import, unmatched_table, parsed.columns, parsed.rows, function(action)
     if not action then
-      vim.notify("Import cancelled", vim.log.levels.INFO)
+      vim.notify("Import cancelled", vim.log.levels.INFO, { title = "PosteDb" })
       return
     end
 
@@ -211,8 +208,7 @@ local function process_import(content, filepath, table_info, table_cols)
     if action == "skip" and #bad_rows > 0 then
       -- 'skip' and 'proceed' import the same rows (valid_rows never
       -- contained the rejected ones); 'skip' just confirms it out loud.
-      vim.notify(string.format("Skipping %d row(s) with validation errors", #bad_rows),
-        vim.log.levels.WARN)
+      vim.notify(string.format("Skipping %d row(s) with validation errors", #bad_rows), vim.log.levels.WARN, { title = "PosteDb" })
     end
 
     -- no callback: execute_import reports success/errors itself
@@ -222,7 +218,7 @@ end
 
 function M.run(table_node, context)
   if table_node.meta and table_node.meta.table_type == "VIEW" then
-    vim.notify("Cannot import data into a view", vim.log.levels.WARN)
+    vim.notify("Cannot import data into a view", vim.log.levels.WARN, { title = "PosteDb" })
     return
   end
 
@@ -230,7 +226,7 @@ function M.run(table_node, context)
 
   get_or_fetch_columns(table_node, context, function(table_cols)
     if not table_cols or #table_cols == 0 then
-      vim.notify("Could not determine table columns for " .. table_node.name, vim.log.levels.ERROR)
+      vim.notify("Could not determine table columns for " .. table_node.name, vim.log.levels.ERROR, { title = "PosteDb" })
       return
     end
 
@@ -240,7 +236,7 @@ function M.run(table_node, context)
       if source_type == "file" then
         local ok, finder = pcall(require, "finder")
         if not ok then
-          vim.notify("beyondlex/finder plugin required for file selection", vim.log.levels.ERROR)
+          vim.notify("beyondlex/finder plugin required for file selection", vim.log.levels.ERROR, { title = "PosteDb" })
           return
         end
         finder.open({
@@ -253,7 +249,7 @@ function M.run(table_node, context)
             if not path then return end
             local content, err = read_source("file", path)
             if not content then
-              vim.notify("Import error: " .. tostring(err), vim.log.levels.ERROR)
+              vim.notify("Import error: " .. tostring(err), vim.log.levels.ERROR, { title = "PosteDb" })
               return
             end
             process_import(content, path, table_info, table_cols)
@@ -263,7 +259,7 @@ function M.run(table_node, context)
       else
         local content, err = read_source("clipboard")
         if not content then
-          vim.notify("Import error: " .. tostring(err), vim.log.levels.ERROR)
+          vim.notify("Import error: " .. tostring(err), vim.log.levels.ERROR, { title = "PosteDb" })
           return
         end
         process_import(content, nil, table_info, table_cols)

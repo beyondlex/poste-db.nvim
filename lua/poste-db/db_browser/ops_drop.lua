@@ -90,7 +90,7 @@ execute_drop = function(table_node, qualified, conn, schema_prefix, context)
   local connections = require("poste-db.connections")
   local url, err = connections.resolve_connection_url(conn)
   if not url then
-    vim.notify("Drop table failed: " .. (err or "unknown"), vim.log.levels.ERROR)
+    vim.notify("Drop table failed: " .. (err or "unknown"), vim.log.levels.ERROR, { title = "PosteDb" })
     return
   end
 
@@ -117,7 +117,7 @@ execute_drop = function(table_node, qualified, conn, schema_prefix, context)
           -- (a dependent view, a permission), and that text only exists in
           -- this response — the journal is not where one looks mid-action.
           local reason = exec_run.first_error(resp) or "unknown error"
-          vim.notify("Failed to drop table '" .. qualified .. "': " .. reason, vim.log.levels.ERROR)
+          vim.notify("Failed to drop table '" .. qualified .. "': " .. reason, vim.log.levels.ERROR, { title = "PosteDb" })
           return
         end
         notify.info("Dropped table: " .. qualified)
@@ -129,13 +129,13 @@ execute_drop = function(table_node, qualified, conn, schema_prefix, context)
     end,
     on_error = function(message)
       vim.schedule(function()
-        vim.notify("Failed to drop table '" .. qualified .. "': " .. message, vim.log.levels.ERROR)
+        vim.notify("Failed to drop table '" .. qualified .. "': " .. message, vim.log.levels.ERROR, { title = "PosteDb" })
       end)
     end,
   })
 
   if not job_id or job_id <= 0 then
-    vim.notify("Failed to start poste job", vim.log.levels.ERROR)
+    vim.notify("Failed to start poste job", vim.log.levels.ERROR, { title = "PosteDb" })
   end
 end
 

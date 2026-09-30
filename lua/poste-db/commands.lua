@@ -95,7 +95,7 @@ function M.setup()
     if cmp_ok then parts[#parts + 1] = "nvim-cmp:   loaded" end
     parts[#parts + 1] = "filetype:   " .. (vim.bo.filetype or "(none)")
     parts[#parts + 1] = sep
-    vim.notify(table.concat(parts, "\n"), vim.log.levels.INFO)
+    vim.notify(table.concat(parts, "\n"), vim.log.levels.INFO, { title = "PosteDb" })
   end, { desc = "Show PosteDb environment info" })
 
   vim.api.nvim_create_user_command("PosteDbCmpStatus", function()
@@ -119,7 +119,7 @@ function M.setup()
     local line_before = line:sub(1, cursor[2])
     status[#status + 1] = "\nAt cursor position (col=" .. cursor[2] .. "):"
     status[#status + 1] = "  Before cursor: '" .. line_before .. "'"
-    vim.notify(table.concat(status, "\n"), vim.log.levels.INFO)
+    vim.notify(table.concat(status, "\n"), vim.log.levels.INFO, { title = "PosteDb" })
   end, { desc = "Check SQL completion status" })
 
   vim.api.nvim_create_user_command("PosteDbCmpReload", function()
@@ -127,7 +127,7 @@ function M.setup()
     require("poste-db.completion")
     local adapter = require("poste-db.completion.adapter")
     if not adapter.is_available() then
-      vim.notify("blink.cmp not loaded, cannot re-register", vim.log.levels.WARN)
+      vim.notify("blink.cmp not loaded, cannot re-register", vim.log.levels.WARN, { title = "PosteDb" })
       return
     end
     adapter.register_source({ name = "poste_db", module = "poste-db.completion", label = "PosteDb",
@@ -180,22 +180,21 @@ function M.setup()
     local name = args.args:match("%S+")
     if name == "--all" then
       local n = tunnel.stop_all()
-      vim.notify(n > 0 and string.format("Stopped %d tunnel(s)", n) or "No active tunnels",
-        vim.log.levels.INFO)
+      vim.notify(n > 0 and string.format("Stopped %d tunnel(s)", n) or "No active tunnels", vim.log.levels.INFO, { title = "PosteDb" })
     elseif name and name ~= "" then
       vim.notify(tunnel.stop(name) and string.format("Tunnel stopped: %s", name)
-        or string.format("No active tunnel: %s", name), vim.log.levels.INFO)
+        or string.format("No active tunnel: %s", name), vim.log.levels.INFO, { title = "PosteDb" })
     else
       local list = tunnel.status_list()
       if #list == 0 then
-        vim.notify("No active tunnels", vim.log.levels.INFO)
+        vim.notify("No active tunnels", vim.log.levels.INFO, { title = "PosteDb" })
         return
       end
       local lines = { "Active SSH tunnels:" }
       for _, t in ipairs(list) do
         lines[#lines + 1] = ("  %s — 127.0.0.1:%d → %s"):format(t.name, t.port, t.target)
       end
-      vim.notify(table.concat(lines, "\n"), vim.log.levels.INFO)
+      vim.notify(table.concat(lines, "\n"), vim.log.levels.INFO, { title = "PosteDb" })
     end
   end, { nargs = "?", complete = function()
     local out = { "--all" }
@@ -271,7 +270,7 @@ function M.setup()
         msg[#msg + 1] = "alias_map: " .. vim.inspect(alias_map)
         sql_comp._test.get_items(buf, line_before, cursor_lnum, function(items)
           msg[#msg + 1] = "items(" .. #items .. "): " .. vim.inspect(vim.list_slice(items, 1, 3))
-          vim.notify(table.concat(msg, "\n"), vim.log.levels.WARN)
+          vim.notify(table.concat(msg, "\n"), vim.log.levels.WARN, { title = "PosteDb" })
         end)
       end)
     end, { desc = "Diagnose SQL completion (debug)" })
@@ -284,10 +283,10 @@ function M.setup()
       local msg = { "PosteDbDebugSpace:", "  line_before: '" .. before .. "'", "  blink loaded: " .. tostring(adapter.is_available()),
         "  menu open: " .. tostring(adapter.is_menu_open()) }
       if adapter.is_available() then
-        vim.notify(table.concat(msg, "\n") .. "\n  → calling blink.show()...", vim.log.levels.WARN)
+        vim.notify(table.concat(msg, "\n") .. "\n  → calling blink.show()...", vim.log.levels.WARN, { title = "PosteDb" })
         adapter.show()
       else
-        vim.notify(table.concat(msg, "\n"), vim.log.levels.ERROR)
+        vim.notify(table.concat(msg, "\n"), vim.log.levels.ERROR, { title = "PosteDb" })
       end
     end, { desc = "Debug space completion trigger (debug)" })
 
@@ -310,10 +309,10 @@ function M.setup()
             if i <= 10 then status[#status + 1] = "  " .. item.label .. " (" .. (item.documentation or "") .. ")" end
           end
           if #items > 10 then status[#status + 1] = "  ... and " .. (#items - 10) .. " more" end
-          vim.notify(table.concat(status, "\n"), vim.log.levels.INFO)
+          vim.notify(table.concat(status, "\n"), vim.log.levels.INFO, { title = "PosteDb" })
         end)
       else
-        vim.notify(table.concat(status, "\n"), vim.log.levels.INFO)
+        vim.notify(table.concat(status, "\n"), vim.log.levels.INFO, { title = "PosteDb" })
       end
     end, { desc = "Test SQL completion at cursor (debug)" })
 

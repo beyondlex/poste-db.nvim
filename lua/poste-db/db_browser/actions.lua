@@ -198,7 +198,7 @@ execute_table_select = function(node, context)
   local connections = require("poste-db.connections")
   local url, err = connections.resolve_connection_url(conn)
   if not url then
-    vim.notify("Connection '" .. conn .. "' not found: " .. (err or "unknown"), vim.log.levels.ERROR)
+    vim.notify("Connection '" .. conn .. "' not found: " .. (err or "unknown"), vim.log.levels.ERROR, { title = "PosteDb" })
     return
   end
 
@@ -246,13 +246,13 @@ execute_table_select = function(node, context)
     end,
     on_error = function(message)
       vim.schedule(function()
-        vim.notify("Query failed for '" .. node.name .. "': " .. message, vim.log.levels.ERROR)
+        vim.notify("Query failed for '" .. node.name .. "': " .. message, vim.log.levels.ERROR, { title = "PosteDb" })
       end)
     end,
   })
 
   if not job_id or job_id <= 0 then
-    vim.notify("Failed to start poste job", vim.log.levels.ERROR)
+    vim.notify("Failed to start poste job", vim.log.levels.ERROR, { title = "PosteDb" })
   end
 end
 
@@ -480,7 +480,7 @@ function M.show_table_info(buf_line, context)
   local connections = require("poste-db.connections")
   local url, url_err = connections.resolve_connection_url(conn)
   if not url then
-    vim.notify("Table info: " .. (url_err or "unknown error"), vim.log.levels.ERROR)
+    vim.notify("Table info: " .. (url_err or "unknown error"), vim.log.levels.ERROR, { title = "PosteDb" })
     return
   end
 

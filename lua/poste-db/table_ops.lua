@@ -20,7 +20,7 @@ local M = {}
 --- buffer stayed untouched.
 local function insert_ddl(source_buf, ddl, label)
   if not source_buf or not vim.api.nvim_buf_is_valid(source_buf) then
-    vim.notify("No source SQL buffer", vim.log.levels.WARN)
+    vim.notify("No source SQL buffer", vim.log.levels.WARN, { title = "PosteDb" })
     return
   end
 
@@ -38,7 +38,7 @@ local function insert_ddl(source_buf, ddl, label)
     vim.api.nvim_win_set_cursor(target_win, { line_count + 2, 0 })
   end
 
-  vim.notify("DDL inserted — review and execute with <leader>rr", vim.log.levels.INFO)
+  vim.notify("DDL inserted — review and execute with <leader>rr", vim.log.levels.INFO, { title = "PosteDb" })
 end
 
 --- Quote an identifier based on dialect.
@@ -151,7 +151,7 @@ local function prompt_drop_column(table_name, dialect, source_buf)
     if not col_name or col_name == "" then return end
     vim.ui.input({ prompt = "Confirm drop '" .. col_name .. "'? [y/N]: " }, function(ans)
       if not ans or ans:lower() ~= "y" then
-        vim.notify("Cancelled", vim.log.levels.INFO)
+        vim.notify("Cancelled", vim.log.levels.INFO, { title = "PosteDb" })
         return
       end
       local ddl = gen_drop_column(table_name, col_name, dialect)

@@ -25,7 +25,7 @@ end
 --- Genuine failures stay blocking (message area, needs ENTER to dismiss).
 ---@param msg string
 function M.error(msg)
-  vim.notify(msg, vim.log.levels.ERROR)
+  vim.notify(msg, vim.log.levels.ERROR, { title = "PosteDb" })
 end
 
 return M
