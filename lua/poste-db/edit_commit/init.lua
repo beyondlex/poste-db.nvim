@@ -60,7 +60,7 @@ function M.refresh_dataset(tab)
 
   local sql = tab.original_sql
   if not sql or sql == "" then
-    vim.notify("No original SQL to re-execute", vim.log.levels.WARN)
+    vim.notify("No original SQL to re-execute", vim.log.levels.WARN, { title = "PosteDb" })
     return
   end
 
@@ -139,13 +139,13 @@ function M.refresh_dataset(tab)
     end,
     on_error = function(message)
       vim.schedule(function()
-        vim.notify("Refresh failed: " .. message, vim.log.levels.ERROR)
+        vim.notify("Refresh failed: " .. message, vim.log.levels.ERROR, { title = "PosteDb" })
       end)
     end,
   })
 
   if not job_id or job_id <= 0 then
-    vim.notify("Failed to start refresh job", vim.log.levels.ERROR)
+    vim.notify("Failed to start refresh job", vim.log.levels.ERROR, { title = "PosteDb" })
   end
 end
 
@@ -159,7 +159,7 @@ function M.commit_edits()
   local state = require("poste-db.state")
   local tab = D.T()
   if not tab or not tab.edit_state or not tab.edit_state.dirty then
-    vim.notify("No changes to commit", vim.log.levels.INFO)
+    vim.notify("No changes to commit", vim.log.levels.INFO, { title = "PosteDb" })
     return
   end
 
@@ -173,7 +173,7 @@ function M.commit_edits()
       if col.primary_key then table.insert(pk_cols, col.name) end
     end
     if #pk_cols == 0 then
-      vim.notify("No primary key info — WHERE will use all column values", vim.log.levels.WARN)
+      vim.notify("No primary key info — WHERE will use all column values", vim.log.levels.WARN, { title = "PosteDb" })
     end
   end
 
@@ -191,13 +191,12 @@ function M.commit_edits()
     -- the count stays out of the header because a batch-level refusal is one line
     -- for several edits
     vim.notify("Some edits were not committed:\n"
-      .. table.concat(skipped, "\n"), vim.log.levels.WARN)
+      .. table.concat(skipped, "\n"), vim.log.levels.WARN, { title = "PosteDb" })
   end
   if not sql then
     vim.notify(skipped and #skipped > 0
         and "Nothing to commit — every edit was skipped (see warning)"
-        or "No changes to commit",
-      vim.log.levels.INFO)
+        or "No changes to commit", vim.log.levels.INFO, { title = "PosteDb" })
     return
   end
 
@@ -236,7 +235,17 @@ function M.commit_edits()
   local conn_url = nil
   if connection and connection ~= "" then
     local connections = require("poste-db.connections")
-    conn_url = connections.resolve_connection_url(connection)
+    local resolved, resolve_err = connections.resolve_connection_url(connection)
+    if not resolved then
+      -- Fail closed: a nil URL reaches exec-file without --connection and the
+      -- binary would commit the batch against its own default connection.
+      vim.notify(string.format(
+        "Commit refused — cannot resolve connection '%s': %s",
+        connection, resolve_err or "unknown error"),
+        vim.log.levels.ERROR, { title = "PosteDb" })
+      return
+    end
+    conn_url = resolved
   end
 
   local sql_content = sql
@@ -273,7 +282,7 @@ function M.commit_edits()
             and "Commit failed — rolled back, no changes applied:\n"
             or "Commit failed (partial changes may have been applied):\n"
         end
-        vim.notify(prefix .. detail:sub(1, 500), vim.log.levels.ERROR)
+        vim.notify(prefix .. detail:sub(1, 500), vim.log.levels.ERROR, { title = "PosteDb" })
         log.write_log({
           source = "dataset_commit",
           table_name = table_name,
@@ -307,7 +316,7 @@ function M.commit_edits()
       if not transactional then
         msg = msg .. " [no transaction support — committed per-statement]"
       end
-      vim.notify(msg, kind == "partial" and vim.log.levels.WARN or vim.log.levels.INFO)
+      vim.notify(msg, kind == "partial" and vim.log.levels.WARN or vim.log.levels.INFO, { title = "PosteDb" })
       log.write_log({
         source = "dataset_commit",
         table_name = table_name,
@@ -329,7 +338,7 @@ function M.commit_edits()
     end,
     on_error = function(message)
       local elapsed = vim.uv.now() - start_time
-      vim.notify("Commit: " .. message, vim.log.levels.ERROR)
+      vim.notify("Commit: " .. message, vim.log.levels.ERROR, { title = "PosteDb" })
       log.write_log({
         source = "dataset_commit",
         table_name = table_name,
@@ -346,7 +355,7 @@ function M.commit_edits()
   })
 
   if not job_id or job_id <= 0 then
-    vim.notify("Failed to start poste exec-file job", vim.log.levels.ERROR)
+    vim.notify("Failed to start poste exec-file job", vim.log.levels.ERROR, { title = "PosteDb" })
   end
 end
 
