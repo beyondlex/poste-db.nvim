@@ -218,3 +218,45 @@ describe("sql_runner response.handle multi result", function()
     assert.equals(verdict.UNEXPLAINED_FAILURE, state_stub.last_error.message)
   end)
 end)
+
+describe("sql_runner response.handle_error", function()
+  before_each(function()
+    indicator_calls = {}
+    rendered = {}
+    notified = {}
+    state_stub.last_error = nil
+  end)
+
+  after_each(function()
+    for k, v in pairs(saved) do package.loaded[k] = v end
+  end)
+
+  it("notifies a transport failure and renders the panel", function()
+    -- nil parsed = the executor-level seam: binary missing, refused start,
+    -- dead session, non-zero exit. There may be no result content, so the
+    -- blocking notify is the report.
+    response.handle_error(make_deps(), "Poste binary not found", nil)
+    vim.wait(100, function() return #notified > 0 end)
+
+    assert.equals(1, #notified)
+    assert.equals("Poste binary not found", notified[1].msg)
+    assert.equals(vim.log.levels.ERROR, notified[1].level)
+    assert.equals("error", indicator_calls[1].kind)
+    assert.equals(1, #rendered)
+    assert.equals("Poste binary not found", state_stub.last_error.message)
+  end)
+
+  it("keeps a session SQL failure panel-only like the exec-file path", function()
+    -- A table parsed = the session transport's per-statement SQL error. The
+    -- exec-file path never notifies for SQL failures (panel + ✘ is the
+    -- report); the same failure must not notify just because the session
+    -- happened to serve it.
+    response.handle_error(make_deps(), "unknown error", { dialect = "postgres" })
+    vim.wait(100, function() return #rendered > 0 end)
+
+    assert.equals(0, #notified, "a SQL failure is data, not a transport crash")
+    assert.equals("error", indicator_calls[1].kind)
+    assert.equals(1, #rendered)
+    assert.equals("unknown error", state_stub.last_error.message)
+  end)
+end)

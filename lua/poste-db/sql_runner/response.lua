@@ -264,7 +264,15 @@ function M.handle_error(deps, message, parsed)
       at = os.time(),
     }
     indicators.set_indicator(deps.src_buf, deps.block_result_line, "error")
-    vim.notify(message, vim.log.levels.ERROR, { title = "PosteDb" })
+    -- A table here is the session transport's per-statement SQL error; nil or
+    -- a string is a transport failure (binary missing, refused start, dead
+    -- session, non-zero exit). A SQL failure reports through the panel on
+    -- either transport — the error tab and ✘ indicator below — so the notify
+    -- stays transport-only: the same failure should not behave differently
+    -- because of which transport happened to serve it.
+    if type(parsed) ~= "table" then
+      vim.notify(message, vim.log.levels.ERROR, { title = "PosteDb" })
+    end
     local lines = sql_format.format_error(message, state.context.connection or "")
     sql_buffer.render_dataset(lines, { type = "error" })
   end)

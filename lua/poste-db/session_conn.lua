@@ -136,7 +136,11 @@ local function process_event(session, event)
     local resp = build_response(event, session)
     local ok_cb, err = pcall(function()
       if resp.has_error then
-        if cb.on_sql_error then cb.on_sql_error(event.error or "unknown error", resp) end
+        -- build_response already ran event.error through verdict.error_text
+        -- (JSON null is the truthy vim.NIL userdata; the raw value would
+        -- reach last_error and the notify as "vim.NIL"), so forward the
+        -- normalized text consumers already see in the panel.
+        if cb.on_sql_error then cb.on_sql_error(resp.results[1].error or "unknown error", resp) end
       else
         if cb.on_response then cb.on_response(resp) end
       end

@@ -170,3 +170,95 @@ describe("session_conn build_response", function()
     assert.equals("affected", vim.json.decode(resp.body).type)
   end)
 end)
+
+describe("session_conn on_sql_error gets the normalized error text", function()
+  -- process_event used to forward the RAW `event.error`: JSON null decoded
+  -- to the truthy vim.NIL userdata, so `event.error or "unknown error"` kept
+  -- the userdata and last_error/notify rendered "vim.NIL" while the panel
+  -- showed the normalized text. The forward must be the same text the panel
+  -- gets — resp.results[1].error, already run through verdict.error_text.
+  local state = require("poste-db.state")
+  local session_conn = require("poste-db.session_conn")
+
+  local jobs
+  local real_binary_lookup
+  local real_jobstart, real_jobwait, real_chansend
+
+  before_each(function()
+    jobs = {}
+    real_binary_lookup = state.find_poste_binary
+    state.find_poste_binary = function() return "/fake/poste" end
+    real_jobstart = vim.fn.jobstart
+    vim.fn.jobstart = function(cmd, opts)
+      local id = 1000 + vim.tbl_count(jobs)
+      jobs[id] = { cmd = cmd, opts = opts }
+      return id
+    end
+    real_jobwait = vim.fn.jobwait
+    vim.fn.jobwait = function() return { -1 } end
+    real_chansend = vim.fn.chansend
+    vim.fn.chansend = function() return 10 end
+  end)
+
+  after_each(function()
+    session_conn.stop_all()
+    state.find_poste_binary = real_binary_lookup
+    vim.fn.jobstart = real_jobstart
+    vim.fn.jobwait = real_jobwait
+    vim.fn.chansend = real_chansend
+  end)
+
+  -- Execute first, then take the job id from the pool: `execute` dispatches
+  -- against the session its own M.get resolves, and with no database argument
+  -- that can be a different pool entry than a bare `get` on a URL whose path
+  -- infers a database (get stores under the inferred key, execute looks the
+  -- raw nil key up). `list()` returns copies without `seq`, so the test
+  -- counts the dispatches itself — after_each's stop_all keeps the pool to
+  -- one fresh session per test.
+  local dispatches = 0
+  before_each(function()
+    dispatches = 0
+  end)
+  local function execute_and_job(sql, callbacks)
+    dispatches = dispatches + 1
+    local status = session_conn.execute("postgres://h/app", sql, callbacks)
+    assert.equals("dispatched", status)
+    local found
+    for _, s in pairs(session_conn.list()) do found = s end
+    return found.job_id, dispatches
+  end
+
+  it("delivers 'unknown error' when the binary sends error:null", function()
+    local got_msg, got_resp = nil, nil
+    local job_id, seq = execute_and_job("SELECT 1", {
+      on_sql_error = function(msg, resp) got_msg, got_resp = msg, resp end,
+    })
+
+    jobs[job_id].opts.on_stdout(nil, {
+      vim.json.encode({
+        type = "result", seq = seq, status = "error", error = vim.NIL,
+        execution_time_ms = 1,
+      }),
+    })
+
+    assert.equals("string", type(got_msg), "the userdata must never reach the callback")
+    assert.equals("unknown error", got_msg)
+    assert.is_true(got_resp.has_error)
+  end)
+
+  it("delivers real error text unchanged", function()
+    local got_msg = nil
+    local job_id, seq = execute_and_job("SELECT 1", {
+      on_sql_error = function(msg) got_msg = msg end,
+    })
+
+    jobs[job_id].opts.on_stdout(nil, {
+      vim.json.encode({
+        type = "result", seq = seq, status = "error", error = "deadlock detected",
+        execution_time_ms = 1,
+      }),
+    })
+
+    assert.equals("deadlock detected", got_msg)
+  end)
+end)
