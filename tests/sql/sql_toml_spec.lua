@@ -270,4 +270,50 @@ describe("toml inline containers", function()
     assert.is_nil(res)
     assert.falsy(err:find("s3cret%-value", 1, false))
   end)
+
+  -- Fail-closed on malformed inline containers: each of these used to be
+  -- silently dropped (a nil value stores nothing), so the consumer failed in
+  -- a place far from the typo — the same reasoning as the triple-quote and
+  -- double-header errors above.
+  it("rejects a missing value after '=' instead of storing nothing", function()
+    local res, err = toml.parse('password =')
+    assert.is_nil(res)
+    assert.matches("Missing value", err)
+    local res2, err2 = toml.parse('password = # oops')
+    assert.is_nil(res2)
+    assert.matches("Missing value", err2)
+  end)
+
+  it("rejects a double comma inside an inline array", function()
+    local res, err = toml.parse('ips = ["h1",, "h2"]')
+    assert.is_nil(res)
+    assert.matches("double comma", err)
+  end)
+
+  it("rejects a double comma inside an inline table", function()
+    local res, err = toml.parse('t = { a = 1,, b = 2 }')
+    assert.is_nil(res)
+    assert.matches("double comma", err)
+  end)
+
+  it("still accepts a trailing comma in inline containers", function()
+    local res, err = toml.parse('[c]\nlist = [1, 2,]\ntbl = { a = 1, }')
+    assert.is_nil(err)
+    assert.same({ 1, 2 }, res.c.list)
+    assert.same({ a = 1 }, res.c.tbl)
+  end)
+
+  it("rejects an inline table entry with a missing key or value", function()
+    local res, err = toml.parse('t = { = 1 }')
+    assert.is_nil(res)
+    assert.matches("Invalid inline table entry", err)
+    local res2, err2 = toml.parse('t = { a = }')
+    assert.is_nil(res2)
+    assert.matches("Invalid inline table entry", err2)
+    -- a comment-only value never reaches the entry check: the comment strip
+    -- eats the closing brace first, which still errors (fail closed)
+    local res3, err3 = toml.parse('t = { a = # c }')
+    assert.is_nil(res3)
+    assert.matches("Unclosed inline table", err3)
+  end)
 end)
