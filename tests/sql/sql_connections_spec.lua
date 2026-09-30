@@ -125,6 +125,27 @@ describe("connections resolve_connection_url", function()
     assert.equals("postgres://old-db:5432/main", url)
   end)
 
+  it("rejects a non-string field instead of crashing the resolver", function()
+    -- the TOML parser turns `host = [1]` into a real table; the builder used
+    -- to crash on `:sub` / `..` (completion, the winbar and the browser all
+    -- resolve on redraw) instead of naming the bad field
+    local shapes = {
+      { cache = { dialect = "postgres", host = { "h" } } },
+      { cache = { dialect = "postgres", host = "h", user = { "u" } } },
+      { cache = { dialect = "postgres", host = "h", password = { "p" } } },
+      { cache = { dialect = "postgres", host = "h", database = { "d" } } },
+      { cache = { dialect = "postgres", url = { "postgres://h/d" } } },
+      { cache = { dialect = "sqlite", path = { "/tmp/x.sqlite" } } },
+    }
+    for i, parsed in ipairs(shapes) do
+      package.loaded["poste-db.toml"].parse_file = function() return parsed end
+      local url, err = connections.resolve_connection_url("cache")
+      assert.is_nil(url, "shape " .. i .. " returned a url")
+      assert.matches("must be a string", err or "", 1, true)
+      assert.truthy(err:find("cache", 1, true))
+    end
+  end)
+
   it("accepts a quoted port and keeps the numeric form", function()
     package.loaded["poste-db.toml"].parse_file = function()
       return {

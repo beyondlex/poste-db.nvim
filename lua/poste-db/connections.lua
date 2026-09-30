@@ -308,6 +308,17 @@ local function build_conn_url(name, conn, ensure_tunnel)
     return nil, ("Connection '%s' has unsupported dialect '%s'"):format(name, tostring(conn.dialect))
   end
 
+  -- Type-gate every field the builder concatenates or string-ops below: the
+  -- TOML parser turns `host = [1]` into a real table, and `:sub` / `..` on
+  -- it crashed the resolver (completion, the winbar and the browser all
+  -- resolve, on every redraw) instead of naming the bad field.
+  for _, field in ipairs({ "url", "host", "path", "user", "password", "database" }) do
+    local v = conn[field]
+    if v ~= nil and type(v) ~= "string" then
+      return nil, ("Connection '%s': %s must be a string"):format(name, field)
+    end
+  end
+
   -- Use url field directly if present. A `tunnel` section cannot apply to a
   -- raw URL — there is no host/port to rewrite — so fail loudly instead of
   -- silently bypassing the jump host.
