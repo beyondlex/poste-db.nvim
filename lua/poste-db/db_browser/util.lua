@@ -131,7 +131,7 @@ function M.run_ddl_and_refresh(sql, conn_name, context, opts)
   local connections = require("poste-db.connections")
   local url, err = connections.resolve_connection_url(conn_name)
   if not url then
-    vim.notify(opts.fail_prefix .. " failed: " .. (err or "unknown"), vim.log.levels.ERROR)
+    vim.notify(opts.fail_prefix .. " failed: " .. (err or "unknown"), vim.log.levels.ERROR, { title = "PosteDb" })
     return
   end
 
@@ -148,18 +148,22 @@ function M.run_ddl_and_refresh(sql, conn_name, context, opts)
       if not ok_body or type(body) ~= "table" then
         body = {}
       end
+      -- verdict.error_text normalizes the non-string family (JSON null is the
+      -- truthy vim.NIL userdata — table.concat would raise on it).
+      local verdict = require("poste-db.verdict")
       local errors = {}
       if body.results then
         for _, result in ipairs(body.results) do
-          if result.error and result.error ~= "" then
-            table.insert(errors, result.error)
+          local text = verdict.error_text(type(result) == "table" and result.error or nil)
+          if text then
+            table.insert(errors, text)
           end
         end
       end
       if resp.has_error or body.has_error or #errors > 0 then
         local msg = table.concat(errors, "\n")
         if msg == "" then msg = "Unknown SQL error" end
-        vim.notify(opts.fail_prefix .. " failed:\n" .. msg, vim.log.levels.ERROR)
+        vim.notify(opts.fail_prefix .. " failed:\n" .. msg, vim.log.levels.ERROR, { title = "PosteDb" })
       else
         notify.info(opts.success_msg)
         M.invalidate_completion_cache()
@@ -167,12 +171,12 @@ function M.run_ddl_and_refresh(sql, conn_name, context, opts)
       M.refresh_subtree(opts.target_node, context, opts.node_type)
     end,
     on_error = function(message)
-      vim.notify(opts.fail_prefix .. " failed: " .. message, vim.log.levels.ERROR)
+      vim.notify(opts.fail_prefix .. " failed: " .. message, vim.log.levels.ERROR, { title = "PosteDb" })
     end,
   })
 
   if not job_id or job_id <= 0 then
-    vim.notify(opts.fail_prefix .. ": failed to start poste process", vim.log.levels.ERROR)
+    vim.notify(opts.fail_prefix .. ": failed to start poste process", vim.log.levels.ERROR, { title = "PosteDb" })
   end
 end
 
