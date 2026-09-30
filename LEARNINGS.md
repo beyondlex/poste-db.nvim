@@ -290,7 +290,25 @@ span，合并进前一个 span 而非跳过）、`get_top_level_stmts`（语句�
 是嵌套还是兄弟；带 `;` 与不带 `;` 各探一次——无 `;` 时 ERROR 会吞掉下一条
 语句（`, 10 SELECT 2`），锚定匹配让它保持报错。
 
+## 19. 用脚本重写 Lua 源码，先过不了 luacheck 别说改完了
+
+**发生了什么**：给 117 处 `vim.notify` 批量补 `{ title = "PosteDb" }` 时，
+第一版脚本用"找 `vim.notify(` + 括号配平"定位调用——把 **docstring 注释里的
+`vim.notify(…, INFO/WARN)`** 也当调用，括号配平从注释一路吞到很远，整段
+源码被替换成一行（source_format.lua -451 行，共损毁 -7420 行）。第二版修了
+注释识别，但 `scan_calls` 返回的 end 已越过右括号、调用方又 `end+1`，生成
+`vim.notify(..., LEVEL), { title = ... })`——title 落到调用外，仍是语法错误。
+两次都靠 `git diff --stat` 的异常删除量才发回。
+
+**约束**：批量重写源码的脚本必须（1）全文件词法状态机（code/string/
+long-string/comment/block-comment）而不是"find + 配平"；（2）对每个重写
+产物自检——重新 lex 一遍必须恰好得到它自己；（3）apply 后**立刻**
+`luacheck` + `loadfile` 全树语法扫描，不要等测试；（4）动手前
+`git status` 必须干净，损坏时 `git checkout -- <files>` 回滚的是脚本碰过
+的文件集合，要防止把同文件里的手工修复一起回滚丢掉（本次手工修复被迫
+重放两次）。
+
 ---
 
-*Latest: 2026-09-23 顶层 ERROR 兄弟节点劈语句边界（LIMIT offset,count）。
+*Latest: 2026-09-30 批量重写 Lua 源码的脚本两次损毁文件（注释匹配 + off-by-one）。
 新增条目时保持同一格式：发生了什么（带 file:line）→ 约束（可执行的检查动作）。*
