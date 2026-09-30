@@ -261,4 +261,21 @@ describe("session_conn on_sql_error gets the normalized error text", function()
 
     assert.equals("deadlock detected", got_msg)
   end)
+
+  it("fails pending requests synchronously when the process exits", function()
+    -- on_exit must not sit behind vim.schedule: a dead session's pending
+    -- requests have to fail inside the same event-loop turn (and the pool
+    -- slot must clear) — a schedule added mid-vim.wait is not pumped in
+    -- headless runs (the redis sibling's lesson).
+    local got_err = nil
+    local job_id, seq = execute_and_job("SELECT 1", {
+      on_error = function(msg) got_err = msg end,
+    })
+
+    jobs[job_id].opts.on_exit(nil, 1)
+
+    assert.is_not_nil(got_err, "the pending request must fail")
+    assert.matches("exited %(code 1%)", got_err)
+    assert.equals(0, vim.tbl_count(session_conn.list()), "the dead session must leave the pool")
+  end)
 end)

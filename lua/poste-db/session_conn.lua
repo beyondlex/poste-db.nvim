@@ -264,7 +264,11 @@ local function start(conn_url, database)
       end
     end,
     on_exit = function(_, code)
-      vim.schedule(function() on_session_exit(session, code) end)
+      -- Called directly, not vim.schedule'd: on_exit already runs on the main
+      -- loop, and a schedule added mid-vim.wait is not pumped in headless
+      -- runs — a dead session would keep its pending requests parked past any
+      -- wait that should have seen them fail (the redis sibling's lesson).
+      on_session_exit(session, code)
     end,
   })
 
