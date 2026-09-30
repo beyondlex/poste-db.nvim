@@ -119,21 +119,27 @@ local function verify_checksum(archive_path, platform, version)
 
   vim.fn.system(M.curl_argv("-sfL", url, tmp, 20))
   if vim.v.shell_error ~= 0 then
-    -- checksum file unavailable — skip verification
+    -- checksum file unavailable — proceed unverified, but say so: the
+    -- no-hasher path below is the precedent for skipping loudly
     pcall(os.remove, tmp)
+    vim.notify("[Poste] Checksum file unavailable — skipped verification", vim.log.levels.WARN)
     return true
   end
 
   local f = io.open(tmp, "r")
   if not f then
     pcall(os.remove, tmp)
+    vim.notify("[Poste] Checksum file unavailable — skipped verification", vim.log.levels.WARN)
     return true
   end
   local expected = f:read("*a"):match("^(%S+)")
   f:close()
   pcall(os.remove, tmp)
 
-  if not expected then return true end
+  if not expected then
+    vim.notify("[Poste] Checksum file unavailable — skipped verification", vim.log.levels.WARN)
+    return true
+  end
 
   -- hasher availability varies by platform (no sha256sum/shasum on Windows):
   -- without any hasher, skip verification like a missing checksum file
