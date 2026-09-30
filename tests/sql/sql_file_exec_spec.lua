@@ -145,6 +145,61 @@ describe("file_exec", function()
       assert.matches("not found", notified.msg)
     end)
 
+    it("renders a null statement error as 'unknown error', not vim.NIL", function()
+      -- `event.error or "unknown error"` never fired for JSON null: vim.NIL
+      -- is truthy, and string.format("%s") printed it literally.
+      local fe = fresh()
+      fe.run({ filepath = "/tmp/x.sql", conn = "playground" })
+      -- Each stdout call is one line; the "" element flushes it (the jobstart
+      -- line contract the handler implements).
+      captured.opts.on_stdout(nil, { vim.json.encode({ type = "progress", seq = 1, total = 1, sql = "SELECT 1" }), "" })
+      captured.opts.on_stdout(nil, {
+        vim.json.encode({
+          type = "result", seq = 1, total = 1, status = "error", sql = "SELECT 1",
+          error = vim.NIL, execution_time_ms = 1,
+        }),
+        "",
+      })
+
+      assert.truthy(notified)
+      assert.matches("unknown error", notified.msg)
+      assert.not_matches("vim%.NIL", notified.msg)
+    end)
+
+    it("redacts a DSN echoed by a failed statement", function()
+      -- This notify bypasses format_error, whose panel path redacts — the
+      -- same rule has to hold here or a driver error leaks the password.
+      local fe = fresh()
+      fe.run({ filepath = "/tmp/x.sql", conn = "playground" })
+      captured.opts.on_stdout(nil, { vim.json.encode({ type = "progress", seq = 1, total = 1, sql = "SELECT 1" }), "" })
+      captured.opts.on_stdout(nil, {
+        vim.json.encode({
+          type = "result", seq = 1, total = 1, status = "error", sql = "SELECT 1",
+          error = "connection failed: postgres://user:secretpw@host/db",
+          execution_time_ms = 1,
+        }),
+        "",
+      })
+
+      assert.truthy(notified)
+      assert.not_matches("secretpw", notified.msg)
+    end)
+
+    it("reports a run that ends without a summary event", function()
+      -- A dead binary/connection used to just stop the dialog: the journal
+      -- recorded the exit, but per-statement failures notified while this
+      -- whole-run failure stayed silent.
+      local fe = fresh()
+      fe.run({ filepath = "/tmp/x.sql", conn = "playground" })
+      captured.opts.on_exit(42, 137)
+      vim.wait(100, function() return notified ~= nil and notified.msg ~= nil end)
+
+      assert.truthy(notified)
+      assert.equals(vim.log.levels.ERROR, notified.level)
+      assert.matches("no summary event", notified.msg)
+      assert.matches("137", notified.msg)
+    end)
+
     it("redacts the connection URL in the command log", function()
       local fe = fresh()
       fe.run({ filepath = "/tmp/x.sql", conn = "playground" })
