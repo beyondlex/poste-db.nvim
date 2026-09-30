@@ -301,7 +301,13 @@ local function handle_line(line)
       })
     else
       S.n_failed = S.n_failed + 1
-      local error_msg = event.error or "unknown error"
+      -- verdict.error_text normalizes the non-string family (JSON null is the
+      -- truthy vim.NIL userdata — string.format("%s") would print it
+      -- literally), and the redact mirrors format_error's panel rule: a
+      -- driver error can echo the DSN it failed on. This notify bypasses
+      -- format_error, so the redaction has to happen here.
+      local error_msg = require("poste-db.log").redact_url(
+        require("poste-db.verdict").error_text(event.error) or "unknown error")
       table.insert(S.results, {
         status = "error",
         seq = seq,
@@ -332,7 +338,7 @@ end
 function M.run(opts)
   opts = opts or {}
   if S.is_running then
-    vim.notify("File execution already in progress", vim.log.levels.WARN)
+    vim.notify("File execution already in progress", vim.log.levels.WARN, { title = "PosteDb" })
     return
   end
   local filepath = opts.filepath
@@ -343,7 +349,7 @@ function M.run(opts)
   local max_rows = opts.max_rows or 1000
 
   if not filepath or filepath == "" then
-    vim.notify("No file specified", vim.log.levels.ERROR)
+    vim.notify("No file specified", vim.log.levels.ERROR, { title = "PosteDb" })
     return
   end
 
@@ -472,6 +478,12 @@ function M.run(opts)
             elapsed_ms = S.start_time and ((vim.uv or vim.loop).now() - S.start_time) or nil,
             error_msg = "exit code " .. tostring(code) .. " (no summary event)",
           })
+          -- A dead binary/connection ends the run silently otherwise: the
+          -- dialog just stops, and per-statement failures notify while this
+          -- whole-run failure did not. Report it on the same channel.
+          vim.notify(
+            string.format("SQL file run failed: exit code %s (no summary event)", code),
+            vim.log.levels.ERROR, { title = "PosteDb" })
         end
         S.is_running = false
         render_progress()
@@ -480,7 +492,7 @@ function M.run(opts)
   })
 
   if S.job_id <= 0 then
-    vim.notify("Failed to start poste exec-file job", vim.log.levels.ERROR)
+    vim.notify("Failed to start poste exec-file job", vim.log.levels.ERROR, { title = "PosteDb" })
     S.is_running = false
     render_progress()
     require("poste-db.sql_log").record({
