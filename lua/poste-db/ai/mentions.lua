@@ -16,6 +16,9 @@ local TOKEN_TABLE = "^([%w%-_]+)/([%w%-_]+)/([%w%-%_%.]+)$"
 --- @param token string text after the @
 --- @return table|nil
 function M.match(token)
+  -- nil/garbage classifies as "not a db mention" (the generic chat falls
+  -- back to file mentions) instead of crashing the completion
+  if type(token) ~= "string" then return nil end
   local conn, db, table_part = token:match(TOKEN_TABLE)
   if conn then
     if not connections.get_connection_config(conn) then return nil end
@@ -100,6 +103,7 @@ end
 --- @param ref table { connection, database, table? }
 --- @param cb function(md, err)
 function M.resolve(ref, cb)
+  if type(ref) ~= "table" then cb(nil, "malformed connection mention") return end
   local conn = ref.connection
   local db = ref.database
   if not conn or not db then cb(nil, "malformed connection mention") return end

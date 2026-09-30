@@ -86,5 +86,13 @@ describe("poste-db.ai.mentions", function()
       assert.is_nil(mentions.match("unknown/blog"))
       assert.is_nil(mentions.match("just-a-word"))
     end)
+
+    it("answers nil (not a crash) on a non-string token", function()
+      -- a nil/garbage token must fall back to file mentions, not break the
+      -- completion that asked
+      assert.is_nil(mentions.match(nil))
+      assert.is_nil(mentions.match(42))
+      assert.is_nil(mentions.match({}))
+    end)
   end)
 end)
