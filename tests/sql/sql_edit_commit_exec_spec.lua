@@ -19,6 +19,29 @@ describe("edit_commit_exec", function()
     assert.same({ "stmt 1: boom" }, errors)
   end)
 
+  it("skips a JSON-null (vim.NIL) error instead of raising on concat", function()
+    -- `error: null` arrives as the truthy vim.NIL userdata; `..` raises on
+    -- it, which used to kill the commit report and leave the generic
+    -- "SQL execution error" crash message for the user.
+    local errors = exec.collect_statement_errors({
+      results = {
+        { error = vim.NIL },
+        { error = "boom" },
+      },
+    })
+
+    assert.same({ "stmt 2: boom" }, errors)
+  end)
+
+  it("falls back to the unknown-error message when every error is null", function()
+    local kind, detail = exec.commit_outcome(
+      { updates = 1 },
+      { has_error = true, results = { { error = vim.NIL } } })
+
+    assert.equals("error", kind)
+    assert.equals("Unknown SQL error (has_error=true)", detail)
+  end)
+
   it("counts affected rows", function()
     local affected = exec.count_affected_rows({
       results = {

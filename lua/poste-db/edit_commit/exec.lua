@@ -1,4 +1,6 @@
 --- Edit commit executor --- build and run SQL UPDATE/INSERT/DELETE.
+local verdict = require("poste-db.verdict")
+
 local M = {}
 
 function M.decode_json(output)
@@ -25,8 +27,15 @@ function M.collect_statement_errors(body)
     return errors
   end
   for i, result in ipairs(body.results) do
-    if type(result) == "table" and result.error and result.error ~= "" then
-      errors[#errors + 1] = "stmt " .. i .. ": " .. result.error
+    if type(result) == "table" then
+      -- error_text normalizes the non-string family (JSON null arrives as the
+      -- truthy vim.NIL userdata — `..` would raise on it); nil text means the
+      -- result carries no readable error, and has_error still routes the
+      -- commit to the fallback message.
+      local text = verdict.error_text(result.error)
+      if text then
+        errors[#errors + 1] = "stmt " .. i .. ": " .. text
+      end
     end
   end
   return errors
