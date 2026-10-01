@@ -124,6 +124,33 @@ describe("dml_guard regex_scan", function()
     assert.equals(0, #guard.regex_scan([[UPDATE t SET a='it\'s WHERE b=1' WHERE id = 2]]))
   end)
 
+  it("flags the unfiltered DELETE a MySQL-legal escape hides under the standard reading", function()
+    -- Under the no-backslash reading `'it\'` closes early, the bare `s`
+    -- re-opens a phantom literal and the following DELETE disappears into it.
+    -- MySQL (backslash escapes) executes that DELETE — the union reading of
+    -- regex_scan is what keeps the gate loud here.
+    local hits = guard.regex_scan([[SELECT 'it\'s'; DELETE FROM users]])
+    assert.equals(1, #hits)
+    assert.equals("delete", hits[1].kind)
+  end)
+
+  it("flags the unfiltered DELETE a postgres-legal literal hides under the backslash reading", function()
+    -- Postgres (standard_conforming_strings) closes `'a\'` at the second
+    -- quote: `; DELETE FROM users` is live code on the server. The backslash
+    -- reading alone swallows it as one unterminated literal — the other
+    -- direction of the same disagreement.
+    local hits = guard.regex_scan([[SELECT 'a\'; DELETE FROM users]])
+    assert.equals(1, #hits)
+    assert.equals("delete", hits[1].kind)
+  end)
+
+  it("asks once when both readings flag the same statement", function()
+    -- Deduped on kind+snippet: the union must not turn one risky statement
+    -- into a double confirmation.
+    local hits = guard.regex_scan("DELETE FROM users")
+    assert.equals(1, #hits)
+  end)
+
   it("keeps semicolons inside literals out of the statement split", function()
     assert.equals(0, #guard.regex_scan("DELETE FROM t WHERE name = 'a;b'"))
   end)

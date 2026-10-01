@@ -22,6 +22,10 @@ local active = {}
 ---------------------------------------------------------------------------
 
 --- Normalize a connections.toml `tunnel` value to { dest, port, key }.
+--- Type-gated like every other field build_conn_url touches: the TOML parser
+--- turns `key = [1]` into a real table, and a table reaching build_ssh_cmd
+--- lands in the ssh argv (spawn refuses non-string args) on the resolve path
+--- completion and the winbar walk on every redraw.
 --- @param v string|table
 --- @return table|nil cfg, string|nil error_message
 function M.normalize_cfg(v)
@@ -32,6 +36,12 @@ function M.normalize_cfg(v)
     local dest = v.to or v.host
     if type(dest) ~= "string" or dest == "" then
       return nil, "tunnel table needs a `to` field (ssh destination)"
+    end
+    if v.key ~= nil and type(v.key) ~= "string" then
+      return nil, "tunnel `key` must be a string (path to an ssh key)"
+    end
+    if v.port ~= nil and type(v.port) ~= "number" and type(v.port) ~= "string" then
+      return nil, "tunnel `port` must be a number"
     end
     return { dest = dest, port = tonumber(v.port) or 22, key = v.key }
   end

@@ -67,7 +67,11 @@ local function get_default_dir()
 end
 
 local function generate_filename(info, ext)
-  local base = (info and info.table_name) or "export"
+  -- Same gate as get_current_data: a non-string table_name (hand-built info,
+  -- a future caller) falls back to `export` instead of reaching `:gsub` on a
+  -- number or a table.
+  local raw = (type(info) == "table") and info.table_name or nil
+  local base = (type(raw) == "string" and raw ~= "") and raw or "export"
   -- A layout.table_name can be schema-qualified ("main.users"); the raw dot
   -- is fine in a filename but a path separator would silently relocate the
   -- export into a subdirectory.
@@ -81,10 +85,16 @@ end
 -- Dataset access
 -------------------------------------------------------------------------------
 
---- Normalize a field that may arrive as JSON null (`vim.NIL`).
+--- Normalize a field that may arrive as JSON null (`vim.NIL`). Strings pass;
+--- other scalars render as text; anything else (a hand-built tab's table-typed
+--- meta, the tests' future callers) counts as absent so the `or` fallback chain
+--- gets its turn — `generate_filename` runs `:gsub` on `table_name`, and a
+--- number must degrade the export's naming, not kill it.
 local function str(v)
   if v == nil or v == vim.NIL then return nil end
-  return v
+  if type(v) == "string" then return v end
+  if type(v) == "number" or type(v) == "boolean" then return tostring(v) end
+  return nil
 end
 
 --- A cell for the text formats (csv/tsv/md). A JSON/JSONB cell arrives as a

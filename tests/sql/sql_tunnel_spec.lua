@@ -21,6 +21,23 @@ describe("tunnel", function()
       assert.is_nil(tunnel._test.normalize_cfg(42))
       assert.is_nil(tunnel._test.normalize_cfg({ port = 22 }))
     end)
+
+    it("rejects a non-string key with a named error", function()
+      -- The TOML parser turns `key = [1]` into a real table; reaching
+      -- build_ssh_cmd it would land in the ssh argv on the resolve path
+      -- completion and the winbar walk on every redraw.
+      local cfg, err = tunnel._test.normalize_cfg({ to = "jump@bastion", key = { 1 } })
+      assert.is_nil(cfg)
+      assert.matches("key", err)
+      local cfg2, err2 = tunnel._test.normalize_cfg({ to = "jump@bastion", port = { 2222 } })
+      assert.is_nil(cfg2)
+      assert.matches("port", err2)
+    end)
+
+    it("accepts a quoted numeric port", function()
+      assert.same({ dest = "jump@bastion", port = 2222 },
+        tunnel._test.normalize_cfg({ to = "jump@bastion", port = "2222" }))
+    end)
   end)
 
   describe("free_port", function()

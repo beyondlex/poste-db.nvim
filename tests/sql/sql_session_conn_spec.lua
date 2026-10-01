@@ -268,7 +268,7 @@ describe("session_conn on_sql_error gets the normalized error text", function()
     -- slot must clear) — a schedule added mid-vim.wait is not pumped in
     -- headless runs (the redis sibling's lesson).
     local got_err = nil
-    local job_id, seq = execute_and_job("SELECT 1", {
+    local job_id = execute_and_job("SELECT 1", {
       on_error = function(msg) got_err = msg end,
     })
 

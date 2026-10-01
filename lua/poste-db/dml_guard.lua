@@ -186,7 +186,18 @@ end
 --- PL/pgSQL function body is not code the outer statement runs, so a
 --- `DELETE FROM t` inside one must neither trip this guard nor split the batch
 --- at its internal `;`.
+---
+--- `backslash_escapes` says whether `\'` reads as an escaped quote (MySQL's
+--- default `sql_mode`) or as ordinary content with the literal closing there
+--- (PostgreSQL/SQLite, `standard_conforming_strings` on). The two readings
+--- disagree about where a literal ends, and either disagreement alone can hide
+--- an unfiltered statement: the backslash reading swallows the `;`-separated
+--- `DELETE` that follows a postgres-legal `'a\'`, while the standard reading
+--- hides a MySQL-legal `'it\'s'; DELETE FROM t` inside a phantom literal. The
+--- scanner therefore runs BOTH readings at the call sites that decide whether
+--- to warn (see `regex_scan`) — a confirm gate must over-flag, never under.
 --- @param sql string
+--- @param backslash_escapes boolean|nil  default true (the historical reading)
 --- @return string
 local QUOTE_STATE = { ["'"] = "squote", ['"'] = "dquote", ["`"] = "bquote" }
 local CLOSING_QUOTE = { squote = "'", dquote = '"', bquote = "`" }
@@ -194,7 +205,8 @@ local CLOSING_QUOTE = { squote = "'", dquote = '"', bquote = "`" }
 -- identifier chars (`$body$`); `$1` is a placeholder, not a tag.
 local DOLLAR_TAG = "^%$[%w_]*%$"
 
-function M.strip_non_code(sql)
+function M.strip_non_code(sql, backslash_escapes)
+  if backslash_escapes == nil then backslash_escapes = true end
   local out = {}
   local i, n = 1, #sql
   local state = "code"
@@ -237,7 +249,7 @@ function M.strip_non_code(sql)
       end
     else
       local closing = CLOSING_QUOTE[state]
-      if c == "\\" and state ~= "bquote" then
+      if c == "\\" and backslash_escapes and state ~= "bquote" then
         i = i + 2 -- an escape consumes its next byte in every quoting style that honors it
       elseif c == closing then
         if sql:sub(i + 1, i + 1) == closing then
@@ -284,18 +296,31 @@ end
 --- Regex fallback for `scan_text`: split on `;`, flag DELETE/UPDATE chunks
 --- without a top-level WHERE. Parens are dropped before scanning so a WHERE
 --- inside a subquery does not count as the statement's filter.
+---
+--- This is the only engine that runs when tree-sitter is unavailable, so it
+--- scans the text under BOTH quote-escape readings and unions the hits: the
+--- dialects disagree on whether `\'` escapes the quote, and either single
+--- reading can park an unfiltered DELETE inside a phantom literal. A confirm
+--- gate that over-flags one extra edge is fine; one that misses a statement is
+--- not. Deduped on kind+snippet so a statement both readings flag asks once.
 --- @param sql string
 --- @return table[] each entry: { kind, snippet }
 function M.regex_scan(sql)
-  local hits = {}
+  local hits, seen = {}, {}
   if not sql or #sql == 0 then return hits end
-  for chunk in (M.strip_non_code(sql) .. ";"):gmatch("[^;]*") do
-    local stmt = (chunk:gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", ""))
-    if stmt ~= "" then
-      local shell = (stmt:gsub("%b()", " "):gsub("%s+", " "))
-      local kind = dml_verb(shell)
-      if kind and not shell:upper():find("%sWHERE%s") then
-        hits[#hits + 1] = { kind = kind, snippet = stmt }
+  for _, backslash in ipairs({ false, true }) do
+    for chunk in (M.strip_non_code(sql, backslash) .. ";"):gmatch("[^;]*") do
+      local stmt = (chunk:gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", ""))
+      if stmt ~= "" then
+        local shell = (stmt:gsub("%b()", " "):gsub("%s+", " "))
+        local kind = dml_verb(shell)
+        if kind and not shell:upper():find("%sWHERE%s") then
+          local key = kind .. "\0" .. stmt
+          if not seen[key] then
+            seen[key] = true
+            hits[#hits + 1] = { kind = kind, snippet = stmt }
+          end
+        end
       end
     end
   end

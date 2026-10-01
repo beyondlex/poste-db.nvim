@@ -212,6 +212,14 @@ describe("export generate_filename", function()
     local name = export._test.generate_filename({ table_name = "data/tmp" }, ".csv")
     assert.matches("^data_tmp_%d%d%d%d%d%d%d%d_%d%d%d%d%d%d%.csv$", name)
   end)
+
+  it("degrades a non-string table_name to the export prefix instead of crashing", function()
+    -- A hand-built tab (or a future caller) with a numeric table_name used to
+    -- reach `:gsub` on a number and kill the whole export; the str() gate now
+    -- counts it absent so the `export` fallback applies.
+    local name = export._test.generate_filename({ table_name = 42 }, ".csv")
+    assert.matches("^export_", name)
+  end)
 end)
 
 describe("export get_current_data (response shape wiring)", function()
@@ -265,6 +273,30 @@ describe("export get_current_data (response shape wiring)", function()
     local result, current = export._test.get_current_data()
     assert.equals("INSERT INTO `authors` (`id`) VALUES (7);",
       export._test.format_sql_insert(result, current))
+  end)
+
+  it("renders a numeric identity field as text instead of passing it through", function()
+    -- The str() gate: strings pass, numbers render, tables count as absent so
+    -- the fallback chain (meta, layout, dialect default) gets its turn — one
+    -- hand-built tab must not reach `:gsub`/`..` with a number.
+    tab_from({
+      type = "resultset",
+      results = { { columns = { { name = "id" } }, rows = { { 1 } } } },
+      table_name = 42,
+      dialect = "mysql",
+    }, {}, {})
+    local _, got = export._test.get_current_data()
+    assert.same({ table_name = "42", schema = nil, dialect = "mysql" }, got)
+  end)
+
+  it("counts a table-typed identity field as absent", function()
+    tab_from({
+      type = "resultset",
+      results = { { columns = { { name = "id" } }, rows = { { 1 } } } },
+      table_name = { "not", "a", "name" },
+    }, { table_name = "layout_tbl" }, {})
+    local _, got = export._test.get_current_data()
+    assert.same({ table_name = "layout_tbl", schema = nil, dialect = "postgres" }, got)
   end)
 end)
 
