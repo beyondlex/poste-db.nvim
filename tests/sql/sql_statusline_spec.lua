@@ -44,6 +44,32 @@ describe("statusline context text", function()
     local hl = statusline.get_context_hl()
     assert.equals("PosteDbSqlCtxprod", hl)
   end)
+
+  it("degrades a table-typed color/link/bg instead of erroring the redraw", function()
+    -- The TOML parser turns `color = [1]` into a real table; `:sub` used to
+    -- raise on it — inside a function every statusline redraw runs. A
+    -- non-string field counts as absent (the redis sibling's round-24 gate).
+    package.loaded["poste-db.connections"] = {
+      get_connection_config = function(conn)
+        if conn == "tbl" then return { color = { "red" }, link = {}, bg = {} } end
+        if conn == "tblbg" then return { color = "red", bg = { "#222222" } } end
+        if conn == "prod" then return { color = "red" } end
+        return nil
+      end,
+    }
+    vim.b.poste_db_conn = "tbl"
+    assert.equals("", statusline.get_context())
+    vim.b.poste_db_context = "tblbg/blog"
+    vim.b.poste_db_conn = "tblbg"
+    assert.matches("^%%#PosteDbSqlCtxtblbg#", statusline.get_context())
+    -- restore the module-level stub the other tests read
+    package.loaded["poste-db.connections"] = {
+      get_connection_config = function(conn)
+        if conn == "prod" then return { color = "red" } end
+        return nil
+      end,
+    }
+  end)
 end)
 describe("statusline % escaping", function()
   before_each(function()
