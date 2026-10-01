@@ -176,6 +176,12 @@ function M.run_sql_request()
   local stmt_lines
   local set_lines  -- preceding SET @var statements found by extract_stmt_at_cursor
 
+  -- The dialect's quote-escape reading keeps the statement map identical to
+  -- what exec-file splits this buffer into (resolved once, before either
+  -- extraction branch; nil when the buffer carries no dialect hint)
+  local ok_sf, source_format = pcall(require, "poste-db.source_format")
+  local dialect_for_span = ok_sf and source_format.resolve_dialect(src_buf) or nil
+
   if is_visual then
     local sel_start = math.min(_vis_start, _vis_end)
     local sel_end = math.max(_vis_start, _vis_end)
@@ -184,7 +190,8 @@ function M.run_sql_request()
     visual_sel_end = sel_end
     -- NB: statement start lines come back via stmt_lines; indicator and
     -- response placement consume those, not the raw directive count
-    buf_content, stmt_lines = statement.extract_visual_block(buf_lines, sel_start, sel_end)
+    buf_content, stmt_lines = statement.extract_visual_block(buf_lines, sel_start, sel_end,
+      dialect_for_span)
   else
     local line = vim.fn.line(".")
     -- NB: plain table capture — table.pack is absent on some nvim builds

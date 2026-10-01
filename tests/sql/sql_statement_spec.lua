@@ -291,3 +291,44 @@ describe("statement extract_stmt_at_cursor (Lua ;-heuristic fallback)", function
     assert.equals(2, stmt_start)
   end)
 end)
+
+describe("statement try_rust_stmt_span dialect threading", function()
+  -- The Rust span is what "run statement under cursor" executes while
+  -- exec-file splits the same buffer with the dialect's own quote-escape
+  -- reading: the --dialect flag is what keeps the two statements identical
+  -- for a MySQL 'it\'s'. Pinned at the CLI-args level; the reading itself is
+  -- the binary's contract (find_statement_span_with in poste-core).
+  -- statement.lua captured its cli reference at load time, so the stub
+  -- mutates the module table (like the statusline spec) instead of swapping
+  -- package.loaded.
+  local cli = require("poste-db.cli")
+  local orig_run_json = cli.run_json
+  local seen_args
+
+  before_each(function()
+    seen_args = nil
+    cli.run_json = function(args)
+      seen_args = args
+      return { start_line = 0, end_line = 0 }
+    end
+  end)
+
+  after_each(function()
+    cli.run_json = orig_run_json
+  end)
+
+  it("passes a resolvable dialect to context stmt", function()
+    statement.try_rust_stmt_span({ "SELECT 'it\\'s';", "DELETE FROM t;" }, 2, "mysql")
+    assert.equals("context", seen_args[1])
+    assert.equals("--dialect", seen_args[4])
+    assert.equals("mysql", seen_args[5])
+  end)
+
+  it("omits the flag when the dialect is unknown", function()
+    statement.try_rust_stmt_span({ "SELECT 1;" }, 1, nil)
+    assert.is_nil(seen_args[4])
+    statement.try_rust_stmt_ranges({ "SELECT 1;" }, 1, 1, "")
+    assert.equals("stmt-ranges", seen_args[2])
+    assert.is_nil(seen_args[3])
+  end)
+end)

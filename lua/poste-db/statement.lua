@@ -42,7 +42,10 @@ end
 
 --- Try to find statement boundaries using the Rust binary.
 --- Returns {start_line, end_line} as 1-based buffer line numbers, or nil.
-function M.try_rust_stmt_span(buf_lines, cursor_line)
+--- `dialect` (when resolvable) makes the binary read string literals the way
+--- exec-file splits the same buffer — run-statement-under-cursor and run-file
+--- must agree on where a MySQL `'it\'s'` puts the boundary.
+function M.try_rust_stmt_span(buf_lines, cursor_line, dialect)
   -- Find the current ### block to limit the scope
   local block_start, block_end = M.find_block_for_line(buf_lines, cursor_line)
 
@@ -55,7 +58,12 @@ function M.try_rust_stmt_span(buf_lines, cursor_line)
 
   -- Call Rust binary
   local input = table.concat(block_lines, "\n")
-  local parsed, err = cli.run_json({ "context", "stmt", tostring(rel_cursor) }, { stdin = input })
+  local args = { "context", "stmt", tostring(rel_cursor) }
+  if dialect and dialect ~= "" then
+    args[#args + 1] = "--dialect"
+    args[#args + 1] = dialect
+  end
+  local parsed, err = cli.run_json(args, { stdin = input })
   if not parsed then
     log.warn("context stmt failed: " .. tostring(err))
     return nil
@@ -80,7 +88,8 @@ end
 --- Calls `poste context stmt-ranges` which returns semantic boundaries
 --- without relying on ';'.
 --- Returns number[] of 1-based buffer statement start lines, or nil.
-function M.try_rust_stmt_ranges(buf_lines, start_line, end_line)
+--- `dialect` threads the quote-escape reading — see try_rust_stmt_span.
+function M.try_rust_stmt_ranges(buf_lines, start_line, end_line, dialect)
   -- Extract the range of lines
   local range_lines = {}
   for i = start_line, end_line do
@@ -88,7 +97,12 @@ function M.try_rust_stmt_ranges(buf_lines, start_line, end_line)
   end
 
   local input = table.concat(range_lines, "\n")
-  local parsed, err = cli.run_json({ "context", "stmt-ranges" }, { stdin = input })
+  local args = { "context", "stmt-ranges" }
+  if dialect and dialect ~= "" then
+    args[#args + 1] = "--dialect"
+    args[#args + 1] = dialect
+  end
+  local parsed, err = cli.run_json(args, { stdin = input })
   if not parsed then
     log.warn("context stmt-ranges failed: " .. tostring(err))
     return nil
@@ -204,7 +218,15 @@ function M.extract_stmt_at_cursor(buf_lines, cursor_line, buf)
     local legacy = compat.opt("legacy_completion")
     local use_rust = not legacy or legacy == "rust"
     if use_rust then
-      local rust_ok, rust_result = pcall(M.try_rust_stmt_span, buf_lines, cursor_line)
+      -- The dialect's quote-escape reading keeps this span identical to what
+      -- exec-file splits the buffer into (resolved lazily: tree-sitter, the
+      -- common path, never pays for it)
+      local dialect
+      if buf then
+        local ok_sf, source_format = pcall(require, "poste-db.source_format")
+        dialect = ok_sf and source_format.resolve_dialect(buf) or nil
+      end
+      local rust_ok, rust_result = pcall(M.try_rust_stmt_span, buf_lines, cursor_line, dialect)
       if rust_ok and rust_result then
         stmt_start = rust_result[1]
         stmt_end = rust_result[2]
@@ -344,8 +366,9 @@ end
 --- @param buf_lines string[]
 --- @param start_line number  1-indexed start of range
 --- @param end_line   number  1-indexed end of range
+--- @param dialect string|nil  quote-escape reading for the Rust fallback
 --- @return number[]  buffer line numbers of each statement's first content line
-function M.find_stmt_lines(buf_lines, start_line, end_line)
+function M.find_stmt_lines(buf_lines, start_line, end_line, dialect)
   -- Lua ;-scan first (deterministic for standard SQL)
   local stmt_lines = {}
   local current_stmt = nil
@@ -376,17 +399,18 @@ function M.find_stmt_lines(buf_lines, start_line, end_line)
   if #stmt_lines > 0 then return stmt_lines end
 
   -- Fallback: try Rust semantic boundary detection
-  return M.try_rust_stmt_ranges(buf_lines, start_line, end_line)
+  return M.try_rust_stmt_ranges(buf_lines, start_line, end_line, dialect)
 end
 
 --- Extract a visual selection as a synthetic ### block for the CLI.
 --- @param buf_lines string[]
 --- @param start_line number
 --- @param end_line   number
+--- @param dialect string|nil  quote-escape reading for the Rust fallback
 --- @return string block_content  full content with directives + ### + selected lines
 --- @return number[] stmt_lines   buffer line numbers of each statement
 --- @return number   directive_count  number of file-level directive lines
-function M.extract_visual_block(buf_lines, start_line, end_line)
+function M.extract_visual_block(buf_lines, start_line, end_line, dialect)
   local directives = {}
   for _, l in ipairs(buf_lines) do
     if l:match("^%s*%-%-") or l:match("^%s*$") then
@@ -403,7 +427,7 @@ function M.extract_visual_block(buf_lines, start_line, end_line)
     table.insert(parts, buf_lines[i] or "")
   end
 
-  local stmt_lines = M.find_stmt_lines(buf_lines, start_line, end_line)
+  local stmt_lines = M.find_stmt_lines(buf_lines, start_line, end_line, dialect)
   return table.concat(parts, "\n"), stmt_lines, #directives
 end
 
