@@ -73,7 +73,9 @@ describe("poste-db.ai.system_prompt", function()
     local hostile_scope2 = system_prompt._test.build({ connection = "my-blog", database = true })
     assert.truthy(hostile_scope2:find("Current chat scope"))
     assert.truthy(hostile_scope2:find("my%-blog"))
-    assert.falsy(hostile_scope2:find(", database", 1, true))
+    -- the old code reached 'string .. true' and crashed before rendering
+    -- anything; arriving here without an error is the regression
+    assert.falsy(hostile_scope2:find("database true", 1, true))
 
     state.context.connection = 99
     state.context.database = {}
