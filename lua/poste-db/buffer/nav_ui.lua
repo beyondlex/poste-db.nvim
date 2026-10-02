@@ -21,7 +21,7 @@ end
 
 --- For SELECT queries, replace multi-column lists with just the first column
 --- + `, ...` before FROM. Case-insensitive for SELECT/FROM keywords.
-local function shorten_select_fields(sql, width)
+local function shorten_select_fields(sql)
   local select_prefix, cols, from_clause = sql:match(
     "^([Ss][Ee][Ll][Ee][Cc][Tt]%s+)(.-)(%s+[Ff][Rr][Oo][Mm]%s.*)$")
   if not select_prefix then return sql end
