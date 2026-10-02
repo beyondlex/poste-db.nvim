@@ -3,6 +3,14 @@ local buffer_setup = require("poste-db.buffer_setup")
 
 local M = {}
 
+local function setup_db_browser_keymap(buf)
+  local k = config.get_keymap("sql_source", "toggle_db_browser", "<leader>db")
+  if k then
+    vim.keymap.set("n", k, function() require("poste-db.db_browser").toggle() end,
+      { buffer = buf, noremap = true, silent = true, desc = "Toggle DB Browser" })
+  end
+end
+
 function M.setup()
   local sql_runner = require("poste-db.sql_runner")
   local sql_syntax = require("poste-db.syntax")
@@ -10,14 +18,6 @@ function M.setup()
   -- One group for the whole pass, cleared on re-setup: ungrouped, every
   -- setup() call stacked another copy of each handler below.
   local group = vim.api.nvim_create_augroup("PosteDbAutocmds", { clear = true })
-
-  local function setup_db_browser_keymap(buf)
-    local k = config.get_keymap("sql_source", "toggle_db_browser", "<leader>db")
-    if k then
-      vim.keymap.set("n", k, function() require("poste-db.db_browser").toggle() end,
-        { buffer = buf, noremap = true, silent = true, desc = "Toggle DB Browser" })
-    end
-  end
 
   vim.api.nvim_create_autocmd("FileType", {
     group = group,
@@ -121,14 +121,6 @@ end
 
 function M.setup_existing_buffers()
   local sql_runner = require("poste-db.sql_runner")
-
-  local function setup_db_browser_keymap(buf)
-    local k = config.get_keymap("sql_source", "toggle_db_browser", "<leader>db")
-    if k then
-      vim.keymap.set("n", k, function() require("poste-db.db_browser").toggle() end,
-        { buffer = buf, noremap = true, silent = true, desc = "Toggle DB Browser" })
-    end
-  end
 
   for _, buf in ipairs(vim.api.nvim_list_bufs()) do
     local name = vim.api.nvim_buf_get_name(buf)

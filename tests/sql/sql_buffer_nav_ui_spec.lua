@@ -213,18 +213,13 @@ describe("buffer_nav_ui", function()
     assert.truthy(ctx2:find("prod", 1, true))
     assert.is_falsy(ctx2:find("99", 1, true))
 
-    -- a numeric connection still falls back to the session name path
-    if state and state.context then
-      state.context.connection = "fallback-name"
-    end
+    -- a numeric connection leaves no connection fragment at all (the
+    -- session-name path only decorates a connection the meta actually has)
     local ctx3 = ui.build_statusline_context({
       type = "resultset",
       connection = 123,
     })
-    assert.truthy(ctx3:find("fallback-name", 1, true))
-    if state and state.context then
-      state.context.connection = nil
-    end
+    assert.is_nil(ctx3)
   end)
 
   it("builds pending changes text only when dirty", function()
