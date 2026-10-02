@@ -1,5 +1,25 @@
 local M = {}
 
+local hl_cache = {}      -- conn_name -> { hl_name = string, fp = string }
+local hl_cache_group = nil
+
+--- get_ctx_color runs on EVERY statusline evaluation and every cursor move
+--- (source winbar + dataset winbar). nvim_set_hl invalidates global
+--- highlighting and forces a full-screen redraw even when the value is
+--- unchanged, so the definition is only re-applied when the connections.toml
+--- fingerprint (color/link/bg) actually changed; a ColorScheme event drops
+--- the cache so definitions re-derive against the new scheme. Mirrors the
+--- poste-redis.nvim sibling's cache so the two stay in step.
+local function cache_drop_group()
+  if not hl_cache_group then
+    hl_cache_group = vim.api.nvim_create_augroup("PosteDbCtxHlCache", { clear = true })
+    vim.api.nvim_create_autocmd("ColorScheme", {
+      group = hl_cache_group,
+      callback = function() hl_cache = {} end,
+    })
+  end
+end
+
 local function get_ctx_color(conn_name)
   local ok, connections = pcall(require, "poste-db.connections")
   if not ok then return nil end
@@ -15,10 +35,16 @@ local function get_ctx_color(conn_name)
   local bg = type(config.bg) == "string" and config.bg or nil
   if not color and not link then return nil end
 
+  local fp = (color or "") .. "\0" .. (link or "") .. "\0" .. (bg or "")
+  local cached = hl_cache[conn_name]
+  if cached and cached.fp == fp then return cached.hl_name end
+
   local hl_name = "PosteDbSqlCtx" .. conn_name:gsub("[^%w_]", "_")
 
   if link then
     pcall(vim.api.nvim_set_hl, 0, hl_name, { link = link })
+    cache_drop_group()
+    hl_cache[conn_name] = { hl_name = hl_name, fp = fp }
     return hl_name
   end
 
@@ -28,28 +54,29 @@ local function get_ctx_color(conn_name)
   if bg then
     if bg:sub(1, 1) == "#" then
       hl_opts.bg = bg
-    else
+    elseif vim.fn.hlexists(bg) == 1 then
       local bg_ok, bg_hl = pcall(vim.api.nvim_get_hl, 0, { name = bg })
       if bg_ok and bg_hl.bg then
         hl_opts.bg = bg_hl.bg
-      else
-        hl_opts.bg = bg
       end
     end
+    -- an unknown bg name is dropped, not passed through: nvim_set_hl would
+    -- reject the whole definition and the connection loses its fg color too
   end
   if color:sub(1, 1) == "#" then
     hl_opts.fg = color
+  elseif vim.fn.hlexists(color) == 1 then
+    -- a highlight-group name links through; the old pcall(get_hl) truthiness
+    -- also "succeeded" for a group that does not exist, linking to nothing
+    hl_opts.link = color
   else
-    local hl_exists = pcall(vim.api.nvim_get_hl, 0, { name = color })
-    if hl_exists then
-      hl_opts.link = color
-    else
-      hl_opts.fg = color
-    end
+    hl_opts.fg = color
   end
   local ok_hl = pcall(vim.api.nvim_set_hl, 0, hl_name, hl_opts)
   if not ok_hl then return nil end
 
+  cache_drop_group()
+  hl_cache[conn_name] = { hl_name = hl_name, fp = fp }
   return hl_name
 end
 
@@ -172,5 +199,9 @@ function M.get_context_hl()
   local conn_name = ctx:match("^(.-)[/]") or ctx
   return get_ctx_color(conn_name)
 end
+
+M._test = {
+  hl_cache = function() return hl_cache end,
+}
 
 return M

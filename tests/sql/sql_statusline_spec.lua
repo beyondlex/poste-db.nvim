@@ -264,3 +264,50 @@ describe("statusline mini wiring", function()
     vim.api.nvim_buf_delete(plain, { force = true })
   end)
 end)
+
+describe("statusline ctx-highlight cache", function()
+  local statusline = require("poste-db.statusline")
+
+  after_each(function()
+    -- restore the module-level stub the other tests read
+    package.loaded["poste-db.connections"] = {
+      get_connection_config = function(conn)
+        if conn == "prod" then return { color = "red" } end
+        return nil
+      end,
+    }
+    vim.api.nvim_exec_autocmds("ColorScheme", {})
+    vim.b.poste_db_context = nil
+    vim.b.poste_db_conn = nil
+  end)
+
+  it("caches per (color,link,bg) fingerprint and re-derives on change", function()
+    vim.b.poste_db_context = "prod/blog"
+    vim.b.poste_db_conn = "prod"
+    assert.equals("PosteDbSqlCtxprod", statusline.get_context_hl())
+    assert.are.equal("red\0\0", statusline._test.hl_cache().prod.fp)
+
+    -- the toml entry changes; the fingerprint changes and the definition is
+    -- re-applied under the same group name
+    package.loaded["poste-db.connections"] = {
+      get_connection_config = function()
+        return { color = "blue", bg = "#222222" }
+      end,
+    }
+    assert.equals("PosteDbSqlCtxprod", statusline.get_context_hl())
+    assert.are.equal("blue\0\0#222222", statusline._test.hl_cache().prod.fp)
+  end)
+
+  it("drops the cache on ColorScheme so definitions re-derive", function()
+    vim.b.poste_db_context = "prod/blog"
+    vim.b.poste_db_conn = "prod"
+    statusline.get_context_hl()
+    assert.is_truthy(statusline._test.hl_cache().prod)
+
+    vim.api.nvim_exec_autocmds("ColorScheme", {})
+    assert.is_nil(statusline._test.hl_cache().prod,
+      "a scheme switch must invalidate every cached definition")
+    -- and the next evaluation rebuilds it against the new scheme
+    assert.equals("PosteDbSqlCtxprod", statusline.get_context_hl())
+  end)
+end)
