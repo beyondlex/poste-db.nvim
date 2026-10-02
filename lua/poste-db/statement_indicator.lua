@@ -1,34 +1,46 @@
 local ts_stmt = require("poste-db.ts_stmt")
 local state = require("poste-db.state")
 local config = require("poste-db.config")
+local util = require("poste-db.util")
 
 local M = {}
-local _setup_done = false
 
 local _disabled = false
 
 local ns = vim.api.nvim_create_namespace("poste_db_boundary")
 
--- Last applied span (1-based, inclusive) so cursor moves inside the same
--- statement do zero work: no extmark clear/re-paint, no re-read.
--- Keeps the boundary painting on the same redraw as the cursor, like
--- the native cursorline.
-local _last_applied = { buf = nil, s = nil, e = nil }
+-- Row tint behind the statement under the cursor, per Normal's darkness. The
+-- dark navy keeps default-light text readable on dark themes; the same navy on
+-- a light theme puts dark text on a dark row. No fg is set either way — the
+-- text keeps the theme's Normal fg.
+local BOUNDARY_BG_DARK = 0x24293f
+local BOUNDARY_BG_LIGHT = 0xd6e4ff
+
+local function boundary_bg()
+  local normal = vim.api.nvim_get_hl(0, { name = "Normal" })
+  if util.is_dark_color(normal and normal.bg) then
+    return BOUNDARY_BG_DARK
+  end
+  return BOUNDARY_BG_LIGHT
+end
 
 function M.setup()
-  if _setup_done then return end
-  _setup_done = true
-  -- full-width rectangle background for the statement under the cursor
-  -- (hl_eol extmarks, poste_ai/poste_http style) — replaces the old
-  -- sign-column border tree and frees the sign column for the execution
-  -- status indicator
-  vim.api.nvim_set_hl(0, "PosteDbSqlBoundary", { bg = 0x24293f })
+  -- Deliberately unguarded: init.lua's ColorScheme autocmd re-runs setup() so
+  -- a :colorscheme switch re-picks the bg (a first-run guard used to defeat
+  -- exactly that and left the previous theme's bg behind).
+  vim.api.nvim_set_hl(0, "PosteDbSqlBoundary", { bg = boundary_bg() })
   -- The "gutter" style marks only the number column of the block. It links to
   -- the rectangle so one override recolours both; a `bg` of its own would
   -- drift from whatever theme the user pointed the rectangle at.
   vim.api.nvim_set_hl(0, "PosteDbSqlBoundaryGutter", { link = "PosteDbSqlBoundary" })
   state.apply_highlight_overrides({ "PosteDbSqlBoundary", "PosteDbSqlBoundaryGutter" })
 end
+
+-- Last applied span (1-based, inclusive) so cursor moves inside the same
+-- statement do zero work: no extmark clear/re-paint, no re-read.
+-- Keeps the boundary painting on the same redraw as the cursor, like
+-- the native cursorline.
+local _last_applied = { buf = nil, s = nil, e = nil }
 
 local function clear_all(buf)
   if buf and vim.api.nvim_buf_is_valid(buf) then

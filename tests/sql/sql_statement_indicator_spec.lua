@@ -195,3 +195,54 @@ describe("statement_indicator boundary gutter", function()
     assert.are.equal(0, #marks())
   end)
 end)
+
+describe("statement_indicator boundary background", function()
+  local function get_bg()
+    return vim.api.nvim_get_hl(0, { name = "PosteDbSqlBoundary" }).bg
+  end
+
+  local saved_normal
+
+  before_each(function()
+    saved_normal = vim.api.nvim_get_hl(0, { name = "Normal" })
+  end)
+
+  after_each(function()
+    vim.api.nvim_set_hl(0, "Normal", saved_normal)
+    statement_indicator.setup()
+  end)
+
+  it("picks a light row tint when Normal is light", function()
+    vim.api.nvim_set_hl(0, "Normal", { fg = 0x222222, bg = 0xffffff })
+    statement_indicator.setup()
+    local bg = get_bg()
+    assert.is_number(bg)
+    assert.is_true(bg > 0x800000, "light Normal must give a light boundary bg, got " .. bg)
+  end)
+
+  it("keeps the dark row tint when Normal is dark", function()
+    vim.api.nvim_set_hl(0, "Normal", { fg = 0xdddddd, bg = 0x1a1b26 })
+    statement_indicator.setup()
+    local bg = get_bg()
+    assert.is_number(bg)
+    assert.is_true(bg < 0x800000, "dark Normal must give a dark boundary bg, got " .. bg)
+  end)
+
+  it("re-picks the bg when setup() runs again after a theme switch", function()
+    -- init.lua's ColorScheme autocmd re-runs setup(); a first-run guard used
+    -- to turn that into a no-op and leave the previous theme's bg behind
+    vim.api.nvim_set_hl(0, "Normal", { fg = 0xdddddd, bg = 0x1a1b26 })
+    statement_indicator.setup()
+    local dark_bg = get_bg()
+
+    vim.api.nvim_set_hl(0, "Normal", { fg = 0x222222, bg = 0xffffff })
+    statement_indicator.setup()
+    assert.are_not.equal(dark_bg, get_bg(), "re-setup must follow the new Normal")
+  end)
+
+  it("links the gutter group to the rectangle", function()
+    statement_indicator.setup()
+    assert.are.equal("PosteDbSqlBoundary",
+      vim.api.nvim_get_hl(0, { name = "PosteDbSqlBoundaryGutter" }).link)
+  end)
+end)
