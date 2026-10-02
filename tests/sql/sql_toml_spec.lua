@@ -144,6 +144,40 @@ database = "inventory"
     assert.equals(1, res['a"b'])
   end)
 
+  it("accepts a quoted key that contains an equals sign", function()
+    -- `"a=b" = 1` is legal TOML; the plain find cut the line at the
+    -- quote-inner `=` and stored the mangled halves (`"a` = `b" = 1`)
+    -- with no error anywhere.
+    local res, err = toml.parse('["t"]\n"a=b" = 1')
+    assert.is_nil(err)
+    assert.equals(1, res.t["a=b"])
+    local res2, err2 = toml.parse("'a=b' = 2")
+    assert.is_nil(err2)
+    assert.equals(2, res2["a=b"])
+  end)
+
+  it("accepts an inline-table key that contains an equals sign", function()
+    -- the pair split had the same plain-find cut, and the swallowed
+    -- key-parse error stored the entry under tostring(nil)
+    local res, err = toml.parse('env = { "A=B" = "x" }')
+    assert.is_nil(err)
+    assert.equals("x", res.env["A=B"])
+  end)
+
+  it("fails closed on an unterminated quote in a key=value line", function()
+    -- the top-level scan never finds an `=` outside the open quote, so the
+    -- line is a plain invalid line instead of a mangled store
+    local _, err = toml.parse('password "x = 1')
+    assert.matches("Invalid key=value line", err)
+  end)
+
+  it("rejects an inline-table entry whose key fails to parse", function()
+    -- `{"uncl = 1}`: the unterminated quote means no top-level `=` — the
+    -- entry must not land under tostring(nil) either way
+    local _, err = toml.parse('v = { "uncl = 1 }')
+    assert.matches("Invalid inline table entry", err)
+  end)
+
   it("still rejects unquoted dotted keys", function()
     local _, err = toml.parse("a.b = 1")
     assert.matches("Dotted keys", err)
@@ -187,6 +221,24 @@ database = "inventory"
     local res, err = toml.parse('[pg] # the dev one\nhost = "h"')
     assert.is_nil(err)
     assert.equals("h", res.pg.host)
+  end)
+
+  it("accepts a comment after a quoted header", function()
+    -- the quoted path's tail check ended two chars short of EOL, so the
+    -- closing `]` landed in the tail and every trailing comment on a
+    -- quoted header died as "Invalid table header" — while the unquoted
+    -- path right beside it accepted one
+    local res, err = toml.parse('["pg-dev"] # the dev one\nhost = "h"')
+    assert.is_nil(err)
+    assert.equals("h", res["pg-dev"].host)
+    local res2, err2 = toml.parse("['pg2']#tight comment\nx = 1")
+    assert.is_nil(err2)
+    assert.equals(1, res2.pg2.x)
+  end)
+
+  it("still rejects trailing text after a quoted header", function()
+    local _, err = toml.parse('["a"] ["b"]')
+    assert.matches("Invalid table header", err)
   end)
 
   it("rejects triple-quoted strings instead of unquoting them into garbage", function()
