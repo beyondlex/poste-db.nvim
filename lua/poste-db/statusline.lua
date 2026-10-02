@@ -1,6 +1,6 @@
 local M = {}
 
-local hl_cache = {}      -- conn_name -> { hl_name = string, fp = string }
+local hl_cache = {}      -- conn_name -> { hl_name = string, fp = string, epoch = number }
 local hl_cache_group = nil
 
 --- get_ctx_color runs on EVERY statusline evaluation and every cursor move

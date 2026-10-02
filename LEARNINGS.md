@@ -308,7 +308,27 @@ long-string/comment/block-comment）而不是"find + 配平"；（2）对每个�
 的文件集合，要防止把同文件里的手工修复一起回滚丢掉（本次手工修复被迫
 重放两次）。
 
+## 20. autocmd 回调按"内容等价"去重：靠实例闭包做 per-instance 注册是死路
+
+**发生了什么**：给 `statusline.lua` 的 per-connection 高亮缓存加 ColorScheme
+失效时，drop 回调写成了实例闭包（`callback = function() hl_cache = {} end`，
+重新绑定模块局部 `hl_cache`）。spec 环境会 reload 本模块（mini-wiring 测试
+`package.loaded[...] = nil` 再 require），实测：reload 后的新实例走
+`nvim_create_autocmd` 全程无报错、组 id 相同，但 `nvim_get_autocmds` 里**永远
+只有一个 handler**——本机 Neovim 对内容等价（常量折叠后相同）的回调去重，后
+注册的静默丢弃。于是无论 `clear = true`（最后一个实例清掉前面所有实例的
+handler，旧实例缓存永不失效）还是 `clear = false`（只有第一个实例的缓存会失
+效），总有一部分实例的缓存在 `:colorscheme` 后永久过期。隔离单跑、手工探针
+全部无法复现，只有"先跑一遍会 reload 的测试再跑缓存测试"的完整文件才稳定
+复现。
+
+**约束**：跨 reload 生效的状态不能用实例闭包承载——失效句柄要落在 reload
+存活的地方（`vim.g` 计数/epoch 是首选），数据侧每条缓存带 epoch、读取时比
+对，handler 只负责 bump。写依赖 autocmd 注册时序的测试前，先用
+`nvim_get_autocmds` 数一下实际注册数，别信 `create_autocmd` 的返回值；一个
+"隔离跑必过、全量跑偶挂"的失败，先怀疑同文件更早测试留下的注册/状态。
+
 ---
 
-*Latest: 2026-09-30 批量重写 Lua 源码的脚本两次损毁文件（注释匹配 + off-by-one）。
+*Latest: 2026-10-03 autocmd 回调按内容等价去重，per-instance 注册是死路（#20）。
 新增条目时保持同一格式：发生了什么（带 file:line）→ 约束（可执行的检查动作）。*
