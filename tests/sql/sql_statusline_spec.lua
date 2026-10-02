@@ -266,8 +266,6 @@ describe("statusline mini wiring", function()
 end)
 
 describe("statusline ctx-highlight cache", function()
-  local statusline = require("poste-db.statusline")
-
   after_each(function()
     -- restore the module-level stub the other tests read
     package.loaded["poste-db.connections"] = {
@@ -298,16 +296,56 @@ describe("statusline ctx-highlight cache", function()
     assert.are.equal("blue\0\0#222222", statusline._test.hl_cache().prod.fp)
   end)
 
-  it("drops the cache on ColorScheme so definitions re-derive", function()
+  it("stales the cache on ColorScheme so definitions re-derive", function()
     vim.b.poste_db_context = "prod/blog"
     vim.b.poste_db_conn = "prod"
     statusline.get_context_hl()
     assert.is_truthy(statusline._test.hl_cache().prod)
 
     vim.api.nvim_exec_autocmds("ColorScheme", {})
-    assert.is_nil(statusline._test.hl_cache().prod,
-      "a scheme switch must invalidate every cached definition")
-    -- and the next evaluation rebuilds it against the new scheme
-    assert.equals("PosteDbSqlCtxprod", statusline.get_context_hl())
+    -- the epoch bump lives in vim.g, so every live module instance sees the
+    -- invalidation even though the handler itself was registered once
+    local served = statusline.get_context_hl()
+    assert.equals("PosteDbSqlCtxprod", served)
+    assert.are.equal(vim.g.poste_db_ctx_hl_epoch,
+      statusline._test.hl_cache().prod.epoch,
+      "the post-switch evaluation must re-derive, not serve the stale entry")
+  end)
+end)
+
+describe("statusline ctx-highlight cache across reloads", function()
+  after_each(function()
+    package.loaded["poste-db.statusline"] = nil
+    vim.api.nvim_exec_autocmds("ColorScheme", {})
+    package.loaded["mini.statusline"] = nil
+    vim.b.poste_db_context = nil
+    vim.b.poste_db_conn = nil
+  end)
+
+  it("a scheme switch stales every reloaded instance's cache", function()
+    -- this Neovim dedupes content-equivalent autocmd callbacks, so a
+    -- reloaded instance (the mini-wiring specs reload this file) never gets
+    -- its own handler; the epoch lives in vim.g precisely so one handler
+    -- invalidates every live instance's cache
+    package.loaded["poste-db.connections"] = {
+      get_connection_config = function() return { color = "red" } end,
+    }
+    local first = require("poste-db.statusline")
+    vim.b.poste_db_conn = "prod"
+    vim.b.poste_db_context = "prod/blog"
+    first.get_context_hl()
+
+    package.loaded["poste-db.statusline"] = nil
+    local second = require("poste-db.statusline")
+    second.get_context_hl()
+
+    vim.api.nvim_exec_autocmds("ColorScheme", {})
+    local epoch = vim.g.poste_db_ctx_hl_epoch
+    assert.is_number(epoch)
+    -- both instances must see the invalidation and re-derive
+    assert.equals("PosteDbSqlCtxprod", first.get_context_hl())
+    assert.equals("PosteDbSqlCtxprod", second.get_context_hl())
+    assert.are.equal(epoch, first._test.hl_cache().prod.epoch, "first instance re-derived")
+    assert.are.equal(epoch, second._test.hl_cache().prod.epoch, "second instance re-derived")
   end)
 end)

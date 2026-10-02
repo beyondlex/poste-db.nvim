@@ -28,7 +28,7 @@ describe("db_browser paste confirm", function()
 
   it("runs on_confirm exactly once on y", function()
     local confirmed, cancelled = 0, 0
-    local buf, q_cb = open_confirm(function() confirmed = confirmed + 1 end,
+    local buf = open_confirm(function() confirmed = confirmed + 1 end,
       function() cancelled = cancelled + 1 end)
     local y_cb
     for _, km in ipairs(vim.api.nvim_buf_get_keymap(buf, "n")) do

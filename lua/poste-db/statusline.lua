@@ -7,15 +7,23 @@ local hl_cache_group = nil
 --- (source winbar + dataset winbar). nvim_set_hl invalidates global
 --- highlighting and forces a full-screen redraw even when the value is
 --- unchanged, so the definition is only re-applied when the connections.toml
---- fingerprint (color/link/bg) actually changed; a ColorScheme event drops
---- the cache so definitions re-derive against the new scheme. Mirrors the
---- poste-redis.nvim sibling's cache so the two stay in step.
+--- fingerprint (color/link/bg) actually changed; a ColorScheme event bumps a
+--- global epoch so cached entries re-derive against the new scheme. Mirrors
+--- the poste-redis.nvim sibling's cache so the two stay in step.
+---
+--- The epoch lives in vim.g, NOT in a rebound upvalue: this Neovim dedupes
+--- autocmd registrations whose callbacks are content-equivalent, so a
+--- reloaded module instance (spec harnesses reload this file) cannot get a
+--- second handler — a handler clearing its own instance's table would leave
+--- every other live instance's cache permanently stale.
 local function cache_drop_group()
   if not hl_cache_group then
     hl_cache_group = vim.api.nvim_create_augroup("PosteDbCtxHlCache", { clear = true })
     vim.api.nvim_create_autocmd("ColorScheme", {
       group = hl_cache_group,
-      callback = function() hl_cache = {} end,
+      callback = function()
+        vim.g.poste_db_ctx_hl_epoch = (vim.g.poste_db_ctx_hl_epoch or 0) + 1
+      end,
     })
   end
 end
@@ -36,15 +44,16 @@ local function get_ctx_color(conn_name)
   if not color and not link then return nil end
 
   local fp = (color or "") .. "\0" .. (link or "") .. "\0" .. (bg or "")
+  local epoch = vim.g.poste_db_ctx_hl_epoch or 0
   local cached = hl_cache[conn_name]
-  if cached and cached.fp == fp then return cached.hl_name end
+  if cached and cached.fp == fp and cached.epoch == epoch then return cached.hl_name end
 
   local hl_name = "PosteDbSqlCtx" .. conn_name:gsub("[^%w_]", "_")
 
   if link then
     pcall(vim.api.nvim_set_hl, 0, hl_name, { link = link })
     cache_drop_group()
-    hl_cache[conn_name] = { hl_name = hl_name, fp = fp }
+    hl_cache[conn_name] = { hl_name = hl_name, fp = fp, epoch = epoch }
     return hl_name
   end
 
@@ -76,7 +85,7 @@ local function get_ctx_color(conn_name)
   if not ok_hl then return nil end
 
   cache_drop_group()
-  hl_cache[conn_name] = { hl_name = hl_name, fp = fp }
+  hl_cache[conn_name] = { hl_name = hl_name, fp = fp, epoch = epoch }
   return hl_name
 end
 
