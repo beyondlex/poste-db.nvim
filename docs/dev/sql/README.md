@@ -60,6 +60,8 @@ see `.opencode/skills/sql-architecture-harness/SKILL.md` for the house rules
 | `async.lua` | jobstart/timeout scaffolding |
 | `edit_commit/` | Dataset edit commit: DML generation (`dml.lua`, `dml_guard.lua`), commit/rollback exec, SQL log |
 | `table_ops.lua` | Table-level DDL operations from the browser |
+| `verdict.lua` | One statement's outcome from an exec envelope — the status flag decides, the message only explains (dependency-free) |
+| `types.lua` | Column type classification (numeric-or-not) shared by import mapping, DML generation, cell editing and dataset alignment |
 
 ### Dataset UI
 

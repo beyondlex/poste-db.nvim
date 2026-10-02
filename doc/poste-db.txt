@@ -455,6 +455,10 @@ statements are never marked.
                   `PosteDbSqlBoundaryGutter`, which links to
                   `PosteDbSqlBoundary` so one |nvim_set_hl()| moves both.
 
+The rectangle's tint follows the colorscheme: a dark tint on dark
+themes, a light one when `Normal` is light (re-picked on every
+|ColorScheme|). Override either with your own `PosteDbSqlBoundary`.
+
 Extras: `icons` (dataset icons), `history_max` (session request history),
 `page_size` (default dataset rows per page), `snippets`
 (see |poste-db-completion|), `statusline = false` to opt out.
