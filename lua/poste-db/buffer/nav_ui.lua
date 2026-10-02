@@ -57,7 +57,10 @@ function M.build_statusline_context(meta, opts)
 
   local parts = {}
 
-  local conn = meta.connection
+  -- The TOML parser and a schema-violating binary can put non-strings in
+  -- these fields; every :match/:gsub below needs a string, and a render-seam
+  -- crash takes the whole dataset redraw down.
+  local conn = type(meta.connection) == "string" and meta.connection or nil
   if conn and conn ~= "" then
     -- The binary echoes connection URLs, never names (exec_file.rs), so
     -- resolve a display name for the dataset's OWN url first — authoritative
@@ -82,17 +85,17 @@ function M.build_statusline_context(meta, opts)
 
   -- Prefer the resolved database actually used by the query (from @database /
   -- USE), falling back to the one embedded in the connection URL.
-  local db = meta.database
-  if (not db or db == "" or db == vim.NIL) and conn and conn ~= "" then
+  local db = type(meta.database) == "string" and meta.database or nil
+  if (not db or db == "") and conn and conn ~= "" then
     db = conn:match("^%w+://[^@]*@[^/]+/([^?]+)")
     if db then db = (db:gsub("/$", "")) end
   end
-  if db and db ~= "" and db ~= vim.NIL then
+  if db and db ~= "" then
     parts[#parts + 1] = ICON_DATABASE .. " " .. db
   end
 
   if opts.include_table ~= false then
-    local tbl = meta.table_name
+    local tbl = type(meta.table_name) == "string" and meta.table_name or nil
     if tbl and tbl ~= "" then
       parts[#parts + 1] = ICON_TABLE .. " " .. tbl
     end

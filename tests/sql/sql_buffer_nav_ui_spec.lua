@@ -192,6 +192,41 @@ describe("buffer_nav_ui", function()
     assert.is_falsy(ctx:find("🃎", 1, true))
   end)
 
+  it("treats non-string meta fields as absent instead of crashing", function()
+    -- a schema-violating binary or a hand-built meta can carry numbers or
+    -- tables where the winbar expects strings; the render seam must degrade,
+    -- not kill the redraw
+    local ctx = ui.build_statusline_context({
+      type = "resultset",
+      connection = 123,
+      database = { "db" },
+      table_name = false,
+    })
+    assert.is_nil(ctx)
+
+    local ctx2 = ui.build_statusline_context({
+      type = "resultset",
+      connection = "prod",
+      database = 99,
+      table_name = { name = "t" },
+    })
+    assert.truthy(ctx2:find("prod", 1, true))
+    assert.is_falsy(ctx2:find("99", 1, true))
+
+    -- a numeric connection still falls back to the session name path
+    if state and state.context then
+      state.context.connection = "fallback-name"
+    end
+    local ctx3 = ui.build_statusline_context({
+      type = "resultset",
+      connection = 123,
+    })
+    assert.truthy(ctx3:find("fallback-name", 1, true))
+    if state and state.context then
+      state.context.connection = nil
+    end
+  end)
+
   it("builds pending changes text only when dirty", function()
     local dirty = ui.build_pending_changes_text({
       edit_state = {
