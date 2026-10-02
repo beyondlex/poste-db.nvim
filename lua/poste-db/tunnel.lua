@@ -43,7 +43,15 @@ function M.normalize_cfg(v)
     if v.port ~= nil and type(v.port) ~= "number" and type(v.port) ~= "string" then
       return nil, "tunnel `port` must be a number"
     end
-    return { dest = dest, port = tonumber(v.port) or 22, key = v.key }
+    -- A string port must actually BE a number: `port = "22a"` used to lose
+    -- the tonumber and silently fall back to 22 — a different ssh endpoint
+    -- than the one configured. `ensure` fails closed the same way for a
+    -- non-numeric database port.
+    local port = v.port ~= nil and tonumber(v.port) or nil
+    if v.port ~= nil and port == nil then
+      return nil, "tunnel `port` must be a number"
+    end
+    return { dest = dest, port = port or 22, key = v.key }
   end
   return nil, "tunnel must be an ssh destination string or { to = ..., port = ..., key = ... }"
 end

@@ -38,6 +38,17 @@ describe("tunnel", function()
       assert.same({ dest = "jump@bastion", port = 2222 },
         tunnel._test.normalize_cfg({ to = "jump@bastion", port = "2222" }))
     end)
+
+    it("rejects a string port that is not a number instead of defaulting to 22", function()
+      -- `port = "22a"` used to lose the tonumber and silently fall back to
+      -- 22 — a different ssh endpoint than the one configured
+      local cfg, err = tunnel._test.normalize_cfg({ to = "jump@bastion", port = "22a" })
+      assert.is_nil(cfg)
+      assert.matches("port", err)
+      local cfg2, err2 = tunnel._test.normalize_cfg({ to = "jump@bastion", port = "" })
+      assert.is_nil(cfg2)
+      assert.matches("port", err2)
+    end)
   end)
 
   describe("free_port", function()
