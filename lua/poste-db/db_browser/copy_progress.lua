@@ -113,23 +113,32 @@ function M.show_paste_confirm(source, target, plan, sizes, on_confirm, on_cancel
   table.insert(lines, "  [y] Start  [n] Cancel")
 
   local height = math.min(math.max(12, #lines + 2), 26)
-  local dlg = dialog.open({
+  -- One settle path for every way the dialog can go away: y confirms, and
+  -- n / q / <Esc> / WinLeave all count as cancel — the on_cancel callback is
+  -- part of this function's contract, so a bare dialog close must not
+  -- silently drop it.
+  local answered = false
+  local dlg
+  local function answer(is_cancel)
+    if answered then return end
+    answered = true
+    if is_cancel and on_cancel then on_cancel() end
+    dlg:close()  -- re-enters via on_close; the answered flag absorbs it
+    if not is_cancel and on_confirm then on_confirm() end
+  end
+
+  dlg = dialog.open({
     title = "Paste",
     width = math.max(popts.width, 56),
     height = height,
     border = "rounded",
     backdrop = true,
+    on_close = function() answer(true) end,
   })
 
   local km = { buffer = dlg.buf, noremap = true, silent = true, nowait = true }
-  vim.keymap.set("n", "y", function()
-    dlg:close()
-    if on_confirm then on_confirm() end
-  end, km)
-  vim.keymap.set("n", "n", function()
-    dlg:close()
-    if on_cancel then on_cancel() end
-  end, km)
+  vim.keymap.set("n", "y", function() answer(false) end, km)
+  vim.keymap.set("n", "n", function() answer(true) end, km)
 
   dlg:update(lines)
 end
