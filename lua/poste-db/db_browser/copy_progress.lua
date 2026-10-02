@@ -274,9 +274,12 @@ function M.show_paste_progress(source, target, jobs, on_close)
       table.insert(lines, "")
       local done_line = "  Done. " .. completed .. " succeeded, " .. failed .. " failed."
       table.insert(lines, done_line)
-      local succeeded_str = tostring(completed) .. " succeeded"
-      local succeeded_start = done_line:find(succeeded_str, 1, true) - 1
-      if succeeded_start and completed > 0 then
+      -- Find before subtracting: a nil match here must skip the highlight,
+      -- not crash on 'nil - 1' before the guard runs.
+      local match = done_line:find(tostring(completed) .. " succeeded", 1, true)
+      if match and completed > 0 then
+        local succeeded_start = match - 1
+        local succeeded_str = tostring(completed) .. " succeeded"
         table.insert(highlights, { line = #lines - 1, col_start = succeeded_start, col_end = succeeded_start + #succeeded_str, hl_group = "PosteDbCopySuccess" })
       end
       if failed > 0 then
