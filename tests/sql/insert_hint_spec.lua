@@ -98,6 +98,24 @@ describe("poste-db insert_hint", function()
     assert.equals("name", hinted_text())
   end)
 
+  it("ignores an update for a buffer that is not the current one", function()
+    -- CursorHold passes this buffer explicitly; if the user has meanwhile
+    -- switched windows, the current window's cursor belongs to other text
+    set_sql({ "INSERT INTO users (id, name) VALUES (1, 'bob');" })
+    local row = vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1]
+    cursor_at(1, row:find("'bob'"))
+    assert.equals(1, #marks())
+
+    local other = vim.api.nvim_create_buf(false, true)
+    vim.api.nvim_set_current_buf(other)
+    insert_hint.update(buf)
+    assert.equals(1, #marks(), "a foreign-cursor update must not touch this buffer's marks")
+    insert_hint.clear(buf)
+
+    vim.api.nvim_set_current_buf(buf)
+    vim.api.nvim_buf_delete(other, { force = true })
+  end)
+
   it("clear removes the extmarks", function()
     set_sql({ "INSERT INTO users (id, name) VALUES (1, 'bob');" })
     local row = vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1]

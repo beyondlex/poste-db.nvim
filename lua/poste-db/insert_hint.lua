@@ -49,6 +49,11 @@ function M.update(bufnr)
     if not ok then return end
     bufnr = cur
   end
+  -- The hint is cursor-driven and everything below reads the CURRENT window's
+  -- cursor: CursorHold can fire after the user switched to another window,
+  -- and recomputing would pair a foreign cursor with this buffer's lines.
+  -- Returning to the buffer fires CursorMoved, which recomputes anyway.
+  if vim.api.nvim_get_current_buf() ~= bufnr then return end
   pcall(vim.api.nvim_buf_clear_namespace, bufnr, ns, 0, -1)
   dbg("update called, bufnr=" .. bufnr)
 
