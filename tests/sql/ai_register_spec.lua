@@ -62,6 +62,25 @@ describe("poste-db.ai.system_prompt", function()
     assert.falsy(prompt:find("Current SQL context"))
   end)
 
+  it("treats non-string scope/context fields as absent instead of crashing", function()
+    -- the scope map is hand-buildable and state.context mirrors the binary's
+    -- error payloads; a number/table where a string belongs must degrade to
+    -- "no such field", not break the prompt build inside the chat request
+    local hostile_scope = system_prompt._test.build({ connection = 42, database = { "db" } })
+    assert.falsy(hostile_scope:find("Current chat scope"))
+    assert.falsy(hostile_scope:find("Current SQL context"))
+
+    local hostile_scope2 = system_prompt._test.build({ connection = "my-blog", database = true })
+    assert.truthy(hostile_scope2:find("Current chat scope"))
+    assert.truthy(hostile_scope2:find("my%-blog"))
+    assert.falsy(hostile_scope2:find(", database", 1, true))
+
+    state.context.connection = 99
+    state.context.database = {}
+    local hostile_ctx = system_prompt._test.build()
+    assert.falsy(hostile_ctx:find("Current SQL context"))
+  end)
+
   it("keeps credentials out of the prompt for both context paths", function()
     -- A chat scope / buffer context can hold the resolved DSN, and the prompt
     -- goes to a remote model.

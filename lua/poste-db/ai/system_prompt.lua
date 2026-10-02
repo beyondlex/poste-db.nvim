@@ -57,19 +57,23 @@ end
 function M.build(chat_scope)
   local parts = { KNOWLEDGE }
 
-  local conn = chat_scope and chat_scope.connection
-  local db = chat_scope and chat_scope.database
+  -- Scope values come from the chat scope map / state.context; a hand-built
+  -- map can carry anything. Only strings concatenate below — everything else
+  -- counts as absent so the prompt builds without that fragment.
+  local conn = type(chat_scope and chat_scope.connection) == "string" and chat_scope.connection or nil
+  local db = type(chat_scope and chat_scope.database) == "string" and chat_scope.database or nil
   if conn then
+    local dialect = dialect_of(conn)
     parts[#parts + 1] = "## Current chat scope\n"
       .. "The chat is scoped to connection " .. redact(conn)
-      .. (dialect_of(conn) and (" (" .. dialect_of(conn) .. " dialect)") or "")
+      .. (dialect and (" (" .. dialect .. " dialect)") or "")
       .. (db and (", database " .. redact(db)) or "")
       .. ". SQL blocks run against this target by default — no @connection directive needed; "
-      .. "write " .. (dialect_of(conn) or "SQL") .. "-compatible statements; "
+      .. "write " .. (dialect or "SQL") .. "-compatible statements; "
       .. "qualify objects only when the query crosses databases."
   else
-    conn = state.context and state.context.connection
-    db = state.context and state.context.database
+    conn = type(state.context and state.context.connection) == "string" and state.context.connection or nil
+    db = type(state.context and state.context.database) == "string" and state.context.database or nil
     if conn or db then
       local cur = "## Current SQL context\nThe buffer the user is working in is currently bound to: "
         .. "connection " .. (redact(conn) or "(none)") .. ", database " .. (redact(db) or "(none)") .. "."
