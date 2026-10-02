@@ -136,6 +136,28 @@ local function find_by_letter(item_map, letter)
     return nil
 end
 
+--- Shortcut keys for a menu's items: each item's own letter, plus a
+--- lowercase alias for an uppercase letter — unless that lowercase key is
+--- already another item's letter (the table menu has both "i" and "I", and
+--- the alias must not clobber "i"'s own binding).
+--- @param defs table MENU_DEFS entry (list of { letter, ... })
+--- @return table[] list of { key, letter } — key to bind, item letter it runs
+local function shortcut_keys(defs)
+  local taken = {}
+  for _, item in ipairs(defs) do
+    taken[item.letter] = true
+  end
+  local keys = {}
+  for _, item in ipairs(defs) do
+    keys[#keys + 1] = { key = item.letter, letter = item.letter }
+    local lower = item.letter:lower()
+    if item.letter ~= lower and not taken[lower] then
+      keys[#keys + 1] = { key = lower, letter = item.letter }
+    end
+  end
+  return keys
+end
+
 --- Open the context menu for a node.
 --- @param node table The node from tree.get_node_at_line
 --- @param context table The browser context from make_context()
@@ -268,17 +290,16 @@ function M.open(node, context)
   vim.keymap.set("n", "q", close, km_opts)
   vim.keymap.set("n", "<Esc>", close, km_opts)
 
-  -- Letter shortcuts: one key per menu item
-  for _, item in ipairs(MENU_DEFS[node.node_type] or {}) do
-    vim.keymap.set("n", item.letter, function()
-      execute_item(find_by_letter(item_map, item.letter))
+  -- Letter shortcuts: one key per menu item (uppercase letters also answer
+  -- their lowercase key where that key is free — the old alias bound the key
+  -- but looked the lowercase letter up, which no item ever has)
+  for _, s in ipairs(shortcut_keys(MENU_DEFS[node.node_type] or {})) do
+    vim.keymap.set("n", s.key, function()
+      execute_item(find_by_letter(item_map, s.letter))
     end, km_opts)
-    if item.letter ~= item.letter:lower() then
-      vim.keymap.set("n", item.letter:lower(), function()
-        execute_item(find_by_letter(item_map, item.letter:lower()))
-      end, km_opts)
-    end
   end
 end
+
+M._test = { shortcut_keys = shortcut_keys }
 
 return M
