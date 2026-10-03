@@ -104,6 +104,18 @@ describe("poste-db.session_conn", function()
     -- pool keying keeps the inferred name for display purposes
     assert.equals("test", a.database)
   end)
+
+  it("answers start_failed when jobstart raises E475 on a vanished binary", function()
+    -- find_poste_binary answered a moment before; the path is gone now.
+    -- jobstart raises Vim:E475 instead of returning an error code, and the
+    -- raise used to escape M.get into the executor's caller instead of the
+    -- "start_failed" answer every other start failure gives.
+    vim.fn.jobstart = function()
+      error("Vim:E475: /fake/poste is not executable")
+    end
+    local outcome = session_conn.execute("postgres://h/app", "SELECT 1", {}, nil, "db9")
+    assert.equals("start_failed", outcome)
+  end)
 end)
 
 describe("session_conn database_from_url", function()

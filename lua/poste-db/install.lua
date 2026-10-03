@@ -183,7 +183,15 @@ function M.download(version)
     return false
   end
 
-  vim.fn.mkdir(BIN_DIR, "p")
+  -- mkdir raises E739 on a permission wall or a read-only data dir — the
+  -- same plugin-load kill the un-pcall'd curl calls were (round 50); report
+  -- and fail the install instead
+  local ok_dir, dir_err = pcall(vim.fn.mkdir, BIN_DIR, "p")
+  if not ok_dir then
+    vim.notify("[Poste] Cannot create install directory " .. BIN_DIR .. ": "
+      .. tostring(dir_err), vim.log.levels.ERROR)
+    return false
+  end
 
   local url = M.download_url(platform, version)
   local ext = archive_ext(platform)

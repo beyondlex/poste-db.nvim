@@ -249,7 +249,7 @@ local function start(conn_url, database)
   if database then
     table.insert(cmd, "--database"); table.insert(cmd, database)
   end
-  local job_id = vim.fn.jobstart(cmd, {
+  local ok_job, job = pcall(vim.fn.jobstart, cmd, {
     stdin = "pipe",
     stdout_buffered = false,
     stderr_buffered = true,
@@ -271,6 +271,11 @@ local function start(conn_url, database)
       on_session_exit(session, code)
     end,
   })
+
+  -- jobstart raises E475 when the binary vanished between find_poste_binary
+  -- and this call; a raise used to blow through M.get into the executor's
+  -- caller instead of answering "start_failed" like every other start failure
+  local job_id = ok_job and job or -1
 
   if job_id <= 0 then return nil end
   session.job_id = job_id

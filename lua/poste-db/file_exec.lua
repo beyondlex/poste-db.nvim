@@ -429,7 +429,11 @@ function M.run(opts)
   log.info("ExecFile cmd: " .. log.redact_cmd(cmd))
 
   local partial = ""
-  S.job_id = vim.fn.jobstart(cmd, {
+  -- jobstart raises E475 when argv[0] vanished between the lookup above and
+  -- this call (a reinstall mid-session, a stale g:poste_binary); unwrapped,
+  -- the raise skips every failure path below and leaves the progress dialog
+  -- running with S.is_running stuck true for the rest of the session
+  local ok_job, job = pcall(vim.fn.jobstart, cmd, {
     stdout_buffered = false,
     stderr_buffered = true,
     on_stdout = function(_, data)
@@ -490,6 +494,8 @@ function M.run(opts)
       end)
     end,
   })
+
+  S.job_id = ok_job and job or -1
 
   if S.job_id <= 0 then
     vim.notify("Failed to start poste exec-file job", vim.log.levels.ERROR, { title = "PosteDb" })

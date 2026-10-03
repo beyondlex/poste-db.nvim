@@ -57,7 +57,10 @@ local function introspect_ddl(conn_name, db_name, table_name, on_result, on_erro
   }
 
   local stderr_buf = {}
-  vim.fn.jobstart(args, {
+  -- jobstart raises E475 when the binary vanished between cli.binary() and
+  -- this call; unwrapped, the raise escaped the context-menu action instead
+  -- of answering through the same on_error a dead job reports
+  local ok_job, job = pcall(vim.fn.jobstart, args, {
     stdout_buffered = true,
     stderr_buffered = true,
     on_stdout = function(_, data)
@@ -85,6 +88,9 @@ local function introspect_ddl(conn_name, db_name, table_name, on_result, on_erro
       end
     end,
   })
+  if not ok_job and on_error then
+    on_error("DDL introspection could not start: " .. tostring(job))
+  end
 end
 
 local function check_table_exists(conn_name, database, dialect, name, on_result, on_error, schema)

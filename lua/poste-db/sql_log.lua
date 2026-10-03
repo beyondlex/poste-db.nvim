@@ -39,7 +39,9 @@ local function get_log_path()
   SQL_LOG_PATH = vim.fn.stdpath("data") .. "/poste/sql_log.jsonl"
   local dir = vim.fn.fnamemodify(SQL_LOG_PATH, ":h")
   if vim.fn.isdirectory(dir) == 0 then
-    vim.fn.mkdir(dir, "p")
+    -- raises E739 on a permission wall; the journal writer runs inside
+    -- execution paths whose own error handling must not die on a log write
+    pcall(vim.fn.mkdir, dir, "p")
   end
   return SQL_LOG_PATH
 end

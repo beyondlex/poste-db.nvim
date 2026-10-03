@@ -73,6 +73,21 @@ describe("completion schema cache", function()
     assert.is_true(fetch_columns({ { name = "id" }, { name = "value" } }))
     assert.same({ "id", "value" }, cache()["prod/blog"].columns["metrics"])
   end)
+
+  it("flushes the waiters when jobstart raises E475 on a vanished binary", function()
+    -- find_binary answered a moment before; the path is gone now. jobstart
+    -- raises Vim:E475 instead of returning an error code — unwrapped, the
+    -- raise escaped into whatever triggered the fetch and the queued
+    -- callbacks hung forever.
+    vim.fn.jobstart = function()
+      error("Vim:E475: /nonexistent/poste-vanished is not executable")
+    end
+    local finished = false
+    local ok, err = pcall(data.ensure_columns, "metrics", function() finished = true end)
+    assert.is_true(ok, "the raise must not escape the fetch: " .. tostring(err))
+    vim.wait(500, function() return finished end)
+    assert.is_true(finished, "a raise must flush the queued callbacks with the exit default")
+  end)
 end)
 
 --- Item 22 follow-up: the connection-name cache had the same authority

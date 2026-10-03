@@ -322,7 +322,10 @@ end
 --- `exit_default` instead of hanging forever.
 local function start_introspect_job(key, args, on_items, exit_default)
   local epoch = cache_epoch
-  vim.fn.jobstart(args, {
+  -- jobstart raises E475 when the binary vanished between find_binary and
+  -- this call; unwrapped, the raise escaped into whatever triggered the
+  -- fetch instead of flushing the waiters the way a dead job's on_exit does
+  local ok_job, job = pcall(vim.fn.jobstart, args, {
     stdout_buffered = true,
     on_stdout = function(_, data)
       if not data or epoch ~= cache_epoch then return end
@@ -338,6 +341,9 @@ local function start_introspect_job(key, args, on_items, exit_default)
       end
     end,
   })
+  if not ok_job or job <= 0 then
+    flush_scheduled(key, exit_default)
+  end
 end
 
 ---------------------------------------------------------------------------

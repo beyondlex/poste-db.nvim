@@ -699,7 +699,7 @@ function M.clear_logs()
   local path = get_log_path()
   local dir = vim.fn.fnamemodify(path, ":h")
   if vim.fn.isdirectory(dir) == 0 then
-    vim.fn.mkdir(dir, "p")
+    pcall(vim.fn.mkdir, dir, "p") -- E739 on a permission wall; io.open below reports
   end
   local f = io.open(path, "w")
   local truncated = f ~= nil

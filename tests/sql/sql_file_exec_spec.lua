@@ -145,6 +145,33 @@ describe("file_exec", function()
       assert.matches("not found", notified.msg)
     end)
 
+    it("reports instead of raising when jobstart throws E475 on a vanished binary", function()
+      -- find_poste_binary answered a moment before; the path is gone now.
+      -- jobstart raises Vim:E475 instead of returning an error code, and the
+      -- raise used to skip the -1 branch entirely, leaving S.is_running stuck
+      -- true and the progress dialog spinning for the session.
+      vim.fn.jobstart = function()
+        error("Vim:E475: /tmp/bin dir/poste is not executable")
+      end
+
+      local fe = fresh()
+      fe.run({ filepath = "/tmp/x.sql", conn = "playground" })
+
+      assert.truthy(notified, "the failure must surface through notify")
+      assert.equals(vim.log.levels.ERROR, notified.level)
+      assert.matches("Failed to start", notified.msg)
+
+      -- the is_running flag must have been reset: a second run reaches jobstart
+      -- instead of being refused as an already-running session
+      notified = nil
+      vim.fn.jobstart = function(cmd, opts)
+        captured = { cmd = cmd, opts = opts }
+        return 42
+      end
+      fe.run({ filepath = "/tmp/x.sql", conn = "playground" })
+      assert.is_table(captured, "a run after a raise must not be blocked by a stuck is_running")
+    end)
+
     it("renders a null statement error as 'unknown error', not vim.NIL", function()
       -- `event.error or "unknown error"` never fired for JSON null: vim.NIL
       -- is truthy, and string.format("%s") printed it literally.
