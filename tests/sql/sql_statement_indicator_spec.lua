@@ -1,3 +1,8 @@
+-- The boundary marks arrive through an async binary/tree-sitter fetch, so every
+-- wait below has a generous budget: a 500ms wait failed two specs when the full
+-- suite ran under load (a concurrent build on the same box), with every other
+-- test green.
+
 local statement_indicator = require("poste-db.statement_indicator")
 
 --- The boundary rows come from `ts_stmt.find_stmt_span`, so with no Tree-sitter
@@ -65,7 +70,7 @@ describe("statement_indicator boundary background", function()
 
   it_needs_parser("paints the statement block with hl_eol extmarks", function()
     statement_indicator.update(buf, 1)  -- cursor inside the statement
-    assert.is_true(vim.wait(500, function()
+    assert.is_true(vim.wait(2000, function()
       return #vim.api.nvim_buf_get_extmarks(
         buf, statement_indicator._test.get_ns(), 0, -1, {}) > 0
     end), "boundary extmarks should appear after update")
@@ -86,7 +91,7 @@ describe("statement_indicator boundary background", function()
 
   it_needs_parser("does not repaint extmarks for moves inside the same statement", function()
     statement_indicator.update(buf, 1)
-    assert.is_true(vim.wait(500, function()
+    assert.is_true(vim.wait(2000, function()
       return #vim.api.nvim_buf_get_extmarks(
         buf, statement_indicator._test.get_ns(), 0, -1, {}) > 0
     end), "boundary extmarks should appear after update")
@@ -108,7 +113,7 @@ describe("statement_indicator boundary background", function()
 
   it_needs_parser("repaints a new span after the statement set changes", function()
     statement_indicator.update(buf, 1)
-    assert.is_true(vim.wait(500, function()
+    assert.is_true(vim.wait(2000, function()
       return #vim.api.nvim_buf_get_extmarks(
         buf, statement_indicator._test.get_ns(), 0, -1, {}) > 0
     end), "boundary extmarks should appear after update")
@@ -131,7 +136,7 @@ describe("statement_indicator boundary background", function()
   it_needs_parser("does not paint single-line statements", function()
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "SELECT 1;" })
     statement_indicator.update(buf, 1)
-    vim.wait(200)
+    vim.wait(1000)
     assert.are.equal(0, #vim.api.nvim_buf_get_extmarks(
       buf, statement_indicator._test.get_ns(), 0, -1, {}))
   end)
@@ -166,7 +171,7 @@ describe("statement_indicator boundary gutter", function()
 
   it("tints the number column instead of the text", function()
     statement_indicator.update(buf, 1)
-    assert.is_true(vim.wait(500, function() return #marks() > 0 end),
+    assert.is_true(vim.wait(2000, function() return #marks() > 0 end),
       "boundary extmarks should appear after update")
 
     local rows = {}
@@ -182,7 +187,7 @@ describe("statement_indicator boundary gutter", function()
 
   it("drops the marks when the cursor leaves the statement", function()
     statement_indicator.update(buf, 1)
-    assert.is_true(vim.wait(500, function() return #marks() > 0 end))
+    assert.is_true(vim.wait(2000, function() return #marks() > 0 end))
     vim.api.nvim_buf_set_lines(buf, 4, 4, false, { "", "SELECT 2;", "" })
     statement_indicator.update(buf, 6)
     assert.are.equal(0, #marks())
@@ -191,7 +196,7 @@ describe("statement_indicator boundary gutter", function()
   it("does not paint a single-line statement", function()
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "SELECT 1;" })
     statement_indicator.update(buf, 1)
-    vim.wait(200)
+    vim.wait(1000)
     assert.are.equal(0, #marks())
   end)
 end)

@@ -6,8 +6,9 @@ cd "$(dirname "$0")/.."
 P="$HOME/.local/share/nvim/lazy/plenary.nvim"
 F="${1:?spec file}"
 export XDG_CACHE_HOME="${XDG_CACHE_HOME:-/tmp/poste-db-test-cache}"
-export XDG_DATA_HOME="${XDG_DATA_HOME:-/tmp/poste-db-test-data}"
 export XDG_STATE_HOME="${XDG_STATE_HOME:-/tmp/poste-db-test-state}"
+# XDG_DATA stays real: the tree-sitter sql parser the boundary specs read
+# lives there; hiding it failed them with "no Tree-sitter sql parser".
 # `busted.run` here instead of :PlenaryBustedFile: that command takes one
 # argument, so it cannot forward opts, and plenary's test_harness then spawns the
 # spec process with `--noplugin` but NO `-u` — so the developer's own init.lua
