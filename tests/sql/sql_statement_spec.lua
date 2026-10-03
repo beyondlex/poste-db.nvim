@@ -324,6 +324,44 @@ describe("statement extract_stmt_at_cursor (Lua ;-heuristic fallback)", function
   end)
 end)
 
+describe("statement extract_stmt_at_cursor — a cursor on a blank line between statements", function()
+  -- The binary maps a blank line to the blank itself (`context stmt` on line
+  -- 2 of `SELECT 1;\n\n\nSELECT 2;` answers the 0-based span (1,1)), so the
+  -- forward skip to the next statement used to invert the detected span
+  -- (stmt_start 4, stmt_end 2): the empty stmt_lines answered `<CR>` with
+  -- "nothing to execute" for a buffer that had `SELECT 2;` below the cursor.
+  local rust_orig
+
+  before_each(function()
+    rust_orig = statement.try_rust_stmt_span
+    statement.try_rust_stmt_span = function(_, cursor_line)
+      return { cursor_line, cursor_line }  -- the binary's degenerate blank-line span
+    end
+  end)
+
+  after_each(function()
+    statement.try_rust_stmt_span = rust_orig
+  end)
+
+  it("executes the next statement instead of reporting nothing", function()
+    local lines = { "SELECT 1;", "", "", "SELECT 2;" }
+    local content, _, stmt_start, stmt_end = statement._test.extract_stmt_at_cursor(lines, 2, nil)
+    assert.is_not_nil(content, "a blank-line cursor above SELECT 2; must still extract it")
+    assert.equals(4, stmt_start)
+    assert.equals(4, stmt_end)
+    assert.match("SELECT 2;", content)
+  end)
+
+  it("re-ends the statement past a `;` that sits inside a literal", function()
+    local lines = { "SELECT 1;", "", "SELECT 'a;b' AS x;", "SELECT 2;" }
+    local content, _, stmt_start, stmt_end = statement._test.extract_stmt_at_cursor(lines, 2, nil)
+    assert.is_not_nil(content)
+    assert.equals(3, stmt_start)
+    assert.equals(3, stmt_end, "the `;` inside the literal must not bound the statement")
+    assert.match("SELECT 'a;b' AS x;", content)
+  end)
+end)
+
 describe("statement try_rust_stmt_span dialect threading", function()
   -- The Rust span is what "run statement under cursor" executes while
   -- exec-file splits the same buffer with the dialect's own quote-escape

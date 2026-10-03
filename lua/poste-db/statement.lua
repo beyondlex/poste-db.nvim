@@ -255,6 +255,25 @@ function M.extract_stmt_at_cursor(buf_lines, cursor_line, buf)
         break
       end
     end
+    -- The skips can walk stmt_start out of the detected span: the binary maps
+    -- a blank line to the blank itself (`context stmt` on line 2 of
+    -- `SELECT 1;\n\n\nSELECT 2;` answers (2,2)), so the forward skip lands on
+    -- the NEXT statement while stmt_end still points back — an inverted span
+    -- whose empty stmt_lines answered `<CR>` with "nothing to execute" for a
+    -- buffer that had a perfectly good statement below the cursor. Re-end the
+    -- statement the way the Lua fallback does (blanked `;`-scan: a `;` inside
+    -- a literal, comment or dollar body does not bound it).
+    if stmt_start > (stmt_end or 0) then
+      local blanked_lines = vim.split(
+        lex.blank_regions(table.concat(buf_lines, "\n")), "\n", { plain = true })
+      stmt_end = #buf_lines
+      for i = stmt_start, #buf_lines do
+        if (blanked_lines[i] or ""):match(";") then
+          stmt_end = i
+          break
+        end
+      end
+    end
   else
     -- Fall back to Lua ;-heuristic logic. The `;` probes read the blanked
     -- buffer (`lex.blank_regions` keeps newlines, so blanked_lines[i] is
