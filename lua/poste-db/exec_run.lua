@@ -14,6 +14,7 @@ local state = require("poste-db.state")
 local log = require("poste-db.log")
 local sql_log = require("poste-db.sql_log")
 local verdict = require("poste-db.verdict")
+local lex = require("poste-db.lex")
 
 ----------------------------------------------------------------------------
 -- Request journaling
@@ -161,11 +162,13 @@ local QUERY_PREFIXES = {
 
 --- Strip string literals and comments so keyword detection only sees SQL
 --- structure (a `'RETURNING …'` inside a literal must not flip the type).
+--- lex.blank_regions is one state machine: the gsub chain this replaced
+--- stopped a literal blank at an escaped `''`'s second quote (`'it''s
+--- RETURNING x'` leaked its tail and flipped an UPDATE into a query) and
+--- knew nothing of dollar-quoted bodies (`$$ … $$ RETURNING`-shaped SQL
+--- inside a function body counted the same way).
 local function strip_literals_and_comments(sql)
-  local out = sql:gsub("'[^']*'", "''")
-  out = out:gsub('"[^"]*"', '""')
-  out = out:gsub("%-%-[^\n]*", " ")
-  return out
+  return lex.blank_regions(sql)
 end
 
 local function is_query_sql(sql)

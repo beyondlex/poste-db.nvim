@@ -238,6 +238,12 @@ describe("exec_run", function()
       assert.is_false(exec_run.is_query_sql("update t set note = 'RETURNING user'"))
       assert.is_false(exec_run.is_query_sql("update t set my_returning_col = 1"))
       assert.is_false(exec_run.is_query_sql("update t set x = 1 -- RETURNING later"))
+      -- the old gsub chain stopped a literal blank at the '' escape's second
+      -- quote and leaked the tail — the UPDATE flipped to a query
+      assert.is_false(exec_run.is_query_sql("update t set note = 'it''s RETURNING x'"))
+      assert.is_false(exec_run.is_query_sql("update t set note = 'a--b RETURNING x'"))
+      -- a dollar-quoted body is not the statement's code either
+      assert.is_false(exec_run.is_query_sql("update t set body = $$ RETURNING x $$ where id = 1"))
     end)
 
     it("keeps plain DML as affected", function()
