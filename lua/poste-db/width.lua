@@ -168,13 +168,17 @@ end
 
 function M.truncate(s, max_dw)
   if not s or s == "" then return s or "" end
+  -- once per call, not once per character: this runs per rendered cell, and
+  -- width_mode() is a pcall'd require + config lookups
+  local mode = width_mode()
+  local strdisplaywidth = vim.fn.strdisplaywidth
   local w, i = 0, 1
   while i <= #s do
     local cp, next_i = decode_cp(s, i)
     local ch = s:sub(i, (next_i or i + 1) - 1)
     local cost
-    if width_mode() == "nvim" then
-      local ok, cw = pcall(vim.fn.strdisplaywidth, ch)
+    if mode == "nvim" then
+      local ok, cw = pcall(strdisplaywidth, ch)
       cost = ok and cw or 1
     else
       cost = cp and char_cost(cp, ch) or 1
