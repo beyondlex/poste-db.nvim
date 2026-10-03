@@ -1,5 +1,14 @@
 # SQL Context Detection Architecture (v2)
 
+> **Status (2026-10-03)**: this is the design proposal that motivated the
+> Rust `context` module; the migration below has shipped. One claim in the
+> Problem list is now historical only: the Lua `find_stmt_lines()` is no
+> longer a "simple `;` check" — the visual-selection map, the no-parser
+> fallback split, the table-name extraction and the JOIN probe all share
+> the region-aware `lex.blank_regions()` scanner (see
+> `docs/REVIEW-2026-10-03-round-51.md`). The Rust context module remains
+> the authority for cursor-position context detection.
+
 ## Problem
 
 Current SQL completion uses Lua-side heuristic regex matching (`detect_context` in
