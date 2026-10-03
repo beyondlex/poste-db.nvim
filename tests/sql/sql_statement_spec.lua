@@ -221,6 +221,38 @@ describe("statement extract_table_name", function()
     -- as far as the keyword scan is concerned
     assert.equals("users", statement.extract_table_name("select * from users where note = 'it''s from bob"))
   end)
+
+  it("a -- inside a literal no longer eats the FROM (round-50 held probe)", function()
+    -- The old pipeline stripped comments BEFORE blanking literals, so the
+    -- "comment" consumed `'a--b' FROM t` and the extraction returned nil.
+    assert.equals("t", statement.extract_table_name("SELECT 'a--b' FROM t"))
+    assert.equals("t", statement.extract_table_name("select * from t where note = 'a--b'"))
+  end)
+
+  it("a -- inside a double-quoted or backticked identifier is data", function()
+    -- kept verbatim as identifiers; the old comment strip read it as a
+    -- comment and the name fell to nil
+    assert.equals("my--table", statement.extract_table_name('select * from "my--table"'))
+    assert.equals("my--table", statement.extract_table_name("select * from `my--table`"))
+  end)
+
+  it("an apostrophe inside a comment opens no phantom literal", function()
+    assert.equals("users", statement.extract_table_name("select * from users -- don't"))
+    assert.equals("users", statement.extract_table_name("select 1 -- don't\nfrom users"))
+  end)
+
+  it("a DELETE inside a dollar-quoted body does not become the table", function()
+    -- the function body is not the outer statement's code
+    assert.equals("users", statement.extract_table_name("$$ delete from secret $$; select 1 from users"))
+    assert.equals("users",
+      statement.extract_table_name("$fn$ delete from secret $fn$; select * from users"))
+  end)
+
+  it("a single quote inside a kept double-quoted region opens no literal", function()
+    -- the `'` sits inside a double-quoted region; the old literal blanker
+    -- opened a phantom string there and blanked the rest (nil)
+    assert.equals("users", statement.extract_table_name('select "it\'s" from users'))
+  end)
 end)
 
 describe("statement get_stmt_sql", function()
@@ -330,5 +362,36 @@ describe("statement try_rust_stmt_span dialect threading", function()
     statement.try_rust_stmt_ranges({ "SELECT 1;" }, 1, 1, "")
     assert.equals("stmt-ranges", seen_args[2])
     assert.is_nil(seen_args[3])
+  end)
+end)
+
+describe("statement extract_stmt_at_cursor — the ;-scan is region-blind", function()
+  -- The Lua fallback is the only splitter left when neither Tree-sitter nor
+  -- the binary answers; a `;` inside a literal/comment used to bound the
+  -- statement there and the truncated text went off to execute a syntax error.
+  local rust_orig
+
+  before_each(function()
+    rust_orig = statement.try_rust_stmt_span
+    statement.try_rust_stmt_span = function() return nil end
+  end)
+
+  after_each(function()
+    statement.try_rust_stmt_span = rust_orig
+  end)
+
+  it("a string `;` does not end the statement", function()
+    local lines = { "SELECT 'a;b' AS v,", "c FROM t;" }
+    local content, _, stmt_start, stmt_end = statement._test.extract_stmt_at_cursor(lines, 1, nil)
+    assert.equals(1, stmt_start)
+    assert.equals(2, stmt_end, "the statement runs to the real `;` on line 2")
+    assert.match("FROM t;", content)
+  end)
+
+  it("a comment `;` above the cursor does not pin the start", function()
+    local lines = { "SELECT 1 -- done;", "FROM t;" }
+    local content, _, stmt_start = statement._test.extract_stmt_at_cursor(lines, 2, nil)
+    assert.equals(1, stmt_start, "starts at the statement, not after the comment's `;`")
+    assert.match("SELECT 1", content)
   end)
 end)

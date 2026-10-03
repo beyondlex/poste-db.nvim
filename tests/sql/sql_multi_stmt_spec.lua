@@ -130,16 +130,49 @@ describe("find_stmt_lines — edge cases and known bugs", function()
     assert.same({ 1, 2 }, stmts)
   end)
 
-  it("semicolon in double-quoted identifier — KNOWN BUG: falsely splits", function()
-    pending("find_stmt_lines uses naive ; heuristic, doesn't track string context")
+  it("semicolon in double-quoted identifier — no false split", function()
+    -- lex.blank_regions blanks the "…" region for the ;-scan: the `;` inside
+    -- the identifier does not end the statement, so the two lines are ONE
+    -- statement (the old naive scan split at line 1's identifier `;`)
+    local lines = {
+      'SELECT "col;name", b FROM users',
+      "ORDER BY 1;",
+    }
+    local stmts = t.find_stmt_lines(lines, 1, 2)
+    assert.same({ 1 }, stmts)
   end)
 
-  it("comment with semicolon — KNOWN BUG: falsely splits", function()
-    pending("find_stmt_lines uses naive ; heuristic, doesn't skip comment content")
+  it("semicolon in a trailing comment — no false split", function()
+    local lines = {
+      "SELECT 1 -- done; really",
+      "FROM t;",
+    }
+    local stmts = t.find_stmt_lines(lines, 1, 2)
+    assert.same({ 1 }, stmts)
   end)
 
-  it("multi-line string with semicolon — KNOWN BUG: string content leaks", function()
-    pending("find_stmt_lines doesn't track string state across lines")
+  it("multi-line string with semicolon — string state carries across lines", function()
+    -- the naive scan called line 2's `;world` a statement end and produced
+    -- {1, 3, 4} for what is really two statements
+    local lines = {
+      "SELECT 'hello",
+      ";world' AS v",
+      "FROM users;",
+      "SELECT 2;",
+    }
+    local stmts = t.find_stmt_lines(lines, 1, 4)
+    assert.same({ 1, 4 }, stmts)
+  end)
+
+  it("semicolon inside a dollar-quoted function body — no false split", function()
+    local lines = {
+      "CREATE FUNCTION f() RETURNS void AS $$",
+      "DELETE FROM secret;",
+      "$$ LANGUAGE sql;",
+      "SELECT 1;",
+    }
+    local stmts = t.find_stmt_lines(lines, 1, 4)
+    assert.same({ 1, 4 }, stmts)
   end)
 
   it("USE statement is skipped", function()

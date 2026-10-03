@@ -145,6 +145,106 @@ function M.block_comment_depth_after(line, depth)
   return depth
 end
 
+local OPEN_QUOTE = { ["'"] = "squote", ['"'] = "dquote", ["`"] = "bquote" }
+local CLOSE_QUOTE = { squote = "'", dquote = '"', bquote = "`" }
+-- `$` opens a tag only when a closing `$` follows at once (`$$`) or after a
+-- run of identifier chars (`$body$`); `$1` is a placeholder, not a tag.
+local DOLLAR_TAG = "^%$[%w_]*%$"
+
+--- Blank every region the keyword/`;` scans must not see, keeping newlines so
+--- per-line arithmetic over the output still matches the input. Blanked:
+--- single-quoted literals (`''` is the escape; an unterminated one blanks
+--- through the end), `--` line comments, `/* */` block comments and
+--- dollar-quoted bodies (`$$ … $$`, `$tag$ … $tag$`) — a function body's
+--- `DELETE FROM t` is not the outer statement's code.
+---
+--- `keep_quoted_idents` decides double-quoted/backtick regions: kept verbatim
+--- they are identifiers feeding name captures ("my--table" survives; the `--`
+--- inside it no longer reads as a comment and kills the parse), blanked the
+--- `;` inside "…" cannot end a statement for the ;-scan.
+---
+--- One state machine, because a gsub chain fails both ways: stripping
+--- comments first lets a `--` inside `'a--b'` swallow the FROM (the query
+--- loses its table name); blanking literals first lets the apostrophe in
+--- `-- don't` open a phantom literal that erases real code. No backslash
+--- escape reading — this is the standard-conforming (postgres/sqlite) scan,
+--- the same one the extraction has always used; the dialect-aware readings
+--- live on the Rust side and in dml_guard's both-readings guard scan.
+---
+--- Length-preserving: every consumed byte emits exactly one output byte, so
+--- offsets into the output are offsets into the input.
+--- @param sql string
+--- @param keep_quoted_idents boolean|nil  keep "…" and `…` regions verbatim
+--- @return string
+function M.blank_regions(sql, keep_quoted_idents)
+  local out = {}
+  local i, n = 1, #sql
+  local state = "code"
+  local tag = nil
+  while i <= n do
+    local c = sql:sub(i, i)
+    if state == "code" then
+      local nx = sql:sub(i + 1, i + 1)
+      local dtag = (c == "$") and sql:match(DOLLAR_TAG, i) or nil
+      if c == "-" and nx == "-" then
+        out[#out + 1] = "  "
+        state, i = "line", i + 2
+      elseif c == "/" and nx == "*" then
+        out[#out + 1] = "  "
+        state, i = "block", i + 2
+      elseif dtag then
+        out[#out + 1] = string.rep(" ", #dtag)
+        tag, state, i = dtag, "dollar", i + #dtag
+      elseif OPEN_QUOTE[c] then
+        state = OPEN_QUOTE[c]
+        -- a kept region must keep BOTH its quotes, or the survivors read as
+        -- unbalanced junk ("users`" instead of the identifier "users")
+        out[#out + 1] = (keep_quoted_idents and state ~= "squote") and c or " "
+        i = i + 1
+      else
+        out[#out + 1] = c
+        i = i + 1
+      end
+    elseif state == "line" then
+      out[#out + 1] = (c == "\n") and "\n" or " "
+      if c == "\n" then state = "code" end
+      i = i + 1
+    elseif state == "block" then
+      if c == "*" and sql:sub(i + 1, i + 1) == "/" then
+        out[#out + 1] = "  "
+        state, i = "code", i + 2
+      else
+        out[#out + 1] = (c == "\n") and "\n" or " "
+        i = i + 1
+      end
+    elseif state == "dollar" then
+      if sql:find(tag, i, true) == i then
+        out[#out + 1] = string.rep(" ", #tag)
+        state, tag, i = "code", nil, i + #tag
+      else
+        out[#out + 1] = (c == "\n") and "\n" or " "
+        i = i + 1
+      end
+    else
+      local closing = CLOSE_QUOTE[state]
+      local keep = keep_quoted_idents and (state == "dquote" or state == "bquote")
+      if c == closing then
+        if sql:sub(i + 1, i + 1) == closing then
+          out[#out + 1] = keep and (closing .. closing) or "  "
+          i = i + 2 -- doubled quote: still inside the region
+        else
+          out[#out + 1] = keep and closing or " "
+          state, i = "code", i + 1
+        end
+      else
+        out[#out + 1] = keep and c or ((c == "\n") and "\n" or " ")
+        i = i + 1
+      end
+    end
+  end
+  return table.concat(out)
+end
+
 function M.find_block_for_line(lines, cursor_line)
   local block_start = 1
   for i = cursor_line - 1, 1, -1 do

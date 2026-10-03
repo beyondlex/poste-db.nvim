@@ -148,3 +148,73 @@ describe("lex.find_block_for_line", function()
     assert.equals(1, lex.find_block_for_line({ "SELECT 1;", "SELECT 2;" }, 2))
   end)
 end)
+
+describe("lex.blank_regions", function()
+  it("blanks a single-quoted literal, quotes included", function()
+    local out = lex.blank_regions("SELECT 'a,b' FROM t")
+    assert.is_nil(out:find("a,b", 1, true))
+    assert.truthy(out:find("FROM t", 1, true))
+  end)
+
+  it("is length- and newline-preserving", function()
+    local src = "SELECT 'a\nb' FROM t\n-- c\n"
+    local out = lex.blank_regions(src)
+    assert.equals(#src, #out)
+    local nl_in, nl_out = 0, 0
+    for _ in src:gmatch("\n") do nl_in = nl_in + 1 end
+    for _ in out:gmatch("\n") do nl_out = nl_out + 1 end
+    assert.equals(nl_in, nl_out)
+  end)
+
+  it("keeps '' inside a literal (one quote of data, not the closing quote)", function()
+    local out = lex.blank_regions("SELECT 'it''s', 'x' FROM t")
+    assert.is_nil(out:find("it", 1, true))
+    assert.is_nil(out:find("x'", 1, true))
+    assert.truthy(out:find("FROM t", 1, true))
+  end)
+
+  it("blanks an unterminated literal through the end", function()
+    local out = lex.blank_regions("select * from users where note = 'it''s from bob")
+    assert.truthy(out:find("from users", 1, true))
+    assert.is_nil(out:find("bob", 1, true))
+  end)
+
+  it("a -- inside a literal is data, not a comment", function()
+    -- the round-50 held probe: the gsub chain stripped the "comment" first
+    -- and the FROM went with it
+    local out = lex.blank_regions("SELECT 'a--b' FROM t")
+    assert.truthy(out:find("FROM t", 1, true))
+  end)
+
+  it("an apostrophe inside a comment opens no phantom literal", function()
+    local out = lex.blank_regions("select 1 -- don't\nfrom users")
+    assert.truthy(out:find("from users", 1, true))
+  end)
+
+  it("blanks block comments, keeping inner newlines", function()
+    local out = lex.blank_regions("select/* x\ny */1")
+    assert.is_nil(out:find("x", 1, true))
+    assert.equals(1, select(2, out:gsub("\n", "")))
+    assert.truthy(out:find("select", 1, true))
+  end)
+
+  it("blanks a dollar-quoted body", function()
+    local out = lex.blank_regions("$$ delete from secret $$ select 1")
+    assert.is_nil(out:find("secret", 1, true))
+    assert.truthy(out:find("select 1", 1, true))
+  end)
+
+  it("keeps double-quoted and backtick regions when asked, blanks them otherwise", function()
+    local kept = lex.blank_regions('select * from "my--table"', true)
+    assert.truthy(kept:find("my--table", 1, true))
+    local blanked = lex.blank_regions('select * from "my--table"')
+    assert.is_nil(blanked:find("my--table", 1, true))
+    local backticked = lex.blank_regions("select * from `my--table`", true)
+    assert.is_true(backticked:find("`my--table`", 1, true) ~= nil)
+  end)
+
+  it("an escaped doubled quote inside a kept region stays verbatim", function()
+    local out = lex.blank_regions('select * from "a""b"', true)
+    assert.equals('"a""b"', out:match('"a""b"'))
+  end)
+end)

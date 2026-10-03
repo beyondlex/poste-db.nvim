@@ -9,6 +9,7 @@ local log = require("poste-db.log")
 local ts_stmt = require("poste-db.ts_stmt")
 local const = require("poste-db.constants")
 local compat = require("poste-db.compat")
+local lex = require("poste-db.lex")
 
 local M = {}
 
@@ -254,44 +255,52 @@ function M.extract_stmt_at_cursor(buf_lines, cursor_line, buf)
         break
       end
     end
-  else
-    -- Fall back to Lua ;-heuristic logic
-    if (buf_lines[cursor_line] or ""):match("^%s*$") then
-      -- Cursor on empty line: search forward for next statement
-      stmt_start = cursor_line
-      while stmt_start <= #buf_lines and (buf_lines[stmt_start] or ""):match("^%s*$") do
-        stmt_start = stmt_start + 1
-      end
     else
-      -- Begin at buffer top; the backward scan pins the start to just after
-      -- the nearest preceding `;` / `###` / directive. Initializing to
-      -- cursor_line instead would chop off the head of the FIRST multi-line
-      -- statement (no `;` above the cursor) and execute a syntax error.
-      stmt_start = 1
-      for i = cursor_line - 1, 1, -1 do
-        local txt = buf_lines[i] or ""
-        if txt:match(";") then
-          stmt_start = i + 1
-          break
+      -- Fall back to Lua ;-heuristic logic. The `;` probes read the blanked
+      -- buffer (`lex.blank_regions` keeps newlines, so blanked_lines[i] is
+      -- buf_lines[i]): a `;` inside a literal, comment or dollar-quoted body
+      -- must not bound the statement — this fallback is the only splitter left
+      -- when neither Tree-sitter nor the binary answered, and starting after a
+      -- phantom `;` (or ending at one) sends a truncation of the real
+      -- statement off to execute a syntax error.
+      local blanked_lines = vim.split(
+        lex.blank_regions(table.concat(buf_lines, "\n")), "\n", { plain = true })
+      if (buf_lines[cursor_line] or ""):match("^%s*$") then
+        -- Cursor on empty line: search forward for next statement
+        stmt_start = cursor_line
+        while stmt_start <= #buf_lines and (buf_lines[stmt_start] or ""):match("^%s*$") do
+          stmt_start = stmt_start + 1
         end
-        if const.is_section_marker(txt) or const.is_directive_comment(txt) then
-          stmt_start = i + 1
-          break
+      else
+        -- Begin at buffer top; the backward scan pins the start to just after
+        -- the nearest preceding `;` / `###` / directive. Initializing to
+        -- cursor_line instead would chop off the head of the FIRST multi-line
+        -- statement (no `;` above the cursor) and execute a syntax error.
+        stmt_start = 1
+        for i = cursor_line - 1, 1, -1 do
+          local txt = buf_lines[i] or ""
+          if (blanked_lines[i] or ""):match(";") then
+            stmt_start = i + 1
+            break
+          end
+          if const.is_section_marker(txt) or const.is_directive_comment(txt) then
+            stmt_start = i + 1
+            break
+          end
+        end
+        while stmt_start <= cursor_line and (buf_lines[stmt_start] or ""):match("^%s*$") do
+          stmt_start = stmt_start + 1
         end
       end
-      while stmt_start <= cursor_line and (buf_lines[stmt_start] or ""):match("^%s*$") do
-        stmt_start = stmt_start + 1
-      end
-    end
 
-    stmt_end = #buf_lines
-    for i = cursor_line, #buf_lines do
-      if (buf_lines[i] or ""):match(";") then
-        stmt_end = i
-        break
+      stmt_end = #buf_lines
+      for i = cursor_line, #buf_lines do
+        if (blanked_lines[i] or ""):match(";") then
+          stmt_end = i
+          break
+        end
       end
     end
-  end
 
   -- Ensure stmt_start is not on a blank line
   while stmt_start and stmt_start <= #buf_lines and (buf_lines[stmt_start] or ""):match("^%s*$") do
@@ -369,7 +378,19 @@ end
 --- @param dialect string|nil  quote-escape reading for the Rust fallback
 --- @return number[]  buffer line numbers of each statement's first content line
 function M.find_stmt_lines(buf_lines, start_line, end_line, dialect)
-  -- Lua ;-scan first (deterministic for standard SQL)
+  -- Lua ;-scan first (deterministic for standard SQL). The `;` probe reads the
+  -- blanked range (`lex.blank_regions` keeps newlines, so blanked[k] is
+  -- range line k): a `;` inside a literal, comment or dollar-quoted body does
+  -- not end a statement. The skip rules still read the ORIGINAL line — a
+  -- comment/directive line skips on its own `--` prefix anyway, and `USE` /
+  -- `###` must be read verbatim.
+  local range = {}
+  for i = start_line, end_line do
+    range[#range + 1] = buf_lines[i] or ""
+  end
+  local blanked = vim.split(
+    lex.blank_regions(table.concat(range, "\n")), "\n", { plain = true })
+
   local stmt_lines = {}
   local current_stmt = nil
 
@@ -386,7 +407,7 @@ function M.find_stmt_lines(buf_lines, start_line, end_line, dialect)
 
     if current_stmt == nil then current_stmt = i end
 
-    if line:match(";") then
+    if (blanked[i - start_line + 1] or ""):match(";") then
       table.insert(stmt_lines, current_stmt)
       current_stmt = nil
     end
@@ -505,58 +526,23 @@ local function last_part(text, pos)
   return name
 end
 
---- Replace every single-quoted literal (and anything left after an
---- unterminated one) with spaces, byte-for-byte length-preserving so
---- callers can keep using offsets into the original text. `''` inside a
---- literal is one quote of data, not the closing quote.
-local function blank_single_quoted(sql)
-  local out, i, n = {}, 1, #sql
-  while i <= n do
-    local q = sql:find("'", i, true)
-    if not q then
-      out[#out + 1] = sql:sub(i)
-      break
-    end
-    out[#out + 1] = sql:sub(i, q - 1)
-    local j = q + 1
-    while true do
-      local q2 = sql:find("'", j, true)
-      if not q2 then
-        j = n + 1 -- unterminated literal: blank through the end
-        break
-      elseif sql:sub(q2 + 1, q2 + 1) == "'" then
-        j = q2 + 2
-      else
-        j = q2 + 1 -- past the closing quote
-        break
-      end
-    end
-    out[#out + 1] = string.rep(" ", j - q)
-    i = j
-  end
-  return table.concat(out)
-end
-
 --- Extract primary table name from a SQL statement.
 --- Returns nil when the statement does not name one table unambiguously: 2+
 --- JOINs, or a `FROM a, b` list (use "result n" instead).
 function M.extract_table_name(sql)
   if not sql or sql == "" then return nil end
-  -- Strip -- line comments and /* */ block comments
-  local clean = sql:gsub("%-%-[^\n]*", ""):gsub("/%*.-%*/", "")
-  -- Blank single-quoted literals (length-preserving — `clean` and `upper`
-  -- below must share byte offsets) so a "join" inside a string no longer
-  -- inflates the JOIN count (09-12 carry). Double-quoted regions stay
-  -- intact: they can be identifiers feeding the captures below, and `''`
-  -- inside a literal is the SQL escape form. A scanner, not a pattern:
-  -- `'([^']|'')*'` closes each match at the first quote the greedy `[^']`
-  -- cannot pass, and once a `''` escape has been consumed that is the
-  -- *next* literal's opening quote — `'it''s', 'x'` matched as
-  -- `'it''s', '` and left `x'` visible, so `SELECT 'it''s', 'note from
-  -- bob' FROM users` extracted "bob" and `update t set a = 'it''s a note
-  -- from 2024', …` extracted "2024". The scanner ends each literal at its
-  -- own unpaired quote instead.
-  clean = blank_single_quoted(clean)
+  -- One lexical pass blanks single-quoted literals, `--`/`/* */` comments and
+  -- dollar-quoted bodies; double-quoted/backtick regions survive as the
+  -- identifiers the captures below read (lex.blank_regions is
+  -- length-preserving, so `clean` and `upper` share offsets with the input).
+  -- A single state machine is the point: the old gsub chain stripped comments
+  -- BEFORE blanking literals, so `SELECT 'a--b' FROM t` lost the FROM (the
+  -- comment strip ate it) and returned nil; the reverse order would let the
+  -- apostrophe in `-- don't` open a phantom literal that erases real code.
+  -- The old literal blanker also stopped at an escaped `''`'s *next* literal's
+  -- opener (`'it''s', 'note from bob'` leaked "note from bob" as a fake FROM);
+  -- the scanner closes each literal at its own unpaired quote.
+  local clean = lex.blank_regions(sql, true)
   local upper = clean:upper()
   local join_count = 0
   local idx = 1
