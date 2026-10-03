@@ -96,6 +96,13 @@ describe("cell editors that prompt for typed text", function()
     dataset.dataset_buffer = buf
     dataset.dataset_window = nil
     install_tab()
+    -- The refusal tests below deliberately walk apply_typed_edit's validation
+    -- error path, which raises an ERROR-level notify. In headless nvim that
+    -- surfaces as an "Error in command line" message, and when the deferred
+    -- print lands inside the runner's `qa` window the process exits 1 with
+    -- every test green — a flaky run.sh failure. These specs assert on the
+    -- recorded cell error, not the notification, so notifications are captured.
+    vim.notify = function() end
   end)
 
   after_each(function()
