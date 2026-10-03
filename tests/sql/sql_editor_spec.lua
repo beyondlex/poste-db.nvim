@@ -1211,6 +1211,19 @@ describe("has_join", function()
     assert.is_false(editor.has_join('SELECT * FROM events WHERE tag = "left join"'))
   end)
 
+  it("does not match the word inside a comment", function()
+    -- the gsub literal-blanker knew nothing about comments: a `-- join`
+    -- note after the query blocked cell editing with a bogus multi-table
+    -- warning
+    assert.is_false(editor.has_join("SELECT * FROM events -- join of a and b\nWHERE id = 1"))
+    assert.is_false(editor.has_join("SELECT * FROM events /* left join pending */"))
+  end)
+
+  it("does not match a JOIN inside a dollar-quoted body", function()
+    assert.is_false(
+      editor.has_join("CREATE FUNCTION f() AS $$ DELETE FROM a JOIN b $$ LANGUAGE sql; SELECT 1 FROM events"))
+  end)
+
   it("handles nil", function()
     assert.is_false(editor.has_join(nil))
   end)

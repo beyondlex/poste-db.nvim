@@ -3,6 +3,7 @@
 
 local ident = require("poste-db.ident")
 local types = require("poste-db.types")
+local lex = require("poste-db.lex")
 
 local M = {}
 
@@ -77,23 +78,18 @@ function M.is_editable_field(col_meta)
 return true
 end
 
--- Blank the contents of single/double-quoted literals (byte length kept, so
--- offsets stay stable). Heuristic only — doubled-quote escapes split the
--- blanked run, which is harmless here since both halves still hide their
--- text. Mirrors the Rust-side blank_string_literals fix for RETURNING.
-local function blank_string_literals(sql)
-  sql = sql:gsub("'[^']*'", function(lit) return string.rep(" ", #lit) end)
-  sql = sql:gsub('"[^"]*"', function(lit) return string.rep(" ", #lit) end)
-  return sql
-end
-
 --- True when the statement actually joins tables: the word JOIN outside
---- string literals, on word boundaries. A bare substring find also matched
---- column names like `join_date` and any literal containing "join", which
---- blocked cell editing with a bogus multi-table warning.
+--- string literals, comments and dollar-quoted bodies, on word boundaries.
+--- A bare substring find also matched column names like `join_date` and any
+--- literal containing "join", which blocked cell editing with a bogus
+--- multi-table warning; the gsub literal-blanker this used to sit on knew
+--- nothing about comments, so a `-- join` note after the query (or a
+--- `$$body$$`'s internal JOIN) blocked editing the same way.
 function M.has_join(sql)
   if not sql then return false end
-  local blanked = blank_string_literals(sql:upper())
+  -- blank_regions keeps quoted identifiers blanked here (default), so a
+  -- "left join" column alias hides like a literal does
+  local blanked = lex.blank_regions(sql:upper())
   -- [%w_] not %w: SQL identifiers treat _ as a word char, so the frontier
   -- must too, or JOIN_DATE still matches.
   return blanked:match("%f[%w_]JOIN%f[^%w_]") ~= nil
