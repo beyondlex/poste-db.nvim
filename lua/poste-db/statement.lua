@@ -255,52 +255,52 @@ function M.extract_stmt_at_cursor(buf_lines, cursor_line, buf)
         break
       end
     end
-    else
-      -- Fall back to Lua ;-heuristic logic. The `;` probes read the blanked
-      -- buffer (`lex.blank_regions` keeps newlines, so blanked_lines[i] is
-      -- buf_lines[i]): a `;` inside a literal, comment or dollar-quoted body
-      -- must not bound the statement — this fallback is the only splitter left
-      -- when neither Tree-sitter nor the binary answered, and starting after a
-      -- phantom `;` (or ending at one) sends a truncation of the real
-      -- statement off to execute a syntax error.
-      local blanked_lines = vim.split(
-        lex.blank_regions(table.concat(buf_lines, "\n")), "\n", { plain = true })
-      if (buf_lines[cursor_line] or ""):match("^%s*$") then
-        -- Cursor on empty line: search forward for next statement
-        stmt_start = cursor_line
-        while stmt_start <= #buf_lines and (buf_lines[stmt_start] or ""):match("^%s*$") do
-          stmt_start = stmt_start + 1
-        end
-      else
-        -- Begin at buffer top; the backward scan pins the start to just after
-        -- the nearest preceding `;` / `###` / directive. Initializing to
-        -- cursor_line instead would chop off the head of the FIRST multi-line
-        -- statement (no `;` above the cursor) and execute a syntax error.
-        stmt_start = 1
-        for i = cursor_line - 1, 1, -1 do
-          local txt = buf_lines[i] or ""
-          if (blanked_lines[i] or ""):match(";") then
-            stmt_start = i + 1
-            break
-          end
-          if const.is_section_marker(txt) or const.is_directive_comment(txt) then
-            stmt_start = i + 1
-            break
-          end
-        end
-        while stmt_start <= cursor_line and (buf_lines[stmt_start] or ""):match("^%s*$") do
-          stmt_start = stmt_start + 1
-        end
+  else
+    -- Fall back to Lua ;-heuristic logic. The `;` probes read the blanked
+    -- buffer (`lex.blank_regions` keeps newlines, so blanked_lines[i] is
+    -- buf_lines[i]): a `;` inside a literal, comment or dollar-quoted body
+    -- must not bound the statement — this fallback is the only splitter left
+    -- when neither Tree-sitter nor the binary answered, and starting after a
+    -- phantom `;` (or ending at one) sends a truncation of the real
+    -- statement off to execute a syntax error.
+    local blanked_lines = vim.split(
+      lex.blank_regions(table.concat(buf_lines, "\n")), "\n", { plain = true })
+    if (buf_lines[cursor_line] or ""):match("^%s*$") then
+      -- Cursor on empty line: search forward for next statement
+      stmt_start = cursor_line
+      while stmt_start <= #buf_lines and (buf_lines[stmt_start] or ""):match("^%s*$") do
+        stmt_start = stmt_start + 1
       end
-
-      stmt_end = #buf_lines
-      for i = cursor_line, #buf_lines do
+    else
+      -- Begin at buffer top; the backward scan pins the start to just after
+      -- the nearest preceding `;` / `###` / directive. Initializing to
+      -- cursor_line instead would chop off the head of the FIRST multi-line
+      -- statement (no `;` above the cursor) and execute a syntax error.
+      stmt_start = 1
+      for i = cursor_line - 1, 1, -1 do
+        local txt = buf_lines[i] or ""
         if (blanked_lines[i] or ""):match(";") then
-          stmt_end = i
+          stmt_start = i + 1
+          break
+        end
+        if const.is_section_marker(txt) or const.is_directive_comment(txt) then
+          stmt_start = i + 1
           break
         end
       end
+      while stmt_start <= cursor_line and (buf_lines[stmt_start] or ""):match("^%s*$") do
+        stmt_start = stmt_start + 1
+      end
     end
+
+    stmt_end = #buf_lines
+    for i = cursor_line, #buf_lines do
+      if (blanked_lines[i] or ""):match(";") then
+        stmt_end = i
+        break
+      end
+    end
+  end
 
   -- Ensure stmt_start is not on a blank line
   while stmt_start and stmt_start <= #buf_lines and (buf_lines[stmt_start] or ""):match("^%s*$") do
