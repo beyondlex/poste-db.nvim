@@ -245,7 +245,11 @@ local function format_markdown(data_result)
   for _, row in ipairs(rows) do
     local vals = {}
     for i = 1, #cols do
-      table.insert(vals, (export_val(row[i]):gsub("|", "\\|")))
+      -- A raw newline splits the pipe-table row and every row below it stops
+      -- being a row — the same record-structure break csv_escape quotes and
+      -- format_tsv flattens. GitHub-markdown tables render <br>, which keeps
+      -- one row per line while keeping the content readable.
+      table.insert(vals, (export_val(row[i]):gsub("[\r\n]+", "<br>"):gsub("|", "\\|")))
     end
     table.insert(lines, "| " .. table.concat(vals, " | ") .. " |")
   end
@@ -344,7 +348,15 @@ local function export_to_file(data_result, info, format_value, path)
   local fn = FORMATTERS[format_value]
   local dir = vim.fn.fnamemodify(path, ":h")
   if dir and dir ~= "" then
-    vim.fn.mkdir(dir, "p")
+    -- mkdir raises E739 (read-only fs, permission, a file squatting on the
+    -- path); unwrapped it killed the export with a raw Vim error instead of
+    -- the notify every other failure here speaks
+    local ok_dir, dir_err = pcall(vim.fn.mkdir, dir, "p")
+    if not ok_dir then
+      vim.notify("Cannot create directory " .. dir .. ": " .. tostring(dir_err),
+        vim.log.levels.ERROR, { title = "PosteDb" })
+      return
+    end
   end
   local ok, text = pcall(fn, data_result, info)
   if not ok then
@@ -501,6 +513,14 @@ end
 --- destination: file|clipboard (optional, prompts if omitted)
 --- path: file path (only if destination=file, prompts if omitted)
 function M.run(format_value, destination, path)
+  -- An unknown format used to surface as "Export failed: attempt to call a
+  -- nil value" from the formatter dispatch — say what is legal instead.
+  if format_value and not FORMATTERS[format_value] then
+    vim.notify("Unknown export format '" .. tostring(format_value)
+      .. "' (csv|tsv|json|md|sql)", vim.log.levels.ERROR, { title = "PosteDb" })
+    return
+  end
+
   if format_value and destination == "clipboard" then
     local data_result, info = get_current_data()
     if data_result then

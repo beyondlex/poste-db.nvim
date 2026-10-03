@@ -106,6 +106,14 @@ describe("export format_markdown", function()
     local out = export._test.format_markdown(data_result({ columns = { { name = "a" } }, rows = { { "x|y" } } }))
     assert.equals("| a |\n| --- |\n| x\\|y |", out)
   end)
+
+  it("renders newlines inside a cell as <br> so the row stays one line", function()
+    -- a raw newline split the pipe-table row and every row below stopped
+    -- being a row — the same break csv_escape quotes and tsv flattens
+    local out = export._test.format_markdown(
+      data_result({ columns = { { name = "a" } }, rows = { { "line1\nline2\r\nline3" } } }))
+    assert.equals("| a |\n| --- |\n| line1<br>line2<br>line3 |", out)
+  end)
 end)
 
 describe("export format_sql_insert", function()
