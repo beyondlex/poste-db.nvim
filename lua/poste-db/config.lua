@@ -51,6 +51,8 @@ M.defaults = {
       ask_ai = "<leader>aa",
       toggle_log = "<leader>l",
       help = "g?",
+      -- was a call-site-only default in buffer_setup.lua (invisible to help)
+      goto_definition = "gd",
     },
     sql_dataset = {
       close = "q",
@@ -112,6 +114,15 @@ M.defaults = {
       help = "g?",
       table_info = "i",
       ask_ai = "a",
+      -- These used to live only as get_keymap call-site defaults: bound and
+      -- rebindable, but invisible to :PosteDbHelp (help walks THIS table) and
+      -- absent from the README's keymap table.
+      yank_node = "y",
+      copy_tables = "p",
+      multi_select_toggle = "<Tab>",
+      multi_select_drop = "D",
+      multi_select_exit = "<Esc>",
+      goto_definition = "gd",
     },
     sql_introspect = {
       close = "q",

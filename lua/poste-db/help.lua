@@ -15,6 +15,7 @@ local DESCRIPTIONS = {
     trigger_completion = "Trigger SQL completion",
     ask_ai = "Ask AI about the selection",
     toggle_log = "Toggle execution log",
+    goto_definition = "Jump to what's under the cursor: a connection or database directive, or a table reference",
     help = "Show this help window",
   },
   sql_dataset = {
@@ -54,6 +55,7 @@ local DESCRIPTIONS = {
     export = "Export dataset (format → destination)",
     show_sql = "Show SQL in floating window",
     help = "Show keymap help",
+    ask_ai = "Ask AI about the last error",
     history_next = "Next history entry",
     history_prev = "Previous history entry",
     history_toggle = "Toggle request history sidebar",
@@ -77,6 +79,12 @@ local DESCRIPTIONS = {
     table_info = "Show table info (rows, size, engine, etc.)",
     yank_node = "Yank table/view/database (press p to paste / clone)",
     copy_tables = "Paste from yank/multi-select, or clone db onto a connection",
+    multi_select_toggle = "Toggle multi-select on the table under the cursor",
+    multi_select_drop = "Drop the multi-selected tables (asks first)",
+    multi_select_exit = "Leave multi-select without acting",
+    goto_definition = "Open the connection node's entry in connections.toml",
+    ask_ai = "Ask AI about the node under the cursor",
+    help = "Show keymap help",
   },
   sql_introspect = {
     close = "Close introspect window",
@@ -169,5 +177,10 @@ function M.open()
   })
   d:update(lines, highlights)
 end
+
+--- Test seam: the spec walks config.config.keymaps against DESCRIPTIONS so a
+--- new keymap without a description fails the suite instead of silently
+--- vanishing from the help window (M.open skips undescribed actions).
+M._test = { descriptions = DESCRIPTIONS, section_titles = SECTION_TITLES }
 
 return M
