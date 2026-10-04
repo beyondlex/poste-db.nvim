@@ -17,6 +17,13 @@ describe("log viewer _format_time", function()
   it("handles non-ISO string", function()
     assert.equals("raw-time", log._format_time("raw-time"))
   end)
+
+  it("handles a non-string ts without indexing it", function()
+    -- A corrupt journal line (numeric ts) used to raise here and abort the
+    -- whole render; the loader now coerces, and the helper itself stays safe.
+    assert.equals("??-?? ??:??:??", log._format_time(1728000000))
+    assert.equals("??-?? ??:??:??", log._format_time({}))
+  end)
 end)
 
 describe("log viewer _preview_sql", function()
@@ -330,6 +337,49 @@ describe("log viewer _entry_table", function()
 
   it("returns nil when nothing matches", function()
     assert.is_nil(log._entry_table({ sql = "BEGIN" }))
+  end)
+end)
+
+describe("log viewer _normalize_entry", function()
+  it("coerces hostile scalar fields to strings", function()
+    local e = log._normalize_entry({
+      ts = 1728000000, sql = 42, status = true,
+      connection = {}, database = vim.NIL, elapsed_ms = "slow",
+    })
+    assert.equals("1728000000", e.ts)
+    assert.equals("42", e.sql)
+    assert.equals("true", e.status)
+    assert.is_nil(e.connection, "a table field is unreadable as a string and drops")
+    assert.is_nil(e.database, "vim.NIL drops too")
+    assert.is_nil(e.elapsed_ms, "a non-number elapsed_ms drops rather than rendering as a table address")
+  end)
+
+  it("rejects a line that was not an object", function()
+    assert.is_nil(log._normalize_entry(42))
+    assert.is_nil(log._normalize_entry("sql"))
+    assert.is_nil(log._normalize_entry(nil))
+  end)
+
+  it("leaves well-formed entries untouched", function()
+    local src = { ts = "2026-10-05T10:00:00", sql = "SELECT 1", status = "success", elapsed_ms = 12 }
+    assert.same(src, log._normalize_entry(vim.deepcopy(src)))
+  end)
+
+  it("keeps the viewer alive over entries that used to crash the render", function()
+    -- One corrupt line among good ones: before the seam, format_time indexed
+    -- the numeric ts and the whole toggle errored out.
+    log._set_entries({
+      { ts = 1728000000, sql = "SELECT 1", status = "success" },
+      { ts = "2026-10-05T10:00:00", sql = "SELECT 2", status = "success" },
+      { ts = "2026-10-05T09:00:00", sql = "SELECT 3", status = "success", error = { code = 1 } },
+    })
+    -- all three entries survive and resolve by line
+    assert.equals(1, log._get_entry_at_line(1))
+    assert.equals(3, log._get_entry_at_line(3))
+    -- every entry survives and the summary parts build without raising
+    local parts = log._summary_parts({ ts = 1728000000, sql = "SELECT 1", table = 7 }, 10)
+    assert.equals("string", type(parts[4]))
+    assert.truthy(parts[6]:find("7", 1, true))
   end)
 end)
 

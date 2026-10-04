@@ -16,6 +16,36 @@ local function get_log_path()
   return vim.fn.stdpath("data") .. "/poste/sql_log.jsonl"
 end
 
+--- Fields the viewer reads as strings, coerced at the load seam. The journal
+--- lives in the user's data dir, so one hand-edited or corrupt line (a numeric
+--- `ts`, an object `error`) used to take the whole viewer down: format_time
+--- indexed a number, filter_matches indexed a non-string field, count of an
+--- object `error` raised on concat. Numbers and booleans coerce; tables and
+--- userdata are unreadable as any of these fields and are treated as absent.
+local STRING_FIELDS = { "ts", "source", "sql", "connection", "database",
+  "status", "error", "table", "table_name" }
+
+--- Normalize one decoded journal entry; returns nil when the line was not an
+--- object at all (a bare `42` in the jsonl used to crash the ts sort).
+local function normalize_entry(entry)
+  if type(entry) ~= "table" then return nil end
+  for _, f in ipairs(STRING_FIELDS) do
+    local v = entry[f]
+    if v ~= nil and type(v) ~= "string" then
+      if type(v) == "number" or type(v) == "boolean" then
+        entry[f] = tostring(v)
+      else
+        entry[f] = nil
+      end
+    end
+  end
+  -- summary_parts interpolates it with %5s; a non-number reads as noise
+  if entry.elapsed_ms ~= nil and type(entry.elapsed_ms) ~= "number" then
+    entry.elapsed_ms = nil
+  end
+  return entry
+end
+
 local function load_entries()
   local path = get_log_path()
   local file = io.open(path, "r")
@@ -24,8 +54,9 @@ local function load_entries()
   for line in file:lines() do
     if line ~= "" then
       local ok, entry = pcall(vim.json.decode, line)
-      if ok and entry then
-        table.insert(result, entry)
+      if ok then
+        entry = normalize_entry(entry)
+        if entry then table.insert(result, entry) end
       end
     end
   end
@@ -75,7 +106,7 @@ end
 M._source_tag = source_tag
 
 local function format_time(ts)
-  if not ts then return "??-?? ??:??:??" end
+  if type(ts) ~= "string" then return "??-?? ??:??:??" end
   local _, month, day, hms = ts:match("(%d+)-(%d+)-(%d+)T(%d+:%d+:%d+)")
   if month and day and hms then
     return string.format("%s-%s %s", month, day, hms)
@@ -187,9 +218,16 @@ local function count_detail_lines(entry)
 end
 M._count_detail_lines = count_detail_lines
 
---- Set entries directly (for testing).
+--- Set entries directly (for testing). Runs the same normalization the disk
+--- load applies, so a spec feeding raw hostile-shaped data exercises the seam
+--- every entry really passes through.
 function M._set_entries(data)
-  entries = data
+  local normalized = {}
+  for _, e in ipairs(data or {}) do
+    local n = normalize_entry(e)
+    if n then normalized[#normalized + 1] = n end
+  end
+  entries = normalized
   expanded = {}
   filter_text = ""
 end
@@ -759,6 +797,11 @@ end
 --- nil global (AGENTS.md forward-declaration pitfall).
 function M._fit_width(s, max_w)
   return fit_width(s, max_w)
+end
+
+--- The load-seam normalizer, for direct hostile-shape specs.
+function M._normalize_entry(e)
+  return normalize_entry(e)
 end
 
 --- Pad/truncate to a given width; `width` nil falls back to the width computed
