@@ -74,9 +74,13 @@ end
 
 --- Classify a commit response. Transaction mode (exec-file --mode
 --- transaction) rolls the whole batch back when any statement fails, so
---- "rolled_back" means nothing was applied; "partial" means every statement
---- succeeded but some matched no rows (the row was concurrently changed or
---- deleted — a warning, not an error).
+--- "rolled_back" means nothing was applied; "partial" means the batch ran but
+--- the affected-row total disagrees with the edit set — in either direction.
+--- Fewer rows than edits: the row was concurrently changed or deleted. MORE
+--- rows than edits: an all-column WHERE (the no-primary-key fallback) matched
+--- duplicate rows, so one edit touched several — the mirror hazard, and just
+--- as much a warning: the user asked to change one row and the database
+--- changed two, silently.
 --- @param summary table edit counts from generate_dml
 --- @param body table decoded response body
 --- @param errors table|nil statement errors (collected if omitted)
@@ -96,6 +100,11 @@ function M.commit_outcome(summary, body, errors)
     return "partial",
       ("%d of %d row(s) affected — %d row(s) were already changed or deleted")
         :format(affected, expected, expected - affected)
+  end
+  if affected > expected then
+    return "partial",
+      ("%d row(s) affected for %d edit(s) — a WHERE matched more rows than the edit set targeted (duplicate rows?)")
+        :format(affected, expected)
   end
   return "ok", ""
 end

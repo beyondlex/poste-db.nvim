@@ -46,7 +46,7 @@ end
 
 --- Show a non-blocking flash message, replacing any flash still on screen.
 ---@param msg string
----@param level integer|nil 0 (info) or 3 (warn); MAPS.level in effect by default
+---@param level integer|nil 2 (info, vim.log.levels.INFO) or 3 (warn); info by default
 function M.flash(msg, level)
   close()
   local text = one_line(msg)

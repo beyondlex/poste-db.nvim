@@ -101,5 +101,17 @@ describe("edit_commit_exec", function()
       assert.equals("partial", kind)
       assert.truthy(detail:find("1 of 2 row%(s%) affected"))
     end)
+
+    it("flags over-application: a WHERE that matched more rows than edits", function()
+      -- No-PK tables fall back to an all-column WHERE; duplicate rows make one
+      -- UPDATE touch several. The old `affected < expected`-only check read
+      -- 2-rows-for-1-edit as a clean commit.
+      local kind, detail = exec.commit_outcome(
+        { updates = 1, inserts = 0, deletes = 0 },
+        { results = { { affected_rows = 3 } } }, {})
+      assert.equals("partial", kind)
+      assert.truthy(detail:find("3 row%(s%) affected for 1 edit"))
+      assert.truthy(detail:find("duplicate"))
+    end)
   end)
 end)
