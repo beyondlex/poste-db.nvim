@@ -33,6 +33,16 @@ describe("db_browser schema_create", function()
   end)
 
   describe("generate_sql (on_change)", function()
+    it("does not mutate the form's grant entries", function()
+      -- on_change runs on every keystroke; the schema name rides as an
+      -- argument to the generators now (it used to be written back onto
+      -- each grant as _schema_name).
+      local grant = { type = "grant", grantee = "r", privileges = { "SELECT" },
+                      on_object = "SCHEMA" }
+      opts.on_change({ name = "mydb", grants = { grant } })
+      assert.is_nil(grant._schema_name)
+    end)
+
     it("grants on ALL TABLES IN SCHEMA put the schema name after the object", function()
       -- regression: the generator emitted
       --   GRANT SELECT ON ALL TABLES IN SCHEMA IN SCHEMA "mydb" TO "app_role";
@@ -98,7 +108,29 @@ describe("db_browser schema_create", function()
       assert.truthy(err)
     end)
 
-    it("accepts a named schema with a grantee-less grant (SQL preview shows it)", function()
+    it("names the first grant whose grantee is empty", function()
+      -- `GRANT … TO ""` used to reach the server and fail with a driver
+      -- error about a quoted empty identifier; the form now refuses with
+      -- the grant's 1-based position.
+      local err = opts.on_validate({
+        name = "mydb",
+        grants = {
+          { type = "grant", grantee = "app_role", privileges = { "SELECT" } },
+          { type = "grant_usage", grantee = "" },
+          { type = "grant", grantee = "" },
+        },
+      })
+      assert.equals("Grant 2: grantee is required", err)
+    end)
+
+    it("accepts a fully-filled form", function()
+      assert.is_nil(opts.on_validate({
+        name = "mydb",
+        grants = { { type = "grant", grantee = "app_role", privileges = { "SELECT" } } },
+      }))
+    end)
+
+    it("accepts a named schema with no grants", function()
       assert.is_nil(opts.on_validate({ name = "mydb", grants = {} }))
     end)
   end)

@@ -14,8 +14,7 @@ local function postgres_create_schema(fields)
   return table.concat(parts, " ") .. ";"
 end
 
-local function gen_grant(grant, dialect)
-  local schema_name = grant._schema_name or ""
+local function gen_grant(grant, dialect, schema_name)
   local parts = { "GRANT" }
   local privs = grant.privileges or {}
   if #privs > 0 then
@@ -39,9 +38,9 @@ local function gen_grant(grant, dialect)
   return table.concat(parts, " ") .. ";"
 end
 
-local function gen_grant_usage(grant)
-  local schema_name = grant._schema_name or ""
-  return "GRANT USAGE ON SCHEMA " .. ident.quote(schema_name, "postgres") .. " TO " .. ident.quote(grant.grantee, "postgres") .. ";"
+local function gen_grant_usage(grant, schema_name)
+  return "GRANT USAGE ON SCHEMA " .. ident.quote(schema_name, "postgres")
+    .. " TO " .. ident.quote(grant.grantee, "postgres") .. ";"
 end
 
 local function get_dialect(node, context)
@@ -111,11 +110,13 @@ local function generate_sql(fields, dialect)
 
   local grants = fields.grants or {}
   for _, grant in ipairs(grants) do
-    grant._schema_name = fields.name
+    -- the schema name rides as an argument, not written back onto the form's
+    -- grant entry: on_change runs on every keystroke, and mutating form state
+    -- there made the preview's input depend on its own previous runs
     if grant.type == "grant" then
-      table.insert(lines, gen_grant(grant, dialect))
+      table.insert(lines, gen_grant(grant, dialect, fields.name))
     elseif grant.type == "grant_usage" then
-      table.insert(lines, gen_grant_usage(grant))
+      table.insert(lines, gen_grant_usage(grant, fields.name))
     end
   end
 
@@ -152,6 +153,14 @@ function M.open(node, context)
     on_validate = function(fields)
       if not fields.name or fields.name == "" then
         return "Schema name is required", "name"
+      end
+      -- An empty grantee used to reach the server as `GRANT … TO ""` — a
+      -- quoted empty identifier whose driver error says nothing about the
+      -- actual miss. Name the grant (1-based, matching the form's order).
+      for i, grant in ipairs(fields.grants or {}) do
+        if not grant.grantee or grant.grantee == "" then
+          return string.format("Grant %d: grantee is required", i)
+        end
       end
       return nil
     end,
