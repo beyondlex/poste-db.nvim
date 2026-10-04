@@ -180,6 +180,16 @@ describe("log viewer _filter_matches", function()
     assert.is_false(log._filter_matches({ sql = "SELECT * FROM posts" }))
     log._set_filter_text("")
   end)
+
+  it("matches by error text", function()
+    -- The detail highlight pass already marks filter matches on error lines,
+    -- so the reason text is searchable: the old field list filtered on it to
+    -- an empty list instead.
+    log._set_filter_text("timeout")
+    assert.is_true(log._filter_matches({ error = "Timeout after 5000ms" }))
+    assert.is_false(log._filter_matches({ sql = "SELECT 1", status = "success" }))
+    log._set_filter_text("")
+  end)
 end)
 
 describe("log viewer _count_detail_lines", function()

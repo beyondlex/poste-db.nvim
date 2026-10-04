@@ -80,6 +80,11 @@ local function filter_matches(entry)
   if (entry.database or ""):lower():find(lower, 1, true) then return true end
   if (entry.source or ""):lower():find(lower, 1, true) then return true end
   if (entry.sql or ""):lower():find(lower, 1, true) then return true end
+  -- The error text is the one field an expanded entry shows that the filter
+  -- skipped: the highlight pass already marks matches on error detail lines,
+  -- so searching for the reason ("Timeout", "does not exist") filtering the
+  -- list down to nothing read the filter as broken rather than as scoped.
+  if (entry.error or ""):lower():find(lower, 1, true) then return true end
   return false
 end
 M._filter_matches = filter_matches
