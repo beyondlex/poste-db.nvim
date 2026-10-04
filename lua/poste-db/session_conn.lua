@@ -183,6 +183,12 @@ local function on_session_stdout(session, chunks)
         if ok and type(event) == "table" and event.type == "result" then
           process_event(session, event)
           session.buffer = ""
+        elseif ok then
+          -- A complete JSON value that is not a result event is a complete
+          -- message we don't handle: drop it. Keeping it glued the stale text
+          -- onto every later chunk, so the session parsed nothing for the rest
+          -- of its life (a mute session with no error anywhere).
+          session.buffer = ""
         else
           -- Incomplete data, keep the buffer for the next chunk
           session.buffer = remaining
@@ -402,6 +408,7 @@ M._test = {
   dialect_from_url = dialect_from_url,
   database_from_url = database_from_url,
   build_response = build_response,
+  on_session_stdout = on_session_stdout,
 }
 
 return M

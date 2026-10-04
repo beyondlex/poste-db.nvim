@@ -291,3 +291,53 @@ describe("session_conn on_sql_error gets the normalized error text", function()
     assert.equals(0, vim.tbl_count(session_conn.list()), "the dead session must leave the pool")
   end)
 end)
+
+describe("session_conn on_session_stdout line assembly", function()
+  local session_conn = require("poste-db.session_conn")
+  local feed = session_conn._test.on_session_stdout
+
+  local function mk_session()
+    return {
+      conn_url = "postgres://h/app", database = "app", dialect = "postgres",
+      pending = {}, buffer = "",
+    }
+  end
+
+  it("a complete non-result JSON line without a trailing newline is discarded", function()
+    -- regression: the newline-less tail was kept in `session.buffer` whenever
+    -- it decoded as JSON but was not a result event, so every later response
+    -- arrived glued to the stale text and never parsed again — the session
+    -- went mute for its remaining life. A complete JSON value IS a complete
+    -- message; one we don't understand is dropped, not retained.
+    local s = mk_session()
+    feed(s, { '{"type":"hello","note":"connected"}' })
+    assert.equals("", s.buffer, "a decoded non-result tail must not be retained")
+
+    local got
+    s.pending[1] = { on_response = function(resp) got = resp end }
+    feed(s, { vim.json.encode({ type = "result", seq = 1, status = "ok", affected_rows = 1 }) })
+    assert.is_not_nil(got, "the next result must still parse after the junk line")
+  end)
+
+  it("an incomplete JSON tail is still kept until the rest arrives", function()
+    local s = mk_session()
+    feed(s, { '{"type":"result","seq":1,"stat' })
+    assert.equals('{"type":"result","seq":1,"stat', s.buffer)
+    local got
+    s.pending[1] = { on_response = function(resp) got = resp end }
+    feed(s, { 'us":"ok"}' })  -- tail completes {"type":"result",...
+    assert.is_not_nil(got)
+    assert.equals("", s.buffer)
+  end)
+
+  it("newline-delimited junk lines stay ignored and results still flow", function()
+    local s = mk_session()
+    local got
+    s.pending[7] = { on_response = function(resp) got = resp end }
+    -- chunks are byte fragments: the junk line carries its newline, the
+    -- result arrives newline-less behind it
+    feed(s, { "not json at all\n" .. vim.json.encode({ type = "result", seq = 7, status = "ok", affected_rows = 0 }) })
+    assert.is_not_nil(got)
+    assert.equals("", s.buffer)
+  end)
+end)
