@@ -91,6 +91,20 @@ describe("sql_runner is_ddl", function()
     assert.is_true(runner._test.is_ddl("RENAME TABLE a TO b;"))
   end)
 
+  it("detects DDL in any keyword case", function()
+    -- The db-browser CREATE TABLE template (db_browser/operations.lua)
+    -- inserts lowercase `create table`; the old exact-case match skipped the
+    -- completion/diagnostics cache invalidation for every statement written
+    -- from it. SQL keywords are not case-sensitive.
+    assert.is_true(runner._test.is_ddl("create table t (id INT);"))
+    assert.is_true(runner._test.is_ddl("Create Table t (id INT);"))
+    assert.is_true(runner._test.is_ddl("drop table t;"))
+    assert.is_true(runner._test.is_ddl("-- @connection blog\n###\ncreate table three_kingdoms_characters (id INT);"))
+    -- An identifier that merely starts with a keyword prefix is not DDL
+    assert.is_false(runner._test.is_ddl("created_at_ts t;"))
+    assert.is_false(runner._test.is_ddl("alphabet soup;"))
+  end)
+
   it("rejects DML and reads", function()
     assert.is_false(runner._test.is_ddl("SELECT * FROM t;"))
     assert.is_false(runner._test.is_ddl("INSERT INTO t VALUES (1);"))

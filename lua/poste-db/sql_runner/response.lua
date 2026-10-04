@@ -35,6 +35,11 @@ end
 --- TRUNCATE/RENAME). Leading `-- @connection` directives, `###` section
 --- markers, blank lines and comment lines are skipped before inspecting the
 --- keyword, because buf_content (and visual blocks) carry that noise.
+--- The keyword test is case-insensitive: SQL keywords are not case-sensitive,
+--- and the family's own CREATE TABLE template (db_browser/operations.lua)
+--- inserts lowercase `create table` — an exact-case match would skip the
+--- completion/diagnostics cache invalidation for every statement written
+--- from that template.
 --- @param sql string|nil
 --- @return boolean
 function M.is_ddl(sql)
@@ -42,11 +47,12 @@ function M.is_ddl(sql)
   for _, ln in ipairs(vim.split(sql, "\n", { plain = true })) do
     local t = ln:match("^%s*(.*)%s*$") or ""
     if t ~= "" and not t:match("^%-%-") and not t:match("^###") then
-      return t:match("^CREATE%s") ~= nil
-        or t:match("^ALTER%s") ~= nil
-        or t:match("^DROP%s") ~= nil
-        or t:match("^TRUNCATE%s") ~= nil
-        or t:match("^RENAME%s") ~= nil
+      local kw = t:lower()
+      return kw:match("^create%s") ~= nil
+        or kw:match("^alter%s") ~= nil
+        or kw:match("^drop%s") ~= nil
+        or kw:match("^truncate%s") ~= nil
+        or kw:match("^rename%s") ~= nil
     end
   end
   return false
