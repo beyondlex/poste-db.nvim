@@ -89,6 +89,7 @@ M.defaults = {
       delete_row = "dd",
       insert_row = "o",
       commit_edits = "<leader>w",
+      show_sql = "gs",
       export = "E",
       history_toggle = "<leader>ph",
       history_next = "<leader>n",

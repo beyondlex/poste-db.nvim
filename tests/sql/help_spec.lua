@@ -30,6 +30,24 @@ describe("help keymap descriptions", function()
     end
     assert.same({}, stray, "a described section without a title renders under its raw key")
   end)
+
+  it("backs every described action with a config default", function()
+    -- the reverse direction: a DESCRIPTIONS entry whose action exists only
+    -- as a get_keymap call-site default is invisible to help (which walks
+    -- config.config.keymaps) — show_sql/gs and the browser's y/p/D/Tab/gd
+    -- all shipped that way. A description promises a discoverable binding.
+    local unbacked = {}
+    for section, descs in pairs(descriptions) do
+      local kms = config.config.keymaps[section] or {}
+      for action, _ in pairs(descs) do
+        if kms[action] == nil then
+          unbacked[#unbacked + 1] = section .. "." .. action
+        end
+      end
+    end
+    assert.same({}, unbacked,
+      "described actions must exist as config keymap defaults to be listed in help")
+  end)
 end)
 
 describe("help window rendering", function()
