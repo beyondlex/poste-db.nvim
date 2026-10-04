@@ -75,8 +75,12 @@ end
 --- @param opts table|nil  e.g. { force = true, trigger_kind = "manual" }
 function M.show(opts)
   local b = blink()
+  -- Pass opts through: blink.cmp's top-level show forwards providers/
+  -- initial_selected_item_idx/callback to the trigger (force and
+  -- trigger_kind are forced internally), so dropping opts would silently
+  -- break future callers that rely on them.
   if b and b.show then
-    b.show()
+    b.show(opts)
     return
   end
   -- Fallback: use completion.trigger directly
