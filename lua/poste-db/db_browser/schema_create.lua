@@ -26,9 +26,12 @@ local function gen_grant(grant, dialect)
   local on_object = grant.on_object or "SCHEMA"
   table.insert(parts, "ON")
   table.insert(parts, on_object)
-  if on_object ~= "SCHEMA" and schema_name ~= "" then
-    table.insert(parts, "IN SCHEMA " .. ident.quote(schema_name, dialect))
-  end
+  -- Every on_object choice ends exactly where the schema name goes:
+  --   GRANT … ON ALL TABLES IN SCHEMA "name" TO …   /   GRANT … ON SCHEMA "name" TO …
+  -- (the object literal already carries "IN SCHEMA"; appending another
+  -- "IN SCHEMA <name>" tail duplicated it, and the SCHEMA branch dropped
+  -- the name entirely — both syntax errors).
+  table.insert(parts, ident.quote(schema_name, dialect))
   table.insert(parts, "TO " .. ident.quote(grant.grantee, dialect))
   if grant.with_grant_option then
     table.insert(parts, "WITH GRANT OPTION")
@@ -49,11 +52,10 @@ local function get_connection_name(node, context)
   return util.get_connection(node)
 end
 
-local function build_sections(dialect, db_name)
+local function build_sections()
   local schema_info_fields = {
     { key = "name", label = "Name", kind = "text", value = "" },
     { key = "owner", label = "Owner", kind = "text", value = "", dialect = "postgres" },
-
   }
 
   local grant_privileges = { "SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE", "USAGE" }
@@ -141,7 +143,7 @@ function M.open(node, context)
 
   local conn = get_connection_name(node, context)
   local db_name = node.name
-  local sections = build_sections(dialect, db_name)
+  local sections = build_sections()
   forms_advanced.open({
     title = "Create Schema in " .. db_name,
     dialect = dialect,
