@@ -11,8 +11,10 @@ pass over the recently-touched modules (`dataset` sort comparator,
 Baseline: 2013 plenary Success / 0 Failed by this round's counting
 (per-file `Success:` lines summed; previous rounds' 2xxx figures use a
 different tally — the Failed count is the comparable number).
-Final: **0 Failed** (luacheck clean, 138 files); the +17 spec cases and
-2 new spec files are this round's additions.
+Final: **2038 Success / 0 Failed** (luacheck clean, 141 files); the
++25 spec cases across 3 new spec files (`sql_db_browser_schema_create`,
+`completion_adapter`, `help`) and one extended file
+(`sql_session_conn`) are this round's additions.
 
 ## Fixes (each with tests)
 
