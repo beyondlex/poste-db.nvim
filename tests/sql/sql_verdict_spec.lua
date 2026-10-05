@@ -40,6 +40,14 @@ describe("verdict.classify", function()
     assert.is_false(classify("not a result"))
   end)
 
+  it("reads a null failed flag as not failed", function()
+    -- JSON null decodes to the truthy vim.NIL; every real producer writes
+    -- exactly `true` or omits the flag, so null means "not failed" — the
+    -- old truthiness check turned it into a failure with no explanation.
+    assert.is_false(classify({ failed = vim.NIL }))
+    assert.is_false(classify({ failed = false, error = "" }))
+  end)
+
   it("reports text as a failure even without the flag", function()
     -- A response decoded from an older/other producer may carry only the text.
     local failed, text = classify({ error = "boom" })

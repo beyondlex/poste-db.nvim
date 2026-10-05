@@ -36,7 +36,10 @@ end
 function M.classify(result)
   if type(result) ~= "table" then return false, nil end
   local raw = M.error_text(result.error)
-  if not raw and not result.failed then return false, nil end
+  -- `== true`, not truthiness: a JSON null decodes to vim.NIL, which is
+  -- truthy, and every real producer writes exactly `true` or omits the
+  -- flag — a null `failed` means "not failed", not "failed unexplained".
+  if not raw and result.failed ~= true then return false, nil end
   return true, raw or M.UNEXPLAINED_FAILURE
 end
 
