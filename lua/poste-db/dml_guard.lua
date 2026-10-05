@@ -362,6 +362,9 @@ end
 --- @return string
 function M.confirm_message(risky)
   local n = #risky
+  -- The only caller gates on #risky > 0 before opening the dialog, but this is
+  -- an exported API: "contains 0 statement(s)" would be a nonsense question.
+  if n == 0 then return "No unfiltered DELETE/UPDATE statements found." end
   local kinds = {}
   local seen = {}
   for _, r in ipairs(risky) do

@@ -247,6 +247,13 @@ describe("dml_guard scan_text", function()
 end)
 
 describe("dml_guard confirm_message", function()
+  it("answers an empty list with a sentence, not a nonsense question", function()
+    -- the production caller gates on #risky > 0, but the API must not produce
+    -- "contains 0 statement(s)" if a future caller forgets the gate
+    assert.equals("No unfiltered DELETE/UPDATE statements found.",
+      guard.confirm_message({}))
+  end)
+
   it("quotes a single risky statement with its snippet", function()
     local msg = guard.confirm_message({ { kind = "delete", snippet = "DELETE FROM users" } })
     assert.matches("DELETE statement", msg)
