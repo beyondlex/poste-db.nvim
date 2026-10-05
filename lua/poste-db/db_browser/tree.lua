@@ -217,16 +217,27 @@ function M.flatten_tree(nodes, depth, multi_select)
   return lines, node_map, count_ranges
 end
 
-local function calc_icon_position(text)
+--- First non-space byte of `text` (1-based), 0 for an all-space line, plus
+--- whether that position starts one of the tree's 3-byte markers. The shared
+--- front half of `calc_icon_position` and `apply_highlights`: both must agree
+--- on where the icon starts, so the marker list lives here and nowhere else.
+local function scan_prefix(text)
   local first_content = 0
   for ci = 1, #text do
     if text:byte(ci) ~= 0x20 then first_content = ci; break end
   end
-  if first_content == 0 then return -1 end
-
+  if first_content == 0 then return 0, false end
   local first_3 = text:sub(first_content, first_content + 2)
-  if first_3 == MARKER_EXPANDED or first_3 == MARKER_COLLAPSED or first_3 == MARKER_LOADING
-      or first_3 == MARKER_SELECTED or first_3 == MARKER_UNSELECTED then
+  local is_marker = first_3 == MARKER_EXPANDED or first_3 == MARKER_COLLAPSED
+    or first_3 == MARKER_LOADING or first_3 == MARKER_SELECTED
+    or first_3 == MARKER_UNSELECTED
+  return first_content, is_marker
+end
+
+local function calc_icon_position(text)
+  local first_content, is_marker = scan_prefix(text)
+  if first_content == 0 then return -1 end
+  if is_marker then
     return first_content + 3
   else
     return first_content - 1
@@ -264,16 +275,11 @@ function M.apply_highlights(buf, line_count, count_ranges, line_to_node, multi_s
 
     local text = vim.api.nvim_buf_get_lines(buf, i - 1, i, false)[1] or ""
 
-    local first_content = 0
-    for ci = 1, #text do
-      if text:byte(ci) ~= 0x20 then first_content = ci; break end
-    end
+    local first_content, is_marker = scan_prefix(text)
     if first_content == 0 then goto continue end
 
-    local first_3 = text:sub(first_content, first_content + 2)
     local icon_byte_start
-    if first_3 == MARKER_EXPANDED or first_3 == MARKER_COLLAPSED or first_3 == MARKER_LOADING
-        or first_3 == MARKER_SELECTED or first_3 == MARKER_UNSELECTED then
+    if is_marker then
       icon_byte_start = first_content + 3
       vim.api.nvim_buf_add_highlight(buf, hl_ns, "PosteDbBrowserMarker",
         i - 1, first_content - 1, first_content + 2)
