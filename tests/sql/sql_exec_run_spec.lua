@@ -182,6 +182,19 @@ describe("exec_run", function()
       assert.equals("inventory", exec_run.detect_use("  USE inventory  "))
     end)
 
+    it("detects an MSSQL bracket-quoted name", function()
+      -- `USE [My DB];` is valid T-SQL: left to the server it EXECUTES while
+      -- the plugin's context kept pointing at the old database — every later
+      -- query ran against a db the user believes they left
+      assert.equals("My DB", exec_run.detect_use("USE [My DB];"))
+      assert.equals("master", exec_run.detect_use("USE [master]"))
+      assert.equals("My DB", exec_run.detect_use("USE [My DB] -- switch"))
+    end)
+
+    it("unwinds a doubled ] inside a bracket-quoted name", function()
+      assert.equals("a]b", exec_run.detect_use("USE [a]]b];"))
+    end)
+
     it("detects USE with a trailing comment and captures only the db name", function()
       -- Regression: the comment-tail pattern had no capture group, so match()
       -- returned the whole statement and it leaked into database_name.

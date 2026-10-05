@@ -96,6 +96,17 @@ local function detect_use(sql)
   if not name then
     name = trimmed:match("^[Uu][Ss][Ee]%s+[\"`]([%w_-]+)[\"`]%s*;?%s*$")
   end
+  -- MSSQL's canonical spelling: `USE [My DB];` is valid T-SQL, so left to the
+  -- server it EXECUTES while the plugin's context keeps pointing at the old
+  -- database — every later query in the buffer runs against a db the user
+  -- believes they left. Greedy to the last `]`, then `]]` unwinds to `]`
+  -- (the same reading lex.find_use_database applies on the context side).
+  if not name then
+    local bracketed = trimmed:match("^[Uu][Ss][Ee]%s+(%[.*%])%s*;?%s*$")
+    if bracketed then
+      name = bracketed:sub(2, -2):gsub("]]", "]")
+    end
+  end
   -- `USE db -- comment` / `USE db; -- comment`: the capture is required here
   -- — a groupless pattern makes match() return the whole statement, which
   -- then leaks into database_name / state.context.database.
@@ -105,6 +116,12 @@ local function detect_use(sql)
   -- meant to execute alone).
   if not name then
     name = trimmed:match("^[Uu][Ss][Ee]%s+([%w_-]+)%s*;?%s*%-%-[^\n]*$")
+  end
+  if not name then
+    local bracketed = trimmed:match("^[Uu][Ss][Ee]%s+(%[.*%])%s*;?%s*%-%-[^\n]*$")
+    if bracketed then
+      name = bracketed:sub(2, -2):gsub("]]", "]")
+    end
   end
   return name
 end
