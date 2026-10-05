@@ -44,6 +44,33 @@ describe("db_browser catalog", function()
       local text = "CREATE VIEW v1"
       assert.equals(text, catalog.view_body_from_ddl(text))
     end)
+
+    it("does not split inside a quoted view name that contains ' as '", function()
+      -- regression: the plain `%sas%s` scan matched inside a quoted name
+      -- (`CREATE VIEW "my as view" AS …` is legal), cut the header in half
+      -- and handed the paste engine `view" AS SELECT 1` as the body.
+      assert.equals("SELECT 1",
+        catalog.view_body_from_ddl('CREATE VIEW "my as view" AS SELECT 1'))
+      assert.equals("select 1",
+        catalog.view_body_from_ddl("create view `as if` as select 1"))
+    end)
+
+    it("still splits when the quoted segment holds no ' as '", function()
+      assert.equals("select 1 as a",
+        catalog.view_body_from_ddl('CREATE VIEW "my view" AS select 1 as a'))
+      -- a literal in the body containing ' as ' comes after the header AS and
+      -- must not matter either way
+      assert.equals("select 'a as b'",
+        catalog.view_body_from_ddl("CREATE VIEW v1 AS select 'a as b'"))
+    end)
+
+    it("find_as_outside_quotes honors doubled quotes and reports nil bare", function()
+      local f = catalog._test.find_as_outside_quotes
+      -- a doubled quote stays inside: '' and `` are the escape for themselves
+      assert.equals(11, f("abc 'a''b' as x", 1))
+      assert.is_nil(f("abc 'unterminated", 1))
+      assert.equals(5, f("x    as y", 1))
+    end)
   end)
 
   describe("compose_trigger_sql", function()
@@ -54,6 +81,18 @@ describe("db_browser catalog", function()
       })
       assert.equals(
         "CREATE TRIGGER `tg` AFTER INSERT ON `t1` FOR EACH ROW SET @x = 1", sql)
+    end)
+
+    it("doubles a backtick inside the trigger or table name", function()
+      -- regression: bare interpolation emitted `a`b` — a syntax error; the
+      -- name arrived from the source catalog already doubled (`a``b`), and
+      -- the round trip must double it again, not unwrap it.
+      local sql = catalog.compose_trigger_sql("mysql", {
+        name = "a`b", timing = "AFTER", event_type = "UPDATE",
+        table_name = "t`1", stmt = "SET @x = 1",
+      })
+      assert.equals(
+        "CREATE TRIGGER `a``b` AFTER UPDATE ON `t``1` FOR EACH ROW SET @x = 1", sql)
     end)
 
     it("passes a pg/sqlite trigger definition through", function()

@@ -190,13 +190,46 @@ function M.result_to_maps(r)
   return maps
 end
 
+--- Position of the first " as " at or after `from` that sits OUTSIDE any
+--- quoted segment ('…', "…", `…`), or nil. Doubled quotes ('', ``) stay
+--- inside, matching every dialect's escape. A while-loop, not a numeric
+--- for: the doubled-quote branch advances i itself, which a for-loop's
+--- internal counter would silently undo.
+---@param low string lowercased DDL text
+---@param from number 1-based scan start
+---@return number|nil
+local function find_as_outside_quotes(low, from)
+  local in_quote
+  local i = from
+  while i <= #low do
+    local c = low:sub(i, i)
+    if in_quote then
+      if c == in_quote then
+        if low:sub(i + 1, i + 1) == in_quote then
+          i = i + 1
+        else
+          in_quote = nil
+        end
+      end
+    elseif c == "'" or c == '"' or c == "`" then
+      in_quote = c
+    elseif low:find("^%sas%s", i) then
+      return i
+    end
+    i = i + 1
+  end
+  return nil
+end
+
 --- Strip a "CREATE ... VIEW <ident> AS" header, leaving the SELECT body.
 --- Handles MySQL (backticks + ALGORITHM/DEFINER clauses) and SQLite; PG's
 --- already-bare body passes through unchanged. Matching is case-insensitive
 --- AND gated on a leading CREATE: sqlite_master stores the statement exactly
 --- as written (`create view …` is common), while pg_get_viewdef returns a
 --- bare SELECT — a body that merely CONTAINS " view … as " (a comment, a
---- string literal) must never be stripped.
+--- string literal) must never be stripped. The AS search also ignores quoted
+--- segments: a quoted view name may itself contain " as " (legal in every
+--- dialect), and splitting there cut the header in half.
 ---@param text string
 ---@return string body
 function M.view_body_from_ddl(text)
@@ -205,7 +238,7 @@ function M.view_body_from_ddl(text)
   if not low:match("^%s*create%s") then return text end
   local vi = low:find("%sview%s")
   if vi then
-    local split_at = low:find("%sas%s", vi + 5)
+    local split_at = find_as_outside_quotes(low, vi + 5)
     if split_at then return text:sub(split_at + 4) end
   end
   return text
@@ -221,9 +254,13 @@ end
 ---@return string sql
 function M.compose_trigger_sql(dialect, trig)
   if dialect == "mysql" or dialect == "mariadb" then
-    return "CREATE TRIGGER `" .. trig.name .. "` "
+    -- esc_backtick, not bare interpolation: a trigger or table whose name
+    -- contains a backtick (legal when quoted) doubled it on the way into the
+    -- catalog and must double it again on the way out — `` `a`b` `` is a
+    -- syntax error, `` `a``b` `` is the name.
+    return "CREATE TRIGGER " .. esc_backtick(trig.name) .. " "
       .. trig.timing .. " " .. trig.event_type
-      .. " ON `" .. trig.table_name .. "` FOR EACH ROW " .. trig.stmt
+      .. " ON " .. esc_backtick(trig.table_name) .. " FOR EACH ROW " .. trig.stmt
   end
   return trig.def
 end
@@ -394,5 +431,8 @@ function M.fetch_routine_definition(source, on_done)
     on_done(tostring(raw))
   end, function(err) on_done(nil, err) end, function() on_done(nil, "routine not found") end)
 end
+
+--- Exposed for tests.
+M._test = { find_as_outside_quotes = find_as_outside_quotes }
 
 return M
