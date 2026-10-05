@@ -355,6 +355,21 @@ local function build_conn_url(name, conn, ensure_tunnel)
 
   local scheme = conn.dialect or "postgres"
   local host = conn.host or "localhost"
+  -- A `host:port` paste (the connection-string habit) built
+  -- `postgres://localhost:5432:5432/db`, which only failed at the binary
+  -- with a URL parse error naming nothing; whitespace is equally
+  -- un-buildable. Both name the fix here instead — the tunnel path above
+  -- also wants a bare address to hand to ssh. (Pure hex+colon still passes:
+  -- that is an IPv6 literal for url_host to bracket. A MSSQL named instance
+  -- `server\\inst` carries no colon and passes untouched.)
+  local host_port = host:match("^([^%s:]+):(%d+)$")
+  if host_port then
+    return nil,
+      ("Connection '%s': host '%s' carries the port — move it to the `port` field"):format(name, host)
+  end
+  if host:match("%s") then
+    return nil, ("Connection '%s': host must not contain whitespace"):format(name)
+  end
   local port = conn.port or const.default_port(scheme)
   if conn.port ~= nil then
     -- A quoted `port = "5432"` is legal TOML, and the tunnel path wants a

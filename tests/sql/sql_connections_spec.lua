@@ -125,6 +125,36 @@ describe("connections resolve_connection_url", function()
     assert.equals("postgres://old-db:5432/main", url)
   end)
 
+  it("names the port field when the host carries one", function()
+    -- the connection-string habit `host = "localhost:5432"` built
+    -- `postgres://localhost:5432:5432/db`, which only failed at the binary
+    -- with a URL parse error naming nothing (synced with poste-redis)
+    package.loaded["poste-db.toml"].parse_file = function()
+      return { cache = { dialect = "postgres", host = "localhost:5432", database = "d" } }
+    end
+    local url, err = connections.resolve_connection_url("cache")
+    assert.is_nil(url)
+    assert.matches("port", err)
+    assert.matches("localhost:5432", err)
+  end)
+
+  it("rejects a host with whitespace", function()
+    package.loaded["poste-db.toml"].parse_file = function()
+      return { cache = { dialect = "postgres", host = "my host", database = "d" } }
+    end
+    local url, err = connections.resolve_connection_url("cache")
+    assert.is_nil(url)
+    assert.matches("whitespace", err)
+  end)
+
+  it("still accepts a MSSQL named-instance host (no colon)", function()
+    package.loaded["poste-db.toml"].parse_file = function()
+      return { cache = { dialect = "mssql", host = "server\\inst", database = "d" } }
+    end
+    local url = connections.resolve_connection_url("cache")
+    assert.equals("mssql://server\\inst:1433/d", url)
+  end)
+
   it("rejects a non-string field instead of crashing the resolver", function()
     -- the TOML parser turns `host = [1]` into a real table; the builder used
     -- to crash on `:sub` / `..` (completion, the winbar and the browser all
@@ -207,10 +237,11 @@ describe("connections resolve_connection_url", function()
   end)
 
   it("brackets nothing that is not an IPv6 literal", function()
-    -- already bracketed (the form that worked before), a port left in the host
-    -- field (a config mistake this must not rewrite), plain names, IPv4, and a
-    -- hex-only hostname that has no colon
-    for _, host in ipairs({ "[::1]", "localhost:5432", "db.example.com", "10.0.0.1",
+    -- already bracketed (the form that worked before), plain names, IPv4, and
+    -- a hex-only hostname that has no colon. (`localhost:5432` used to be in
+    -- this list asserting the port-in-host paste passed through verbatim; it
+    -- is now rejected with a "move it to the `port` field" error instead.)
+    for _, host in ipairs({ "[::1]", "db.example.com", "10.0.0.1",
       "abcdef" }) do
       package.loaded["poste-db.toml"].parse_file = function()
         return { primary = { dialect = "postgres", host = host, port = 5432, database = "blog" } }
