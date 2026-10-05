@@ -368,11 +368,14 @@ function M.confirm_message(risky)
   local kinds = {}
   local seen = {}
   for _, r in ipairs(risky) do
-    if not seen[r.kind] then
+    -- `seen[nil] = true` raises "table index is nil": an exported API must
+    -- not crash on a malformed entry, so kindless entries are skipped
+    if type(r) == "table" and r.kind and not seen[r.kind] then
       seen[r.kind] = true
       kinds[#kinds + 1] = (r.kind == "delete") and "DELETE statement" or "UPDATE statement"
     end
   end
+  if #kinds == 0 then return "SQL contains unfiltered statement(s) without a WHERE clause." end
   local head
   if n == 1 and risky[1].snippet and risky[1].snippet ~= "" then
     head = string.format("%s without a WHERE clause:\n  %s", kinds[1], risky[1].snippet)

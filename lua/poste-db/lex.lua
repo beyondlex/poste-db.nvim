@@ -74,12 +74,13 @@ end
 
 --- Extract the database name from a `USE <name>` line, or nil.
 --- Handles: case-insensitive USE, a trailing `;`, quoted names (including
---- spaces inside quotes), and leading block comments (`USE /* d */ mydb`
---- used to return the comment as the name). A `--` line comment after the
---- name is naturally excluded because the bare-name scan stops at
---- whitespace. A USE inside a multi-line block comment is the caller's
---- concern — pair this with `block_comment_depth_after` when scanning a
---- buffer line by line.
+--- spaces inside quotes), MSSQL bracket-quoted names (`USE [My DB]` is the
+--- canonical T-SQL spelling and used to come back cut at the space), and
+--- leading block comments (`USE /* d */ mydb` used to return the comment as
+--- the name). A `--` line comment after the name is naturally excluded
+--- because the bare-name scan stops at whitespace. A USE inside a multi-line
+--- block comment is the caller's concern — pair this with
+--- `block_comment_depth_after` when scanning a buffer line by line.
 function M.find_use_database(line)
   if not line then return nil end
   local trimmed = line:match("^%s*(.-)%s*$") or ""
@@ -97,6 +98,19 @@ function M.find_use_database(line)
     local close = trimmed:find(quote, name_pos + 1, true)
     if not close then return nil end
     local name = trimmed:sub(name_pos + 1, close - 1)
+    if name == "" then return nil end
+    return name
+  end
+  if quote == "[" then
+    -- T-SQL bracket-quoted identifier. A `]` inside brackets is doubled
+    -- (`]]`) in T-SQL; scan for the closer that is NOT part of a pair, the
+    -- same reading the server applies.
+    local close = trimmed:find("]", name_pos + 1, true)
+    while close and trimmed:sub(close + 1, close + 1) == "]" do
+      close = trimmed:find("]", close + 2, true)
+    end
+    if not close then return nil end
+    local name = trimmed:sub(name_pos + 1, close - 1):gsub("]]", "]")
     if name == "" then return nil end
     return name
   end

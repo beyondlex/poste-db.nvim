@@ -271,6 +271,15 @@ describe("dml_guard confirm_message", function()
     assert.matches("DELETE statement", msg)
     assert.matches("UPDATE statement", msg)
   end)
+
+  it("survives a malformed kindless entry instead of raising", function()
+    -- `seen[r.kind] = true` with a nil kind raises "table index is nil";
+    -- an exported API must not crash on a malformed entry
+    local msg = guard.confirm_message({ { snippet = "no kind here" } })
+    assert.matches("without a WHERE clause", msg)
+    local mixed = guard.confirm_message({ { snippet = "x" }, { kind = "update", snippet = "UPDATE t" } })
+    assert.matches("UPDATE statement", mixed)
+  end)
 end)
 
 describe("dml_guard snippet", function()

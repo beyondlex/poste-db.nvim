@@ -132,6 +132,14 @@ function M.format_number(val)
   if val == math.floor(val) and math.abs(val) < 1e15 then
     return string.format("%.0f", val)
   end
+  -- Every double at or above 1e15 in magnitude is integer-valued, so the
+  -- branch above already took every honest integer; what still falls through
+  -- is ±inf and magnitudes whose %f form is the FULL expansion — a Float64
+  -- 1e300 printed ~300 digits and blew the column width up with it.
+  -- Scientific form is the honest display past the exact-integer range.
+  if math.abs(val) >= 1e15 then
+    return string.format("%.6g", val)
+  end
   if val ~= 0 and math.abs(val) < 0.0001 then
     -- Tiny magnitudes: keep significant digits (scientific form) instead of
     -- collapsing to 0.0000.

@@ -147,6 +147,16 @@ describe("format bigint precision", function()
     assert.equals("120000000", format.format_number(120000000))
     assert.equals("2", format.format_number(2))
   end)
+
+  it("renders magnitudes past the exact-integer range in scientific form", function()
+    -- a Float64 1e300 fell through the <1e15 integer gate into %f and
+    -- printed the ~300-digit full expansion, blowing the column width
+    assert.equals("1e+300", format.format_number(1e300))
+    assert.equals("1.5e+15", format.format_number(1.5e15))
+    -- infinity shortens too (it read "inf" before and still does)
+    assert.equals("inf", format.format_number(math.huge))
+    assert.equals("nan", format.format_number(0 / 0))
+  end)
 end)
 
 describe("format ClickHouse type modifiers", function()

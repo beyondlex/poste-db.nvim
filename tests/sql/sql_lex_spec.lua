@@ -41,6 +41,22 @@ describe("lex.find_use_database", function()
     assert.equals("my db", lex.find_use_database("USE 'my db'"))
   end)
 
+  it("reads a MSSQL bracket-quoted name", function()
+    -- `USE [My DB]` is the canonical T-SQL spelling; the bare-name scan used
+    -- to cut at the space and return "[My"
+    assert.equals("My DB", lex.find_use_database("USE [My DB]"))
+    assert.equals("master", lex.find_use_database("USE [master];"))
+  end)
+
+  it("unwinds a doubled ] inside a bracket-quoted name", function()
+    -- T-SQL escapes a literal ] by doubling it
+    assert.equals("a]b", lex.find_use_database("USE [a]]b]"))
+  end)
+
+  it("returns nil for an unterminated bracket-quoted name", function()
+    assert.is_nil(lex.find_use_database("USE [My DB"))
+  end)
+
   it("does not let a block comment become the database name", function()
     -- `USE /* default */ mydb` used to return "/*" + "default*/" verbatim.
     assert.equals("mydb", lex.find_use_database("USE /* default */ mydb"))
