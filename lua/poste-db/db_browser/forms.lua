@@ -29,19 +29,26 @@ local function to_display(f)
   return tostring(v)
 end
 
---- Render form lines into a buffer. Returns { lines, field_rows } where
---- field_rows[i] = line number of field i (1-indexed within buffer).
-local function render_form(buf, title, fields, current_idx)
+--- Width the form renders at: the label column plus a fixed value area, or
+--- the title if longer. Also returns the two widths the border art pads with.
+--- The float geometry (`calc_size`) and the drawing (`render_form`) must
+--- agree on this or the window clips its own border.
+local function calc_width(title, fields)
   local label_dw = 4
   for _, f in ipairs(fields) do
     label_dw = math.max(label_dw, vim.fn.strdisplaywidth(f.label))
   end
-
   local content_width = label_dw + 4 + 24  -- "  Label: " + value area
   local title_dw = vim.fn.strdisplaywidth(title)
+  return math.max(title_dw + 6, content_width), label_dw, title_dw
+end
+
+--- Render form lines into a buffer. Returns { lines, field_rows } where
+--- field_rows[i] = line number of field i (1-indexed within buffer).
+local function render_form(buf, title, fields, current_idx)
   -- Top border: "┌ " (2) + title + " " (1) + pad + "┐" (1) = title_dw + 4 + pad
   -- So pad = width - title_dw - 4
-  local width = math.max(title_dw + 6, content_width)
+  local width, label_dw, title_dw = calc_width(title, fields)
 
   local lines = {}
   local field_rows = {}
@@ -118,13 +125,7 @@ function M.open(title, fields, on_submit)
   local current_idx = 1
 
   local function calc_size()
-    local label_dw = 4
-    for _, f in ipairs(fields) do
-      label_dw = math.max(label_dw, vim.fn.strdisplaywidth(f.label))
-    end
-    local content_width = label_dw + 4 + 24
-    local title_dw = vim.fn.strdisplaywidth(title)
-    local width = math.max(title_dw + 6, content_width)
+    local width = calc_width(title, fields)
     local height = #fields + 6  -- borders + padding + submit + hints
     return width, height
   end
@@ -183,6 +184,27 @@ function M.open(title, fields, on_submit)
     refresh()
   end
 
+  --- The one select-field picker: Enter on a select row and the `t` key both
+  --- land here, so the editing flag, the cancel guard and the
+  --- refocus-then-refresh pairing are written once instead of drifting.
+  local function pick_select(f)
+    editing = true
+    vim.ui.select(f.choices, {
+      prompt = f.label .. ":",
+      format_item = function(item) return item end,
+    }, function(choice)
+      editing = false
+      if closed then return end
+      if choice then
+        f.value = choice
+      end
+      if form_win and vim.api.nvim_win_is_valid(form_win) then
+        vim.api.nvim_set_current_win(form_win)
+      end
+      refresh()
+    end)
+  end
+
   local function edit_current()
     local f = fields[current_idx]
     if not f then return end
@@ -200,21 +222,7 @@ function M.open(title, fields, on_submit)
     if f.kind == "select" and f.choices then
       -- pick from the declared choices (same as the `t` key); a free-text
       -- input here would let arbitrary values into the form
-      editing = true
-      vim.ui.select(f.choices, {
-        prompt = f.label .. ":",
-        format_item = function(item) return item end,
-      }, function(choice)
-        editing = false
-        if closed then return end
-        if choice then
-          f.value = choice
-        end
-        if form_win and vim.api.nvim_win_is_valid(form_win) then
-          vim.api.nvim_set_current_win(form_win)
-        end
-        refresh()
-      end)
+      pick_select(f)
       return
     end
 
@@ -277,25 +285,14 @@ function M.open(title, fields, on_submit)
   vim.keymap.set("n", "t", function()
     local f = fields[current_idx]
     if f and f.kind == "select" and f.choices then
-      editing = true
-      vim.ui.select(f.choices, {
-        prompt = f.label .. ":",
-        format_item = function(item) return item end,
-      }, function(choice)
-        editing = false
-        if closed then return end
-        if choice then
-          f.value = choice
-        end
-        if form_win and vim.api.nvim_win_is_valid(form_win) then
-          vim.api.nvim_set_current_win(form_win)
-        end
-        refresh()
-      end)
+      pick_select(f)
     end
   end, opts)
   vim.keymap.set("n", "q", close, opts)
   vim.keymap.set("n", "<Esc>", close, opts)
 end
+
+--- Exposed for tests.
+M._test = { calc_width = calc_width }
 
 return M
