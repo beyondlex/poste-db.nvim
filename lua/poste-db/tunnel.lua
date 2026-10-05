@@ -76,9 +76,16 @@ function M.free_port()
 end
 
 --- The -L argument forwarding 127.0.0.1:local → db_host:db_port through ssh.
---- @return string
+--- An IPv6 literal host (connections.toml `host = "::1"`) must be bracketed —
+--- the bare form made ssh read the address groups as extra `host:port` fields
+--- and the forward pointed somewhere else entirely.
+---@return string
 function M.forward_arg(local_port, db_host, db_port)
-  return string.format("127.0.0.1:%d:%s:%d", local_port, db_host, db_port)
+  local host = tostring(db_host)
+  if host:find(":", 1, true) and not host:find("[", 1, true) then
+    host = "[" .. host .. "]"
+  end
+  return string.format("127.0.0.1:%d:%s:%d", local_port, host, db_port)
 end
 
 local function build_ssh_cmd(cfg, fwd)

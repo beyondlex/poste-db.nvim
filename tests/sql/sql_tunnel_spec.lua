@@ -64,6 +64,18 @@ describe("tunnel", function()
       assert.equals("127.0.0.1:15432:db.internal:5432",
         tunnel._test.forward_arg(15432, "db.internal", 5432))
     end)
+
+    it("brackets an IPv6 literal host", function()
+      -- regression: the bare form made ssh split the address groups into
+      -- extra host:port fields — the forward pointed nowhere near ::1.
+      assert.equals("127.0.0.1:15432:[::1]:5432",
+        tunnel._test.forward_arg(15432, "::1", 5432))
+      assert.equals("127.0.0.1:15432:[2001:db8::10]:5432",
+        tunnel._test.forward_arg(15432, "2001:db8::10", 5432))
+      -- an already-bracketed host passes through once
+      assert.equals("127.0.0.1:15432:[::1]:5432",
+        tunnel._test.forward_arg(15432, "[::1]", 5432))
+    end)
   end)
 
   describe("build_ssh_cmd", function()
