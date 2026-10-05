@@ -91,10 +91,10 @@ function M.select_star_sql(table_ref, dialect, count)
 end
 
 --- T-SQL has no RENAME TO / RENAME COLUMN. `sp_rename` takes its arguments as
---- string literals, so names are unquoted there (apostrophes doubled) rather
---- than bracket-quoted identifiers.
+--- string literals, so names are unquoted there (apostrophes doubled via
+--- quote_literal) rather than bracket-quoted identifiers.
 local function sp_rename(old_ref, new_name, object_kind)
-  local lit = function(s) return "'" .. tostring(s):gsub("'", "''") .. "'" end
+  local lit = function(s) return ident.quote_literal(tostring(s), "mssql") end
   local stmt = "EXEC sp_rename " .. lit(old_ref) .. ", " .. lit(new_name)
   if object_kind then stmt = stmt .. ", " .. lit(object_kind) end
   return stmt .. ";"
