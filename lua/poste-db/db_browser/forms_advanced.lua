@@ -322,6 +322,18 @@ local function render(rows, width, sql_lines)
   return lines, highlights, row_line
 end
 
+--- First field whose `key` matches, across every section. The async-handle
+--- lookup; kept pure so a spec can pin the "declared later in another section"
+--- case without opening a dialog.
+local function find_field(sections, key)
+  for _, section in ipairs(sections) do
+    for _, field in ipairs(section.fields or {}) do
+      if field.key == key then return field end
+    end
+  end
+  return nil
+end
+
 function M.open(opts)
   opts = opts or {}
   local title = opts.title or "Form"
@@ -636,6 +648,24 @@ function M.open(opts)
   active_form = { dlg = dlg, opts = opts }
   refresh()
 
+  --- A handle for callers that fill the form after it opened — the async
+  --- populate case: a `select` whose choices need a server round-trip (the
+  --- Create Database owner list). The form opens immediately with empty
+  --- choices; when the answer lands, `set_choices` writes them onto the field
+  --- and redraws. A closed form (user left, or `single` replaced it) makes
+  --- every call a no-op, so a late response can never resurrect buffers.
+  local form_handle = {
+    set_choices = function(key, choices)
+      if closed then return false end
+      local field = find_field(sections, key)
+      if not field then return false end
+      field.choices = choices
+      rebuild_rows()
+      return true
+    end,
+    is_closed = function() return closed end,
+  }
+
   local km_opts = { buffer = dlg.buf, noremap = true, silent = true, nowait = true }
 
   vim.keymap.set("n", "j", function() move_cursor(1) end, km_opts)
@@ -686,6 +716,8 @@ function M.open(opts)
       end
     end,
   })
+
+  return form_handle
 end
 
 --- Exposed for tests.
@@ -698,6 +730,7 @@ M._test = {
   build_rows = build_rows,
   render = render,
   footer_lines = footer_lines,
+  find_field = find_field,
 }
 
 return M

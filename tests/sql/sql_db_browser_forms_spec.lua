@@ -66,3 +66,33 @@ describe("db_browser forms_advanced list entries", function()
     assert.equals("app", other.grantee)
   end)
 end)
+
+describe("db_browser forms_advanced find_field", function()
+  local sections = {
+    { title = "Info", fields = {
+        { key = "name", label = "Name", kind = "text" },
+      } },
+    { title = "Owner", fields = {
+        { key = "owner", label = "Owner", kind = "select", choices = {} },
+      } },
+  }
+
+  it("finds a field declared in a later section", function()
+    -- The async populate (db_create's Owner list) looks its field up after the
+    -- form opened, by key alone — sections are an implementation detail.
+    assert.equals(sections[2].fields[1], t.find_field(sections, "owner"))
+  end)
+
+  it("returns the first match when keys repeat across sections", function()
+    local dup = {
+      { fields = { { key = "k", value = 1 } } },
+      { fields = { { key = "k", value = 2 } } },
+    }
+    assert.equals(1, t.find_field(dup, "k").value)
+  end)
+
+  it("answers nil for an unknown key or a section without fields", function()
+    assert.is_nil(t.find_field(sections, "nope"))
+    assert.is_nil(t.find_field({ { title = "empty" } }, "name"))
+  end)
+end)

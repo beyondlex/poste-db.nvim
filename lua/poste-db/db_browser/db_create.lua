@@ -37,31 +37,23 @@ local function get_connection_name(node, context)
   return util.get_connection(node)
 end
 
-local function fetch_roles(url)
-  local exec_run = require("poste-db.exec_run")
-  local resp = exec_run.run_sql("SELECT rolname FROM pg_roles ORDER BY rolname", {
-    conn_url = url,
-    mode = "greedy",
-    log_source = "browser",
-  })
-  if not resp then return nil end
-  local ok, data = pcall(vim.json.decode, resp.body or "{}")
-  if not ok then return nil end
-  local body = data
+--- Roles from a legacy-shaped exec response (`results[].rows`, first column).
+--- The response already carries decoded results — re-decoding `resp.body` here
+--- only duplicated the parse. nil (keep the Owner select empty) unless at least
+--- one role came back.
+local function extract_roles(resp)
   local roles = {}
-  if body.results then
-    for _, res in ipairs(body.results) do
-      if res.rows then
-        for _, row in ipairs(res.rows) do
-          table.insert(roles, row[1])
-        end
-      end
+  for _, res in ipairs(resp and resp.results or {}) do
+    for _, row in ipairs(res.rows or {}) do
+      -- vim.NIL is not nil, so a null rolname must be named out or it lands
+      -- in the picker as the literal text "vim.NIL".
+      if row[1] ~= nil and row[1] ~= vim.NIL then table.insert(roles, tostring(row[1])) end
     end
   end
   return #roles > 0 and roles or nil
 end
 
-local function build_sections(dialect, roles)
+local function build_sections(dialect)
   local fields = {
     { key = "name", label = "Name", kind = "text", value = "" },
   }
@@ -77,7 +69,11 @@ local function build_sections(dialect, roles)
   end
 
   if dialect == "postgres" then
-    table.insert(fields, { key = "owner", label = "Owner", kind = "select", value = "", choices = roles or {}, dialect = "postgres" })
+    -- Choices start empty: the role list needs a server round-trip, and
+    -- waiting for it inline froze the whole UI for up to the exec timeout
+    -- (a VPN or a hung server). The form_handle.set_choices below fills
+    -- this field when the async query answers.
+    table.insert(fields, { key = "owner", label = "Owner", kind = "select", value = "", choices = {}, dialect = "postgres" })
   end
 
   local sections = {
@@ -116,6 +112,25 @@ local function execute_sql(sql, conn_name, context, opts)
   })
 end
 
+--- Fire the role-list query for the Owner select without blocking the UI. The
+--- form is already open when this runs; a failed or empty answer just leaves
+--- the select empty (parity with the old synchronous fetch's nil), and a
+--- response after the user closed the form is a no-op through the handle.
+local function populate_roles_async(form_handle, url)
+  local exec_run = require("poste-db.exec_run")
+  exec_run.run_async("SELECT rolname FROM pg_roles ORDER BY rolname", {
+    conn_url = url,
+    mode = "greedy",
+    log_source = "browser",
+  }, {
+    on_response = function(resp)
+      if form_handle.is_closed() then return end
+      local roles = extract_roles(resp)
+      if roles then form_handle.set_choices("owner", roles) end
+    end,
+  })
+end
+
 function M.open(node, context)
   local dialect = get_dialect(node, context)
 
@@ -125,19 +140,10 @@ function M.open(node, context)
   end
 
   local conn = get_connection_name(node, context)
-  local roles = nil
-  if dialect == "postgres" then
-    local connections = require("poste-db.connections")
-    local url, _ = connections.resolve_connection_url(conn)
-    if url then
-      roles = fetch_roles(url)
-    end
-  end
-  local sections = build_sections(dialect, roles)
-  forms_advanced.open({
+  local form_handle = forms_advanced.open({
     title = "Create Database in " .. conn,
     dialect = dialect,
-    sections = sections,
+    sections = build_sections(dialect),
     on_change = function(fields) return generate_sql(fields, dialect) end,
     on_validate = function(fields)
       if not fields.name or fields.name == "" then
@@ -150,6 +156,14 @@ function M.open(node, context)
     end,
     window_management = "single",
   })
+
+  if dialect == "postgres" then
+    local connections = require("poste-db.connections")
+    local url, _ = connections.resolve_connection_url(conn)
+    if url then
+      populate_roles_async(form_handle, url)
+    end
+  end
 end
 
 --- Exposed for tests.
