@@ -194,29 +194,19 @@ end
 --- Replace a routine's own name inside its SHOW CREATE/pg_get_functiondef
 --- text (first occurrence after the PROCEDURE/FUNCTION keyword, so DEFINER
 --- clauses are untouched).
+---
+--- MySQL: the routine's own name is the first `` `src` `` after the keyword —
+--- SHOW CREATE renders it (schema-qualified or not) before the parameter list,
+--- and every other backtick pair (DEFINER, body literals) either sits before
+--- the keyword or after the name. A name containing a backtick is escaped as a
+--- doubled backtick in SHOW CREATE, so it matches neither here nor anywhere —
+--- the paste keeps the source name and the failure surfaces in the summary.
 function M.rename_routine_in_def(dialect, def, src, tgt)
   local upper = def:upper()
   local kw_pos = routine_kw_pos(upper)
   if not kw_pos then return def end
 
   if dialect == "mysql" or dialect == "mariadb" then
-    local open = def:find("`", kw_pos, true)
-    while open do
-      local close = def:find("`", open + 1, true)
-      if not close then break end
-      if def:sub(open + 1, close - 1) == src then
-        -- open sits on the original backtick; drop it (the appended "`"
-        -- replaces it) or MySQL reads a doubled backtick as a literal.
-        return def:sub(1, open - 1) .. "`" .. tgt .. "`" .. def:sub(close + 1)
-      end
-      open = def:find("`", close + 1, true)
-      if open and open > close and open < kw_pos + 200 then
-        -- keep scanning just past this token pair; stop runaway scans early
-        break
-      end
-      open = nil
-    end
-    -- Fallback: any direct `src` mention right after the keyword.
     local plain_idx = def:find("`" .. src .. "`", kw_pos, true)
     if plain_idx then
       return def:sub(1, plain_idx - 1) .. "`" .. tgt .. "`" .. def:sub(plain_idx + #src + 2)

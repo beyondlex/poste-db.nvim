@@ -249,6 +249,29 @@ describe("db_browser copy_ddl rename_routine_in_def", function()
     assert.equals("CREATE PROCEDURE `myschema`.`proc_copy`() BEGIN END", out)
   end)
 
+  it("renames the routine's own name, not a later body mention", function()
+    -- the name precedes the body, so the first `src` after the keyword is the
+    -- name even when a statement inside the body references the same string
+    local def = "CREATE PROCEDURE `proc_a`() BEGIN SELECT * FROM `proc_a`; END"
+    local out = ddl_mod.rename_routine_in_def("mysql", def, "proc_a", "proc_copy")
+    assert.equals("CREATE PROCEDURE `proc_copy`() BEGIN SELECT * FROM `proc_a`; END", out)
+  end)
+
+  it("leaves a mysql name that carries a backtick unrenamed", function()
+    -- SHOW CREATE doubles an inner backtick (a``b), so the raw name never
+    -- appears verbatim; the paste keeps the source name and the summary
+    -- reports the failure instead of silently mangling the definition.
+    local def = "CREATE PROCEDURE `a``b`() BEGIN END"
+    assert.equals(def, ddl_mod.rename_routine_in_def("mysql", def, "a`b", "copy"))
+  end)
+
+  it("renames a schema-qualified postgres function", function()
+    local out = ddl_mod.rename_routine_in_def(
+      "postgres", "CREATE OR REPLACE FUNCTION public.func_a(int) RETURNS void AS $$ BEGIN END $$ LANGUAGE plpgsql;",
+      "func_a", "func_copy")
+    assert.equals("CREATE OR REPLACE FUNCTION public.func_copy(int) RETURNS void AS $$ BEGIN END $$ LANGUAGE plpgsql;", out)
+  end)
+
   it("renames a postgres function name before the parameter list", function()
     local out = ddl_mod.rename_routine_in_def(
       "postgres", "CREATE FUNCTION func_a() RETURNS void AS $$ BEGIN END $$;", "func_a", "func_copy")
