@@ -392,6 +392,19 @@ describe("toml inline containers", function()
     assert.same({ a = 1 }, res.c.tbl)
   end)
 
+  it("rejects unbalanced brackets in an inline container", function()
+    -- `[1]2]` ends in `]` so the unclosed-array check passes; the old split
+    -- kept consuming closers and stored the garbage string "1]2" with no
+    -- error anywhere — a typo'd config that silently misparsed. (Synced from
+    -- poste-redis/toml.lua.)
+    local res, err = toml.parse('ips = [1]2]')
+    assert.is_nil(res)
+    assert.matches("Unbalanced brackets", err)
+    local res2, err2 = toml.parse('t = { a = [1 }')
+    assert.is_nil(res2)
+    assert.matches("Unbalanced brackets", err2)
+  end)
+
   it("rejects an inline table entry with a missing key or value", function()
     local res, err = toml.parse('t = { = 1 }')
     assert.is_nil(res)
