@@ -138,11 +138,7 @@ function M.update(browser_buf, path, comment, multi_select)
         width = vim.api.nvim_win_get_width(win)
       end
       local text = M.build(path, comment, multi_select, width)
-      if text == "" then
-        pcall(vim.api.nvim_set_option_value, "statusline", "", { win = win })
-      else
-        pcall(vim.api.nvim_set_option_value, "statusline", text, { win = win })
-      end
+      pcall(vim.api.nvim_set_option_value, "statusline", text, { win = win })
     end
   end
 

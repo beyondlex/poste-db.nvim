@@ -2,11 +2,12 @@
 ---
 --- Extracted from sql/init.lua to reduce module size.
 --- Provides show_table_ddl() and supporting functions.
--- luacheck: ignore 411
 
 local state = require("poste-db.state")
 local util = require("poste-db.util")
 local config = require("poste-db.config")
+local context = require("poste-db.context")
+local connections = require("poste-db.connections")
 local route = require("poste-db.introspect.route")
 local detect = require("poste-db.introspect.detect")
 local target_resolver = require("poste-db.introspect.target")
@@ -89,7 +90,7 @@ function M.show_table_ddl()
   local directive_action = target_resolver.resolve_directive_action(entry)
   if directive_action and directive_action.kind == "database" then
     local db_name = directive_action.db_name
-    local ctx = require("poste-db.context").resolve_full_context(buf, line_num)
+    local ctx = context.resolve_full_context(buf, line_num)
     local conn = ctx.connection
     if not conn then
       vim.notify("No connection context for database '" .. db_name .. "'", vim.log.levels.WARN, { title = const.PLUGIN_TITLE })
@@ -101,7 +102,7 @@ function M.show_table_ddl()
 
   if directive_action and directive_action.kind == "connection" then
     local conn_name = directive_action.conn_name
-    local conn_cfg = require("poste-db.connections").get_connection_config(conn_name)
+    local conn_cfg = connections.get_connection_config(conn_name)
     if not conn_cfg then
       vim.notify("Connection '" .. conn_name .. "' not found in connections.toml", vim.log.levels.WARN, { title = const.PLUGIN_TITLE })
       return
@@ -120,9 +121,7 @@ function M.show_table_ddl()
     return
   end
 
-  local sql_context = require("poste-db.context")
-  local buf = vim.api.nvim_get_current_buf()
-  local ctx = sql_context.resolve_full_context(buf)
+  local ctx = context.resolve_full_context(buf)
   local conn = ctx.connection
   if not conn or conn == "" then
     vim.notify("No SQL connection context. Add -- @connection <name> to the file header.", vim.log.levels.ERROR, { title = const.PLUGIN_TITLE })
@@ -132,18 +131,9 @@ function M.show_table_ddl()
   local db = ctx.database
 
   -- Try to detect if cursor is on a column name via Rust context detection
-  local cursor = vim.api.nvim_win_get_cursor(0)
-  local line_num = cursor[1]
-  local col = cursor[2]
   local all_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-  local line_text = all_lines[line_num] or ""
-  local line_len = #line_text
 
-  local end_col = col
-  while end_col < line_len do
-    local ch = line_text:sub(end_col + 1, end_col + 1)
-    if ch:match("[%w_]") then end_col = end_col + 1 else break end
-  end
+  local end_col = util.scan_word_end(line_text, cursor[2])
 
   local function detect_target_at(slice_end_col, resolve_after_dot_col)
     local payload = detect.build_detect_payload(all_lines, line_num, slice_end_col)
@@ -154,7 +144,7 @@ function M.show_table_ddl()
     -- dialect-aware detection: without this flag the CLI falls back to
     -- generic function filtering, so e.g. MSSQL/MySQL builtins were missing
     -- from completion candidates
-    local cc = require("poste-db.connections").get_connection_config(conn)
+    local cc = connections.get_connection_config(conn)
     local args = { binary, "context", "detect", tostring(payload.offset) }
     if cc and cc.dialect and cc.dialect ~= "" then
       table.insert(args, "--dialect")

@@ -72,6 +72,24 @@ function M.unquote_ident(s)
   return s
 end
 
+--- 0-based index just past the identifier run that starts at or after the
+--- 0-based cursor column `col`. The "extend the cursor column over the
+--- word" scan shared by go-to-definition (nav/handlers) and introspect
+--- target detection (introspect/init): both feed the byte offset of the
+--- word's end into `poste context detect`.
+--- @param line_text string
+--- @param col number
+--- @return number
+function M.scan_word_end(line_text, col)
+  local end_col = col or 0
+  local len = #line_text
+  while end_col < len do
+    local ch = line_text:sub(end_col + 1, end_col + 1)
+    if ch:match("[%w_]") then end_col = end_col + 1 else break end
+  end
+  return end_col
+end
+
 ---------------------------------------------------------------------------
 -- Merged from poste.nvim@5b3759e lua/poste/util.lua (family dissolution)
 ---------------------------------------------------------------------------

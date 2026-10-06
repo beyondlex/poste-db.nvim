@@ -76,16 +76,10 @@ function M.handle_table_reference(buf, line_num, line_text, cursor, full_ctx, ta
   if bin then
     local all_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
     local nav_line_text = all_lines[line_num] or ""
-    local col = cursor[2]
-    local line_len = #nav_line_text
 
-    local end_col = col
-    while end_col < line_len do
-      local ch = line_text:sub(end_col + 1, end_col + 1)
-      if ch:match("[%w_]") then end_col = end_col + 1 else break end
-    end
+    local end_col = util.scan_word_end(nav_line_text, cursor[2])
 
-    local block = detect.extract_sql_block(all_lines, line_num, line_text, end_col)
+    local block = detect.extract_sql_block(all_lines, line_num, nav_line_text, end_col)
     if block then
       local conn_config = require("poste-db.connections").get_connection_config(full_ctx.connection)
       local cmd = { bin, "context", "detect", tostring(block.offset) }
