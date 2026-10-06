@@ -153,7 +153,10 @@ function M.show_table_ddl()
 
     local ok_sys, result_obj = pcall(vim.system, args, {
       stdin = payload.sql_text,
-      timeout = 5000,
+      -- Same subcommand completion/init.lua runs per keystroke at 2000ms;
+      -- this call blocks the editor, so a wedged binary must not hold the
+      -- UI for longer than that precedent.
+      timeout = 2000,
     })
     if not ok_sys then return nil end
     local result = result_obj:wait()

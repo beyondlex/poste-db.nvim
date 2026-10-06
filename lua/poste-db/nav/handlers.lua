@@ -86,7 +86,10 @@ function M.handle_table_reference(buf, line_num, line_text, cursor, full_ctx, ta
       if conn_config and conn_config.dialect then
         table.insert(cmd, "--dialect"); table.insert(cmd, conn_config.dialect)
       end
-      local ok_sys, result_obj = pcall(vim.system, cmd, { stdin = block.sql_text, timeout = 5000 })
+      -- :wait() blocks the editor; completion runs the same subcommand per
+      -- keystroke at 2000ms — don't let a wedged binary freeze
+      -- go-to-definition for longer.
+      local ok_sys, result_obj = pcall(vim.system, cmd, { stdin = block.sql_text, timeout = 2000 })
       if ok_sys then
         local result = result_obj:wait()
         if result.code == 0 and result.stdout then
