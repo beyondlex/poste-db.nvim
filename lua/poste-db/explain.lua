@@ -59,8 +59,17 @@ function M.wrap_sql(dialect, stmt)
   -- are part of this statement's own text — `SELECT 'a;b'`, a `-- note; end`
   -- tail, a PL/pgSQL `$$ … ; … $$` body — and refused a cursor that really
   -- was on a single statement.
-  if dml_guard.strip_non_code(inner):find(";", 1, true) then
-    return nil, "EXPLAIN runs a single statement — put the cursor on one statement"
+  --
+  -- The mask runs under BOTH quote-escape readings: they disagree about
+  -- where a literal ends (postgres closes `'C:\path\'` at the final quote;
+  -- the backslash reading escapes it), and a single reading parks a real
+  -- `;` inside a phantom literal, hiding the statement behind it. A refusal
+  -- gate over-flags, never under — the rule `dml_guard.regex_scan` unions
+  -- its hits by.
+  for _, backslash in ipairs({ false, true }) do
+    if dml_guard.strip_non_code(inner, backslash):find(";", 1, true) then
+      return nil, "EXPLAIN runs a single statement — put the cursor on one statement"
+    end
   end
   return prefix .. inner, nil
 end

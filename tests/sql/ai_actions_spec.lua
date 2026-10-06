@@ -138,6 +138,20 @@ describe("poste-db.ai.actions", function()
       assert.is_false(actions._test.is_readonly(""))
       assert.is_false(actions._test.is_readonly("   \n-- nothing but a comment\n"))
     end)
+
+    it("flags a write a trailing-backslash literal hides from one reading", function()
+      -- postgres (standard_conforming_strings) closes `'C:\path\'` at the
+      -- final quote, so `;DROP TABLE` after it is a real second statement —
+      -- but the backslash reading escapes that quote and parks the write
+      -- inside a phantom literal that never closes. The gate scans both
+      -- readings; either one flagging is a confirm.
+      assert.is_false(actions._test.is_readonly("SELECT 'C:\\path\\'; DROP TABLE users"))
+      -- the mirror shape: a mysql-legal `\'` hides the write from the
+      -- standard reading
+      assert.is_false(actions._test.is_readonly("SELECT 'it\\'s'; DELETE FROM t"))
+      -- a trailing-backslash literal on its own is still just a SELECT
+      assert.is_true(actions._test.is_readonly("SELECT 'C:\\path\\' FROM t"))
+    end)
   end)
 
   describe("strip_directives", function()

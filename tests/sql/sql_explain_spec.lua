@@ -60,6 +60,20 @@ describe("explain", function()
       end
     end)
 
+    it("rejects a break a trailing-backslash literal hides from one reading", function()
+      -- postgres closes `'C:\path\'` at the final quote, so the `; SELECT`
+      -- after it is real — but the backslash reading escapes that quote and
+      -- hides the break inside a phantom literal. The refusal gate runs both
+      -- readings; either one seeing a separator refuses (over-flag, never
+      -- under).
+      local wrapped, err = explain.wrap_sql("postgres", "SELECT 'C:\\path\\'; SELECT 2")
+      assert.is_nil(wrapped)
+      assert.truthy(err:find("single statement"))
+      -- ... while the single statement itself still wraps
+      assert.equals("EXPLAIN SELECT 'C:\\path\\' FROM t",
+        explain.wrap_sql("postgres", "SELECT 'C:\\path\\' FROM t"))
+    end)
+
     it("rejects empty statements", function()
       local wrapped, err = explain.wrap_sql("postgres", "   ")
       assert.is_nil(wrapped)

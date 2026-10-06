@@ -56,15 +56,26 @@ end
 --- statement, not pass on the first. Leading comment lines are blanked, so
 --- `-- @connection x\nSELECT 1` (the header append_header writes, and which
 --- models copy) still reads as a SELECT.
+---
+--- The block is scanned under BOTH quote-escape readings and must read
+--- read-only under each: the readings disagree about where a literal ends
+--- (postgres reads `'C:\path\'` as closed at the final quote; the backslash
+--- reading escapes it), and the wrong reading parks the `;DROP TABLE` that
+--- follows inside a phantom literal. A gate that runs SQL unconfirmed must
+--- over-flag, never under — the same rule `dml_guard.regex_scan` scans by.
 --- @param sql string
 --- @return boolean
 function M.is_readonly(sql)
   local count = 0
-  for stmt in (dml_guard.strip_non_code(sql) .. ";"):gmatch("([^;]*)") do
-    if stmt:match("%S") then
-      count = count + 1
-      if not statement_is_readonly(stmt) then return false end
+  for _, backslash in ipairs({ false, true }) do
+    local seen = 0
+    for stmt in (dml_guard.strip_non_code(sql, backslash) .. ";"):gmatch("([^;]*)") do
+      if stmt:match("%S") then
+        seen = seen + 1
+        if not statement_is_readonly(stmt) then return false end
+      end
     end
+    count = math.max(count, seen)
   end
   return count > 0
 end
