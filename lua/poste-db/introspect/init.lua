@@ -145,11 +145,7 @@ function M.show_table_ddl()
     -- generic function filtering, so e.g. MSSQL/MySQL builtins were missing
     -- from completion candidates
     local cc = connections.get_connection_config(conn)
-    local args = { binary, "context", "detect", tostring(payload.offset) }
-    if cc and cc.dialect and cc.dialect ~= "" then
-      table.insert(args, "--dialect")
-      table.insert(args, cc.dialect)
-    end
+    local args = context.detect_command(binary, payload.offset, cc and cc.dialect or nil)
 
     local ok_sys, result_obj = pcall(vim.system, args, {
       stdin = payload.sql_text,

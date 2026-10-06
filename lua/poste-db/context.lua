@@ -8,6 +8,29 @@ local lex = require("poste-db.lex")
 local M = {}
 
 ---------------------------------------------------------------------------
+-- Shared detect-command builder
+---------------------------------------------------------------------------
+
+--- The argv for `poste context detect <offset> [--dialect D]` — the one
+--- place the flag contract lives. `generic` is the binary's default
+--- (schema.md), so it is not spelled out; a nil/empty dialect means the
+--- caller has no connection config to read it from. Consumers today:
+--- completion/init (async, cached), nav/handlers and introspect/init
+--- (synchronous go-to-definition paths).
+--- @param binary string path to the poste binary
+--- @param offset number 0-based byte offset into the detect payload
+--- @param dialect string|nil connection dialect ("generic", "postgres", …)
+--- @return string[]
+function M.detect_command(binary, offset, dialect)
+  local cmd = { binary, "context", "detect", tostring(offset) }
+  if dialect and dialect ~= "" and dialect ~= "generic" then
+    cmd[#cmd + 1] = "--dialect"
+    cmd[#cmd + 1] = dialect
+  end
+  return cmd
+end
+
+---------------------------------------------------------------------------
 -- Context resolution
 ---------------------------------------------------------------------------
 

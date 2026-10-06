@@ -211,3 +211,14 @@ describe("context handle_use_statement", function()
   end)
 end)
 
+
+describe("context.detect_command", function()
+  it("builds the bare detect argv and the dialect flag", function()
+    assert.same({ "poste", "context", "detect", "12" }, context.detect_command("poste", 12, nil))
+    assert.same({ "poste", "context", "detect", "12" }, context.detect_command("poste", 12, ""))
+    -- generic is the binary's default; spelling it out buys nothing
+    assert.same({ "poste", "context", "detect", "12" }, context.detect_command("poste", 12, "generic"))
+    assert.same({ "poste", "context", "detect", "12", "--dialect", "mysql" },
+      context.detect_command("poste", 12, "mysql"))
+  end)
+end)

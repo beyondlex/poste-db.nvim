@@ -1,4 +1,7 @@
 --- Go-to-definition --- handlers for connection/database/table navigation.
+--- Requires stay LAZY on purpose: sql_nav_spec stubs poste-db.context /
+--- poste-db.db_browser through package.loaded, and a top-level require
+--- would capture the real module before the stub lands.
 local detect = require("poste-db.nav.detect")
 local util = require("poste-db.util")
 
@@ -57,8 +60,7 @@ function M.handle_connection_directive(buf, conn_name)
 end
 
 function M.handle_database_directive(buf, line_num, db_name)
-  local ctx = require("poste-db.context")
-  local full_ctx = ctx.resolve_full_context(buf, line_num)
+  local full_ctx = require("poste-db.context").resolve_full_context(buf, line_num)
   if not full_ctx.connection then
     vim.notify("No connection context for database '" .. db_name .. "'. Add -- @connection <name> to the file.", vim.log.levels.WARN, { title = "PosteDb" })
     return true
@@ -82,10 +84,7 @@ function M.handle_table_reference(buf, line_num, line_text, cursor, full_ctx, ta
     local block = detect.extract_sql_block(all_lines, line_num, nav_line_text, end_col)
     if block then
       local conn_config = require("poste-db.connections").get_connection_config(full_ctx.connection)
-      local cmd = { bin, "context", "detect", tostring(block.offset) }
-      if conn_config and conn_config.dialect then
-        table.insert(cmd, "--dialect"); table.insert(cmd, conn_config.dialect)
-      end
+      local cmd = require("poste-db.context").detect_command(bin, block.offset, conn_config and conn_config.dialect or nil)
       -- :wait() blocks the editor; completion runs the same subcommand per
       -- keystroke at 2000ms — don't let a wedged binary freeze
       -- go-to-definition for longer.
