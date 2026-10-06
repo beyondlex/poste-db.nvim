@@ -113,3 +113,34 @@ describe("nav_detect column word scan", function()
     assert.same("a", target.column_name)
   end)
 end)
+
+-- Detect responses carry the source spelling of a name (`` `users` `` from a
+-- MySQL buffer); matching against the bare cword only works after the strip,
+-- and navigation targets get the bare name so introspection args are not
+-- double-quoted. (Today's binary answers with bare names already — both
+-- sides strip so a future quoting binary cannot break them unevenly.)
+describe("nav_detect quoted names", function()
+  it("matches a backticked table name against a bare cword", function()
+    local target = detect.resolve_detected_table_target({
+      ctx_type = "table",
+      tables = { { name = "`posts`", alias = "p" } },
+    }, "select * from posts", 18, "posts", { connection = "c", database = "blog" })
+
+    assert.same({
+      action = "navigate_to_table",
+      database = "blog",
+      table_name = "posts",
+      column_name = nil,
+    }, target)
+  end)
+
+  it("resolves a quoted alias to the stripped table name", function()
+    local target = detect.resolve_detected_table_target({
+      ctx_type = "dot_column",
+      ctx_data = "p",
+      tables = { { name = "`posts`", alias = "`p`" } },
+    }, "p.title", 1, "title", { connection = "c", database = "blog" })
+
+    assert.same("posts", target.table_name)
+  end)
+end)

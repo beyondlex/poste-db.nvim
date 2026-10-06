@@ -69,3 +69,24 @@ describe("util ellipsize", function()
     assert.equals("ab", util.ellipsize("abcdef", 2))
   end)
 end)
+
+describe("util.unquote_ident", function()
+  it("strips one matching pair of identifier quotes", function()
+    assert.equals("users", util.unquote_ident("`users`"))
+    assert.equals("users", util.unquote_ident('"users"'))
+    assert.equals("", util.unquote_ident('""'))
+  end)
+
+  it("keeps names whose ends merely look like quotes", function()
+    -- round-56 toml lesson: only a MATCHING pair quotes; a lone leading or
+    -- trailing quote is part of the name.
+    assert.equals("`users", util.unquote_ident("`users"))
+    assert.equals('users"', util.unquote_ident('users"'))
+    assert.equals("`", util.unquote_ident("`"))
+  end)
+
+  it("tolerates nil and bare names", function()
+    assert.equals("", util.unquote_ident(nil))
+    assert.equals("users", util.unquote_ident("users"))
+  end)
+end)

@@ -1,4 +1,6 @@
 --- Introspection --- context resolver for connection/database fallback.
+local util = require("poste-db.util")
+
 local M = {}
 
 local SKIP_KEYWORDS = {
@@ -6,19 +8,12 @@ local SKIP_KEYWORDS = {
   ["when"] = true, ["case"] = true, ["end"] = true,
 }
 
-local function strip_q(s)
-  if not s then return "" end
-  -- The parens matter: `gsub` also returns its substitution count, which
-  -- would ride along into any caller that splices this into `{ ... }`.
-  return (s:gsub("^`", ""):gsub("`$", ""):gsub('^"', ''):gsub('"$', ''))
-end
-
 local function pick_table_match(parsed_tables, word_lower)
   local matched = nil
   local schema_matched = nil
   for _, t in ipairs(parsed_tables or {}) do
-    local tn = strip_q(t.name):lower()
-    local ta = strip_q(t.alias):lower()
+    local tn = util.unquote_ident(t.name):lower()
+    local ta = util.unquote_ident(t.alias):lower()
     local ts = t.schema and t.schema:lower() or ""
     if tn == word_lower and not SKIP_KEYWORDS[tn] then
       matched = t
@@ -49,7 +44,7 @@ function M.resolve_detected_target(parsed, cword, db, after_dot_col)
     if tables then
       for _, t in ipairs(tables) do
         if t.alias and t.alias:lower() == prefix:lower() then
-          parent_table = strip_q(t.name)
+          parent_table = util.unquote_ident(t.name)
           parent_schema = t.schema
           break
         end
@@ -106,8 +101,8 @@ function M.resolve_detected_target(parsed, cword, db, after_dot_col)
     local is_table = false
     local schema_match = nil
     for _, t in ipairs(tables or {}) do
-      local tn = strip_q(t.name):lower()
-      local ta = strip_q(t.alias):lower()
+      local tn = util.unquote_ident(t.name):lower()
+      local ta = util.unquote_ident(t.alias):lower()
       local ts = t.schema and t.schema:lower() or ""
       if (tn == cword_lower or ta == cword_lower) and not SKIP_KEYWORDS[tn] then
         is_table = true
@@ -125,11 +120,11 @@ function M.resolve_detected_target(parsed, cword, db, after_dot_col)
       }
     end
     if not is_table and tables and #tables > 0
-      and not SKIP_KEYWORDS[strip_q(tables[1].name):lower()] then
+      and not SKIP_KEYWORDS[util.unquote_ident(tables[1].name):lower()] then
       return {
         kind = "column",
         db = db,
-        parent_table = strip_q(tables[1].name or tables[1].alias),
+        parent_table = util.unquote_ident(tables[1].name or tables[1].alias),
         parent_schema = tables[1].schema,
         column_name = cword,
       }

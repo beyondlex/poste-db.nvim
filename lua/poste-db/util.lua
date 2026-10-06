@@ -55,6 +55,23 @@ function M.utf8_safe_cut(s, max_bytes)
   return s:sub(1, cut)
 end
 
+--- Strip one MATCHING pair of identifier quotes (backtick or double quote)
+--- from `s`. Names that merely end in a quote character (`a"`) stay
+--- verbatim, so a table genuinely named `a"` is not rewritten. Detect
+--- responses (`poste context detect`) carry the source spelling of a name —
+--- `` `users` `` from a MySQL buffer — and every caller that MATCHES those
+--- names against a bare cword needs the quoted form gone first.
+--- @param s string|nil
+--- @return string
+function M.unquote_ident(s)
+  if not s then return "" end
+  local q = s:sub(1, 1)
+  if (q == "`" or q == '"') and #s >= 2 and s:sub(-1) == q then
+    return s:sub(2, -2)
+  end
+  return s
+end
+
 ---------------------------------------------------------------------------
 -- Merged from poste.nvim@5b3759e lua/poste/util.lua (family dissolution)
 ---------------------------------------------------------------------------

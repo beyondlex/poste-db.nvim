@@ -1,5 +1,6 @@
 --- Go-to-definition --- context detection via Rust CLI, route dispatch.
 local const = require("poste-db.constants")
+local util = require("poste-db.util")
 
 local M = {}
 
@@ -7,8 +8,11 @@ local function pick_table_match(parsed_tables, word_lower)
   local matched = nil
   local schema_matched = nil
   for _, t in ipairs(parsed_tables or {}) do
-    local tn = (t.name or ""):lower()
-    local ta = (t.alias or ""):lower()
+    -- Names arrive in their source spelling (`` `users` `` from a MySQL
+    -- buffer); the bare cword only matches unquoted. Same strip the
+    -- introspect sibling (introspect/context.lua) applies to the same JSON.
+    local tn = util.unquote_ident(t.name):lower()
+    local ta = util.unquote_ident(t.alias):lower()
     local ts = (t.schema or ""):lower()
     if tn == word_lower then
       matched = t
@@ -29,24 +33,29 @@ local function db_for_table(t, full_ctx)
   return (t and t.schema and t.schema ~= "") and t.schema or full_ctx.database
 end
 
+--- A detect entry's bare name field: quotes stripped, nil preserved (NOT ""
+--- — callers chain these into `or` fallbacks, and "" is truthy in Lua).
+local function bare(t, field)
+  local v = t and t[field]
+  if not v then return nil end
+  return util.unquote_ident(v)
+end
+
 local function table_by_name(parsed, name)
   for _, t in ipairs(parsed.tables or {}) do
-    if t.name and t.name:lower() == (name or ""):lower() then return t end
+    if t.name and util.unquote_ident(t.name):lower() == (name or ""):lower() then return t end
   end
   return nil
 end
 
 local function resolve_alias(parsed, prefix)
-  local resolved = nil
-  if prefix and parsed and parsed.tables then
-    for _, t in ipairs(parsed.tables) do
-      if t.alias and t.alias:lower() == prefix:lower() then
-        resolved = t.name
-        break
-      end
+  if not (prefix and parsed and parsed.tables) then return nil end
+  for _, t in ipairs(parsed.tables) do
+    if t.alias and util.unquote_ident(t.alias):lower() == prefix:lower() then
+      return bare(t, "name")
     end
   end
-  return resolved
+  return nil
 end
 
 --- 0-based index of the character before the word that ends at `from`
@@ -157,7 +166,7 @@ function M.resolve_detected_table_target(parsed, line_text, end_col, cword, full
       return {
         action = "navigate_to_table",
         database = db_for_table(matched, full_ctx),
-        table_name = matched.name or matched.alias or cword,
+        table_name = bare(matched, "name") or bare(matched, "alias") or cword,
         column_name = nil,
       }
     end
@@ -181,14 +190,14 @@ function M.resolve_detected_table_target(parsed, line_text, end_col, cword, full
         return {
           action = "navigate_to_table",
           database = db_for_table(matched, full_ctx),
-          table_name = matched.name or matched.alias or cword,
+          table_name = bare(matched, "name") or bare(matched, "alias") or cword,
           column_name = after_dot_col,
         }
       elseif schema_matched then
         return {
           action = "navigate_to_table",
           database = cword,
-          table_name = schema_matched.name,
+          table_name = bare(schema_matched, "name"),
           column_name = nil,
         }
       end
@@ -207,14 +216,14 @@ function M.resolve_detected_table_target(parsed, line_text, end_col, cword, full
         return {
           action = "navigate_to_table",
           database = db_for_table(matched, full_ctx),
-          table_name = matched.name or matched.alias or cword,
+          table_name = bare(matched, "name") or bare(matched, "alias") or cword,
           column_name = nil,
         }
       elseif schema_matched then
         return {
           action = "navigate_to_table",
           database = cword,
-          table_name = schema_matched.name,
+          table_name = bare(schema_matched, "name"),
           column_name = nil,
         }
       end
@@ -246,7 +255,7 @@ function M.resolve_detected_table_target(parsed, line_text, end_col, cword, full
           column_name = cword,
         }
       end
-      local target = parsed.tables[1].name or parsed.tables[1].alias
+      local target = bare(parsed.tables[1], "name") or bare(parsed.tables[1], "alias")
       if target then
         return {
           action = "navigate_to_table",
