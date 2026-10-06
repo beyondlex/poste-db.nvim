@@ -13,10 +13,20 @@ function M.build_connection_search_dir(buf)
 end
 
 function M.find_connection_target_line(config_lines, conn_name)
-  local pattern = '^%[' .. vim.pesc(conn_name) .. '%]'
+  -- The TOML parser accepts whitespace-padded quoted headers ([ 'my db' ]),
+  -- so a byte-exact ^[name] pattern would report a connection the file
+  -- really has as missing. Trim, then drop one MATCHING quote pair.
   for i, line in ipairs(config_lines or {}) do
-    if line:match(pattern) then
-      return i
+    local header = line:match("^%s*%[(.-)%]%s*$")
+    if header then
+      header = vim.trim(header)
+      local q = header:sub(1, 1)
+      if (q == "'" or q == '"') and #header >= 2 and header:sub(-1) == q then
+        header = header:sub(2, -2)
+      end
+      if header == conn_name then
+        return i
+      end
     end
   end
   return nil

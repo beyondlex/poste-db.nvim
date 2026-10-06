@@ -2,12 +2,12 @@ local route = require("poste-db.nav.route")
 
 describe("nav_route", function()
   it("routes connection directives", function()
-    local target = route.resolve_definition_route(1, 1, "-- @connection analytics", { 1, 0 }, {})
+    local target = route.resolve_definition_route("-- @connection analytics")
     assert.same({ kind = "connection", conn_name = "analytics" }, target)
   end)
 
   it("routes database directives", function()
-    local target = route.resolve_definition_route(1, 1, "-- @database blog", { 1, 0 }, { connection = "conn" })
+    local target = route.resolve_definition_route("-- @database blog")
     assert.same({ kind = "database", db_name = "blog" }, target)
   end)
 
@@ -16,7 +16,15 @@ describe("nav_route", function()
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "authors" })
     vim.api.nvim_set_current_buf(buf)
 
-    local target = route.resolve_definition_route(buf, 1, "authors", { 1, 0 }, { connection = "conn" })
+    local target = route.resolve_definition_route("authors")
     assert.same({ kind = "table", table_name = "authors" }, target)
+  end)
+
+  it("returns nil with no word under the cursor", function()
+    local buf = vim.api.nvim_create_buf(false, true)
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "" })
+    vim.api.nvim_set_current_buf(buf)
+
+    assert.is_nil(route.resolve_definition_route(""))
   end)
 end)

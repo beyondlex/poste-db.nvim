@@ -3,7 +3,10 @@ local const = require("poste-db.constants")
 
 local M = {}
 
-function M.resolve_definition_route(buf, line_num, line_text, cursor, full_ctx)
+--- Categorize the go-to-definition target from the cursor line alone. The
+--- table branch reads the word with <cword>, so this must run with the SQL
+--- buffer as the current window — which goto-definition always does.
+function M.resolve_definition_route(line_text)
   local conn_match = const.match_directive(line_text, const.DIRECTIVE_CONNECTION)
   if conn_match then
     return { kind = "connection", conn_name = vim.trim(conn_match) }

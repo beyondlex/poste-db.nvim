@@ -9,7 +9,7 @@ function M.goto_definition()
   local cursor = vim.api.nvim_win_get_cursor(0)
   local line_num = cursor[1]
   local line_text = vim.api.nvim_buf_get_lines(buf, line_num - 1, line_num, false)[1] or ""
-  local target = route.resolve_definition_route(buf, line_num, line_text, cursor)
+  local target = route.resolve_definition_route(line_text)
   if not target then
     vim.notify("No connection context. Add -- @connection <name> to the file header.", vim.log.levels.WARN, { title = "PosteDb" })
     return

@@ -1,9 +1,8 @@
 local saved_poste_util = package.loaded["poste-db.util"]
-package.loaded["poste-db.util"] = saved_poste_util or {
-  clean_nil = function()
-    return nil
-  end,
-}
+-- util is a leaf module (no requires, no side effects), so the fallback is
+-- the real thing — a hand-rolled fake here went stale the moment
+-- nav/detect started calling util.unquote_ident.
+package.loaded["poste-db.util"] = saved_poste_util or require("poste-db.util")
 
 local nav = require("poste-db.nav")
 
