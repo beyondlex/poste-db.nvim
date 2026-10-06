@@ -11,7 +11,11 @@ function M.goto_definition()
   local line_text = vim.api.nvim_buf_get_lines(buf, line_num - 1, line_num, false)[1] or ""
   local target = route.resolve_definition_route(line_text)
   if not target then
-    vim.notify("No connection context. Add -- @connection <name> to the file header.", vim.log.levels.WARN, { title = "PosteDb" })
+    -- resolve_definition_route only returns nil when <cword> is empty (the
+    -- directives and the table word all return before that), so the message
+    -- names the real cause — this used to say "add a @connection header",
+    -- which the user cannot fix by adding one.
+    vim.notify("No word under cursor", vim.log.levels.WARN, { title = "PosteDb" })
     return
   end
 
