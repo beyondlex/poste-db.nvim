@@ -33,6 +33,19 @@ describe("introspect helpers", function()
     }, lines)
   end)
 
+  -- Entries arrive straight from the binary's JSON; a null (vim.NIL) or
+  -- missing type/name used to reach the `..` operator and raise.
+  it("build_table_lines survives a missing or null type", function()
+    assert.same({ "  logs" }, helpers.build_table_lines({ { name = "logs" } }))
+    assert.same({ "  logs" }, helpers.build_table_lines({ { name = "logs", type = vim.NIL } }))
+    assert.same({ "  logs" }, helpers.build_table_lines({ { name = "logs", type = "" } }))
+  end)
+
+  it("build_table_lines keeps a placeholder row when the name is missing", function()
+    assert.same({ "  ?  (VIEW)" }, helpers.build_table_lines({ { type = "VIEW" } }))
+    assert.same({ "  ?" }, helpers.build_table_lines({ { name = vim.NIL } }))
+  end)
+
   it("build_database_info_lines formats database metadata", function()
     local lines = helpers.build_database_info_lines({
       name = "blog",

@@ -101,4 +101,22 @@ describe("introspect column helper", function()
       "analytics",
     }, captured)
   end)
+
+  -- The empty-table-name guard used to sit AFTER the quote strip, so a nil
+  -- table_name raised before the check could speak.
+  it("notifies instead of raising on a nil table name", function()
+    local notified = nil
+    local notify = vim.notify
+    vim.notify = function(msg)
+      notified = msg
+    end
+    exec_stub.run_json_items_job = function()
+      error("should not run a job")
+    end
+
+    column.show_column_info("primary", "blog", nil, "id", nil, function() end)
+
+    vim.notify = notify
+    assert.equals("Cannot introspect column: empty table name", notified)
+  end)
 end)

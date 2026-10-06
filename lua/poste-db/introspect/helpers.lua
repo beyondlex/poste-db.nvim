@@ -49,8 +49,15 @@ end
 function M.build_table_lines(items)
   local lines = {}
   for _, item in ipairs(items or {}) do
-    local suffix = item.type ~= "BASE TABLE" and "  (" .. item.type .. ")" or ""
-    lines[#lines + 1] = "  " .. item.name .. suffix
+    -- Entries come straight from the binary's JSON; a null type (some
+    -- backends emit one for views) or name must not reach the `..`
+    -- operator. Type is checked as a string so vim.NIL fails the guard too.
+    local name = type(item.name) == "string" and item.name ~= "" and item.name or "?"
+    local suffix = ""
+    if type(item.type) == "string" and item.type ~= "" and item.type ~= "BASE TABLE" then
+      suffix = "  (" .. item.type .. ")"
+    end
+    lines[#lines + 1] = "  " .. name .. suffix
   end
   return lines
 end

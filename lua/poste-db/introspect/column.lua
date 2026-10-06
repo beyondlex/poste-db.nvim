@@ -6,14 +6,16 @@ local ui = require("poste-db.introspect.ui")
 local M = {}
 
 function M.show_column_info(conn, db, table_name, col_name, schema, show_float)
-  table_name = table_name:gsub("^`", ""):gsub("`$", ""):gsub('^"', ''):gsub('"$', '')
-  col_name = col_name:gsub("^`", ""):gsub("`$", ""):gsub('^"', ''):gsub('"$', '')
+  -- Guard before the quote strip: gsub on a nil table_name would raise
+  -- before the empty-name check below could speak.
   if not table_name or table_name == "" then
     vim.schedule(function()
       vim.notify("Cannot introspect column: empty table name", vim.log.levels.ERROR, { title = const.PLUGIN_TITLE })
     end)
     return
   end
+  table_name = table_name:gsub("^`", ""):gsub("`$", ""):gsub('^"', ''):gsub('"$', '')
+  col_name = col_name and col_name:gsub("^`", ""):gsub("`$", ""):gsub('^"', ''):gsub('"$', '') or ""
 
   local connections = require("poste-db.connections")
   local url, url_err = connections.resolve_connection_url(conn)
