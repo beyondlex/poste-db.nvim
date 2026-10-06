@@ -116,9 +116,15 @@ function M.run_async(cmd, opts)
     return nil
   end
 
+  -- chansend/chanclose THROW, they do not return -1: a channel whose stream
+  -- already closed answers E900 / "Can't send data to closed stream" (the
+  -- process can die between jobstart and this write). A throw here would
+  -- skip every on_exit below and leave the caller's spinner running — the
+  -- same hazard the guarded jobstart above prevents (synced to
+  -- poste-redis/cli.lua).
   if opts.stdin and job_id > 0 then
-    vim.fn.chansend(job_id, opts.stdin)
-    vim.fn.chanclose(job_id, "stdin")
+    local ok_send = pcall(vim.fn.chansend, job_id, opts.stdin)
+    if ok_send then pcall(vim.fn.chanclose, job_id, "stdin") end
   end
 
   return job_id

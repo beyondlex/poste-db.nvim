@@ -116,6 +116,31 @@ describe("poste-db.session_conn", function()
     local outcome = session_conn.execute("postgres://h/app", "SELECT 1", {}, nil, "db9")
     assert.equals("start_failed", outcome)
   end)
+
+  it("survives a chansend THROW on a dead channel", function()
+    -- chansend does not return -1 on a dead stream, it RAISES ("Can't send
+    -- data to closed stream" / E900): the process can die between execute()'s
+    -- alive check and the write. The unguarded write skipped the pending
+    -- cleanup and the caller's on_error, and callers upstream of execute
+    -- (a keymap, a scan loop) saw the raw Lua error instead. (Synced from
+    -- poste-redis/session_conn_spec.lua.)
+    local session = session_conn.get("postgres://h/app", nil, "db1")
+    assert.is_not_nil(session)
+    vim.fn.chansend = function()
+      error("Can't send data to closed stream")
+    end
+    local errs = {}
+    local outcome = session_conn.execute("postgres://h/app", "SELECT 1", {
+      on_response = function() error("on_response must not fire") end,
+      on_error = function(msg) errs[#errs + 1] = msg end,
+    }, nil, "db1")
+    assert.equals("not_running", outcome)
+    assert.equals(1, #errs)
+    assert.match("chansend failed", errs[1])
+    -- the request's pending entry must be gone, or the session looks busy
+    -- with a request nothing will ever answer
+    assert.equals(0, vim.tbl_count(session.pending))
+  end)
 end)
 
 describe("session_conn database_from_url", function()

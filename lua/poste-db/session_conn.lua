@@ -331,10 +331,16 @@ function M.execute(conn_url, sql, callbacks, bufnr, database)
     on_sql_error = callbacks.on_sql_error,
   }
   local payload = vim.json.encode({ seq = seq, sql = sql }) .. "\n"
-  local sent = vim.fn.chansend(session.job_id, payload)
-  state.log("DEBUG", string.format("SQL session send seq=%d job=%d chansend=%d", seq, session.job_id, sent))
+  -- pcall, not just the `sent <= 0` check: chansend THROWS on a dead channel
+  -- ("Can't send data to closed stream" / E900) — the process can die after
+  -- the alive check and before this write, and an uncaught throw would skip
+  -- the pending cleanup and the caller's on_error (synced to
+  -- poste-redis/session_conn.lua, whose SELECT path was hardened the same
+  -- way first).
+  local ok_send, sent = pcall(vim.fn.chansend, session.job_id, payload)
+  state.log("DEBUG", string.format("SQL session send seq=%d job=%d chansend=%s", seq, session.job_id, tostring(sent)))
   state.log("DEBUG", "SQL session payload: " .. (sql and sql:sub(1, 300):gsub("\n", "\\n") or "nil"))
-  if sent <= 0 then
+  if not ok_send or type(sent) ~= "number" or sent <= 0 then
     session.pending[seq] = nil
     if callbacks.on_error then callbacks.on_error("SQL session chansend failed") end
     return "not_running"
