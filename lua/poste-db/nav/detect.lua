@@ -57,6 +57,18 @@ local function back_over_word(line_text, from)
   return p
 end
 
+--- The word after the dot when the cursor word ends right before one — the
+--- cursor-on-alias spelling of `alias.column`, where the target column is the
+--- word PAST the dot. Any other character (a `,` with no space after the
+--- column, a space, `)`) means the cursor word IS the column: scanning
+--- forward from there used to steal the next statement token, so
+--- `SELECT u.name,o.total` with the cursor on `name` navigated to column
+--- `o`. Mirrors the `nxt == "."` guard in the column/keyword branch below.
+local function word_after_dot(line_text, end_col)
+  if line_text:sub(end_col + 1, end_col + 1) ~= "." then return nil end
+  return line_text:sub(end_col + 2):match("^([%w_]+)")
+end
+
 function M.extract_sql_block(all_lines, line_num, line_text, end_col)
   local block_start = 1
   if line_num > 1 then
@@ -110,23 +122,19 @@ function M.resolve_detected_table_target(parsed, line_text, end_col, cword, full
 
   if parsed.ctx_type == "dot_column" and parsed.ctx_data then
     local prefix = parsed.ctx_data or ""
-    local ad = line_text:sub(end_col + 2)
-    local cm = ad:match("^([%w_]+)")
     return {
       action = "navigate_to_table",
       database = parsed.ctx_schema or full_ctx.database,
       table_name = resolve_alias(parsed, prefix) or prefix,
-      column_name = cm or cword,
+      column_name = word_after_dot(line_text, end_col) or cword,
     }
   elseif parsed.ctx_type == "insert_column" and parsed.ctx_data then
     local prefix = parsed.ctx_data or ""
-    local ad = line_text:sub(end_col + 2)
-    local cm = ad:match("^([%w_]+)")
     return {
       action = "navigate_to_table",
       database = parsed.ctx_schema or full_ctx.database,
       table_name = resolve_alias(parsed, prefix) or prefix,
-      column_name = cm or cword,
+      column_name = word_after_dot(line_text, end_col) or cword,
     }
   elseif parsed.ctx_type == "schema_table" and parsed.ctx_data then
     local schema = parsed.ctx_data or ""
