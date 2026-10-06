@@ -332,3 +332,26 @@ handler，旧实例缓存永不失效）还是 `clear = false`（只有第一个
 
 *Latest: 2026-10-03 autocmd 回调按内容等价去重，per-instance 注册是死路（#20）。
 新增条目时保持同一格式：发生了什么（带 file:line）→ 约束（可执行的检查动作）。*
+
+## 21. 给"被桩的模块"提升 require，全量门是绿的，单文件跑才炸
+
+**发生了什么**：round 57 把 `nav/handlers.lua` 的 `require("poste-db.context")`
+从函数体内提升到模块顶层（配合新的 `context.detect_command`）。
+`sql_nav_spec.lua` 用 `stub_module("poste-db.context", ...)` 在测试体里替换
+`package.loaded`，但 spec 文件顶部早就 `require("poste-db.nav")`——顶层
+require 让 handlers 在**那一刻**捕获了真模块，桩永远落不进去。更隐蔽的是：
+全量 `tests/run.sh` 是**绿的**（别的 spec 先加载了真 `poste-db.context`，
+`stub_module` 保存/恢复的本来就是真模块，行为碰巧一致），只有
+`tests/run_one.sh tests/sql/sql_nav_spec.lua` 单文件跑才红。同一天还有第二
+个变体：`sql_nav_spec` 给 `poste-db.util` 的兜底桩是手写的假模块
+（`{ clean_nil = ... }`），nav/detect 一旦开始调用 `util.unquote_ident`
+就 nil 索引——同样是单文件跑才炸（全量跑时 util 已被加载，兜底分支没走到）。
+
+**约束**：(1) 给一个"有 spec 通过 `package.loaded` 桩它"的模块新增顶层
+require 前，先 grep 那个模块的 spec 找 `stub_module`/`package.loaded`；
+约定俗成的规则是 handlers 层保持惰性 require，并在文件头注释里写明为什么。
+(2) 给叶子模块写兜底桩时回退到真模块（`saved or require(...)`），不要手写
+假模块——假模块在真实模块长出新函数那天变成 nil 索引。(3) 改动涉及 require
+结构时，单文件跑一次受影响的 spec 是必要验收，全量绿不算数（两个环境在
+`package.loaded` 的预填充状态上不等价——`tests/run_one.sh` 头注释记录过
+另一个实例）。
