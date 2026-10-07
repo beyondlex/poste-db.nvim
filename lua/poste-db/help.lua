@@ -61,10 +61,10 @@ local DESCRIPTIONS = {
     history_toggle = "Toggle request history sidebar",
   },
   sql_table_ops = {
-    select_all = "SELECT * from table",
-    refresh_all = "Refresh table list",
-    describe_all = "DESCRIBE table",
-    toggle_menu = "Toggle action menu",
+    add_column = "Add a column (prompts for name/type/nullability/default)",
+    rename_column = "Rename a column",
+    drop_column = "Drop a column (asks first)",
+    alter_type = "Alter a column's type",
   },
   sql_db_browser = {
     close = "Close DB Browser",

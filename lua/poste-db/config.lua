@@ -96,11 +96,18 @@ M.defaults = {
       history_prev = "<leader>p",
       help = "g?",
     },
+    -- Action names match what the keys DO (they bind from the db-browser
+    -- buffer via table_ops.register_keymaps). The old names — select_all,
+    -- refresh_all, describe_all, toggle_menu — described browser actions the
+    -- keys never performed, and :PosteDbHelp showed those lies; a user who
+    -- disabled `select_all` silently lost add-column instead. The old names
+    -- are still honored when a config carries them (table_ops reads legacy
+    -- first), they just no longer appear here.
     sql_table_ops = {
-      select_all = "ma",
-      refresh_all = "mr",
-      describe_all = "md",
-      toggle_menu = "mt",
+      add_column = "ma",
+      rename_column = "mr",
+      drop_column = "md",
+      alter_type = "mt",
     },
     sql_db_browser = {
       toggle_node = "<CR>",

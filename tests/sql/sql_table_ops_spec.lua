@@ -143,3 +143,66 @@ describe("poste-db table_ops DDL insertion", function()
     assert.equals(5, #lines)
   end)
 end)
+
+--- The register_keymaps action names used to be copied from a browser
+--- keymap group (select_all/refresh_all/...), so :PosteDbHelp described
+--- keys as doing things they never did and a config disabling `select_all`
+--- silently lost add-column. The rename keeps the legacy names readable.
+describe("poste-db table_ops keymap names", function()
+  local config = require("poste-db.config")
+  local ops = require("poste-db.table_ops")
+
+  local saved
+  local function with_table_ops(overrides, fn)
+    saved = vim.deepcopy(config.config.keymaps.sql_table_ops)
+    config.config.keymaps.sql_table_ops = overrides
+    fn()
+    config.config.keymaps.sql_table_ops = saved
+  end
+
+  it("binds the new action names with their default keys", function()
+    local bound = {}
+    local orig_set = vim.keymap.set
+    vim.keymap.set = function(mode, lhs) bound[lhs] = true end
+    with_table_ops({ add_column = "ma", rename_column = "mr", drop_column = "md", alter_type = "mt" }, function()
+      ops.register_keymaps(vim.api.nvim_create_buf(false, true), function() return nil end)
+    end)
+    vim.keymap.set = orig_set
+    assert.is_true(bound.ma and bound.mr and bound.md and bound.mt)
+  end)
+
+  it("an override of the legacy name still wins", function()
+    local bound = {}
+    local orig_set = vim.keymap.set
+    vim.keymap.set = function(mode, lhs) bound[lhs] = true end
+    with_table_ops({ add_column = "ma", rename_column = "mr", drop_column = "md", alter_type = "mt", select_all = "mx" }, function()
+      ops.register_keymaps(vim.api.nvim_create_buf(false, true), function() return nil end)
+    end)
+    vim.keymap.set = orig_set
+    assert.is_true(bound.mx, "the pre-rename override must survive the rename")
+    assert.is_nil(bound.ma, "the legacy override replaces the new default")
+  end)
+
+  it("a legacy `false` disables the binding", function()
+    local bound = {}
+    local orig_set = vim.keymap.set
+    vim.keymap.set = function(mode, lhs) bound[lhs] = true end
+    with_table_ops({ add_column = "ma", rename_column = "mr", drop_column = "md", alter_type = "mt", select_all = false }, function()
+      ops.register_keymaps(vim.api.nvim_create_buf(false, true), function() return nil end)
+    end)
+    vim.keymap.set = orig_set
+    assert.is_nil(bound.ma, "false must disable, not fall back to the default key")
+    assert.is_true(bound.mr)
+  end)
+
+  it("help describes what the keys actually do", function()
+    local desc = require("poste-db.help")._test.descriptions.sql_table_ops
+    -- the old copy claimed select_all ran a SELECT; the four keys prompt for
+    -- column DDL, and the descriptions must say so
+    assert.match("column", desc.add_column)
+    assert.match("column", desc.rename_column)
+    assert.match("column", desc.drop_column)
+    assert.match("column", desc.alter_type)
+    assert.is_nil(desc.select_all)
+  end)
+end)

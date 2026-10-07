@@ -206,7 +206,22 @@ end
 function M.register_keymaps(browser_buf, get_table_context)
   local opts = { buffer = browser_buf, noremap = true, silent = true }
 
-  local k = config.get_keymap("sql_table_ops", "select_all", "ma")
+  -- The action names used to be copied from a browser keymap group
+  -- (select_all/refresh_all/describe_all/toggle_menu) while the keys actually
+  -- add/rename/drop/alter columns — :PosteDbHelp described what the keys
+  -- never did. The legacy names stay readable so a pre-rename config's
+  -- override (or `false` disable) survives; they are no longer defaults, so
+  -- their presence in the merged config means the user set them.
+  local sec = config.config.keymaps.sql_table_ops or {}
+  local function op_key(action, legacy, default)
+    if sec[legacy] ~= nil then
+      if sec[legacy] == false then return nil end
+      return sec[legacy]
+    end
+    return config.get_keymap("sql_table_ops", action, default)
+  end
+
+  local k = op_key("add_column", "select_all", "ma")
   if k then
     vim.keymap.set("n", k, function()
       local ctx = get_table_context()
@@ -214,7 +229,7 @@ function M.register_keymaps(browser_buf, get_table_context)
     end, vim.tbl_extend("force", opts, { desc = "Add column" }))
   end
 
-  k = config.get_keymap("sql_table_ops", "refresh_all", "mr")
+  k = op_key("rename_column", "refresh_all", "mr")
   if k then
     vim.keymap.set("n", k, function()
       local ctx = get_table_context()
@@ -222,7 +237,7 @@ function M.register_keymaps(browser_buf, get_table_context)
     end, vim.tbl_extend("force", opts, { desc = "Rename column" }))
   end
 
-  k = config.get_keymap("sql_table_ops", "describe_all", "md")
+  k = op_key("drop_column", "describe_all", "md")
   if k then
     vim.keymap.set("n", k, function()
       local ctx = get_table_context()
@@ -230,7 +245,7 @@ function M.register_keymaps(browser_buf, get_table_context)
     end, vim.tbl_extend("force", opts, { desc = "Drop column" }))
   end
 
-  k = config.get_keymap("sql_table_ops", "toggle_menu", "mt")
+  k = op_key("alter_type", "toggle_menu", "mt")
   if k then
     vim.keymap.set("n", k, function()
       local ctx = get_table_context()
