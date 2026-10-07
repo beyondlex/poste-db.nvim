@@ -1,5 +1,23 @@
 local M = {}
 
+-- A UTF-8 BOM (U+FEFF). A file saved by a BOM-writing editor (Windows notepad,
+-- Neovim with 'bomb' off) keeps it glued to the buffer's first line, where it
+-- is invisible but is not `%s` — every anchored `^%s*` matcher below went
+-- blind on line 1: the `-- @connection` directive, the directive-comment skip
+-- in statement extraction, and the `###` section marker. The Rust CLI strips
+-- the same prefix in strip_directives / extract_connection_directive.
+local BOM = "\xef\xbb\xbf"
+
+--- Drop a leading BOM (only line 1 of a buffer/file can carry one).
+--- @param line string
+--- @return string
+function M.strip_leading_bom(line)
+  if line:sub(1, #BOM) == BOM then
+    return line:sub(#BOM + 1)
+  end
+  return line
+end
+
 M.DIRECTIVE_CONNECTION = "connection"
 M.DIRECTIVE_DATABASE = "database"
 M.DIRECTIVE_PROTOCOL = "protocol"
@@ -253,11 +271,13 @@ M.PG_CATALOG_TABLES = {
 }
 
 function M.is_section_marker(line)
-  return type(line) == "string" and line:match(M.SECTION_MARKER_PATTERN) ~= nil
+  return type(line) == "string"
+    and M.strip_leading_bom(line):match(M.SECTION_MARKER_PATTERN) ~= nil
 end
 
 function M.is_directive_comment(line)
-  return type(line) == "string" and line:match(M.DIRECTIVE_PREFIX_PATTERN) ~= nil
+  return type(line) == "string"
+    and M.strip_leading_bom(line):match(M.DIRECTIVE_PREFIX_PATTERN) ~= nil
 end
 
 function M.match_directive(line, directive_name)
@@ -265,7 +285,7 @@ function M.match_directive(line, directive_name)
     return nil
   end
   local pattern = "^%s*%-%-%s*@" .. vim.pesc(directive_name) .. "%s+(.+)"
-  return line:match(pattern)
+  return M.strip_leading_bom(line):match(pattern)
 end
 
 return M

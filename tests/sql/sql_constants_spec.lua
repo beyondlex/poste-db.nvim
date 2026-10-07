@@ -13,6 +13,24 @@ describe("constants helpers", function()
     assert.is_nil(const.match_directive("###", const.DIRECTIVE_CONNECTION))
   end)
 
+  it("sees line-1 anchors through a leading UTF-8 BOM", function()
+    -- A BOM-writing editor glues U+FEFF to the buffer's first line, where it
+    -- is not `%s`: the anchored matchers went blind exactly when the directive
+    -- or the section marker sat on line 1 (the Rust CLI's
+    -- extract_connection_directive had the same hole, fixed in lockstep).
+    local bom = "\xef\xbb\xbf"
+    assert.equals("analytics", const.match_directive(bom .. "-- @connection analytics", const.DIRECTIVE_CONNECTION))
+    assert.is_true(const.is_directive_comment(bom .. "-- @connection analytics"))
+    assert.is_true(const.is_section_marker(bom .. "### refresh"))
+    -- a BOM mid-line is data and must not manufacture a match
+    assert.is_nil(const.match_directive("-- " .. bom .. "@connection analytics", const.DIRECTIVE_CONNECTION))
+    assert.is_false(const.is_section_marker("-- " .. bom .. "###"))
+    -- non-strings keep refusing
+    assert.is_nil(const.match_directive(nil, const.DIRECTIVE_CONNECTION))
+    assert.is_false(const.is_section_marker(nil))
+    assert.is_false(const.is_directive_comment(nil))
+  end)
+
   it("exposes shared numeric defaults", function()
     assert.equals(0.7, const.FLOAT_WIDTH_RATIO)
     assert.equals(120, const.FLOAT_MAX_WIDTH)
