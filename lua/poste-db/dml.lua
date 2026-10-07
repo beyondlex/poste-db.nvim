@@ -111,7 +111,14 @@ local function where_eq(col_name, val, dialect, allow_expr, col_type)
   return ident.quote(col_name, dialect) .. " = " .. quote_val(val, dialect, allow_expr, col_type)
 end
 
-local function build_where(columns, pk_cols, row_values, dialect, allow_expr)
+local function build_where(columns, pk_cols, row_values, dialect)
+  -- The WHERE identifies the row; its values are DATA the user never typed
+  -- this commit, so the `__expr:` hatch stays closed here even when the
+  -- caller opened it for SET. The pk path already passed nil explicitly; the
+  -- all-columns fallback needs the same gate — a stored text value that
+  -- merely starts with `__expr:` (a note documenting the feature, or a
+  -- crafted `__expr:1=1 OR 1=1`) went out as raw SQL, and the OR form made
+  -- the WHERE true for every row: one cell edit rewrote the whole table.
   if #pk_cols > 0 then
     local parts = {}
     for _, ci in ipairs(pk_cols) do
@@ -125,7 +132,7 @@ local function build_where(columns, pk_cols, row_values, dialect, allow_expr)
   for i, col in ipairs(columns or {}) do
     local val = row_values[i]
     if val ~= nil and val ~= vim.NIL then
-      parts[#parts + 1] = where_eq(col.name, val, dialect, allow_expr, col_type_of(col))
+      parts[#parts + 1] = where_eq(col.name, val, dialect, nil, col_type_of(col))
     end
   end
   return table.concat(parts, " AND ")
@@ -152,7 +159,7 @@ function M.generate_update(schema, table_name, columns, modifications, row_value
   local where = ""
   if row_values then
     local pk_cols = find_pk_columns(columns)
-    where = build_where(columns, pk_cols, row_values, dialect, allow_expr)
+    where = build_where(columns, pk_cols, row_values, dialect)
   end
   -- A missing WHERE target means a WHERE-less UPDATE — a full-table rewrite.
   -- Refuse instead: an all-NULL row (no PK, nothing to match on) cannot be

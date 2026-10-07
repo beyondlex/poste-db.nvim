@@ -265,6 +265,16 @@ describe("generate_insert __expr gating", function()
       { { col = 1, new_val = "y" } },
       { "__expr:1=1" }, "postgres")
     assert.equals('UPDATE "t" SET "note" = \'y\' WHERE "note" = \'__expr:1=1\';', sql3)
+
+    -- the hatch stays closed in the WHERE even when the caller opened it for
+    -- SET: WHERE values are stored DATA, not user input this commit. Open,
+    -- the stored `__expr:1=1 OR 1=1` went out as raw SQL and the OR made the
+    -- WHERE true for every row — one cell edit rewrote the whole table.
+    local sql4 = dml.generate_update(
+      nil, "t", { { name = "note", ctype = "text" } },
+      { { col = 1, new_val = "__expr:now()" } },
+      { "__expr:1=1 OR 1=1" }, "postgres", true)
+    assert.equals('UPDATE "t" SET "note" = now() WHERE "note" = \'__expr:1=1 OR 1=1\';', sql4)
   end)
 end)
 
