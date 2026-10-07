@@ -817,6 +817,23 @@ describe("connections format_connection", function()
     })
     assert.equals("📦 lite — data.db 🔒", line)
   end)
+
+  it("marks the connection the buffer context points at", function()
+    -- the picker must answer "which one am I on?" before the user re-picks
+    local line = connections._test.format_connection({
+      name = "pg-dev", dialect = "postgres", host = "h", database = "app",
+    }, "pg-dev")
+    assert.equals("🐘 pg-dev — h:5432/app  [active]", line)
+    -- another connection (or no context) renders unchanged
+    local other = connections._test.format_connection({
+      name = "pg-dev", dialect = "postgres", host = "h", database = "app",
+    }, "pg-prod")
+    assert.equals("🐘 pg-dev — h:5432/app", other)
+    local none = connections._test.format_connection({
+      name = "pg-dev", dialect = "postgres", host = "h", database = "app",
+    }, nil)
+    assert.equals("🐘 pg-dev — h:5432/app", none)
+  end)
 end)
 
 describe("connections percent_encode", function()

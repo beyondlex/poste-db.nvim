@@ -523,20 +523,23 @@ local dialect_icons = {
   clickhouse = "🧅",
 }
 
-local function format_connection(conn)
+local function format_connection(conn, active_name)
   local icon = dialect_icons[conn.dialect] or "❓"
   local name = conn.name or "?"
   local tunnel_mark = conn.tunnel and " 🔒" or ""
+  -- Mark the connection the current buffer context already points at, so the
+  -- picker answers "which one am I on?" before the user re-picks blindly.
+  local active_mark = (active_name and name == active_name) and "  [active]" or ""
 
   if conn.dialect == "sqlite" then
-    return string.format("%s %s — %s%s", icon, name, conn.path or "?", tunnel_mark)
+    return string.format("%s %s — %s%s%s", icon, name, conn.path or "?", tunnel_mark, active_mark)
   else
     local host = conn.host or "localhost"
     -- tonumber: a quoted `port = "5432"` in connections.toml is a string and
     -- would make %d throw, killing the whole picker
     local port = tonumber(conn.port) or const.default_port(conn.dialect) or 3306
     local db = conn.database or ""
-    return string.format("%s %s — %s:%d/%s%s", icon, name, host, port, db, tunnel_mark)
+    return string.format("%s %s — %s:%d/%s%s%s", icon, name, host, port, db, tunnel_mark, active_mark)
   end
 end
 
@@ -554,7 +557,7 @@ function M.select_connection()
 
     local items = {}
     for _, conn in ipairs(connections) do
-      table.insert(items, format_connection(conn))
+      table.insert(items, format_connection(conn, state.context.connection))
     end
 
     select_mod.select(items, "Select Connection", function(selected)
@@ -631,7 +634,7 @@ function M.test_connection()
 
     local items = {}
     for _, conn in ipairs(connections) do
-      table.insert(items, format_connection(conn))
+      table.insert(items, format_connection(conn, state.context.connection))
     end
 
     select_mod.select(items, "Test Connection", function(selected)
