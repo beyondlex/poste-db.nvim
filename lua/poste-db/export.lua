@@ -553,7 +553,18 @@ function M.run(format_value, destination, path)
   end)
 end
 
---- Command completion helper
+--- Command completion helper.
+--- Which argument the cursor sits on is decided the way vim delivers the two
+--- arguments: ArgLead is the prefix of the word UNDER the cursor, and a
+--- trailing space in CmdLine means the cursor starts a fresh empty argument.
+--- words[1] is the command name itself, so the 1-based argument number is
+--- words - 1 (0 = no argument started yet).
+--- The old arithmetic counted the command name as argument #1: mid-word on
+--- the format slot (`:PosteDbExport cs<Tab>`) answered with the DESTINATION
+--- list — an empty match for "cs", or `clipboard` completed into the format
+--- slot, which then failed as "Unknown export format 'clipboard'" — and Tab
+--- after a terminated format (`:PosteDbExport csv <Tab>`) fell through to
+--- filename completion instead of offering destinations.
 function M.complete(ArgLead, CmdLine)
   -- prefix match on plain text: f:find(ArgLead) treats the arg as a Lua
   -- pattern, so a magic `%`/`-` on the command line errors the completion.
@@ -564,15 +575,16 @@ function M.complete(ArgLead, CmdLine)
     end
     return out
   end
-  local parts = {}
-  for word in CmdLine:gmatch("%S+") do
-    table.insert(parts, word)
+  local trailing = CmdLine:match("%s$") ~= nil
+  local words = 0
+  for _ in CmdLine:gmatch("%S+") do
+    words = words + 1
   end
-  local n = #parts
-  if n == 0 or (n == 1 and not CmdLine:match("%s$")) then
+  local arg = words - 1 + (trailing and 1 or 0)
+  if arg <= 1 then
     return starts_with({ "csv", "tsv", "json", "md", "sql" }, ArgLead)
   end
-  if n == 1 or (n == 2 and not CmdLine:match("%s$")) then
+  if arg == 2 then
     return starts_with({ "clipboard", "file" }, ArgLead)
   end
   return vim.fn.getcompletion(ArgLead, "file")

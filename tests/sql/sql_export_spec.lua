@@ -314,9 +314,24 @@ describe("export complete", function()
     assert.same({ "csv", "tsv", "json", "md", "sql" }, formats)
   end)
 
-  it("offers clipboard and file destinations after a format", function()
-    local dests = export.complete("", "PosteDbExport csv")
-    assert.same({ "clipboard", "file" }, dests)
+  it("matches the format prefix mid-word — the shape vim really passes", function()
+    -- `:PosteDbExport cs<Tab>`: CmdLine carries the command name plus the word
+    -- under the cursor. The old word-count read this as the destination slot
+    -- and returned nothing (or completed `clipboard` into the format slot).
+    assert.same({ "csv" }, export.complete("cs", "PosteDbExport cs"))
+    assert.same({ "csv" }, export.complete("csv", "PosteDbExport csv"))
+  end)
+
+  it("offers destinations once the format is terminated by a space", function()
+    -- a trailing space means the cursor starts the NEXT (destination) argument
+    assert.same({ "clipboard", "file" }, export.complete("", "PosteDbExport csv "))
+    assert.same({ "file" }, export.complete("f", "PosteDbExport csv f"))
+  end)
+
+  it("falls back to filename completion only from the third argument on", function()
+    -- path completion calls vim.fn.getcompletion; a lead nothing in this cwd
+    -- matches pins the DISPATCH (file lookup reached, destination list not)
+    assert.same(vim.fn.getcompletion("zz_", "file"), export.complete("zz_", "PosteDbExport csv clipboard zz_"))
   end)
 
   it("matches the prefix plainly — a magic ArgLead neither errors nor fuzzy-matches", function()
