@@ -102,3 +102,48 @@ describe("buffer_search record_search", function()
     assert.same({}, search.search_history)
   end)
 end)
+
+describe("buffer_search search_text_of", function()
+  local text_of = search._test.search_text_of
+
+  it("renders a JSON/JSONB cell as the compact JSON the renderer shows", function()
+    -- tostring on a table is a pointer address; searching for text visibly
+    -- inside a JSONB cell must match what is on screen
+    assert.equals('{"a":1}', text_of({ a = 1 }))
+    assert.equals("[1,2]", text_of({ 1, 2 }))
+  end)
+
+  it("falls back to inspect when a table cannot be encoded", function()
+    local cyc = {}
+    cyc.self = cyc
+    assert.equals(vim.inspect(cyc), text_of(cyc))
+  end)
+
+  it("keeps the old scalar shapes", function()
+    assert.equals("", text_of(nil))
+    assert.equals("", text_of(vim.NIL))
+    assert.equals("42", text_of(42))
+    assert.equals("true", text_of(true))
+    assert.equals("alice", text_of("alice"))
+  end)
+end)
+
+describe("buffer_search same_value", function()
+  local same = search._test.same_value
+
+  it("compares two separately-decoded JSON cells by content", function()
+    -- the filter value and a matching row come from different json.decode
+    -- calls, so pointer equality kept only the row the filter was taken from
+    assert.is_true(same({ a = 1 }, { a = 1 }))
+    assert.is_true(same({ 1, "x" }, { 1, "x" }))
+    assert.is_false(same({ a = 1 }, { a = 2 }))
+    assert.is_false(same({ a = 1 }, { b = 1 }))
+  end)
+
+  it("keeps plain == for scalars — a number is not its text", function()
+    assert.is_true(same(5, 5))
+    assert.is_false(same(5, "5"))
+    assert.is_true(same("x", "x"))
+    assert.is_true(same(vim.NIL, vim.NIL))
+  end)
+end)

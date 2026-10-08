@@ -42,6 +42,35 @@ end
 local update_winbar
 local jump_to_search_match
 
+--- Display form of a cell for SEARCH matching. A JSON/JSONB cell arrives as a
+--- Lua table, and `tostring` on it is a garbage pointer address — the renderer
+--- (format.cell_to_string), the cell yank (nav_cell.clipboard_text) and the
+--- exporter all compact-encode the table instead, so the text the user sees in
+--- the cell is the JSON. Search must match what is on screen: searching for
+--- text visibly inside a JSONB cell used to answer "No matches for ..." while
+--- the cell itself displayed exactly that text.
+local function search_text_of(val)
+  if val == nil or val == vim.NIL then return "" end
+  if type(val) == "table" then
+    local ok, encoded = pcall(vim.json.encode, val)
+    return ok and encoded or vim.inspect(val)
+  end
+  return tostring(val)
+end
+
+--- Canonical comparison key for FILTER equality. `==` on two separately
+--- decoded tables is pointer identity, so filtering a JSONB column kept only
+--- the row the filter was taken from, even when other rows held identical
+--- JSON — the filter value and every visually-identical row must compare by
+--- their encoded form. Scalars keep plain `==` (a number is not the text "5").
+local function same_value(a, b)
+  if type(a) == "table" and type(b) == "table" then
+    local ea, eb = search_text_of(a), search_text_of(b)
+    return ea == eb
+  end
+  return a == b
+end
+
 --- Recompute search matches from search_text against the current view_indices.
 --- The set of matching rows is unchanged by sort/filter (only their order), so
 --- matches are re-derived to keep n/N and highlights correct after a reorder.
@@ -58,7 +87,7 @@ local function compute_matches(tab, text)
   for view_pos, src_idx in ipairs(all_indices) do
     local row_data = tab.rows_source[src_idx]
     for ci, val in ipairs(row_data) do
-      local s = (val == nil or val == vim.NIL) and "" or tostring(val)
+      local s = search_text_of(val)
       if s:lower():find(q, 1, true) then
         total_count = total_count + 1
         local page = math.ceil(view_pos / tab.page_size)
@@ -343,7 +372,7 @@ function M.filter_by_current_cell()
 
   local indices = {}
   for i, r in ipairs(tab.rows_source) do
-    if r[col] == filter_val then
+    if same_value(r[col], filter_val) then
       indices[#indices + 1] = i
     end
   end
@@ -442,6 +471,8 @@ M._test = {
   match_span = match_span,
   step_history = step_history,
   record_search = record_search,
+  search_text_of = search_text_of,
+  same_value = same_value,
 }
 
 return M
