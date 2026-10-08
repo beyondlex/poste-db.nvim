@@ -188,6 +188,17 @@ function M.run_sql_request()
     sel_start = math.max(1, sel_start)
     sel_end = math.min(#buf_lines, sel_end)
     visual_sel_end = sel_end
+    -- The selection must not cut a statement in half: a fragment (e.g. an
+    -- INSERT whose VALUES lines fell outside the selection) fails on the
+    -- server with a 1064 that reads like a plugin bug. Cancel paths here sit
+    -- before any state clearing, so the previous response/dataset survive.
+    local cut = statement.selection_cuts_statement(src_buf, buf_lines, sel_end, dialect_for_span)
+    if cut then
+      vim.notify(
+        "Selection ends mid-statement — extend it to the statement's last line (the `;`), or run it with the cursor on it.",
+        vim.log.levels.WARN, { title = "PosteDb" })
+      return
+    end
     -- NB: statement start lines come back via stmt_lines; indicator and
     -- response placement consume those, not the raw directive count
     buf_content, stmt_lines = statement.extract_visual_block(buf_lines, sel_start, sel_end,
@@ -318,6 +329,7 @@ function M.run_sql_request()
 
   -- Extract raw SQL text for a single statement (without directives/###)
   local stmt_sql_raw
+  local sql_statements
   if not is_visual and stmt_start and stmt_end then
     local raw_lines = {}
     if set_lines then
@@ -327,6 +339,18 @@ function M.run_sql_request()
       raw_lines[#raw_lines + 1] = buf_lines[i] or ""
     end
     stmt_sql_raw = table.concat(raw_lines, "\n")
+    -- The session transport needs the pieces, not the join: one request per
+    -- statement (see session_conn.execute_sequence — a multi-statement
+    -- single request dies in MySQL's prepared-statement protocol).
+    if set_lines and #set_lines > 0 then
+      sql_statements = {}
+      for _, l in ipairs(set_lines) do sql_statements[#sql_statements + 1] = l end
+      local body_lines = {}
+      for i = stmt_start, stmt_end do
+        body_lines[#body_lines + 1] = buf_lines[i] or ""
+      end
+      sql_statements[#sql_statements + 1] = table.concat(body_lines, "\n")
+    end
   end
   entry.sql = stmt_sql_raw or buf_content
 
@@ -396,6 +420,7 @@ function M.run_sql_request()
   if conn_name == vim.NIL then conn_name = nil end
   executor.execute({
     sql = stmt_sql_raw or buf_content,
+    sql_statements = sql_statements,
     conn_url = conn_url,
     database = db,
     mode = "greedy",

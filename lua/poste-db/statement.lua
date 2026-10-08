@@ -152,6 +152,37 @@ function M.try_ts_stmt_span(buf, cursor_line)
   return nil
 end
 
+--- True when a visual selection ends in the MIDDLE of a statement — the
+--- statement under the selection's last line continues past it, so executing
+--- the selection would send a fragment (a VALUES-less INSERT ran as exactly
+--- that and failed with a confusing 1064 "near ''"). A selection that ends
+--- on the statement's last line, on a blank/comment line between statements,
+--- or at the buffer's unterminated end is not a cut. nil when neither
+--- Tree-sitter nor the binary could read the statement span: degrade to the
+--- old execute-anyway behavior rather than block a legitimate run.
+--- @param buf number|nil  buffer handle (for Tree-sitter)
+--- @param buf_lines string[]
+--- @param sel_end number  1-based last line of the visual selection
+--- @param dialect string|nil  quote-escape reading for the Rust fallback
+--- @return boolean|nil
+function M.selection_cuts_statement(buf, buf_lines, sel_end, dialect)
+  local span = M.try_ts_stmt_span(buf, sel_end)
+  if not span and type(buf_lines) == "table" then
+    -- the binary fallback reads the buffer text, so it needs the lines
+    span = M.try_rust_stmt_span(buf_lines, sel_end, dialect)
+  end
+  if not span or type(span[1]) ~= "number" or type(span[2]) ~= "number" then
+    return nil
+  end
+  -- A detected span that starts below the selection's last line (the blank-
+  -- line walks can land on the NEXT statement) is not a cut; an inverted
+  -- span is detector noise, not evidence either way.
+  if span[1] > sel_end or span[2] < span[1] then
+    return false
+  end
+  return span[2] > sel_end
+end
+
 --- Try to find ALL statement boundaries using Tree-sitter.
 --- Returns number[] of 1-based buffer statement start lines, or nil.
 function M.try_ts_stmt_ranges(buf, start_line, end_line)
@@ -676,6 +707,7 @@ M._test = {
   try_rust_stmt_ranges = M.try_rust_stmt_ranges,
   try_ts_stmt_span = M.try_ts_stmt_span,
   try_ts_stmt_ranges = M.try_ts_stmt_ranges,
+  selection_cuts_statement = M.selection_cuts_statement,
   find_block_for_line = M.find_block_for_line,
   extract_label = M.extract_label,
 }
