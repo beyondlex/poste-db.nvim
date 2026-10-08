@@ -624,6 +624,28 @@ describe("is_editable_field", function()
   it("allows float", function()
     assert.is_true(editor.is_editable_field({ ctype = "float" }))
   end)
+
+  it("blocks a binary type spelled with its width — MySQL's `varbinary(16)`", function()
+    -- the exact-name table missed the width MySQL introspection appends, and
+    -- the editor offered binary data as an editable text cell
+    assert.is_false(editor.is_editable_field({ ctype = "varbinary(16)" }))
+    assert.is_false(editor.is_editable_field({ ctype = "bit(1)" }))
+  end)
+
+  it("blocks a binary type under a ClickHouse modifier wrapper", function()
+    assert.is_false(editor.is_editable_field({ ctype = "Nullable(bytea)" }))
+    assert.is_false(editor.is_editable_field({ ctype = "LowCardinality(Nullable(geometry))" }))
+  end)
+
+  it("keeps text editable under the same wrappers", function()
+    assert.is_true(editor.is_editable_field({ ctype = "character varying(255)" }))
+    assert.is_true(editor.is_editable_field({ ctype = "Nullable(String)" }))
+  end)
+
+  it("survives a non-string ctype from broken metadata", function()
+    assert.is_true(editor.is_editable_field({ ctype = 42 }))
+    assert.is_false(editor.is_editable_field({ ctype = nil, primary_key = true }))
+  end)
 end)
 
 ---------------------------------------------------------------------------

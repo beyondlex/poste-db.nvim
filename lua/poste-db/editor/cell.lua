@@ -72,8 +72,17 @@ function M.is_editable_field(col_meta)
   if col_meta.primary_key then
     return false
   end
-  if col_meta.ctype and TYPES.ineditable[col_meta.ctype:lower()] then
-    return false
+  -- Root-word read on the unwrapped name, not the exact-name table: MySQL
+  -- introspection spells widths into the declaration (`varbinary(16)`,
+  -- `bit(1)`) and ClickHouse wraps modifiers (`Nullable( String )`), and an
+  -- exact match on those spelled a binary column editable — the text editor
+  -- offered it, and the commit only failed at the server with a type error.
+  -- The same root lookup validate_value already asks via `types`.
+  if type(col_meta.ctype) == "string" then
+    local root = types.unwrap_modifier(col_meta.ctype:lower()):match("^%a[%a_]*")
+    if root and TYPES.ineditable[root] then
+      return false
+    end
   end
 return true
 end
