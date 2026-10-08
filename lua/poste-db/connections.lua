@@ -378,7 +378,19 @@ local function build_conn_url(name, conn, ensure_tunnel)
     -- the driver got `postgres://h:{{POSTE_PORT}}/db`. Refuse it here — the
     -- same rule the Rust store applies to the same file. The value stays out
     -- of the message because `port = "{{POSTE_PASS}}"` is a plausible typo.
-    local n = tonumber(conn.port)
+    -- Strings read through Rust's f64 grammar (decimal digits, optional sign
+    -- / fraction / exponent, surrounding whitespace): LuaJIT's plain tonumber
+    -- — even with base 10 — also takes "0x10", and a hex typo sailed into the
+    -- URL as port 16 where the Rust parse refuses the same file.
+    local n
+    if type(conn.port) == "number" then
+      n = conn.port
+    elseif type(conn.port) == "string" then
+      if conn.port:match("^%s*[%+%-]?%d+%.?%d*%s*$")
+        or conn.port:match("^%s*[%+%-]?%d+%.?%d*[eE][%+%-]?%d+%s*$") then
+        n = tonumber(conn.port)
+      end
+    end
     if not n or n ~= math.floor(n) or n < 1 or n > 65535 then
       return nil,
         ("Connection '%s': port must be a number between 1 and 65535"):format(name)

@@ -138,6 +138,26 @@ describe("connections resolve_connection_url", function()
     assert.matches("localhost:5432", err)
   end)
 
+  it("refuses a hex-spelled port string like the Rust mirror does", function()
+    -- LuaJIT's plain tonumber accepts "0x10" as 16, so the typo sailed into
+    -- the URL and the statement ran against port 16 while the Rust f64 parse
+    -- refused the same file — one connection, one reading
+    package.loaded["poste-db.toml"].parse_file = function()
+      return { cache = { dialect = "postgres", host = "h", port = "0x10", database = "d" } }
+    end
+    local url, err = connections.resolve_connection_url("cache")
+    assert.is_nil(url)
+    assert.matches("port must be a number", err)
+  end)
+
+  it("still takes a quoted decimal port string", function()
+    package.loaded["poste-db.toml"].parse_file = function()
+      return { cache = { dialect = "postgres", host = "h", port = "5432", database = "d" } }
+    end
+    local url = connections.resolve_connection_url("cache")
+    assert.equals("postgres://h:5432/d", url)
+  end)
+
   it("rejects a host with whitespace", function()
     package.loaded["poste-db.toml"].parse_file = function()
       return { cache = { dialect = "postgres", host = "my host", database = "d" } }
