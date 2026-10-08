@@ -433,3 +433,121 @@ describe("statement extract_stmt_at_cursor — the ;-scan is region-blind", func
     assert.match("SELECT 1", content)
   end)
 end)
+
+describe("statement selection_cuts_statement", function()
+  -- The guard's own decision table, exercised with both span readers stubbed
+  -- so it holds in environments without the Tree-sitter sql parser.
+  local ts_orig, rust_orig
+
+  before_each(function()
+    ts_orig = statement.try_ts_stmt_span
+    rust_orig = statement.try_rust_stmt_span
+    statement.try_rust_stmt_span = function() return nil end
+  end)
+
+  after_each(function()
+    statement.try_ts_stmt_span = ts_orig
+    statement.try_rust_stmt_span = rust_orig
+  end)
+
+  it("is a cut when the statement under the last selected line continues past it", function()
+    statement.try_ts_stmt_span = function()
+      return { 2, 5 } -- the INSERT spans lines 2..5; the selection ends at 2
+    end
+    assert.is_true(statement.selection_cuts_statement(nil, {}, 2, nil))
+  end)
+
+  it("is not a cut when the selection ends on the statement's last line", function()
+    statement.try_ts_stmt_span = function()
+      return { 2, 5 }
+    end
+    assert.is_false(statement.selection_cuts_statement(nil, {}, 5, nil))
+  end)
+
+  it("is not a cut when the span belongs to a statement below the selection", function()
+    -- the blank-line walk can report the NEXT statement: its start sits below
+    -- the selection's end, which says nothing about the selection itself
+    statement.try_ts_stmt_span = function()
+      return { 9, 9 }
+    end
+    assert.is_false(statement.selection_cuts_statement(nil, {}, 4, nil))
+  end)
+
+  it("falls back to the binary span when Tree-sitter has none", function()
+    statement.try_ts_stmt_span = function() return nil end
+    statement.try_rust_stmt_span = function(_, cursor_line, _)
+      assert.equals(2, cursor_line)
+      return { 2, 5 }
+    end
+    assert.is_true(statement.selection_cuts_statement(nil, {}, 2, "mysql"))
+  end)
+
+  it("degrades to nil when neither reader answers", function()
+    statement.try_ts_stmt_span = function() return nil end
+    assert.is_nil(statement.selection_cuts_statement(nil, {}, 2, nil))
+  end)
+end)
+
+local has_sql_parser = require("poste-db.ts_stmt").check_parser()
+
+if has_sql_parser then
+  describe("statement selection_cuts_statement — real spans", function()
+    -- The shapes that make the guard worth having, read by the real
+    -- Tree-sitter parser the way a real visual run sees the buffer. The
+    -- binary fallback stays stubbed: ts is the production common path, and
+    -- spawning the real CLI from a spec would make this env-dependent.
+    local rust_orig
+
+    before_each(function()
+      rust_orig = statement.try_rust_stmt_span
+      statement.try_rust_stmt_span = function() return nil end
+    end)
+
+    after_each(function()
+      statement.try_rust_stmt_span = rust_orig
+    end)
+
+    local function make_buf(lines)
+      local buf = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+      vim.bo[buf].filetype = "poste_sql"
+      vim.wait(500, function()
+        local ok, p = pcall(vim.treesitter.get_parser, buf, "sql")
+        return ok and p ~= nil
+      end)
+      return buf
+    end
+
+    it("a selection ending before VALUES cuts the INSERT", function()
+      -- the 02:28:55 incident: the selection covered the SET line and the
+      -- INSERT's column list; the VALUES lines fell outside it
+      local lines = {
+        "SET @menuId = (SELECT MAX(id) FROM menu);",
+        "INSERT INTO permission (platform, menu_id, title)",
+        "VALUES ('ADMIN', @menuId, 'x');",
+        "INSERT INTO permission (platform, menu_id, title)",
+        "VALUES ('ADMIN', @menuId, 'y');",
+      }
+      local buf = make_buf(lines)
+      assert.is_true(statement.selection_cuts_statement(buf, lines, 2, nil),
+        "line 2's statement continues onto line 3")
+      assert.is_false(statement.selection_cuts_statement(buf, lines, 3, nil),
+        "line 3 is the statement's last line")
+      assert.is_false(statement.selection_cuts_statement(buf, lines, 5, nil),
+        "an unterminated-looking last statement at the buffer end is not a cut")
+    end)
+
+    it("a selection ending on a boundary line between statements does not block the run", function()
+      local lines = {
+        "SELECT 1;",
+        "",
+        "SELECT 2;",
+      }
+      local buf = make_buf(lines)
+      -- no span exists at the blank line, so the guard degrades (nil); the
+      -- contract the runner leans on is simply "not true → execute"
+      assert.is_not_true(statement.selection_cuts_statement(buf, lines, 2, nil),
+        "a blank line between statements must not read as a cut")
+    end)
+  end)
+end

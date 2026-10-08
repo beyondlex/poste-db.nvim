@@ -39,8 +39,9 @@ package.loaded["poste-db.statement"] = {
   extract_stmt_at_cursor = function() end,
   extract_visual_block = function() end,
   find_stmt_lines = function() end,
-  get_stmt_sql = function() end,
+  get_stmt_sql = function() return "" end,
   extract_table_name = function() end,
+  selection_cuts_statement = function() return false end,
   _test = {},
 }
 package.loaded["poste-db.introspect"] = { show_table_ddl = function() end }
@@ -261,8 +262,66 @@ describe("sql_runner run_sql_request", function()
     assert.same({ type = "resultset" }, sql_state_stub.last_dataset)
   end)
 
-  it("accepted run begins the session and clears request-scoped state", function()
+  it("passes the hoisted SET prelude to the executor as separate statements", function()
+    -- One request per statement on the session transport: a multi-statement
+    -- single request dies in MySQL's prepared-statement protocol with a 1064.
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "set @a = 1;", "select @a;" })
     poste_state_stub.find_poste_binary = function() return "poste" end
+    config_stub.get_keymap = function(area, name, default) return default end
+    config_stub.config = {}
+    local stmt_stub = package.loaded["poste-db.statement"]
+    stmt_stub.extract_stmt_at_cursor = function()
+      return "-- @connection x\n###\nset @a = 1;\nselect @a;", nil, 2, 2, { "set @a = 1;" }
+    end
+    stmt_stub.extract_label = function() return "lbl" end
+    stmt_stub.fallback_label = function() return "test_1" end
+    package.loaded["poste-db.session"] = nil
+
+    local executed = {}
+    package.loaded["poste-db.executor"] = {
+      execute = function(opts) executed[#executed + 1] = opts end,
+    }
+
+    vim.fn.cursor(2, 1)
+    runner.run_sql_request()
+
+    assert.equals(1, #executed, "clean statement must reach the executor")
+    assert.same({ "set @a = 1;", "select @a;" }, executed[1].sql_statements)
+  end)
+
+  it("visual selection cutting a statement in half cancels before any run", function()
+    poste_state_stub.find_poste_binary = function() return "poste" end
+    config_stub.get_keymap = function(area, name, default) return default end
+    config_stub.config = { confirm_unfiltered_dml = false }
+    local stmt_stub = package.loaded["poste-db.statement"]
+    stmt_stub.selection_cuts_statement = function() return true end
+    stmt_stub.extract_visual_block = function()
+      error("extract_visual_block must not run for a cut selection")
+    end
+    package.loaded["poste-db.executor"] = { execute = function()
+      error("executor must not run for a cut selection")
+    end }
+    package.loaded["poste-db.session"] = { begin = function()
+      error("session must not begin for a cut selection")
+    end }
+
+    -- A previous request's results must survive the cancel
+    poste_state_stub.last_response = { body = "keep" }
+
+    local notified
+    vim.notify = function(msg, level)
+      notified = { msg = msg, level = level }
+    end
+    runner.ensure_sql_keymaps(buf)
+    vim.cmd("normal! ggVG")
+    vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<CR>", true, false, true), "x", false)
+
+    assert.is_not_nil(notified, "the cut must be explained")
+    assert.matches("mid%-statement", notified.msg)
+    assert.same({ body = "keep" }, poste_state_stub.last_response)
+  end)
+
+  it("accepted run begins the session and clears request-scoped state", function()    poste_state_stub.find_poste_binary = function() return "poste" end
     config_stub.get_keymap = function(area, name, default) return default end
     config_stub.config = {}
 

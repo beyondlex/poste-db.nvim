@@ -24,6 +24,10 @@ function M.execute(opts)
   if prefer_session == nil then prefer_session = true end
   local src_buf = opts.src_buf
   local src_file = opts.src_file
+  -- Per-statement pieces of `sql` (the hoisted `SET @var` prelude + the
+  -- statement itself). Only the session transport sends them as one request
+  -- per statement; the exec-file transport splits the joined sql itself.
+  local sql_statements = opts.sql_statements
 
   -- Request journaling: one entry per executor request, success or failure,
   -- covering both the session and exec-file transports (and the internal
@@ -95,7 +99,7 @@ function M.execute(opts)
       on_sql_error = function(message, parsed)
         if on_error then on_error(message, parsed) end
       end,
-    }, src_buf, database)
+    }, src_buf, database, sql_statements)
     if ok ~= "dispatched" then
       exec_file_fallback("session " .. ok)
     end

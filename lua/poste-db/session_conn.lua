@@ -74,6 +74,119 @@ local function norm_affected(v)
   return tonumber(v)
 end
 
+-- One wire response aggregating a sequence's per-statement results, shaped
+-- like `build_response` so the consumers (sql_runner's SET-prelude filter,
+-- dataset rendering, journaling) see the same body either way. `sql` on each
+-- result comes from the event; classification mirrors exec_run.build_response
+-- (an affected count alone does not make it a non-query).
+local function build_sequence_response(session, results)
+  local failed = 0
+  local total_rows, total_affected, total_ms = 0, 0, 0
+  local is_query = false
+  for _, r in ipairs(results) do
+    if r.failed then failed = failed + 1 end
+    if not r.error and not r.failed
+      and (r.affected_rows == nil or (r.row_count or 0) > 0 or #(r.columns or {}) > 0) then
+      is_query = true
+    end
+    total_rows = total_rows + (r.row_count or 0)
+    if not r.failed and r.affected_rows then
+      total_affected = total_affected + r.affected_rows
+    end
+    total_ms = total_ms + (r.execution_time_ms or 0)
+  end
+  local has_error = failed > 0
+  local body_obj = {
+    type = is_query and "resultset" or "affected",
+    results = results,
+    total_results = #results,
+    total_rows = total_rows,
+    total_affected = total_affected,
+    total_execution_time_ms = total_ms,
+    connection = session.conn_url,
+    database = session.database or "",
+    dialect = session.dialect,
+  }
+  if has_error then body_obj.has_error = true end
+  return {
+    status = has_error and "error" or "ok",
+    latency_ms = total_ms,
+    body = vim.json.encode(body_obj),
+    connection = session.conn_url,
+    database = session.database,
+    dialect = session.dialect,
+    results = results,
+    has_error = has_error,
+  }
+end
+
+-- Send a statement LIST as one request per statement on the session's
+-- persistent connection, then answer the caller's callbacks once with an
+-- aggregated response. The hoisted `SET @var` prelude must travel this way:
+-- the session hands each request to MySQL's prepared-statement protocol,
+-- which rejects a multi-statement string with a 1064 — and on a session
+-- binary before cbd5de3 that error killed the session process, so the
+-- executor silently re-ran the whole request on a one-shot exec-file
+-- connection where the SET's variable died with the process (the next
+-- statement then failed with "column cannot be null" on a fresh session).
+-- The requests are sent back to back: the session loop reads stdin and
+-- executes serially, so ordering is the wire order.
+local function execute_sequence(session, statements, callbacks)
+  local total = #statements
+  local collector = {
+    results = {},   -- [statement index] = that statement's result table
+    arrived = 0,
+    delivered = false,
+    on_response = callbacks.on_response,
+    on_sql_error = callbacks.on_sql_error,
+    on_error = callbacks.on_error,
+  }
+
+  local function deliver(kind, a, b)
+    if collector.delivered then return end
+    collector.delivered = true
+    if kind == "response" then
+      if collector.on_response then collector.on_response(build_sequence_response(session, collector.results)) end
+    elseif kind == "sql_error" then
+      if collector.on_sql_error then collector.on_sql_error(a, b) end
+    else
+      if collector.on_error then collector.on_error(a) end
+    end
+  end
+
+  for i, stmt in ipairs(statements) do
+    session.seq = session.seq + 1
+    session.last_active = os.time()
+    local seq = session.seq
+    local index = i
+    session.pending[seq] = {
+      on_response = function(resp)
+        collector.results[index] = resp.results[1]
+        collector.arrived = collector.arrived + 1
+        if collector.arrived < total then return end
+        deliver("response")
+      end,
+      on_sql_error = function(message, resp)
+        collector.results[index] = resp and resp.results and resp.results[1] or nil
+        deliver("sql_error", message, resp)
+      end,
+      on_error = function(message)
+        deliver("error", message)
+      end,
+    }
+    local payload = vim.json.encode({ seq = seq, sql = stmt }) .. "\n"
+    local ok_send, sent = pcall(vim.fn.chansend, session.job_id, payload)
+    state.log("DEBUG", string.format("SQL session send seq=%d (sequence %d/%d) chansend=%s",
+      seq, i, total, tostring(sent)))
+    if not ok_send or type(sent) ~= "number" or sent <= 0 then
+      session.pending[seq] = nil
+      deliver("error", "SQL session chansend failed")
+      return "not_running"
+    end
+  end
+  return "dispatched"
+end
+
 local function build_response(event, session)
   local has_err = event.status ~= "ok"
   local aff = norm_affected(event.affected_rows)
@@ -311,8 +424,13 @@ end
 --- @param callbacks table { on_response = fn(parsed), on_error = fn(msg), on_sql_error = fn(msg, parsed?) }
 --- @param bufnr number|nil
 --- @param database string|nil database context (e.g. from `@database` directive)
+--- @param statements string[]|nil when the sql carries a statement prelude
+---   (the hoisted `SET @var` lines), the pieces to send as one request each —
+---   a multi-statement single request dies in MySQL's prepared-statement
+---   protocol with a 1064 (see execute_sequence). Single-statement requests
+---   are the common case and keep the plain one-request shape.
 --- @return string  "dispatched", "start_failed", or "not_running"
-function M.execute(conn_url, sql, callbacks, bufnr, database)
+function M.execute(conn_url, sql, callbacks, bufnr, database, statements)
   callbacks = callbacks or {}
   local session = M.get(conn_url, bufnr, database)
   if not session then
@@ -320,6 +438,13 @@ function M.execute(conn_url, sql, callbacks, bufnr, database)
   end
   if not session.alive then
     return "not_running"
+  end
+
+  if statements and #statements > 1 then
+    return execute_sequence(session, statements, callbacks)
+  end
+  if statements and #statements == 1 then
+    sql = statements[1]
   end
 
   session.seq = session.seq + 1
@@ -414,6 +539,7 @@ M._test = {
   dialect_from_url = dialect_from_url,
   database_from_url = database_from_url,
   build_response = build_response,
+  build_sequence_response = build_sequence_response,
   on_session_stdout = on_session_stdout,
 }
 

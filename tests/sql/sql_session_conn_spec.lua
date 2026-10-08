@@ -317,6 +317,192 @@ describe("session_conn on_sql_error gets the normalized error text", function()
   end)
 end)
 
+describe("session_conn multi-statement sequence", function()
+  -- The hoisted `SET @var` prelude travels as ONE request per statement: a
+  -- multi-statement single request dies in MySQL's prepared-statement
+  -- protocol with a 1064, and on a session binary before cbd5de3 the error
+  -- killed the session process — the executor then silently re-ran the whole
+  -- request on a one-shot exec-file connection where the SET died with the
+  -- process, and the next statement failed with "column cannot be null" on
+  -- the freshly started session.
+  local state = require("poste-db.state")
+  local session_conn = require("poste-db.session_conn")
+
+  local jobs, sends
+  local real_binary_lookup
+  local real_jobstart, real_jobwait, real_chansend
+
+  before_each(function()
+    jobs, sends = {}, {}
+    real_binary_lookup = state.find_poste_binary
+    state.find_poste_binary = function() return "/fake/poste" end
+    real_jobstart = vim.fn.jobstart
+    vim.fn.jobstart = function(cmd, opts)
+      local id = 2000 + vim.tbl_count(jobs)
+      jobs[id] = { cmd = cmd, opts = opts }
+      return id
+    end
+    real_jobwait = vim.fn.jobwait
+    vim.fn.jobwait = function() return { -1 } end
+    real_chansend = vim.fn.chansend
+    vim.fn.chansend = function(_, payload)
+      sends[#sends + 1] = vim.json.decode(payload)
+      return #payload
+    end
+  end)
+
+  after_each(function()
+    session_conn.stop_all()
+    state.find_poste_binary = real_binary_lookup
+    vim.fn.jobstart = real_jobstart
+    vim.fn.jobwait = real_jobwait
+    vim.fn.chansend = real_chansend
+  end)
+
+  local function exec_sequence(statements, callbacks)
+    local session = session_conn.get("postgres://h/app", nil, "db1")
+    local status = session_conn.execute("postgres://h/app", table.concat(statements, "\n"),
+      callbacks, nil, "db1", statements)
+    assert.equals("dispatched", status)
+    return session
+  end
+
+  it("sends one wire request per statement, each with its own seq", function()
+    local session = exec_sequence({ "SET @a = 1;", "SELECT @a;" }, {})
+    assert.equals(2, #sends, "one wire request per statement")
+    assert.equals("SET @a = 1;", sends[1].sql)
+    assert.equals("SELECT @a;", sends[2].sql)
+    assert.are_not.equal(sends[1].seq, sends[2].seq)
+    assert.equals(2, vim.tbl_count(session.pending), "every statement parks its own pending entry")
+  end)
+
+  it("answers once, after the last statement has reported", function()
+    local responses = 0
+    local got
+    local session = exec_sequence({ "SET @a = 1;", "SELECT @a;" }, {
+      on_response = function(resp)
+        responses = responses + 1
+        got = resp
+      end,
+    })
+    jobs[session.job_id].opts.on_stdout(nil, {
+      vim.json.encode({ type = "result", seq = sends[1].seq, status = "ok",
+        affected_rows = 0, execution_time_ms = 2 }),
+    })
+    assert.equals(0, responses, "a prelude answer must not deliver the run")
+
+    jobs[session.job_id].opts.on_stdout(nil, {
+      vim.json.encode({ type = "result", seq = sends[2].seq, status = "ok",
+        affected_rows = 1, execution_time_ms = 3 }),
+    })
+    assert.equals(1, responses)
+    assert.equals(2, #got.results)
+    assert.is_false(got.has_error)
+    -- same body shape the exec-file transport reconstructs, so consumers
+    -- (SET-prelude filter, dataset rendering) see one shape either way
+    local body = vim.json.decode(got.body)
+    assert.equals("affected", body.type)
+    assert.equals(1, body.total_affected)
+    assert.equals(5, body.total_execution_time_ms)
+  end)
+
+  it("delivers the first statement failure through on_sql_error exactly once", function()
+    local sql_errs, responses = {}, 0
+    local session = exec_sequence({ "SET @a = 1;", "INSERT INTO t VALUES (1);", "SELECT 1;" }, {
+      on_response = function() responses = responses + 1 end,
+      on_sql_error = function(msg, resp) sql_errs[#sql_errs + 1] = { msg = msg, resp = resp } end,
+    })
+    -- one event per stdout call: the wire emits one JSON line per statement
+    local events = {
+      { type = "result", seq = sends[1].seq, status = "ok",
+        affected_rows = 0, execution_time_ms = 1 },
+      { type = "result", seq = sends[2].seq, status = "error",
+        error = "duplicate key value", execution_time_ms = 2 },
+      -- a statement that reports after the failure is history
+      { type = "result", seq = sends[3].seq, status = "ok",
+        affected_rows = vim.NIL, row_count = 1, execution_time_ms = 1 },
+    }
+    for _, ev in ipairs(events) do
+      jobs[session.job_id].opts.on_stdout(nil, { vim.json.encode(ev) })
+    end
+    assert.equals(1, #sql_errs, "the failure must reach the caller once")
+    assert.matches("duplicate key", sql_errs[1].msg)
+    assert.is_true(sql_errs[1].resp.has_error)
+    assert.equals(0, responses, "a failed sequence must not answer with a response")
+  end)
+
+  it("fails a mid-sequence session death exactly once", function()
+    local errs, responses = {}, 0
+    local session = exec_sequence({ "SELECT 1;", "SELECT 2;", "SELECT 3;" }, {
+      on_response = function() responses = responses + 1 end,
+      on_error = function(msg) errs[#errs + 1] = msg end,
+    })
+    jobs[session.job_id].opts.on_exit(nil, 1)
+    assert.equals(1, #errs, "every parked seq fires; the caller must hear it once")
+    assert.matches("exited %(code 1%)", errs[1])
+    assert.equals(0, responses)
+    assert.equals(0, vim.tbl_count(session_conn.list()), "the dead session must leave the pool")
+  end)
+
+  it("a dead channel mid-sequence stops the sends and reports not_running", function()
+    vim.fn.chansend = function(_, payload)
+      sends[#sends + 1] = vim.json.decode(payload)
+      if #sends == 2 then
+        error("Can't send data to closed stream")
+      end
+      return #payload
+    end
+    local errs = {}
+    local status = session_conn.execute("postgres://h/app", "SELECT 1;\nSELECT 2;\nSELECT 3;", {
+      on_error = function(msg) errs[#errs + 1] = msg end,
+    }, nil, "db1", { "SELECT 1;", "SELECT 2;", "SELECT 3;" })
+    assert.equals("not_running", status)
+    assert.equals(2, #sends, "the statement behind the failed send must not go out")
+    assert.equals(1, #errs)
+  end)
+  it("classifies a sequence with a reading statement as a resultset", function()
+    -- A prelude SET (affected count) plus a SELECT (rows, no affected count):
+    -- the combined body must carry the resultset shape or the dataset panel
+    -- renders the read as an affected-rows "Query OK".
+    local got
+    local session = exec_sequence({ "SET @a = 1;", "SELECT @a;" }, {
+      on_response = function(resp) got = resp end,
+    })
+    local events = {
+      { type = "result", seq = sends[1].seq, status = "ok",
+        affected_rows = 0, execution_time_ms = 1 },
+      { type = "result", seq = sends[2].seq, status = "ok",
+        affected_rows = vim.NIL, row_count = 1, columns = { { name = "@a" } },
+        rows = { { 1 } }, execution_time_ms = 1 },
+    }
+    for _, ev in ipairs(events) do
+      jobs[session.job_id].opts.on_stdout(nil, { vim.json.encode(ev) })
+    end
+    assert.is_not_nil(got)
+    local body = vim.json.decode(got.body)
+    assert.equals("resultset", body.type)
+    assert.equals(1, body.total_rows)
+  end)
+end)
+
+describe("session_conn build_sequence_response", function()
+  local session_conn = require("poste-db.session_conn")
+  local build = session_conn._test.build_sequence_response
+  local session = { conn_url = "mysql://h/app", database = "app", dialect = "mysql" }
+
+  it("keeps a failed statement's rows out of the affected total", function()
+    local resp = build(session, {
+      { affected_rows = 1, row_count = 0, execution_time_ms = 2 },
+      { affected_rows = 5, row_count = 0, execution_time_ms = 3, failed = true, error = "no such table" },
+    })
+    assert.equals(2, #resp.results, "both results ride along")
+    assert.is_true(resp.has_error)
+    local body = vim.json.decode(resp.body)
+    assert.equals(1, body.total_affected, "a rejected statement affected nothing")
+    assert.equals(5, body.total_execution_time_ms)
+  end)
+end)
+
 describe("session_conn on_session_stdout line assembly", function()
   local session_conn = require("poste-db.session_conn")
   local feed = session_conn._test.on_session_stdout
